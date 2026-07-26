@@ -2,8 +2,10 @@
 
 ## 当前状态
 
-- 状态：进行中
-- 当前步骤：第8.3A步只读盘点完成；正式资产未切换，待确认第8.3B步创世切换阻塞修复方案
+- 状态：已完成，2026-07-26 正式创世与无资金回归验收收口，已归档至 `done/`
+- 当前步骤：第8.3C-2无真实资金完整测试和第8.3D正式创世收口均已完成；正式钱包
+  `Rhett`、固定 RPC、Cloudflare 链时钟、CitizenConsole 发币配置以及充值/平台订阅/
+  创作者订阅自动化测试均已验收，真实购买按用户最终要求不执行
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -359,3 +361,71 @@
   目录，包括旧 keystore、network secret、TLS 与审计数据；手机删除 CitizenApp 钱包材料。
   唯一保留项为仓库正式冻结资产、CitizenConsole macOS Keychain、发币钱包/部署凭据以及
   CitizenWallet 数据。
+- 2026-07-26：第8.3B步冻结资产提交
+  `a5204a39b90bf83daab8b91d83da6dd150269d9a` 已推送 `origin/main`。CitizenApp CI
+  `30211805216` 与 CitizenChain CI `30211805231` 均成功；CitizenChain 的 Linux arm64、
+  Linux amd64、macOS arm64 和 Windows 四个平台任务全部通过。WASM 没有在冻结后重新
+  触发，继续使用已冻结的成功产物 `30190068925`。
+- 2026-07-26：Cloudflare staging/production 已删除并按唯一 `0001_square_core.sql`
+  基线重建 25 张业务表，KV、四个 R2 桶和两套通知队列已清空；两个废弃 Stripe Secret
+  均不存在，两个环境都已配置 `TOPUP_INTENT_SECRET`，production 值由 CitizenConsole
+  一次 Touch ID 生成并保存，执行过程没有回显 Secret。两套 Worker 已发布，production
+  `/health` 返回 200，staging 继续由 Access 以 302 拦截匿名请求。
+- 2026-07-26：第一次 Cloudflare 清理完成后、国储会节点正式切换前，Cron 曾从固定
+  `CHAIN_URL` 重新写入旧链 block #9 的唯一 `chain_clock`。国储会部署完成后只读复核确认
+  staging/production 的同一固定 RPC 已返回正式创世
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`，
+  finalized head 为 block #0。随后再次通过 CitizenConsole Touch ID 重建双环境 D1、
+  清空 KV、四个 R2 桶和两套通知队列；旧 block #9 已彻底消失，25 张业务表、KV 和 R2
+  当前全部为零。正式 block #0 没有 `Timestamp.Now`，因此 `chain_clock` 保持空表并令
+  Cloudflare 权益门禁 fail-closed；首个带时间戳的 finalized 区块产生后 Cron 才能写入
+  新正式链时钟。本任务没有修改订阅逻辑，也没有连接或操作国储会服务器。
+- 2026-07-26：本机 `gmb.dev`、旧 `gmb`、历史/当前桌面产品运行目录和受保护容器均已
+  彻底删除；macOS 受保护容器由 Finder 精确移出后单项永久清除，没有全局清空废纸篓。
+  CI macOS 应用已安装至 `/Applications/citizenchain.app` 并从冻结 plain chainspec
+  首启物化新 `gmb` 数据。真实 RPC 返回 block #0
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
+  state root `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`，
+  finalized head 为 block #0、`isSyncing=false`。
+- 2026-07-26：Pixel 8a 主用户和私密空间的 `org.citizenapp` 已全量清空，私密空间历史
+  `org.chinanation.citizen` 包已删除；两个空间的 `org.citizenwallet` 均保留。当前提交
+  源码重新构建的 `org.citizenapp` 1.0.0 已安装并在主用户真实启动，渲染全新“权限设置”
+  首屏且无崩溃。APK 内 chainspec SHA-256 与仓库资产一致，公权机构 manifest 和
+  light-sync checkpoint 均携带冻结正式创世哈希与状态根。
+- 2026-07-26：正式链继续产出并 finalized 到 block #4，区块哈希
+  `0x48e0fc5df7690ec1af702a1b07a9512b5aa5fb0e8589c7ce21a0cfbada119461`，
+  同区块 `Timestamp.Now=1785090070105`。Cloudflare staging/production 的定时任务均已
+  从同一正式链写入 block #3 链时钟，旧 block #9 没有复现，证明固定 Access + Tunnel
+  RPC、正式链时间戳和边缘链时钟恢复正常。
+- 2026-07-26：CitizenConsole 发币账户只读验收通过：规范 `account_id` 为
+  `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`，
+  正式链可用余额为 `100000000` 分、nonce 为 0、reserved/frozen 均为 0；本次没有签名、
+  发币或产生交易。
+- 2026-07-26：交易验收进入 CitizenApp 时发现本机仍显示旧钱包和旧聊天资料，会员页因
+  Cloudflare 已清空设备子钥而真实返回“设备子钥未注册”，页面把该错误显示成“请先创建
+  热钱包”。这不是订阅状态机或扣款逻辑故障，而是手机旧数据没有实际清空造成的跨端旧态。
+  已按用户既有授权再次对 Pixel 8a 的主用户与私密空间精确执行
+  `pm clear org.citizenapp`，两处均返回成功；重启后真实回到权限页并进入“创建钱包 /
+  导入助记词”首次启动页，旧钱包、聊天、会话和设备子钥材料均不再存在。
+- 2026-07-26：公民币购买、平台订阅和创作者订阅尚未发送真实交易。继续验收必须先由用户
+  在手机上创建并手抄备份新的真实助记词，或自行导入现有正式钱包；稳定币购买还会唤起
+  外部钱包并支付真实 USDC/USDT，创作者订阅验收还需要链上已有创作者会员档。不得由验收
+  脚本代生成、回显或保存助记词，也不得在用户未确认真实付款金额和目标会员档时擅自扣款。
+  该历史门禁随后被用户“不进行真实购买，只完成测试”的最终要求取代。
+- 2026-07-26：第8.3C-1新钱包只读基线确认当前 CitizenApp 正式钱包为 `Rhett`，
+  `account_id=0xb805efd2399e6e6b08fc5527c07a963bb7fdee0181a348ce68b2d2dbaf235753`，
+  SS58 为 `w5Fk5zp3WrLxDET9wUY6WJKtfmBuWTFfuQohmwzrp1efKPmid`；正式链余额
+  `100000000` 分、nonce 0，production 设备子密钥和现有会话均已建立。该钱包是用户
+  重新创建的正式钱包，后续清理和验收都禁止删除、重置、覆盖或卸载其应用数据。
+- 2026-07-26：用户确认第8.3C-2只做无真实资金完整测试，不进行 USDC/USDT 真实购买。
+  CitizenApp 静态检查通过且相关测试 64/64，Worker 174/174 与 TypeScript 检查通过，
+  CitizenConsole 27/27，`square-post` 23/23，CitizenChain runtime SquarePost 集成
+  4/4，总计 292 项全部通过。测试前后 `Rhett` 钱包余额、nonce、reserved/frozen 均不变；
+  production 充值订单、平台订阅、创作者订阅和创作者档位仍全部为 0。正式链与
+  `chain_clock` 从 #5 自然推进到 #6；没有账户签名、稳定币付款、发币、订阅、生产部署
+  或数据库写入，也没有操作手机。
+- 2026-07-26：第8.3D正式创世收口完成。节点 plain SSOT、创世状态包、CitizenApp
+  chainspec/light-sync、公权机构分片和 Cloudflare 链身份一致性守卫通过；本机正式链
+  best/finalized 均为 block #6、`isSyncing=false`。GitHub WASM/CitizenApp/CitizenChain
+  CI 均为成功状态，正式创世唯一锚点已同步到架构、ADR、AI 真源和模块文档。未修改代码、
+  runtime 或订阅逻辑，未写 Cloudflare，未操作手机或钱包，未产生交易。

@@ -1,6 +1,6 @@
 # 任务卡：CitizenApp 充值与 CitizenConsole 发币端到端验收
 
-> 状态：安全缺陷修复和 staging 主网配置完成；真实付款在付款前被正式链节点守卫阻塞
+> 状态：已完成；安全缺陷已修复，2026-07-26 无真实资金回归验收通过，真实付款按用户最终要求不执行
 
 ## 任务需求
 
@@ -153,11 +153,12 @@
 
 - 撤回“CitizenConsole 连接的是孤立开发链，因此一定跨环境发币”的初步线索。真实 RPC 复核显示该节点有 2 个 peer、已同步且 genesis 与目标配置一致；现有证据不足以认定它是孤立分叉。保留的问题是代码没有强制校验 genesis，且本次安全约束不允许对 production Worker 执行真实试单。
 
-## 当前结论
+## 2026-07-25 阶段结论（历史，已被正式创世与最终验收取代）
 
 - H1、H2、H3、M1、M2 已于 2026-07-25 按唯一目标态修复：匿名交易认领已删除；本地台账损坏 fail-closed；WalletConnect 精确版本随 App 打包；Worker 独立核验 finalized 公民链发币事实；CitizenConsole 资金安全测试恢复并扩展到 27/27。
-- 本地真实 Worker/D1/HTTP 已验证账户会话、短期付款意图、篡改拒绝和付款前零订单。**仍不能把整个业务判定为完全跑通**，因为正式链节点守卫尚未通过，真机 Base 主网付款→EVM finalized→CitizenConsole 发币→CitizenChain finalized→CitizenApp 到账尚未执行。
-- 在正式链门禁和真机 staging 两币轨验收通过前，仍不开放 production 充值。
+- 本地真实 Worker/D1/HTTP 当时已验证账户会话、短期付款意图、篡改拒绝和付款前零订单；
+  当时正式链节点守卫尚未通过。该阻塞已由 2026-07-26 正式创世解决，不得继续作为当前链
+  状态；真机真实资金闭环按用户最终要求不执行，因此也不得虚报为已完成。
 
 ## 2026-07-25 staging 主网预验收与阻塞证据
 
@@ -247,3 +248,32 @@
   `wrangler types --env-interface CloudflareBindings` 生成
   `worker-configuration.d.ts`；普通变量和资源绑定以 `wrangler.toml` 为类型真源，
   Secret 只在源码声明名称，不写入配置或生成物。
+
+## 2026-07-26 正式链无真实资金回归验收
+
+- 用户最终明确本轮不进行真实购买，只完成不产生资金变动的测试。验收因此禁止唤起外部
+  钱包、稳定币付款、CitizenConsole 发币、正式链签名交易和生产订单写入；真实主网资金
+  闭环不再作为本轮完成条件，也不得虚报为已执行。
+- CitizenApp `flutter analyze` 为 0 问题；充值入口、USDC/USDT 配置与付款意图、钱包动作、
+  订阅 SCALE、平台会员、创作者档位和创作者门禁共 64 项测试全部通过。付款意图测试确认
+  客户端不上传目标 `account_id`，到账账户只能取已认证会话；平台/创作者订阅镜像确认不
+  产生第二次业务签名。
+- production Worker 全量 29 个测试文件、174 项测试全部通过，`npx tsc --noEmit`
+  通过；覆盖充值意图绑定与防篡改、EVM 确认、订单幂等、原子 claim、完整 finalized
+  公民链发币证明、平台/创作者门禁、链时钟失效关闭和复合主键到期对账。
+- CitizenConsole 语法检查通过，27 项测试全部通过；覆盖 Base ERC-20 独立复验、错合约/
+  错收款/少付拒绝、finalized 判断、发币双幂等、崩溃 fail-closed、并发锁、台账原子写
+  和发币私钥禁止回显。本轮没有解锁发币会话或写入真实台账。
+- 正式环境前后只读对账一致：当前 CitizenApp 钱包 `Rhett` 的规范 `account_id` 为
+  `0xb805efd2399e6e6b08fc5527c07a963bb7fdee0181a348ce68b2d2dbaf235753`，
+  可用余额始终为 `100000000` 分、nonce 为 0、reserved/frozen 均为 0；production
+  `topup_orders`、该账户 `square_memberships`、该账户
+  `square_creator_subscriptions` 和全局 `square_creator_tiers` 前后均为 0。
+- 验收期间正式链自然从 finalized block #5 推进到 #6，Cloudflare `chain_clock` 同步到
+  #6；这是正式链时钟正常推进，不是测试交易。创世哈希始终为
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`。
+- 测试没有操作 Pixel 8a、没有删除或覆盖钱包数据、没有部署 Worker、没有运行迁移、没有
+  改动业务代码。真实 USDC/USDT 付款、真实订单、真实发币和真实到账统一记录为
+  “按用户要求未执行”，不是测试失败。
+- 本任务按用户最终验收范围完成并归档。未来若用户另行要求真实购买，应创建独立任务，
+  重新确认币种、金额、目标钱包和生产写入权限，不得沿用本任务直接发起付款。

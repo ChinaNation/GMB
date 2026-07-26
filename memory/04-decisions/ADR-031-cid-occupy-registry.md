@@ -102,7 +102,17 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
   - 当前 plain spec 启动仍会触发 Substrate `GenesisBlockBuilder` 做链初始存储校验,不是重新写库,但仍有分钟级 CPU 成本;首次本地数据准备显示“初始化中”，已有数据库启动显示“启动中”。
 - CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态,公权机构目录用“创世快照缓存 + 链投影增量更新”。
 - 重新创世部署(6 节点 mesh);创世后重跑 CitizenApp 公权机构快照包生成器(死规则:否则机构全断)。
-- 旧全量镇级创世资产已废弃；当前 49,593 个机构的唯一冻结基线由 Git commit `7abac7982a5c5ee25580583d456523ce2132743e`、GitHub `CitizenChain WASM` run `29530114067` 生成，并随冻结资产提交 `80f58aa5cfe19713edfba7331ea2896cacf09b62` 发布：`genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、`state_root=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`、`runtime_wasm_hash=be4585ce369e658e6799be667ed5be692fc050f9c6196ab14c53f7dfa5dc6e70`、`chainspec_hash=5e609d166e8517d20ec0cd2095b88825146e34e64b3ebaba54152c7bde9d1f60`、`public_institution_root=ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682`。
+- 旧全量镇级创世资产已废弃。2026-07-16 的
+  `genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`
+  只保留为历史冻结记录，已被 2026-07-26 正式创世替代。
+- 当前 49,593 个公权机构的唯一正式创世基线由 runtime 源提交
+  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0`、GitHub `CitizenChain WASM` run
+  `30190068925` 和冻结资产提交 `a5204a39b90bf83daab8b91d83da6dd150269d9a`
+  生成：`genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
+  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
+  `runtime_wasm_hash=a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`、
+  `chainspec_hash=3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`、
+  `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
 
 ### 4.4 规模账(终态)
 

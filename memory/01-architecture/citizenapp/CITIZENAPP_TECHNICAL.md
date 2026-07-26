@@ -502,9 +502,17 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - `GET /v1/chain/bootstrap` 属于 Cloudflare 边缘启动清单接口，返回 `citizenapp.chain.bootstrap.v2`：`chain`、`light_client`、`p2p`、`services`、`security`、`degradation`。该接口只治理链身份、公开 bootnodes 和服务发现，不返回 checkpoint、轻同步资产 URL/摘要或 RPC URL，不代理 JSON-RPC，不接触私钥；`signed_extrinsic_relay.enabled` 仅在 Worker 显式配置 `RELAY_ENABLED=1` 且服务节点 RPC 已配置时为 `true`，path 固定 `/v1/chain/extrinsics/relay`。
 - `POST /v1/chain/extrinsics/relay` 是已签名交易受控广播兜底接口，只接受 `signed_extrinsic_hex`，只调用服务节点 `author_submitExtrinsic`，拒绝私钥/助记词/seed/keystore 等密钥字段，并用 D1 表 `chain_extrinsic_relays` 记录 `extrinsic_sha256`、`tx_hash`、`request_ip_hash`、状态和错误码用于审计、限流和去重；该表不保存原始 extrinsic body 或 RPC URL。
 - App 端接入文件为 `citizenapp/lib/rpc/chain_bootstrap_api.dart`、`citizenapp/lib/rpc/smoldot_client.dart`、`citizenapp/lib/rpc/signed_extrinsic_relay_api.dart` 和 `citizenapp/lib/rpc/chain_rpc.dart`。`ChainBootstrapApi` 只接受 HTTPS 或本地调试 HTTP，拒绝 `api_is_truth=true`、`rpc_proxy=true`、任何 RPC URL 字段，并且只接受固定 signed extrinsic relay path；`SmoldotClientManager` 只把清单中的 bootnodes 当作 P2P 启动加速信息；`ChainRpc.submitExtrinsic` 仅在轻节点提交失败且错误像链路故障时走 relay 兜底，交易本身已显示 invalid/bad proof/stale/future/payment 类错误时不兜底。
-- Cloudflare staging API 唯一入口为 `https://www.crcfrcn.com/api-staging`，由 `CitizenApp API Staging` Access 应用保护。2026-07-25 第8.3A步只读盘点：D1 为 25 张最终业务表，只有 `chain_clock` 一行且仍指向旧链 block #9；KV 和两个 R2 桶为空，通知队列 `square-notify-fanout-staging` 的生产者和消费者均绑定 staging Worker。当前活动 Worker 版本为 `3fc28e6e-6d5b-43d2-84ad-0ea4d87ee400`，匿名健康请求继续由 Access 以 302 拦截。本次盘点没有清表、部署或改 Secret。
-- Cloudflare 链上游统一为 `chain.crcfrcn.com` 的 Access 保护路径，经健康的 `nrcgch-rpc` Tunnel 到达国储会服务器 `127.0.0.1:18080` 网关，再由网关按固定 JSON-RPC 方法转发本机节点。staging/production Worker 使用同一个 `CitizenChain` Service Auth 凭据组，Secret 值只保存在 Cloudflare。Cloudflare Access 只保留 `CitizenApp API Staging` 与 `chain` 两个应用，只保留对应两个可重用策略和一个链服务令牌。
-- Cloudflare production API 唯一入口为 `https://www.crcfrcn.com/api`。2026-07-25 第8.3A步只读盘点：D1 为 25 张最终业务表，会员、创作者订阅、充值、帖子、媒体、通讯录和聊天业务表均为空；现存数据仅为旧链 `chain_clock`、7 项设备子钥、1,001 项登录 challenge、5 项通知已读、1 项限流窗口及 625 项请求 nonce。KV 有 15 项会话/账户索引残留，两个 R2 桶为空。通知队列 `square-notify-fanout-production` 的生产者和消费者均已绑定，当前活动 Worker 版本为 `4032e9ef-55ad-4fc5-a598-96853b5ee32d`，真实 `/health` 返回 200；`/v1/chain/bootstrap` 仍返回旧创世，尚未部署本次冻结资产。会员没有外部支付 webhook；Stream 账户 webhook 固定为 `/api/v1/square/uploads/stream/webhook`。Images/Stream 只签发短期私有交付地址，Feed 不保存长期播放 URL。
+- Cloudflare staging API 唯一入口为 `https://www.crcfrcn.com/api-staging`，由 `CitizenApp API Staging` Access 应用保护。2026-07-26 第8.3B步已按唯一 0001 基线再次重建 D1，并清空 KV、两个 R2 桶和通知队列；匿名健康请求继续由 Access 以 302 拦截。25 张业务表和 KV 当前全部为零。
+- Cloudflare 链上游统一为 `chain.crcfrcn.com` 的 Access 保护路径，经 `nrcgch-rpc` Tunnel 到达国储会服务器 `127.0.0.1:18080` 网关，再由网关按固定 JSON-RPC 方法转发本机节点。staging/production Worker 使用同一个 `CitizenChain` Service Auth 凭据组，Secret 值只保存在 Cloudflare。2026-07-26 国储会部署完成后，该固定 RPC 已返回正式创世 `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`；随后正式链 finalized 到 block #4，同区块 `Timestamp.Now=1785090070105`，双环境 Cron 均从同一正式链写入 block #3 链时钟。节点重建没有改变 Tunnel、Access、域名或网关地址，旧链 block #9 没有复现。
+- Cloudflare production API 唯一入口为 `https://www.crcfrcn.com/api`。2026-07-26 第8.3B步已按唯一 0001 基线再次重建 25 张 D1 业务表，清空 KV、两个 R2 桶和通知队列，删除 Stripe Secret，保存并同步 production `TOPUP_INTENT_SECRET`，发布冻结正式链锚点；真实 `/health` 返回 200，`/v1/chain/bootstrap` 返回正式创世和状态根且交易 relay 关闭。第8.3B清理完成瞬间的 25 张业务表和 KV 均为零，随后只由正式钱包注册设备子密钥和建立会话。会员没有外部支付 webhook；Stream 账户 webhook 固定为 `/api/v1/square/uploads/stream/webhook`。Images/Stream 只签发短期私有交付地址，Feed 不保存长期播放 URL。
+- 2026-07-26 第8.3C无真实资金验收：当前正式钱包 `Rhett` 的 `account_id` 为
+  `0xb805efd2399e6e6b08fc5527c07a963bb7fdee0181a348ce68b2d2dbaf235753`，
+  SS58 为 `w5Fk5zp3WrLxDET9wUY6WJKtfmBuWTFfuQohmwzrp1efKPmid`，正式链余额
+  `100000000` 分、nonce 0。production 设备子密钥和现有会话已建立；充值订单、平台订阅、
+  创作者订阅和创作者档位均为 0。CitizenApp 64 项、Worker 174 项、CitizenConsole
+  27 项、`square-post` 23 项、runtime SquarePost 集成 4 项，共 292 项测试全部通过；
+  前后余额、nonce 和生产业务表计数不变。用户明确不执行真实购买，本轮没有唤起外部钱包、
+  账户签名、USDC/USDT 支出、发币或订阅交易。当前钱包禁止被后续清理动作删除或覆盖。
 - Cloudflare DNS 严格保留 8 条：`www`、`chain`、`nrcgch`、`prchbs`、`prches`、`prcsds`、`prcsxs`、`prczss`。production 与 staging API 都复用 `www` 的路径路由，不创建额外 API DNS。
 - production 每日 UTC 03:00 扫描退订满 90 天的视频，`ARCHIVE_ENABLED=1` 时按“Stream 导出到 R2 Infrequent Access、确认落成后删除 Stream”的顺序冷归档；重新订阅后从 R2 回灌 Stream。staging 与本地保持关闭。2026-07-11 已用 production 远端绑定触发空扫描，返回 200 且无错误。
 - App 端广场/聊天 API 默认即线上 production `SquareApiConfig.prodBaseUrl = https://www.crcfrcn.com/api`（Chat 瞬时转发与广场共用同一 Worker）；`SQUARE_API_URL` 编译期 define 仅作显式本地联调覆盖。官网同源使用 `/api`，原生 App 无 Origin 时使用 P-256 设备请求证明。
@@ -627,6 +635,18 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   同步到 #4 后拒绝 #5，守卫理由 `RewardAuditInvalid`；同时检测到管理员账户解码、
   省储行质押账户和机构存储与冻结创世不一致。因此两币真实付款必须等正式创世重新冻结、
   节点数据切换并通过上述门禁后再执行，禁止先收稳定币后补救。
+- 2026-07-26 正式链前置门禁已通过：固定国储会 RPC finalized 到 block #4，Cloudflare
+  双环境链时钟已从同一正式链恢复；CitizenConsole 发币账户
+  `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`
+  可用余额为 `100000000` 分，reserved/frozen 均为 0。本次只读校验没有支付或发币。
+  Pixel 8a 主用户和私密空间旧 `org.citizenapp` 数据当时已精确清除；随后用户已重新创建
+  正式热钱包 `Rhett`。该钱包现有应用数据、Android Keystore 和安全存储禁止再被清理、
+  重置、覆盖或卸载。用户最终要求不执行真实购买，因此本阶段只完成无资金测试；验收工具
+  不得代存或输出助记词。
+- 第8.3D只读收口审计确认 CitizenApp chainspec、light-sync checkpoint、公权机构分片和
+  Cloudflare 链身份仍统一指向正式创世
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`；
+  本机正式链 best/finalized 均为 block #6。本次没有操作手机、钱包、付款或链上交易。
 
 ### 4.6 二维码模块
 
@@ -683,10 +703,11 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 
 `LocalTxEntity` 只记录本机钱包进入 citizenapp 后的余额变化流水，不补扫导入前历史；`WalletTxSyncCursorEntity` 只记录 finalized 补同步游标，newHeads 只用于把当前区块内命中的流水先标记为 `inBlock`，不得把 best/latest block 当成 finalized。
 
-当前尚未正式创世，应用只打开代码生成的最终 Isar schema，不保存业务 schema
-版本，也不执行旧 collection、旧字段或交易流水 migration。旧 Isar 业务库删除后由
-应用按最终模型重建；secure storage、Keychain/Keystore、助记词、seed、私钥和
-生物识别保护材料不属于 Isar 业务库，严禁随业务库删除。
+正式创世已经完成，应用只打开代码生成的最终 Isar schema，不保存业务 schema
+版本，也不执行旧 collection、旧字段或交易流水 migration。正式切换时已按用户明确授权
+对 CitizenApp 整包执行一次性数据清除，Isar、secure storage、Android Keystore、助记词、
+seed、私钥和生物识别保护材料一并删除；正常运行期间仍只允许按各自生命周期管理，
+不得把删除 Isar 业务库扩展成删除钱包机密。
 
 ### 5.3 偏好层（SharedPreferences）
 

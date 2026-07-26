@@ -24,8 +24,9 @@
   `pubkeyHex` 或裸 `address`。
 - `WalletProfileEntity` 最终字段保存 `accountId + ss58Address + ss58Prefix` 及钱包
   展示元数据，不重复保存同一 32 字节值的公钥别名。
-- 当前尚未正式创世，CitizenWallet 只打开最终 Isar schema。旧 Isar 业务库删除重建，
-  不执行 migration，不读取旧 `address` / `pubkeyHex` 字段。
+- 正式创世切换前，CitizenWallet 已只按最终 Isar schema 完成旧业务库重建；运行态不执行
+  旧格式 migration，不读取旧 `address` / `pubkeyHex` 字段。正式创世后不得再把开发期
+  “删除重建”口径用于现行钱包数据或安全材料。
 - Secure Storage、Android Keystore、iOS Keychain 中的 seed、助记词密文、PIN
   派生材料和私钥保护材料不属于 Isar 业务数据，业务库重建不得删除或改写它们。
 

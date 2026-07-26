@@ -1,6 +1,6 @@
 # ADR-040：全仓账户标识采用 Substrate 官方模型
 
-状态：Accepted（2026-07-22；目标契约已冻结，代码按任务卡分步实施至本地工具和文档收口）。
+状态：Accepted（2026-07-22 冻结目标契约；2026-07-26 已随正式创世完成实施收口）。
 
 ## 背景
 
@@ -50,8 +50,10 @@ CidByAccountId[account_id] -> cid_number
 
 ### 5. 数据与兼容策略
 
-- 当前尚未正式创世，runtime 和 pallet StorageVersion 保持 `0`，直接采用最终结构，不写 migration。
-- PostgreSQL、Isar、Cloudflare D1/R2 旧业务数据全部删除并按最终 schema 重建。
+- 本 ADR 实施时尚未正式创世，因此 runtime 和 pallet StorageVersion 保持 `0`，直接采用
+  最终结构且不写 migration；该开发期条件已于 2026-07-26 正式创世结束。
+- PostgreSQL、Isar、Cloudflare D1/R2 旧业务数据已在正式创世切换前全部删除并按最终
+  schema 重建；正式创世后的现行数据不得再次按本条开发期策略删除。
 - 不保留旧字段、旧 JSON、旧 SQL 列、双写、双读、fallback 或任何过渡兼容。
 - 助记词、seed、私钥、macOS Keychain、iOS Keychain、Android Keystore 和 GitHub Secrets 不属于待删除业务数据，必须保留；同一安全材料按未改变的派生规则得到同一账户。
 - CID 生成、签名 payload、SCALE 字段顺序或哈希材料不得因纯命名重构而改变字节。实施中若发现必须改变协议字节，必须停止并单独取得确认。
@@ -72,17 +74,19 @@ CidByAccountId[account_id] -> cid_number
 - 第 5—7 步已完成 QR registry 与生成物、CitizenApp/Isar、CitizenWallet/Isar 的账户、公钥、SS58 分层和严格边界统一；旧数据库按最终 schema 重建，不保留兼容读取。
 - 第 8 步已完成 Cloudflare Worker、D1、KV、R2、Queues 和边缘协议统一，staging/production 旧业务数据按用户确认删除重建，并以真实 HTTP 和运行状态验收。
 - 第 9 步已完成本机 CitizenConsole 协议升级公钥命名、严格校验、WASM 版本职责隔离、CI/文档残留清理和真实页面验收。CitizenConsole 按用户最终决定整目录由 Git 忽略，本机修改不得进入 GitHub；旧 Keychain target 已经单独确认后删除，新 `NRC_SIGNER_PUBLIC_KEY` 由用户另行配置。
-- 第 10 步为全链真实运行态总验收，完整方案已写入任务卡，尚未执行。
+- 第 10 步已完成正式创世运行态总验收：节点、CitizenApp、Cloudflare 使用同一创世哈希
+  和状态根，账户标识继续按本 ADR 执行；本次无资金回归没有产生交易或业务数据。
 
 ## 备选方案
 
 - 保留 `wallet_account`：拒绝。钱包是软件载体，不是 runtime 身份类型。
 - 全部统一为 `public_key`：拒绝。账户标识、公钥和 SS58 地址是不同层次，未来签名算法变化后尤其不能混用。
 - 全部统一为 `account_id` 而删除角色：拒绝。同一结构有多个账户时会失去发送方、接收方、投票人等业务语义。
-- 保留旧字段兼容：拒绝。当前没有正式创世数据，兼容会永久制造双轨。
+- 保留旧字段兼容：拒绝。正式创世前直接清理已经完成；正式创世后恢复旧字段同样会永久
+  制造双轨。
 
 ## 后续动作
 
-- 按 `memory/08-tasks/20260722-account-id-official-unify.md` 分步实施。
-- 每一步先输出完整技术方案；涉及 runtime 时按完整路径取得二次确认。
-- 每一步完成代码、文档、中文注释和残留清理；最终重新创世并完成真实运行态验收。
+- 后续变更继续遵守本 ADR；涉及 runtime 时必须按完整路径取得二次确认。
+- 正式创世已经完成，不再执行“最终重新创世”。后续 runtime 变更只能通过正式链升级流程，
+  并对既有状态执行必要的原子迁移，不得恢复旧命名或兼容分支。

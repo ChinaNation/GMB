@@ -66,7 +66,7 @@ lib/
   - 钱包元数据写入 Isar
 - `lib/isar/app_isar.dart`
   - Isar 最终集合定义与数据库打开
-  - 当前尚未正式创世，业务库直接删除重建，不保存本地 schema 版本、不执行 migration
+  - 正式创世切换前已完成最终业务库重建；运行态不读取旧 schema、不执行旧格式 migration
   - 提供 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 作为全 App 业务读写唯一入口；余额刷新、交易流水同步、多签扫描、钱包导入等并发读写必须排队执行
   - `LocalTxEntity` 保存本机钱包进入 App 后的余额变化流水；`WalletTxSyncCursorEntity` 保存每个钱包的同步起点和最新同步高度
 - `wallet_secure_keys.dart`
@@ -274,9 +274,10 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 ## 6. 数据重建策略
 
-当前尚未正式创世，CitizenApp 只打开最终 Isar schema，并在空库中创建唯一的
-`WalletSettingsEntity(id=0)`。旧 Isar 业务库直接删除重建，不保存
-`wallet.data.schema.version`，不执行 collection 清理 migration，也不读取旧字段。
+正式创世切换前，CitizenApp 已按最终 Isar schema 完成一次空库重建，并创建唯一的
+`WalletSettingsEntity(id=0)`。运行态不保存 `wallet.data.schema.version`，不执行旧
+collection 清理 migration，也不读取旧字段。2026-07-26 正式创世后，当前正式热钱包
+`Rhett` 及其应用数据不得再按开发期策略清空、重置、覆盖或通过卸载删除。
 secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保护材料不属于
 业务库，严禁随 Isar 删除。
 

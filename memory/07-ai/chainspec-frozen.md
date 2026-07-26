@@ -76,7 +76,34 @@
 7. 无头服务器下载对应平台软件，停服务安装后保留节点身份密钥和 GRANDPA keystore；
    新数据目录由安装包内 release 状态包初始化，既有链数据库不得被覆盖。
 
-## 当前唯一冻结锚点（2026-07-16）
+## 当前唯一正式创世锚点（2026-07-26）
+
+- runtime 源提交：`ac6de21b2432f52f45f1767f88f4e6833a2c79d0`；冻结资产提交：
+  `a5204a39b90bf83daab8b91d83da6dd150269d9a`；GitHub `CitizenChain WASM`
+  run：`30190068925`，artifact：`8628330093`。
+- `genesis_hash`：
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`。
+- `state_root`：
+  `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`。
+- `runtime_wasm_hash`：
+  `a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`。
+- 全节点 `chainspec_hash`：
+  `3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`。
+- CitizenApp `chainspec_hash`：
+  `6d5fce5d349d99c8521a5a8aa690cdb038d6594003cebf55ce01cc7825861310`。
+- `light_sync_state_hash`：
+  `95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`。
+- `public_institution_root`：
+  `c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`，
+  43 省共 49,593 个公权机构。
+
+同一次 release bake 生成的节点 plain SSOT、创世状态包、CitizenApp 轻形态 chainspec、
+light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉校验通过。2026-07-26
+本机正式节点与固定远端 RPC 均返回上述创世哈希和状态根；本机正式链审计时 best/finalized
+均为 block #6、`isSyncing=false`。正式创世已经完成，不得再次执行 `--finalize` 覆盖上述
+锚点；后续 runtime 升级只能通过正式链 `system.setCode`，除非用户另行明确批准正式硬分叉。
+
+## 历史冻结锚点（2026-07-16，已被正式创世替代）
 
 - runtime 源提交：`7abac7982a5c5ee25580583d456523ce2132743e`；冻结资产提交：`80f58aa5cfe19713edfba7331ea2896cacf09b62`；GitHub `CitizenChain WASM` run：`29530114067`。
 - `genesis_hash`：`0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`。
@@ -89,10 +116,10 @@
 
 正式 bake 的创世物化耗时 51 秒；公民宪法 `law_id=0`、v1 生效版和不可变条款校验通过。临时节点使用同一 CI WASM 真实启动并经 RPC 返回上述 block#0/state root，`isSyncing=false`。`bake-chainspec.sh` 的 RPC 轮询必须让内嵌 Python 正常解析响应；不得抑制解析失败后把已就绪节点误判为超时。
 
-## 第 5 步 preview 候选（2026-07-16，非冻结值）
+## 第 5 步 preview 候选（2026-07-16，历史非冻结值）
 
 - 本次只完成创世准备，没有执行 CI、`--finalize`、正式冻结或正式创世；上节 2026-07-14
-  锚点仍是仓库当前唯一正式锚点。
+  锚点在当时仍是仓库发布锚点。该记录现已被 2026-07-26 正式创世锚点取代。
 - preview 候选：`genesis_hash=0x8347f61bd28c93c4ce6d6b98f4b5a70f185841e0ac87b0bab9eb8c6caf8375ed`，
   `state_root=0x467996c0094900833e30ff0a11e668aaf234abc35acdb4917f858702642ee707`，
   `runtime_wasm_hash=c5333afdf66c5d60f58d9101c2dc49a50885773c7708dace7d64fd5f7a1079b5`，

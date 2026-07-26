@@ -13,7 +13,10 @@ Cloudflare staging 和全量测试证据见第 10 步执行结果）。
 - SS58 只作为展示和输入输出地址，字段统一为 `ss58_address`，不得作为授权或持久化主键。
 - `account_id` 和 32 字节公钥的文本编码统一为小写 `0x` 加 64 位十六进制，校验式为 `^0x[0-9a-f]{64}$`。
 - 删除 `wallet_account`、`admin_account`、`owner_account`、`wallet_pubkey`、`admin_pubkey` 等同义命名，不保留旧格式、旧字段、双读或兼容分支。
-- 当前尚未正式创世，PostgreSQL、Isar、Cloudflare D1/R2 的旧业务数据全部删除重建；不编写 migration。助记词、seed、私钥和 Keychain/Keystore 安全材料不属于业务数据，禁止删除，账户按原派生规则重新得到同一 `AccountId`。
+- 本任务实施时尚未正式创世，因此 PostgreSQL、Isar、Cloudflare D1/R2 的旧业务数据一次性
+  删除重建且不编写 migration；该开发期条件已于 2026-07-26 正式创世结束。助记词、seed、
+  私钥和 Keychain/Keystore 安全材料始终不属于业务数据，禁止删除，账户按原派生规则得到
+  同一 `AccountId`。
 
 ## 不变边界
 

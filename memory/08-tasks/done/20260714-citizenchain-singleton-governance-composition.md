@@ -70,7 +70,9 @@
 - 六个国家单例创世只含空缺默认 LR 岗位，不含成员岗位、任职、admins 或动态阈值；组成前先独立登记 admins，治理结果再写成员岗位和任职。
 - 新增 `national_body_composition` 原生策略；五类固定治理码的 `InternalThresholdSnapshot` 必须等于编译期阈值，FRG 省岗位组上下文同样覆盖。
 - 当前累计回归：primitives 66/66、public-admins 8/8、public-manage 42/42、runtime 集成 40/40、NodeGuard 整组 88/88；其中 NodeGuard 国家组成专项 8/8、CID 生命周期专项 15/15。
-- 最新正式冻结：GitHub `CitizenChain WASM` run `29530114067` artifact 校验通过；`runtime_wasm_hash=be4585ce369e658e6799be667ed5be692fc050f9c6196ab14c53f7dfa5dc6e70`，物化耗时 51 秒。
+- 本任务当时最新冻结：GitHub `CitizenChain WASM` run `29530114067` artifact 校验通过；
+  `runtime_wasm_hash=be4585ce369e658e6799be667ed5be692fc050f9c6196ab14c53f7dfa5dc6e70`，
+  物化耗时 51 秒。该值已被 2026-07-26 正式创世锚点替代。
 - 唯一发布锚点：`genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、`state_root=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`、`chainspec_hash=5e609d166e8517d20ec0cd2095b88825146e34e64b3ebaba54152c7bde9d1f60`、`light_sync_state_hash=4b05735ed59a8ef3756bf6445f1e4fa744730d2161ad14a62be1e16856bbfb9a`、`public_institution_root=ecff487ce7d2bac6cb89d064a456187b453acd27f4bee2b140f474a48d072682`。
 - 冻结一致性脚本、43 省分片及 49,593 总数校验通过；默认内嵌链规范使用正式创世状态包真实启动，RPC 返回同一 block#0/state root、`isSyncing=false`，节点正常退出。
 - CitizenApp 本地 checkpoint、缓存测试夹具、Cloudflare bootstrap 默认值及 development/staging/production 三套环境链身份已同步；Flutter 相关 31/31、smoldot chain-spec 4/4、Cloudflare typecheck、Worker 167/167 测试通过，未执行远端部署。

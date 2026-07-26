@@ -12,7 +12,10 @@
 - 验签先由 `signer_public_key` 得到 `signer_account_id`，再与业务要求的 `account_id` 或 `<role>_account_id` 比较；不得直接按 SS58 文本授权。
 - 机构岗位权限仍为 `cid_number + role_code + account_id`，公民身份仍为 `cid_number + account_id`；账户命名统一不得改变 CID、岗位和签名职责边界。
 - 纯命名重构不得改变账户字节、SCALE 顺序、签名 payload、哈希材料、CID 生成结果或助记词派生。若实现发现必须改变任一协议字节，必须停止并单独确认。
-- 当前没有正式创世，链上和链下业务数据直接按目标结构重建，不写 migration、双读、双写或旧格式兼容；助记词、seed、私钥、Keychain/Keystore 和 Secret 不属于待删除业务数据。
+- 该命名统一在正式创世前已通过删除旧业务数据并按目标结构重建完成，当时未写 migration、
+  双读、双写或旧格式兼容。2026-07-26 正式创世后，链上状态、当前 CitizenApp 钱包及其
+  安全材料均不得再按开发期清理口径删除；助记词、seed、私钥、Keychain/Keystore 和
+  Secret 始终不属于可删除业务数据。
 
 ## 0.1 机构、岗位、权限与管理员目标契约（ADR-039，2026-07-19）
 
@@ -40,16 +43,22 @@
 - 个人多签及 `personal-admins` 使用独立 `AuthorizationSubject::PersonalMultisig`，不使用机构岗位契约。
 - 每个业务模块前置校验 `RoleSubject`，在代码中静态指定唯一投票引擎并绑定 VotePlan；调用方不得选择引擎。投票引擎只做资格快照、票据、阈值、计票和终态，不执行具体业务。
 
-## 0.2 正式创世前项目版本归零契约（2026-07-21）
+## 0.2 正式创世版本基线（2026-07-21 定稿，2026-07-26 生效）
 
-当前 CitizenChain 尚未正式创世，不存在需要迁移或兼容的链上历史状态。正式创世前，项目自身版本必须统一使用初始值，不得用版本递增掩盖仍可直接修改的开发期结构：
+正式创世前不存在需要迁移或兼容的链上历史状态，因此项目自身版本统一使用以下初始值，
+不得用版本递增掩盖开发期结构调整。该归零阶段已经结束，以下值现为正式创世版本基线：
 
 - runtime 的 `authoring_version`、`spec_version`、`impl_version`、`transaction_version`、`system_version` 全部为 `0`。
 - 所有项目 pallet 的 `StorageVersion` 全部为 `0`；结构调整直接落到创世目标结构，不编写 migration、双读或旧 storage 兼容。
 - CitizenChain workspace、runtime 和 Node 的项目程序包版本统一为 `0.0.0`。
 - 第三方依赖版本不属于项目版本归零范围，不得修改。
 - Substrate runtime API trait 的协议版本用于框架 API 协商，不属于项目升级计数，不得为了本规则修改。
-- 正式创世以后，runtime、Node 或 storage 发生真实升级时，才按对应升级规则递增版本并提供必要迁移。
+- 当前正式创世哈希为
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`，
+  状态根为
+  `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`。
+- 正式创世以后，runtime、Node 或 storage 发生真实升级时，才按对应升级规则递增版本并
+  对既有正式链状态执行必要的原子迁移；禁止重新烘焙创世、双读、双写或保留旧协议兼容分支。
 
 ## 0.3 密钥/签名文本编码统一带 0x 契约（ADR-041，2026-07-24）
 

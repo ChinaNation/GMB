@@ -114,8 +114,9 @@
 - 创世配置：正式安装包只内置冻结 plain chainspec，不携带 RocksDB。首启必须从该
   chainspec 本地物化块 0，并在进入运行态前核验创世哈希；preview 或 release
   `genesis-state` 都不得进入四平台安装包。release 状态包只作为正式创世审计制品保留。
-- 当前正式冻结锚点（2026-07-25，runtime 源提交
-  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0`，冻结资产尚待下一步提交，GitHub
+- 当前唯一正式创世锚点（2026-07-26，runtime 源提交
+  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0`，冻结资产提交
+  `a5204a39b90bf83daab8b91d83da6dd150269d9a`，GitHub
   `CitizenChain WASM` run `30190068925`）：
   `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
   `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
@@ -181,13 +182,36 @@
 - 国储会节点及其它服务器部署已被用户明确移出本任务。本机、Cloudflare 与手机数据切换
   不读取服务器 SSH 配置，也不连接、停止、清理或部署任何远端节点。
 
-2026-07-16 第 5 步仅完成创世准备：preview 候选块 0 为
+2026-07-26 第8.3B步本机正式切换验收：
+
+- 冻结资产提交 `a5204a39b90bf83daab8b91d83da6dd150269d9a` 推送后，CitizenChain CI
+  `30211805231` 的 Linux arm64、Linux amd64、macOS arm64 和 Windows 均成功。
+- 本机全部旧 `gmb.dev`、`gmb` 和历史桌面运行目录已经删除。CI macOS 应用安装后没有
+  复制 release RocksDB，而是从内嵌冻结 plain chainspec 首启物化新数据。
+- 新进程真实监听 `127.0.0.1:9944`；RPC 返回 block #0
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
+  state root `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`，
+  finalized head 为 block #0、`isSyncing=false`，证明轻量安装包首启合同成立。
+- 本步骤没有转入基金会费用账户或 CitizenConsole 发币账户资金，没有连接、清理或部署
+  国储会服务器。国储会负责方完成部署后，Cloudflare 固定加密 Tunnel RPC 已返回同一
+  正式创世；节点重建没有改变 Tunnel、Access、域名或本机网关端口。
+- 正式链随后 finalized 到 block #4，区块哈希
+  `0x48e0fc5df7690ec1af702a1b07a9512b5aa5fb0e8589c7ce21a0cfbada119461`，
+  同区块 `Timestamp.Now=1785090070105`。Cloudflare staging/production Cron 均已从同一
+  正式链恢复 block #3 链时钟，旧链 block #9 没有复现，固定加密 RPC 运行态验收通过。
+- CitizenConsole 发币账户只读链查询返回可用余额 `100000000` 分、nonce 0、
+  reserved/frozen 均为 0；该余额是创世后的独立资金步骤结果，本任务没有发起发币或其它
+  签名交易。
+- 第8.3D步只读收口审计时，本机正式链 best/finalized 已自然推进到 block #6，
+  `isSyncing=false`；创世哈希、状态根和账户 nonce/余额未发生验收交易导致的变化。
+
+2026-07-16 第 5 步历史创世准备记录：preview 候选块 0 为
 `0x8347f61bd28c93c4ce6d6b98f4b5a70f185841e0ac87b0bab9eb8c6caf8375ed`，state root 为
 `0x467996c0094900833e30ff0a11e668aaf234abc35acdb4917f858702642ee707`。该值已经过隔离
-node、NodeGuard、OnChina 真实投影/API/页面验证，但不是冻结值；2026-07-14 正式锚点保持不变，
-后续必须等 CI WASM、release freeze 与正式创世阶段再执行 `--finalize`。
+node、NodeGuard、OnChina 真实投影/API/页面验证，但不是冻结值；本段所述发布条件现已由
+2026-07-26 正式创世完成，不得把该 preview 或当时锚点作为当前发布依据。
 
-2026-07-01 正式创世冻结收口:
+2026-07-01 历史创世冻结准备记录：
 
 - GitHub WASM run:`28492547251`,提交 `208ae60d81828d04946239e21b648b8f1ba0c2a0`,artifact `citizenchain-wasm` id `7999877697`。
 - CI WASM `citizenchain.compact.compressed.wasm` sha256:`b6d8c9dcee90df963dcda89c96b18c8f3361d37f31c52686dddda0480195df92`。

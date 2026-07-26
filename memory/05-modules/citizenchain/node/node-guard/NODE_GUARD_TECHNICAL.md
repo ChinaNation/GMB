@@ -102,7 +102,13 @@ PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取�
 
 启动自检失败只记录 `node-guard` 错误日志并让节点继续启动，不能阻断 P2P、RPC、挖矿或已有合法状态服务。节点守卫真正执法的边界是后续普通区块、完整状态包和候选 runtime 导入：固定机构、机构码/状态/管理员总数、固定岗位、席位数、任职账户、admins 集合、NJD 的 7/1/2/5 和 FRG 的 43×5 等规则在这些导入路径仍统一 fail-closed；非法候选只被拒绝，节点继续停留在此前已运行的合法 runtime。
 
-2026-07-16 已使用 GitHub WASM CI run `29530114067` 重生唯一冻结链规范和创世状态包。49,593 个创世公权机构成功物化，NodeGuard 未拒绝；临时节点真实启动后，`chain_getBlockHash(0)` 返回 `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`，`stateRoot=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`，`isSyncing=false`。验收节点正常退出，不保留双轨或旧 SCALE 兼容。
+2026-07-16 当时使用 GitHub WASM CI run `29530114067` 重生冻结链规范和创世状态包。
+49,593 个创世公权机构成功物化，NodeGuard 未拒绝；临时节点真实启动后，
+`chain_getBlockHash(0)` 返回
+`0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`，
+`stateRoot=0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`，
+`isSyncing=false`。验收节点正常退出，不保留双轨或旧 SCALE 兼容；该值现为历史记录，
+当前正式锚点见第 22 节。
 
 2026-07-18 管理员三字段改造第2步验收：NodeGuard 直接解码共享 `Admin` 后，Node 280 项测试全部通过；强制重建当前源码 WASM 和 Node，并以隔离 `citizenchain-fresh` 启动，block#0 为 `0xc1dc759689aed0a8f8361dc3cb0e39c1faf19cfc55c7611b02ccc79ce04524c6`，`stateRoot=0x967155d28abe492052ef4bfd59a1ddbebce8cdaa57d9baaad446028848061a5e`，`isSyncing=false`。没有 NodeGuard 拒绝或旧纯账户兼容，验收节点已停止并清理临时数据；未替代第8步正式 chainspec 烘焙和数据切换。
 
@@ -470,7 +476,12 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 - 第 4 步完成 NodeGuard 职责收口：89 个固定治理机构按完整身份精确保护，普通机构不进入治理骨架分区；六个国家单例只冻结身份，只有 NSN/NRP/NED 进入成员组成策略；NLG/NSP/PRS 的运行期岗位/admins 不触发误拒绝。
 - 新增提案/快照双向复核与 `:code` 存量全检，补齐 runtime 升级不触碰旧 key 或移走旧快照表时的永久阈值缺口；专项同时证明六个国家单例均不进入固定阈值策略。
 - 第 4 步回归为 primitives 66/66、国家组成专项 8/8、NodeGuard 整组 88/88。
-- 最新正式冻结使用 Git commit `7abac7982a5c5ee25580583d456523ce2132743e` 的 CI WASM：block#0 `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、state root `0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`。冻结一致性脚本、43 个公权分片哈希及临时节点真实 RPC 验收均通过。
+- 本节当时的冻结使用 Git commit `7abac7982a5c5ee25580583d456523ce2132743e`
+  的 CI WASM：block#0
+  `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`、
+  state root
+  `0x99b4cb3031baa5e87536a22190dc81bf6bf49d3678c0abae86a312268506fe09`。
+  这是历史验收值，已被第 22 节正式创世锚点替代。
 
 ## 20. 私权创世公民链基金会接入验收（2026-07-19，2026-07-20 更新）
 
@@ -494,3 +505,18 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
   推进。验收没有修改创世资金、替换权威集合或复制正式私钥。
 - 该结果只证明当前源码创世与守卫的静态/启动一致性，不替代第8步以正式 CI WASM、正式
   chainspec 和正式权威环境执行的出块、跨节点导入及终局验收。
+
+## 22. 正式创世 NodeGuard 收口（2026-07-26）
+
+- 唯一正式创世使用 runtime 源提交
+  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0`、GitHub `CitizenChain WASM` run
+  `30190068925` 和冻结资产提交 `a5204a39b90bf83daab8b91d83da6dd150269d9a`。
+- 正式 `genesis_hash` 为
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`，
+  `state_root` 为
+  `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`。
+- 本机正式节点从内嵌 plain chainspec 物化新数据后通过 NodeGuard 启动自检；只读收口审计
+  时 best/finalized 均为 block #6、`isSyncing=false`，创世哈希和状态根保持不变。
+- 第 21 节及更早章节中的 fresh、preview 和历史冻结哈希只用于追溯各阶段守卫验收，
+  均不得作为部署、网络连接或重新创世依据。正式创世后 NodeGuard 继续保护链上既有状态；
+  runtime 只能走链上升级，不得通过重烘焙创世绕过守卫。
