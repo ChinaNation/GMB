@@ -22,6 +22,7 @@ const STARTUP_GRACE: Duration = Duration::from_secs(120);
 const REQUIRED_SUSPECT_SAMPLES: u32 = 6;
 const DEGRADED_AUDIT_WINDOW: Duration = Duration::from_secs(10 * 60);
 
+// 守护线程与前端状态分别持有独立互斥量，避免诊断读取阻塞停止信号。
 static GUARD_RUNTIME: OnceLock<Mutex<Option<SyncGuardRuntime>>> = OnceLock::new();
 static GUARD_STATUS: OnceLock<Mutex<SyncGuardStatus>> = OnceLock::new();
 

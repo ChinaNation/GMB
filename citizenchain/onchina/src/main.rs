@@ -38,7 +38,9 @@ pub(crate) use domains::citizens::model::*;
 /// 每次进 tab 全量链读(全省任职扫描 + 批量余额)代价高;短窗内重复打开直接命中缓存,
 /// 避免每次开 tab 都阻塞全量链读。管理员变更后至多缓存窗口延迟可见。
 pub(crate) type FederalAdminsCache = Arc<
-    std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Vec<FederalRegistryAdminRow>)>>,
+    std::sync::Mutex<
+        std::collections::HashMap<String, (std::time::Instant, Vec<FederalRegistryAdminRow>)>,
+    >,
 >;
 
 #[derive(Clone)]
@@ -1360,6 +1362,8 @@ impl Db {
         })
     }
 
+    // 参数逐项对应稳定 SQL 过滤维度，封装结构会掩盖调用点的查询范围，故保持显式参数。
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn list_institutions_exact(
         &self,
         filter: crate::institution::subjects::InstitutionListFilter,
@@ -1596,6 +1600,8 @@ impl Db {
         })
     }
 
+    // 公权目录查询显式携带省市镇、机构码和分页窗口，避免把权限范围藏入泛化对象。
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn list_official_institutions_scope(
         &self,
         province_code: &str,
@@ -1996,7 +2002,7 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
 
     // 2. 逐省单事务级联删(禁止跨省一条 SQL)。
     let mut deleted_total: u64 = 0;
-    for (province, _cids) in &all_by_province {
+    for province in all_by_province.keys() {
         let gov_cids = gov_by_province.get(province).cloned().unwrap_or_default();
         let private_cids = private_by_province
             .get(province)
@@ -2055,7 +2061,8 @@ fn main() {
             "DATABASE_URL points to non-local host, but sync postgres client is running in NoTls mode; set ONCHINA_ALLOW_REMOTE_DB_WITHOUT_TLS=true only if transport is protected externally"
         );
     }
-    let db = Db::from_database_url(database_url.as_str()).expect("init database");
+    let db = Db::from_database_url(database_url.as_str())
+        .unwrap_or_else(|err| panic!("init database failed: {err}"));
     let state = AppState {
         db,
         rate_limiter: Arc::new(LocalRateLimiter::new()),
@@ -2112,7 +2119,7 @@ fn main() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .expect("build tokio runtime");
+        .unwrap_or_else(|err| panic!("build tokio runtime failed: {err}"));
     let indexer_db = match core::chain_url::chain_ws_url() {
         Ok(_) => Some(state.db.clone()),
         Err(err) => {
@@ -2522,7 +2529,8 @@ fn main() {
         // 管理员成员资格仍以链上 Active 集合为准,本地只允许同省更换投影。
 
         // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。
-        let addr = resolve_backend_bind_addr().expect("resolve onchina backend bind address");
+        let addr = resolve_backend_bind_addr()
+            .unwrap_or_else(|err| panic!("resolve onchina backend bind address failed: {err}"));
 
         // (Card 05):收退出信号(Ctrl-C / node 停子进程 SIGTERM)→ 优雅停内嵌 PG → 退出。
         // 内嵌关闭时无操作;daemon 化的 postgres 即便被强杀也会在下次 ensure_started 复用。
@@ -2550,15 +2558,15 @@ async fn serve_console(addr: SocketAddr, app: axum::Router) {
         axum_server::bind_rustls(addr, config)
             .serve(service)
             .await
-            .expect("run onchina backend https server");
+            .unwrap_or_else(|err| panic!("run onchina backend https server failed: {err}"));
     } else {
         info!("onchina console listening on http://{}", addr);
         let listener = tokio::net::TcpListener::bind(addr)
             .await
-            .expect("bind onchina backend listener");
+            .unwrap_or_else(|err| panic!("bind onchina backend listener failed: {err}"));
         axum::serve(listener, service)
             .await
-            .expect("run onchina backend server");
+            .unwrap_or_else(|err| panic!("run onchina backend server failed: {err}"));
     }
 }
 

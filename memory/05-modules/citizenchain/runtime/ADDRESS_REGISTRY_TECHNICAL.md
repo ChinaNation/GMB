@@ -71,4 +71,10 @@ province_code + city_code + town_code + address_name_code + address_local_no + a
 ```text
 cargo check --manifest-path citizenchain/Cargo.toml -p address-registry
 cargo check --manifest-path citizenchain/Cargo.toml -p citizenchain
+cargo clippy --manifest-path citizenchain/Cargo.toml -p address-registry --all-targets -- -D warnings
 ```
+
+2026-07-25 正式创世前复验：地址键返回类型已收口为模块内类型别名；FRAME extrinsic
+参数数量属于既定 SCALE 调用 ABI，仅在本 pallet 使用带中文原因的最窄 lint 许可。
+storage、call index、参数顺序、权限和费用逻辑均未改变。地址模块严格 Clippy 及工作区
+全量测试通过。

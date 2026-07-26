@@ -27,86 +27,57 @@ export interface SquareNotifyJob {
   cursor?: { created_at: number; account_id: string };
 }
 
-export interface Env {
-  DB: D1Database;
-  SQUARE_MEDIA: R2Bucket;
-  // 大媒体(>100MB)瞬时中转专用桶(桶级 24h 生命周期 TTL);只存薪火 + >100MB 的 E2E 密文。
-  CHAT_RELAY?: R2Bucket;
-  SQUARE_CACHE: KVNamespace;
-  CHAT_REALTIME?: DurableObjectNamespace;
-  STREAM?: StreamBinding;
+/// Wrangler 根据 wrangler.toml 生成普通变量与资源绑定；Secret 仅保留名称契约，不写入配置或生成物。
+interface WorkerSecretsAndOptionalVars {
   // 平台推送只发送无内容 Chat 唤醒；私钥只允许使用 Worker Secret 配置。
   APNS_KEY?: string;
   APNS_KID?: string;
   APNS_TEAM?: string;
   APNS_TOPIC?: string;
-  APNS_ENV?: string;
   FCM_PROJECT?: string;
   FCM_EMAIL?: string;
   FCM_KEY?: string;
-  // 广场发帖通知扇出队列（producer 入队、consumer 分页跨调用推完全部未静音粉丝）。
-  SQUARE_NOTIFY_QUEUE?: Queue<SquareNotifyJob>;
   // Cloudflare 账户由 R2 冷归档、Images、Stream 共用；S3 密钥只用于内部归档读取。
   CF_ACCOUNT_ID?: string;
   R2_ACCESS_ID?: string;
   R2_SECRET_KEY?: string;
-  R2_BUCKET?: string;
-  SESSION_TTL_SECONDS?: string;
-  UPLOAD_TTL_SECONDS?: string;
   // Worker 通过 Access + Tunnel 调用权威节点回环 RPC；URL 和服务令牌只放远端 Secret。
   CHAIN_URL?: string;
   CHAIN_ID?: string;
   CHAIN_SECRET?: string;
-  // 轻节点启动清单只下发公开 bootnodes 和冻结链身份，不下发 checkpoint 或 RPC 地址。
-  CHAIN_BOOTNODES?: string;
-  BOOT_TTL_SECONDS?: string;
   // 官网「公民宪法」tab 读链文档的 KV 短缓存 TTL（秒，缺省 300）。修宪后一个 TTL 内自动刷新。
   CONSTITUTION_TTL_SECONDS?: string;
-  CHAIN_GENESIS_HASH?: string;
-  CHAIN_STATE_ROOT?: string;
-  // 已签名交易兜底广播：只转发完整 signed extrinsic，不提供通用 JSON-RPC proxy。
-  RELAY_ENABLED?: string;
-  RELAY_MAX_BYTES?: string;
-  RELAY_PER_MINUTE?: string;
   // Cloudflare Images / Stream API token 只放 Worker Secret；App 只拿一次性上传 URL。
   CF_API_TOKEN?: string;
-  IMAGES_URL?: string;
-  STREAM_URL?: string;
   STREAM_HOOK_SECRET?: string;
-  MEDIA_TTL_SECONDS?: string;
   IMAGES_SIGNING_KEY?: string;
-  TURNSTILE_SITEKEY?: string;
   TURNSTILE_SECRET?: string;
-  WEB_ORIGIN?: string;
   HASH_KEY?: string;
-  // 退订视频冷归档：开关（'1' 开）与阈值（天，缺省 90）。关闭时 Cron 不做任何归档。
-  ARCHIVE_ENABLED?: string;
-  ARCHIVE_LAPSE_DAYS?: string;
-  // 会员镜像对账：平台/创作者各自开关（'1' 开）+ 共用每轮批量（缺省 50，上限 500）。
-  // 均为 wrangler 默认值；运行期以 KV 开关（flag:membership_reconcile / flag:creator_reconcile）
-  // 优先，供控制台即时开关。关闭时 Cron 对账内部直接返回。
-  MEMBERSHIP_RECONCILE_ENABLED?: string;
-  CREATOR_RECONCILE_ENABLED?: string;
-  MEMBERSHIP_RECONCILE_BATCH?: string;
-  // 稳定币充值购买公民币（topup）：网络 / 收款地址 / 各链 EVM RPC / 合约覆盖 / 确认数 / 结算令牌。
-  // 'mainnet' | 'testnet'（缺省 testnet，沙箱期）。
-  TOPUP_NETWORK?: string;
-  // 平台/国储会 EVM 收款地址（同一 EOA 跨链复用）。
-  TOPUP_RECV_ADDRESS?: string;
-  // 各链 EVM JSON-RPC（必须 https）；若 URL 内嵌 API key 则改用 wrangler secret。
-  TOPUP_BASE_RPC_URL?: string;
-  // 覆盖代币合约地址（testnet mock USDT 必填；mainnet 用代码内置默认）。
-  TOPUP_USDC_CONTRACT?: string;
-  TOPUP_USDT_CONTRACT?: string;
-  // 最小确认数；>0 按 latest 计算，=0（缺省）按 finalized 区块判定。
-  TOPUP_MIN_CONFIRMATIONS?: string;
   // 本地部署控制台↔Worker 结算接口鉴权令牌，只放 Worker Secret。
   TOPUP_SETTLE_TOKEN?: string;
   // 付款意图 HMAC 密钥，只放 Worker Secret；用于把登录账户、付款钱包和报价绑定为短期令牌。
   TOPUP_INTENT_SECRET?: string;
-  // 公民币发放账户的规范 AccountId；Worker 用它独立核验最终链上转账签名者。
-  TOPUP_DISBURSE_ACCOUNT_ID?: string;
 }
+
+/// Wrangler 会把配置值推导为字面量；Worker 运行期仍需接受测试覆盖值和控制台注入的字符串。
+type WidenWorkerVar<T> = T extends string ? string : T;
+type GeneratedBindings = {
+  [K in keyof CloudflareBindings]: WidenWorkerVar<CloudflareBindings[K]>;
+};
+
+/// 数据库、广场媒体桶和缓存是基础能力；其余变量与资源延续原契约，缺失时由业务入口 fail-closed。
+type RequiredRuntimeBinding = 'DB' | 'SQUARE_MEDIA' | 'SQUARE_CACHE';
+type SpecializedRuntimeBinding = 'CHAT_REALTIME' | 'SQUARE_NOTIFY_QUEUE';
+type RuntimeBindings =
+  Pick<GeneratedBindings, RequiredRuntimeBinding>
+  & Partial<Omit<GeneratedBindings, RequiredRuntimeBinding | SpecializedRuntimeBinding>>
+  & {
+    CHAT_REALTIME?: DurableObjectNamespace;
+    SQUARE_NOTIFY_QUEUE?: Queue<SquareNotifyJob>;
+  };
+
+/// Worker 唯一环境类型 = Wrangler 生成的真实绑定 + 不可写入 wrangler.toml 的 Secret 名称。
+export type Env = RuntimeBindings & WorkerSecretsAndOptionalVars;
 
 export interface SessionState {
   account_id: string;

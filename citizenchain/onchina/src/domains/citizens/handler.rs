@@ -3,6 +3,9 @@
 //! 公民查询能力属于 citizens 模块,不属于权限范围规则。
 //! 因此本文件承接后台公民列表和公开身份查询入口。
 
+// 公民 handler 的失败分支统一携带完整 Axum Response，避免公开与管理入口形成双轨错误模型。
+#![allow(clippy::result_large_err)]
+
 use axum::{
     body::Body,
     extract::{Multipart, Path, Query, State},

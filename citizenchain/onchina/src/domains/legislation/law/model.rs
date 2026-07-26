@@ -243,6 +243,8 @@ pub fn to_law_chapters(chapters: &[ChapterArg]) -> Vec<LawChapter> {
 }
 
 #[cfg(test)]
+// 法律模型夹具必须通过固定校验，断言式解包仅限测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

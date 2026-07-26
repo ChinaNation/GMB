@@ -51,6 +51,8 @@ pub(crate) struct AdminSecurityGrant {
 }
 
 #[cfg(test)]
+// 序列化夹具异常应使测试立即失败，断言式解包仅限本测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：正式创世前统一改造第6步私权创世机构接入已完成；2026-07-20 该机构已按最终确认重新定义为“公民链技术发展基金会”，下一步为第7步正式创世阻塞审计
+- 当前步骤：第7步正式创世前一致性验收完成；全仓库全部 target 的严格 Clippy、全量测试、AI 守卫和残留检查已通过，订阅逻辑保持不变；待确认第8步 GitHub CI WASM 与正式创世冻结方案
 - 用户确认：2026-07-17
 - 执行规则：每一步先确认方案；执行完成后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案
 
@@ -180,3 +180,79 @@
 - 2026-07-19：第6步验证通过：primitives 72 项、private-admins/private-manage 17 项、runtime 45 项、Node 281 项、OnChina 137 项测试全部通过；生产/no-default-features 编译、WASM 强制重建、格式和残留检查通过。当前源码以隔离 `citizenchain-fresh --tmp` 真实启动，节点守卫启动自检通过，block#0 `0x1732f0f1005d7e8ee7f9292e35a036698ece48569f6aca8e01f56f264761083d`、`stateRoot=0x37379726b7245af3123618fe032fa5355e17ec847159703daf6a9b5322a04fd3`、`isSyncing=false`。本步未烘焙正式 chainspec、未更新 CitizenApp/Cloudflare 正式资产、未切换节点数据、未部署或推送。
 - 2026-07-17：OnChina、CitizenWallet、CitizenApp 已同步删除 `institution_create_credential` 动作码；CitizenWallet 对 `0x1e05/0x1f05` 按新 call-data 顺序解码并统一中文展示，创建机构链路不再存在内层凭证 Option 分支。
 - 2026-07-17：本轮验收通过：`cargo check -p citizenchain`、`cargo check -p onchina`、`cargo test -p public-manage -p private-manage`、`cargo test -p onchina core::institution_call`、OnChina 前端 `npm run build`、CitizenWallet `flutter analyze`、CitizenWallet `flutter test test/signer/payload_decoder_test.dart test/signer/field_labels_test.dart`、CitizenApp `flutter test test/qr/qr_router_test.dart`、CitizenApp `flutter analyze`、`git diff --check`。
+- 2026-07-25：第7步以当前源码强制构建 WASM 并导出隔离
+  `citizenchain-fresh`，block#0 为
+  `0xa75336f2847a159012127590f0a90974f9d12b4b057bf34ad133c237ee680177`，
+  state root 为
+  `0xcbd2f72f289f235506da0bbe96d2e697f9fedfbf3c6dea993604c95d899d52d3`。
+  创世宪法脚本、17 项创世专项测试以及 NodeGuard
+  `real_genesis_complete_state_passes_all_policies_in_one_scan` 全部通过；普通测试构建中因
+  无内嵌 WASM 而显式跳过的 chainspec 用例未冒充通过。
+- 2026-07-25：真实 RPC 核对确认私权创世机构唯一目标态为
+  `GZ018-SFGYR-201206100-2026 / 公民链技术发展基金会`。机构使用一名管理员程伟，
+  `account_id=0x9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068`，
+  公民 CID 为 `GZ000-CTZN6-198805200-2026`；同一账户分别担任
+  `LR / GENESIS_PRODUCT_MANAGER / GENESIS_PROGRAMMER`，三个岗位均启用且各一席，
+  治理阈值为 2。机构主账户
+  `0xaa23304c7b663ba25a9d3a2fb1efafdd650ecf2504a2caedc228fe81b46b4333`
+  与费用账户
+  `0xe4837d50cd5ef677c9b10ea49baf8c7d60cf11b422d748377e9e5f750640e927`
+  和源码常量一致。
+- 2026-07-25：两套独立 fresh 数据库已成功启动并通过加密 P2P 地址互联，双方均读取同一
+  block#0，peer 角色分别为 `AUTHORITY` 与 `FULL`。当前链禁止空交易池出块，而临时
+  Alice/Bob 矿工账户创世余额为 0；本机也不存在 44 名正式 GRANDPA 权威的任一私钥。
+  因此本轮没有篡改创世余额、替换正式权威或复制生产私钥，非创世区块导入和
+  finalized 持续推进保持未验收，不标记为通过。
+- 2026-07-25：`OnchainTransaction::transfer_with_remark` 元数据入口存在，call index
+  为 `4,0`；runtime 费用路由、按交易金额收费、精确付款账户及分账专项测试均通过。
+  基金会费用账户
+  `0xe4837d50cd5ef677c9b10ea49baf8c7d60cf11b422d748377e9e5f750640e927`
+  在 fresh 创世余额为 0，而基金会机构操作只允许从该费用账户扣费；正式链启用机构操作前
+  必须由用户确认合法注资来源、金额和执行时点。
+  CitizenConsole 当前发币账户
+  `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`
+  在 fresh 创世余额为 0。正式冻结前必须由用户确认该账户的合法资金来源和金额；未经确认
+  不得擅自增加创世分配或假设创世后人工转账。
+- 2026-07-25：本步未修改 runtime、未覆盖正式 chainspec、未切换正式节点数据、未触碰
+  GitHub/CI、未部署。隔离节点和临时数据在验收后清理。
+- 2026-07-25：正式创世前本地总验收再次通过当前冻结资产同源脚本、`git diff --check`、
+  runtime 51 项测试、NodeGuard 84 项测试、Node 全目标 clippy、OnChina 144 项测试、
+  QR 协议 8 项守卫、CitizenApp 806 项测试、CitizenWallet 192 项测试、Worker 174 项测试
+  和 CitizenConsole 27 项资金安全测试。Node 与 OnChina 前端生产构建均通过。
+- 2026-07-25：用户最终确认仓库当前订阅逻辑正确，禁止在本轮创世验收中修改。此前把
+  `Suspended`、`NeedReconsent`、`InsufficientBalance` 或 `CreatorPaused` 判为正式创世
+  阻塞的结论已撤回；本轮未修改 runtime 或任一订阅实现。
+- 2026-07-25：Node 前端把 DOMPurify 更新到 `3.4.12`、Vite 更新到 `6.4.3`，OnChina
+  前端把 Vite 更新到 `6.4.3`，并更新兼容范围内的 Babel、PostCSS、Picomatch、Rollup 等
+  间接依赖。两端 `npm audit --audit-level=low` 均为 0，生产构建通过；仍保留约
+  889 KB 和 1.539 MB 主包体积性能告警，不属于依赖安全告警。
+- 2026-07-25：AI 门禁已改用兼容 macOS BSD grep/GNU grep 的新增行匹配，并按精确路径
+  排除固定 WalletConnect bundle 与 Wrangler 生成类型的源码残留/中文注释扫描。用户完成
+  runtime 二次确认后，10 个既有大改文件均补充了关键中文注释；权重文件只增加生成说明，
+  未修改权重数值、读写次数或执行逻辑。门禁比较口径同时由“基线到 HEAD”改为“基线到当前
+  工作树”，保证本地验收覆盖本轮未提交修改，CI 干净工作树结果不变；最终复跑通过。
+- 2026-07-25：Cloudflare Worker 已删除手写 `@cloudflare/workers-types`，改由
+  `wrangler types --env-interface CloudflareBindings` 生成并跟踪
+  `worker-configuration.d.ts`；类型漂移检查、typecheck、29 个测试文件 174 项测试和
+  依赖审计全部通过。production `TOPUP_DISBURSE_ACCOUNT_ID` 已写入 CitizenConsole
+  现有发币账户的规范 AccountId。
+- 2026-07-25：OnChina 生产二进制及全部测试目标自身的严格
+  `cargo clippy -p onchina --all-targets --no-deps -- -D warnings` 已通过，144 项测试通过。
+  测试中的断言式 `expect/unwrap` 豁免只放在各自 `#[cfg(test)]` 模块；生产代码没有使用
+  crate 级静音。
+- 2026-07-25：用户逐批完成 runtime 路径二次确认后，
+  `cargo clippy --workspace --all-targets -- -D warnings` 已在整个 CitizenChain 工作区
+  零告警通过，`cargo test --workspace --all-targets` 全部通过；范围覆盖 runtime、Node、
+  OnChina、协议 crate、测试工具和固定 Substrate GRANDPA 上游源码。FRAME extrinsic
+  既定多参数 ABI 与上游 vendor 只使用带中文原因的最窄 lint 范围，没有全局跳过目录。
+  43 个省级 `stake_amount` 仅分组数字格式变化，逐项数值与 HEAD 完全一致。
+  本轮未修改 `square-post` 订阅实现，订阅真实日历、自动续费、取消保留已付权益、
+  创作者暂停恢复及价格重确认等既有测试全部通过。
+- 2026-07-25：本轮最终复验通过 `git diff --check`、全仓严格 Clippy、全量测试和
+  AI 守卫；已确认文件完成 rustfmt，未在本轮授权清单内的 runtime 文件没有因全仓格式化
+  被改动。链上资产发行骨架中的旧开发标记已改为明确的“当前授权入口/后续任务卡执行边界”，
+  没有伪装成业务已完成，也没有补写或改变资产发行逻辑。
+- 2026-07-25：用户确认正式创世时基金会费用账户与 CitizenConsole 发币账户保持零余额；
+  正式创世后先部署国储会 GRANDPA 权威节点并验证 finalized 持续推进，再分别转入合法资金。
+  两账户到账且节点最终性通过前，机构付费操作和稳定币充值业务保持关闭。本轮没有烘焙正式
+  chainspec、没有删除正式数据、没有触发 GitHub CI，也没有转入资金或部署权威节点。

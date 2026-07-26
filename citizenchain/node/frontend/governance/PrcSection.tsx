@@ -72,6 +72,7 @@ export function PrcSection() {
   }
 
   if (view.page === 'grandpa-key') {
+    // 省储委会换钥返回当前机构详情，禁止跨机构复用管理员签名集合。
     return (
       <GrandpaKeyChangePage
         actorCidNumber={view.cidNumber}

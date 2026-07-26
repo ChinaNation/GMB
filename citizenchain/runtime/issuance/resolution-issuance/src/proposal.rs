@@ -168,7 +168,7 @@ impl<T: Config> Pallet<T> {
                 proposer_role_code: proposer_role_code.clone(),
                 proposer_account_id: proposer_account_id.clone(),
                 reason: reason.to_vec(),
-                total_amount: total_amount.clone(),
+                total_amount,
                 allocations: allocations.to_vec(),
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
@@ -276,7 +276,7 @@ impl<T: Config> Pallet<T> {
                 if Self::execute_approved_issuance(
                     proposal_id,
                     &execute_reason,
-                    data.total_amount.clone(),
+                    data.total_amount,
                     &execute_allocations,
                 )
                 .is_ok()

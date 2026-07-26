@@ -48,6 +48,21 @@ void main() {
     await tester.pump();
     final updated = tester.widget<Text>(find.text('公民链 已更新'));
     expect(updated.style?.color, AppTheme.success);
+    expect(
+      find.byKey(
+        const ValueKey<String>('transaction-chain-status-divider'),
+      ),
+      findsOneWidget,
+    );
+
+    final statusContainer = tester.widget<Container>(
+      find.byKey(const ValueKey<String>('transaction-chain-status')),
+    );
+    final decoration = statusContainer.decoration! as BoxDecoration;
+    expect(
+      decoration.borderRadius,
+      BorderRadius.circular(AppTheme.radiusSm),
+    );
   });
 
   testWidgets('交易紧凑状态读取失败时显示红色连接失败', (tester) async {

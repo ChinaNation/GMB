@@ -6,7 +6,8 @@ fn main() {
 
     if let Ok(wasm_file) = std::env::var("WASM_FILE") {
         // ── 使用 CI 预编译的 WASM（本地启动脚本、全新创世、升级工具）──
-        let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+        let out_dir =
+            std::env::var("OUT_DIR").unwrap_or_else(|error| panic!("OUT_DIR not set: {error}"));
         let dest = std::path::Path::new(&out_dir).join("wasm_binary.rs");
 
         let wasm_path = std::path::Path::new(&wasm_file)
@@ -22,7 +23,7 @@ pub const WASM_BINARY_BLOATY: Option<&[u8]> = Some(include_bytes!("{wasm_path_st
 "#,
             ),
         )
-        .expect("写入 wasm_binary.rs 失败");
+        .unwrap_or_else(|error| panic!("写入 wasm_binary.rs 失败: {error}"));
 
         eprintln!("使用 CI WASM: {wasm_path_str}");
     } else if std::env::var("WASM_BUILD_FROM_SOURCE").is_ok() {
@@ -32,7 +33,8 @@ pub const WASM_BINARY_BLOATY: Option<&[u8]> = Some(include_bytes!("{wasm_path_st
         // ── 普通桌面端打包：不内置 runtime WASM。
         // 现有链运行时从链上状态读取 runtime code，不依赖安装包内置 WASM。
         // 只有本地重新创世或 runtime 升级工具才需要通过 WASM_FILE 显式提供 WASM。
-        let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+        let out_dir =
+            std::env::var("OUT_DIR").unwrap_or_else(|error| panic!("OUT_DIR not set: {error}"));
         let dest = std::path::Path::new(&out_dir).join("wasm_binary.rs");
         std::fs::write(
             &dest,
@@ -40,7 +42,7 @@ pub const WASM_BINARY_BLOATY: Option<&[u8]> = Some(include_bytes!("{wasm_path_st
 pub const WASM_BINARY_BLOATY: Option<&[u8]> = None;
 "#,
         )
-        .expect("写入空 wasm_binary.rs 失败");
+        .unwrap_or_else(|error| panic!("写入空 wasm_binary.rs 失败: {error}"));
 
         eprintln!("未设置 WASM_FILE；本次构建不内置 runtime WASM");
     }

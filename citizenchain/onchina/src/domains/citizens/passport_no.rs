@@ -239,6 +239,8 @@ fn claim_recycled_passport_no<C: postgres::GenericClient>(
 }
 
 #[cfg(test)]
+// 护照号测试依赖固定合法夹具，断言式解包仅用于测试失败定位。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::{
         build_passport_no, passport_city_namespace, passport_valid_until, passport_validity_years,

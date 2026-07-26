@@ -367,9 +367,9 @@ pub fn grant_close_role(cid_number: &pallet::CidNumberOf<Test>) -> crate::RoleCo
 }
 
 thread_local! {
-    static IS_OPERATION: core::cell::Cell<bool> = core::cell::Cell::new(false);
+    static IS_OPERATION: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
     static CID_WALLET: core::cell::RefCell<Option<(alloc::vec::Vec<u8>, AccountId32)>> =
-        core::cell::RefCell::new(None);
+        const { core::cell::RefCell::new(None) };
 }
 
 /// 可切换相位 mock：默认 Genesis，测试可切 Operation。

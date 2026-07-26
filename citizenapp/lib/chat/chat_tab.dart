@@ -1009,6 +1009,7 @@ class _CaretPainter extends CustomPainter {
 }
 
 class _ConversationTile extends StatelessWidget {
+  // 会话列表首尾共享圆角容器，中间项保持连续边框；单聊头像仅以账户标识生成本地占位图。
   const _ConversationTile({
     required this.preview,
     required this.isFirst,
@@ -1313,6 +1314,7 @@ class _EmptyConversationList extends StatelessWidget {
 }
 
 String _conversationTime(DateTime value) {
+  // 会话时间按本地日历分层展示，避免把跨日消息仍误显示成纯时分。
   final local = value.toLocal();
   final now = DateTime.now();
   final day = DateTime(local.year, local.month, local.day);

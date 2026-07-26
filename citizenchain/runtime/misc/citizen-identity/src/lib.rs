@@ -148,15 +148,11 @@ pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
     MaxEncodedLen,
 )]
 #[repr(u8)]
+#[derive(Default)]
 pub enum CitizenStatus {
+    #[default]
     Normal = 0,
     Revoked = 1,
-}
-
-impl Default for CitizenStatus {
-    fn default() -> Self {
-        CitizenStatus::Normal
-    }
 }
 
 /// 公民性别(参选身份公开档案字段)。
@@ -1454,7 +1450,8 @@ pub mod pallet {
             if !(1900..=9999).contains(&year) || !(1..=12).contains(&month) || day == 0 {
                 return false;
             }
-            let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+            let leap =
+                year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
             let days_in_month = match month {
                 2 if leap => 29,
                 2 => 28,

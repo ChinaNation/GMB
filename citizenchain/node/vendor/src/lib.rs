@@ -1,5 +1,25 @@
 // This file is part of Substrate.
-
+// 本目录是固定版本的 Substrate GRANDPA 上游源码；本地只维护集成补丁，不机械改写上游接口与测试风格。
+#![allow(
+    clippy::borrowed_box,
+    clippy::expect_used,
+    clippy::from_over_into,
+    clippy::manual_contains,
+    clippy::map_clone,
+    clippy::match_like_matches_macro,
+    clippy::multiple_bound_locations,
+    clippy::needless_borrow,
+    clippy::needless_range_loop,
+    clippy::redundant_closure,
+    clippy::should_implement_trait,
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::unnecessary_cast,
+    clippy::unnecessary_map_or,
+    clippy::unwrap_used,
+    clippy::useless_conversion,
+    clippy::useless_vec
+)]
 // Copyright (C) Parity Technologies (UK) Ltd.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 

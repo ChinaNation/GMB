@@ -203,12 +203,11 @@ String _sourceLabel(String source) {
 String _statusLabel(String status) {
   switch (status) {
     case LocalTxStore.statusPending:
-      return '已提交';
     case LocalTxStore.statusInBlock:
-      return '已出块';
+      return '待确认';
     case LocalTxStore.statusFinalized:
       return '已确认';
-    case 'failed':
+    case LocalTxStore.statusFailed:
       return '失败';
     default:
       return status;
@@ -218,12 +217,11 @@ String _statusLabel(String status) {
 Color _statusColor(String status) {
   switch (status) {
     case LocalTxStore.statusPending:
-      return AppTheme.warning;
     case LocalTxStore.statusInBlock:
-      return AppTheme.primaryDark;
+      return AppTheme.warning;
     case LocalTxStore.statusFinalized:
       return AppTheme.success;
-    case 'failed':
+    case LocalTxStore.statusFailed:
       return AppTheme.danger;
     default:
       return AppTheme.textTertiary;

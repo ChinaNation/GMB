@@ -217,8 +217,7 @@ impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
                 .cid_number
                 .as_bytes(),
         ]
-        .iter()
-        .any(|cid| *cid == role_subject.cid_number.as_slice());
+        .contains(&role_subject.cid_number.as_slice());
         admin == &AccountId32::new([1u8; 32])
             && valid_cid
             && Self::role_has_permission(role_subject, business_action_id, operation)

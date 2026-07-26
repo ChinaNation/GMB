@@ -21,6 +21,7 @@ class CitizenTabPage extends StatefulWidget {
 
 class _CitizenTabPageState extends State<CitizenTabPage> {
   int _selectedTab = 0;
+  // 提案页回传待投票数，本页只负责同步展示，不复制投票资格或计票逻辑。
   int _pendingVoteCount = 0;
   static const List<String> _tabs = ['提案', '立法', '选举', '治理', '公权'];
 

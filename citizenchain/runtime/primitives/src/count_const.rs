@@ -31,7 +31,7 @@ pub const JOINT_VOTE_PASS_THRESHOLD: u32 = 105; // 联合投票通过条件：�
 // 投票时限,单位:区块。
 pub const VOTING_DURATION_DAYS: u32 = 30; // 投票默认期限30天
 pub const BLOCKS_PER_DAY: u32 = pow_const::BLOCKS_PER_DAY as u32; // 每天区块数（统一来源：pow_const）
-pub const VOTING_DURATION_BLOCKS: u32 = BLOCKS_PER_DAY as u32 * VOTING_DURATION_DAYS; // 投票默认期限（区块）= 30 * BLOCKS_PER_DAY
+pub const VOTING_DURATION_BLOCKS: u32 = BLOCKS_PER_DAY * VOTING_DURATION_DAYS; // 投票默认期限（区块）= 30 * BLOCKS_PER_DAY
 
 // 决议发行常量。
 pub const RESOLUTION_ISSUANCE_MAX_REASON_LEN: u32 = 1024; // 决议发行理由最大长度

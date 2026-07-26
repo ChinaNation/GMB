@@ -89,6 +89,8 @@ void main() {
     expect(find.text('公民链 更新中'), findsOneWidget);
     expect(find.text('扫一扫'), findsOneWidget);
     expect(find.text('多签账户'), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.account_tree_outlined), findsNothing);
     expect(find.text('个人多签'), findsNothing);
     expect(find.text('机构多签'), findsNothing);
 
@@ -140,6 +142,13 @@ void main() {
         status: LocalTxStore.statusFinalized,
       ),
       _tx(
+        recordKey: 'a:failed',
+        ss58Address: 'wallet_a',
+        accountId: _walletAAccountId,
+        amountDeltaFen: '-404',
+        status: LocalTxStore.statusFailed,
+      ),
+      _tx(
         recordKey: 'b:incoming',
         ss58Address: 'wallet_b',
         accountId: _walletBAccountId,
@@ -170,18 +179,18 @@ void main() {
         ),
       ),
     );
-    await _pumpUntilFound(tester, find.text('已提交 1'));
+    await _pumpUntilFound(tester, find.text('待确认 2'));
 
-    expect(find.text('已提交 1'), findsOneWidget);
-    expect(find.text('已出块 1'), findsOneWidget);
+    expect(find.text('待确认 2'), findsOneWidget);
+    expect(find.textContaining('已出块'), findsNothing);
+    expect(find.textContaining('已提交'), findsNothing);
     expect(find.text('已确认 1'), findsOneWidget);
-    expect(find.text('失败 0'), findsOneWidget);
+    expect(find.text('失败 1'), findsOneWidget);
 
     await tester.tap(find.byTooltip('选择交易钱包'));
-    await _pumpUntilFound(tester, find.text('已提交 0'));
+    await _pumpUntilFound(tester, find.text('待确认 0'));
 
-    expect(find.text('已提交 0'), findsOneWidget);
-    expect(find.text('已出块 0'), findsOneWidget);
+    expect(find.text('待确认 0'), findsOneWidget);
     expect(find.text('已确认 0'), findsOneWidget);
     expect(find.text('失败 0'), findsOneWidget);
   });
@@ -212,11 +221,15 @@ void main() {
     final addressField = tester.widget<TextField>(
       find.byWidgetPredicate(
         (widget) =>
-            widget is TextField && widget.decoration?.labelText == '收款地址',
+            widget is TextField &&
+            widget.decoration?.hintText == '输入或粘贴 SS58 地址',
       ),
     );
     expect(addressField.controller?.text, recipient);
     expect(find.textContaining('钱包可用余额：100'), findsOneWidget);
+    expect(find.text('GMB'), findsOneWidget);
+    expect(find.text('CNY'), findsNothing);
+    expect(find.textContaining('钱包可用余额：100.00 GMB'), findsOneWidget);
   });
 
   testWidgets('交易页下拉刷新重载余额+本地记录且保留连接状态栏', (tester) async {

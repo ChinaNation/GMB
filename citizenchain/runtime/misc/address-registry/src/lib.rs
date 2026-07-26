@@ -1,4 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+// FRAME 宏会从既定 extrinsic 载荷生成多参数分发函数；参数顺序属于链上编码契约，禁止为 lint 合并。
+#![allow(clippy::too_many_arguments)]
 //! 地址变更上链模块。
 //!
 //! 本 pallet 不保存完整行政区地址库,只保存当前地址目录版本、当前地址哈希
@@ -24,6 +26,7 @@ pub trait AddressUpdateAuthority<AccountId> {
         action_code: u32,
     ) -> bool;
 
+    // 链上授权接口必须逐字段接收行为主体和行政区范围，不能为通过 lint 改变协议形状。
     fn can_update_address(
         who: &AccountId,
         actor_cid_number: &[u8],
@@ -343,6 +346,7 @@ pub mod pallet {
         /// 新增或修改完整地址。
         #[pallet::call_index(3)]
         #[pallet::weight(T::DbWeight::get().reads_writes(2, 2))]
+        // extrinsic 参数顺序属于链上编码契约，不能为通过 lint 合并成另一种载荷。
         pub fn set_address(
             origin: OriginFor<T>,
             actor_cid_number: ActorCidNumber,
@@ -509,7 +513,7 @@ pub mod pallet {
             city_code: Vec<u8>,
             town_code: Vec<u8>,
             address_name_code: Vec<u8>,
-        ) -> Result<(CodeOf<T>, CodeOf<T>, CodeOf<T>, AddressNameCodeOf<T>), Error<T>> {
+        ) -> Result<AddressNameKeyOf<T>, Error<T>> {
             Ok((
                 Self::bounded_code(province_code)?,
                 Self::bounded_code(city_code)?,

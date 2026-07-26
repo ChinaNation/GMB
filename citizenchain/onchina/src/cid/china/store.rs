@@ -1,5 +1,8 @@
 //! SQLite 行政区划只读层。
 
+// 只读行政区数据库是随包权威资产；路径、结构或行数据异常必须在启动时立即失败，禁止降级运行。
+#![allow(clippy::expect_used)]
+
 use std::{
     fs,
     path::{Path, PathBuf},

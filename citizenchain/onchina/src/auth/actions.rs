@@ -3,6 +3,9 @@
 //! 管理员治理动作、业务安全授权和短期挑战全部使用结构化表;
 //! PasskeyColdSign 档 commit 校验冷钱包签名且 signer 须 ∈ 本机构链上 Active 集合。
 
+// 管理员动作统一返回完整 Axum Response 以保留状态码和错误体，错误路径不参与高频成功态分配。
+#![allow(clippy::result_large_err)]
+
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -284,7 +287,7 @@ pub(crate) async fn prepare_admin_action(
         actor_cid_number: actor_cid_number.clone(),
         actor_province_name: province,
         actor_city_name: ctx.scope_city_name.clone(),
-        auth_type: preview.auth_type.clone(),
+        auth_type: preview.auth_type,
         target: preview.target,
         payload_text,
         payload_hash: payload_hash.clone(),
@@ -449,7 +452,7 @@ pub(crate) async fn commit_admin_action(
                     actor_cid_number: current.actor_cid_number.clone(),
                     actor_province_name: ctx.scope_province_name.clone().unwrap_or_default(),
                     actor_city_name: ctx.scope_city_name.clone(),
-                    auth_type: current.auth_type.clone(),
+                    auth_type: current.auth_type,
                     target: current.target.clone(),
                     payload_hash: hash_json(&current.request_payload),
                     issued_at: now,

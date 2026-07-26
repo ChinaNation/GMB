@@ -263,6 +263,8 @@ pub struct AdminSetChangeAction<AccountId, AdminList> {
 /// 个人多签创建、注销等业务 pallet 只能通过此 trait 请求 personal-admins
 /// 写入 Pending/Active/Closed，机构管理员不使用本生命周期模型。
 pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
+    // 个人多签待激活记录必须逐字段绑定提案、主体和创建人，接口形状属于跨 pallet 契约。
+    #[allow(clippy::too_many_arguments)]
     fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],

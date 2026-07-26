@@ -7,6 +7,7 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec;
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
 
 void main() {
   test('publish_post call_data 与 runtime 下标和字段顺序一致', () {
@@ -94,6 +95,22 @@ void main() {
     expect(identity.cidNumber, 'CN001-CTZN-000000001-2026');
     expect(identity.identityLevel, 'candidate');
   });
+
+  test('三档平台价格通过一次 finalized storage 批量读取', () async {
+    final rpc = _BatchPriceChainRpc();
+    final service = SquareChainService(chainRpc: rpc);
+
+    final prices = await service.fetchAllPlatformPrices(forceFresh: true);
+
+    expect(prices, const {
+      'freedom': 29900,
+      'democracy': 99900,
+      'spark': 199900,
+    });
+    expect(rpc.fetchCount, 1);
+    expect(rpc.requestedKeyCount, 3);
+    expect(rpc.lastForceFresh, isTrue);
+  });
 }
 
 Uint8List _candidateIdentityBytes() {
@@ -136,7 +153,34 @@ class _FakeIdentityReader extends CitizenIdentityChainReader {
       snapshot;
 }
 
+class _BatchPriceChainRpc extends ChainRpc {
+  int fetchCount = 0;
+  int requestedKeyCount = 0;
+  bool lastForceFresh = false;
+
+  @override
+  Future<Map<String, Uint8List?>> fetchStorageBatch(
+    List<String> storageKeyHexList, {
+    bool forceFresh = false,
+  }) async {
+    fetchCount++;
+    requestedKeyCount = storageKeyHexList.length;
+    lastForceFresh = forceFresh;
+    const prices = [29900, 99900, 199900];
+    return {
+      for (var index = 0; index < storageKeyHexList.length; index++)
+        storageKeyHexList[index]: _u128(prices[index]),
+    };
+  }
+}
+
 List<int> _u32(int value) {
   final bytes = ByteData(4)..setUint32(0, value, Endian.little);
   return bytes.buffer.asUint8List();
+}
+
+Uint8List _u128(int value) {
+  final bytes = Uint8List(16);
+  ByteData.sublistView(bytes).setUint64(0, value, Endian.little);
+  return bytes;
 }

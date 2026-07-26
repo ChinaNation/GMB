@@ -4,6 +4,9 @@
 //! 本子模块只承接链下私密档案(部门/联系方式/证件照/passkey 绑定)与链投影,
 //! 落库到 `institution_admins` 省级分区表。控制台登录元数据走独立的 `admins` 表,与此无关。
 
+// 机构管理员校验辅助函数直接返回统一 Axum Response，错误路径不另造可分叉的包装类型。
+#![allow(clippy::result_large_err)]
+
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -228,14 +231,14 @@ fn parse_admin_inputs(
                 .try_into()
                 .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "公民 CID 过长"))?;
             public_admins.push(admin_primitives::Admin {
-                account_id: account_id,
+                account_id,
                 cid_number,
                 family_name,
                 given_name,
             });
         } else {
             private_admins.push(admin_primitives::Admin {
-                account_id: account_id,
+                account_id,
                 cid_number: Default::default(),
                 family_name,
                 given_name,
@@ -323,7 +326,7 @@ fn assignment_targets(
             ));
         }
         out.push(entity_primitives::InstitutionAssignmentTarget {
-            account_id: account_id,
+            account_id,
             term_start: target.term_start,
             term_end: target.term_end,
             assignment_source:
@@ -668,7 +671,7 @@ pub(crate) async fn prepare_institution_governance(
     };
     let cid_number = input.cid_number.trim();
     let proposer_role_code = input.proposer_role_code.trim();
-    if proposer_role_code.is_empty() || proposer_role_code.as_bytes().len() > 64 {
+    if proposer_role_code.is_empty() || proposer_role_code.len() > 64 {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,

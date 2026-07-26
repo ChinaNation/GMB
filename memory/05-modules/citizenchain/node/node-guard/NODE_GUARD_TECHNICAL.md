@@ -479,3 +479,18 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 - 守卫额外检查基金会三个固定岗位的代码、名称、固定权限和一席席位不变；一名私权管理员程伟以同一钱包同时担任 `LR`、创世产品经理、创世程序员。法定代表人原子结构必须与 `LR` 任职一致。基金会机构记录、固定岗位、任职或管理员缺失及公私权错误路由均 fail-closed；普通动态岗位允许存在；
 - Node 281 项测试通过；当前源码强制重建 WASM 后以隔离 `citizenchain-fresh --tmp` 启动，日志确认“节点守卫启动自检通过”，RPC 返回 block#0 `0x1732f0f1005d7e8ee7f9292e35a036698ece48569f6aca8e01f56f264761083d`、state root `0x37379726b7245af3123618fe032fa5355e17ec847159703daf6a9b5322a04fd3`、`isSyncing=false`；该结果是第6步源码验收，不替代第8步正式冻结。
 - 2026-07-20 公权四字段、entity 机构阈值和基金会一人兼任三岗完成后再次强制从源码构建 WASM/Node，并以隔离 `citizenchain-fresh --tmp` 启动。NodeGuard 启动自检通过，RPC 返回 block#0 `0x9ad703ec20ed91f693e8077075cc27ffbe0d4f1b9b0e0ee32fb917e52009f6fd`、state root `0xdc532c2cfaa75db4ce38530ee2986c138360da8a8ffa5bbeab36b37b66a9c8b1`、`isSyncing=false`、runtime `specVersion=2`；验收节点已停止，临时目录由 `--tmp` 清理。本结果仍不替代最终 chainspec 正式冻结。
+
+## 21. 正式创世前当前源码一致性复核（2026-07-25）
+
+- 使用 `WASM_BUILD_FROM_SOURCE=1` 从当前源码导出隔离 `citizenchain-fresh`，block#0 为
+  `0xa75336f2847a159012127590f0a90974f9d12b4b057bf34ad133c237ee680177`，
+  state root 为
+  `0xcbd2f72f289f235506da0bbe96d2e697f9fedfbf3c6dea993604c95d899d52d3`。
+- 创世宪法脚本、17 项创世专项测试和
+  `real_genesis_complete_state_passes_all_policies_in_one_scan` 通过，证明当前真实创世完整状态
+  满足同一套 NodeGuard 策略。无内嵌 WASM 时显式跳过的测试不计为验收证据。
+- 两个独立数据库节点通过 `/wss` P2P 地址互联，双方均读取同一 block#0；当前空交易池不出块，
+  临时矿工账户无创世余额，本机也没有正式 GRANDPA 私钥，因此未验证 block#1 导入和 finalized
+  推进。验收没有修改创世资金、替换权威集合或复制正式私钥。
+- 该结果只证明当前源码创世与守卫的静态/启动一致性，不替代第8步以正式 CI WASM、正式
+  chainspec 和正式权威环境执行的出块、跨节点导入及终局验收。

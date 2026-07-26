@@ -96,10 +96,12 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   /// 来源：primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT = 111
   static const double _edYuan = 1.11;
   final OnchainPaymentService _paymentService = OnchainPaymentService();
+  final ChainRpc _chainRpc = ChainRpc();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _remarkController = TextEditingController();
-  final String _selectedSymbol = '元';
+  // CitizenChain 原生币在交易页统一展示为 GMB。
+  final String _selectedSymbol = 'GMB';
 
   WalletProfile? _currentWallet;
   bool _loadingWallet = true;
@@ -222,19 +224,82 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     return _localTxRecords.where((r) => r.status == status).length;
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case LocalTxStore.statusPending:
-        return AppTheme.warning;
-      case LocalTxStore.statusInBlock:
-        return AppTheme.primaryDark;
-      case LocalTxStore.statusFinalized:
-        return AppTheme.success;
-      case 'failed':
-        return AppTheme.danger;
-      default:
-        return AppTheme.textSecondary;
+  /// `inBlock` 只是未最终化的内部进度，界面与 `pending` 统一归为“待确认”。
+  int get _waitingCount => _localTxRecords
+      .where((record) =>
+          record.status == LocalTxStore.statusPending ||
+          record.status == LocalTxStore.statusInBlock)
+      .length;
+
+  bool _isDefinitivePoolFailure(TxPoolWatchKind kind) {
+    return kind == TxPoolWatchKind.invalid ||
+        kind == TxPoolWatchKind.dropped ||
+        kind == TxPoolWatchKind.usurped;
+  }
+
+  Future<void> _applyWatchEventToLocalRecord({
+    required TxPoolWatchEvent event,
+    required WalletProfile wallet,
+    required String txHash,
+  }) async {
+    if (_isDefinitivePoolFailure(event.kind)) {
+      await LocalTxStore.markLocalSubmitFailed(
+        accountId: wallet.accountId,
+        txHash: txHash,
+        failureReason: event.description,
+      );
+    } else if (event.kind == TxPoolWatchKind.retracted) {
+      await LocalTxStore.markLocalSubmitPending(
+        accountId: wallet.accountId,
+        txHash: txHash,
+      );
+    } else if (event.kind == TxPoolWatchKind.finalized) {
+      // finalized 先证明“不会回滚”，再按 txHash 定位该笔 extrinsic，
+      // 只读取同一 extrinsic index 的失败事件，避免误用同块其它交易的错误。
+      await LocalTxStore.markLocalSubmitInBlock(
+        accountId: wallet.accountId,
+        txHash: txHash,
+        blockHash: event.blockHashHex,
+      );
+      final blockHash = event.blockHashHex;
+      if (blockHash != null && blockHash.isNotEmpty) {
+        try {
+          final extrinsicIndex =
+              await _chainRpc.findSubmittedExtrinsicIndexAtFinalizedBlock(
+            blockHashHex: blockHash,
+            txHashHex: txHash,
+          );
+          if (extrinsicIndex != null) {
+            final events = await _chainRpc.fetchSystemEventsAtBlock(blockHash);
+            final failure = events == null
+                ? null
+                : _chainRpc.findExtrinsicFailureInEvents(
+                    events,
+                    extrinsicIndex: extrinsicIndex,
+                  );
+            if (failure != null) {
+              await LocalTxStore.markLocalSubmitFailed(
+                accountId: wallet.accountId,
+                txHash: txHash,
+                failureReason: failure.description,
+              );
+            }
+          }
+        } catch (error) {
+          // 最终结果核对暂时不可用时保留“待确认”，绝不猜成失败或已确认。
+          AppLog.d('[链上交易] finalized 失败事件核对失败: $error');
+        }
+      }
+    } else if (event.kind == TxPoolWatchKind.inBlock) {
+      await LocalTxStore.markLocalSubmitInBlock(
+        accountId: wallet.accountId,
+        txHash: txHash,
+        blockHash: event.blockHashHex,
+      );
+    } else {
+      return;
     }
+    if (mounted) await _loadLocalRecords(wallet: wallet);
   }
 
   Future<void> _reloadWallet() async {
@@ -391,8 +456,8 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '余额不足，可用余额：${AmountFormat.format(availableBalance, symbol: '')} 元'
-            '（已扣除 ED ${AmountFormat.format(_edYuan, symbol: '')} 元）',
+            '余额不足，可用余额：${AmountFormat.format(availableBalance, symbol: '')} GMB'
+            '（已扣除 ED ${AmountFormat.format(_edYuan, symbol: '')} GMB）',
           ),
         ),
       );
@@ -485,17 +550,20 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
       String? submittedTxHash;
       String? includedBlockHash;
+      TxPoolWatchEvent? latestWatchEvent;
+      var localRecordReady = false;
       void handleWatchEvent(TxPoolWatchEvent event) {
-        if (!event.isIncluded) return;
-        includedBlockHash = event.blockHashHex ?? includedBlockHash;
+        latestWatchEvent = event;
+        if (event.isIncluded) {
+          includedBlockHash = event.blockHashHex ?? includedBlockHash;
+        }
         final txHash = submittedTxHash;
-        final wallet = _currentWallet;
-        if (txHash == null || wallet == null) return;
-        unawaited(LocalTxStore.markLocalSubmitInBlock(
-          accountId: wallet.accountId,
+        if (!localRecordReady || txHash == null) return;
+        unawaited(_applyWatchEventToLocalRecord(
+          event: event,
+          wallet: wallet,
           txHash: txHash,
-          blockHash: event.blockHashHex,
-        ).then((_) => _loadLocalRecords()));
+        ));
       }
 
       final result = await _paymentService.submitTransfer(
@@ -530,31 +598,33 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
             (-(BigInt.parse(transferAmountFen) + BigInt.parse(feeFen)))
                 .toString();
         await LocalTxStore.upsertLocalSubmitTransfer(
-          ss58Address: _currentWallet!.ss58Address,
-          accountId: _currentWallet!.accountId,
+          ss58Address: wallet.ss58Address,
+          accountId: wallet.accountId,
           txHash: txHash,
           amountDeltaFen: amountDeltaFen,
           transferAmountFen: transferAmountFen,
           feeFen: feeFen,
           counterpartySs58Address: toSs58Address,
-          fromSs58Address: _currentWallet!.ss58Address,
+          fromSs58Address: wallet.ss58Address,
           toSs58Address: toSs58Address,
           remark: remark,
           usedNonce: result.usedNonce,
           createdAtMillis: DateTime.now().millisecondsSinceEpoch,
           blockHash: includedBlockHash,
         );
-        if (includedBlockHash != null) {
-          await LocalTxStore.markLocalSubmitInBlock(
-            accountId: _currentWallet!.accountId,
+        localRecordReady = true;
+        final watchEvent = latestWatchEvent;
+        if (watchEvent != null) {
+          await _applyWatchEventToLocalRecord(
+            event: watchEvent,
+            wallet: wallet,
             txHash: txHash,
-            blockHash: includedBlockHash,
           );
         }
         if (mounted) await _loadLocalRecords();
 
-        // 本机先展示 pending；交易池 inBlock 回调会升级为已出块，
-        // finalized 区块事件再升级为已确认。这里仅兜底延迟刷新本地列表。
+        // 本机先展示待确认；交易池 inBlock 只更新内部进度，finalized
+        // 成功事件写回后才展示已确认。这里仅兜底延迟刷新本地列表。
         unawaited(_reloadAfterChainEventWindow());
       } catch (e) {
         AppLog.d('[交易记录] 写入本地失败: $e');
@@ -601,27 +671,73 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     await _loadLocalRecords();
   }
 
-  Widget _buildStatusText(String label, int count, Color color) {
-    return Text(
-      '$label $count',
-      style: TextStyle(
-        color: color,
-        fontWeight: FontWeight.w700,
+  InputDecoration _transactionFieldDecoration({
+    required String hintText,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      filled: true,
+      fillColor: AppTheme.surfaceCard,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        borderSide: const BorderSide(color: AppTheme.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        borderSide: const BorderSide(color: AppTheme.danger),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppTheme.textPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusMetric({
+    required String label,
+    required int count,
+  }) {
+    return Expanded(
+      child: Text(
+        '$label $count',
+        maxLines: 1,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: AppTheme.textPrimary,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
 
   Widget _buildSubmitCard() {
     return Container(
-      decoration: AppTheme.cardDecoration(),
+      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_currentWallet != null)
               Padding(
-                padding: const EdgeInsets.only(left: 0, bottom: 12),
+                padding: const EdgeInsets.only(bottom: 18),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -638,71 +754,117 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '钱包可用余额：${AmountFormat.format(_currentWallet!.balance, symbol: '')} 元',
+                      '钱包可用余额：${AmountFormat.format(_currentWallet!.balance, symbol: '')} GMB',
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 14,
                         color: AppTheme.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
+            _buildFieldLabel('收款地址'),
             TextField(
               controller: _toController,
-              decoration: const InputDecoration(
-                labelText: '收款地址',
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 14,
+              ),
+              decoration: _transactionFieldDecoration(
+                hintText: '输入或粘贴 SS58 地址',
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _amountController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [ThousandSeparatorFormatter()],
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: '金额',
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildFieldLabel('金额'),
+                      TextField(
+                        controller: _amountController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [ThousandSeparatorFormatter()],
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                        ),
+                        decoration: _transactionFieldDecoration(
+                          hintText: '请输入金额',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 SizedBox(
-                  width: 120,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: '币种',
-                      contentPadding: EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: Text(
-                      _selectedSymbol,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 16,
+                  width: 112,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildFieldLabel('币种'),
+                      InputDecorator(
+                        decoration: _transactionFieldDecoration(
+                          hintText: '',
+                        ),
+                        child: const Text(
+                          'GMB',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildFieldLabel('转账备注（选填）'),
+            Stack(
+              children: [
+                TextField(
+                  controller: _remarkController,
+                  minLines: 3,
+                  maxLines: 3,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                  ),
+                  decoration: _transactionFieldDecoration(
+                    hintText: '请输入转账备注（选填）',
+                  ).copyWith(
+                    contentPadding: const EdgeInsets.fromLTRB(14, 14, 14, 32),
+                    errorText: _transferRemarkBytes >
+                            TransferRpc.maxTransferRemarkBytes
+                        ? '备注不能超过 ${TransferRpc.maxTransferRemarkBytes} 字节'
+                        : null,
+                  ),
+                ),
+                Positioned(
+                  right: 12,
+                  bottom: 10,
+                  child: Text(
+                    '$_transferRemarkBytes/${TransferRpc.maxTransferRemarkBytes} 字节',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _transferRemarkBytes >
+                              TransferRpc.maxTransferRemarkBytes
+                          ? AppTheme.danger
+                          : AppTheme.textSecondary,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _remarkController,
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: '转账备注',
-                helperText:
-                    '$_transferRemarkBytes/${TransferRpc.maxTransferRemarkBytes} 字节',
-                errorText:
-                    _transferRemarkBytes > TransferRpc.maxTransferRemarkBytes
-                        ? '备注不能超过 ${TransferRpc.maxTransferRemarkBytes} 字节'
-                        : null,
-              ),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -724,32 +886,41 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                   ),
                 ),
               ),
-            const SizedBox(height: 12),
-            // 链上交易状态行
+            const Padding(
+              padding: EdgeInsets.only(top: 18, bottom: 12),
+              child: Divider(color: AppTheme.divider),
+            ),
+            // 展示口径只有三态；inBlock 未获最终性确认，归入“待确认”。
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    children: [
-                      _buildStatusText(
-                          '已提交',
-                          _countByStatus(LocalTxStore.statusPending),
-                          _statusColor(LocalTxStore.statusPending)),
-                      _buildStatusText(
-                          '已出块',
-                          _countByStatus(LocalTxStore.statusInBlock),
-                          _statusColor(LocalTxStore.statusInBlock)),
-                      _buildStatusText(
-                          '已确认',
-                          _countByStatus(LocalTxStore.statusFinalized),
-                          _statusColor(LocalTxStore.statusFinalized)),
-                      _buildStatusText('失败', _countByStatus('failed'),
-                          _statusColor('failed')),
-                    ],
+                _buildStatusMetric(
+                  label: '待确认',
+                  count: _waitingCount,
+                ),
+                const SizedBox(
+                  height: 18,
+                  child: VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: AppTheme.divider,
                   ),
+                ),
+                _buildStatusMetric(
+                  label: '已确认',
+                  count: _countByStatus(LocalTxStore.statusFinalized),
+                ),
+                const SizedBox(
+                  height: 18,
+                  child: VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: AppTheme.divider,
+                  ),
+                ),
+                _buildStatusMetric(
+                  label: '失败',
+                  count: _countByStatus(LocalTxStore.statusFailed),
                 ),
                 InkWell(
                   onTap: _currentWallet != null
@@ -796,6 +967,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                       'assets/icons/contact-round.svg',
                       width: 22,
                       height: 22,
+                      colorFilter: const ColorFilter.mode(
+                        AppTheme.primary,
+                        BlendMode.srcIn,
+                      ),
                     ),
                   ),
                   Expanded(
@@ -814,6 +989,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                       'assets/icons/wallet.svg',
                       width: 22,
                       height: 22,
+                      colorFilter: const ColorFilter.mode(
+                        AppTheme.primary,
+                        BlendMode.srcIn,
+                      ),
                     ),
                   ),
                 ],

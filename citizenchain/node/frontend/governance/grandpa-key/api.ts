@@ -6,6 +6,7 @@ import type {
 } from './types';
 
 export const grandpaKeyChangeApi = {
+  // 前端只调用节点暴露的三段式换钥命令，不在浏览器生成或持久化 GRANDPA 私钥。
   getStatus: () =>
     invoke<GrandpaKeyChangeStatus>('get_grandpa_key_change_status'),
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -17,6 +18,34 @@ class SubscriptionException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+/// 会员页持久化展示快照：只缓存低频变化的 finalized 订阅态与三档链上价格。
+///
+/// 套餐名称和权益不进入缓存，始终使用 App 内置静态定义；订阅或支付动作仍在提交前
+/// 使用链上真值校验，展示缓存不构成授权真源。
+class MembershipDisplaySnapshot {
+  const MembershipDisplaySnapshot({
+    required this.state,
+    required this.prices,
+    required this.subscriptionFetchedAtMs,
+    required this.pricesFetchedAtMs,
+  });
+
+  final SquareMembershipState state;
+  final Map<String, int> prices;
+  final int subscriptionFetchedAtMs;
+  final int pricesFetchedAtMs;
+
+  bool subscriptionIsFresh(int nowMs, Duration ttl) =>
+      subscriptionFetchedAtMs > 0 &&
+      nowMs >= subscriptionFetchedAtMs &&
+      nowMs - subscriptionFetchedAtMs <= ttl.inMilliseconds;
+
+  bool pricesAreFresh(int nowMs, Duration ttl) =>
+      pricesFetchedAtMs > 0 &&
+      nowMs >= pricesFetchedAtMs &&
+      nowMs - pricesFetchedAtMs <= ttl.inMilliseconds;
 }
 
 /// 平台会员订阅编排：在「我的 → 会员」页订阅 / 取消平台会员（自由/民主/薪火）。
@@ -45,8 +74,80 @@ class SubscriptionService {
   /// 会员页只以 finalized 链状态和同区块共识时间戳决定当前档位与权益。
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState(
       String accountId) async {
-    await _retryPendingMirrors(accountId);
+    // Cloudflare 只是 finalized 回执镜像；历史回执重试不得阻塞会员页链上真态读取。
+    unawaited(_retryPendingMirrors(accountId));
     return _rpc.fetchSubscriptionSnapshot(subscriberAccountId: accountId);
+  }
+
+  String _displaySnapshotKey(String accountId) =>
+      'platform_membership_display_snapshot_v1:$accountId';
+
+  /// 读取当前账户上一次成功同步的展示快照；损坏缓存直接丢弃，绝不阻塞静态卡片。
+  Future<MembershipDisplaySnapshot?> readDisplaySnapshot(
+      String accountId) async {
+    final preferences = await _prefs;
+    final key = _displaySnapshotKey(accountId);
+    final raw = preferences.getString(key);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final pricesRaw = decoded['prices'];
+      final prices = <String, int>{};
+      if (pricesRaw is Map<String, dynamic>) {
+        for (final level in const ['freedom', 'democracy', 'spark']) {
+          final value = pricesRaw[level];
+          if (value is int && value >= 0) prices[level] = value;
+        }
+      }
+      final membershipLevel = decoded['membership_level'];
+      final subscriptionStatus = decoded['subscription_status'];
+      return MembershipDisplaySnapshot(
+        state: SquareMembershipState(
+          active: decoded['active'] == true,
+          paidUntil:
+              decoded['paid_until'] is int ? decoded['paid_until'] as int : 0,
+          membershipLevel: membershipLevel is String ? membershipLevel : null,
+          subscriptionStatus:
+              subscriptionStatus is String ? subscriptionStatus : null,
+          subscriptionActive: decoded['subscription_active'] == true,
+          lastChargedAt: decoded['last_charged_at'] is int
+              ? decoded['last_charged_at'] as int
+              : 0,
+        ),
+        prices: prices,
+        subscriptionFetchedAtMs: decoded['subscription_fetched_at_ms'] is int
+            ? decoded['subscription_fetched_at_ms'] as int
+            : 0,
+        pricesFetchedAtMs: decoded['prices_fetched_at_ms'] is int
+            ? decoded['prices_fetched_at_ms'] as int
+            : 0,
+      );
+    } on FormatException {
+      await preferences.remove(key);
+      return null;
+    }
+  }
+
+  /// 原子覆盖当前账户展示快照；调用方只在对应链读成功后推进该部分时间戳。
+  Future<void> writeDisplaySnapshot(
+    String accountId,
+    MembershipDisplaySnapshot snapshot,
+  ) async {
+    await (await _prefs).setString(
+      _displaySnapshotKey(accountId),
+      jsonEncode({
+        'active': snapshot.state.active,
+        'paid_until': snapshot.state.paidUntil,
+        'membership_level': snapshot.state.membershipLevel,
+        'subscription_status': snapshot.state.subscriptionStatus,
+        'subscription_active': snapshot.state.subscriptionActive,
+        'last_charged_at': snapshot.state.lastChargedAt,
+        'prices': snapshot.prices,
+        'subscription_fetched_at_ms': snapshot.subscriptionFetchedAtMs,
+        'prices_fetched_at_ms': snapshot.pricesFetchedAtMs,
+      }),
+    );
   }
 
   /// 订阅平台会员某档（level=freedom/democracy/spark）。

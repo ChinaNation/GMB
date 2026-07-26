@@ -1265,7 +1265,11 @@ pub(crate) async fn read_chain_citizen_detail(
 
     // 1) CidRegistry:未占号则链上无此公民。
     let Some(reg_value) = storage
-        .fetch(&dynamic::storage("CitizenIdentity", "CidRegistry", cid_key()))
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "CidRegistry",
+            cid_key(),
+        ))
         .await
         .map_err(|e| format!("fetch CidRegistry {cid_number} failed: {e}"))?
     else {
@@ -1277,7 +1281,11 @@ pub(crate) async fn read_chain_citizen_detail(
 
     // 2) AccountIdByCid
     let account_id = match storage
-        .fetch(&dynamic::storage("CitizenIdentity", "AccountIdByCid", cid_key()))
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "AccountIdByCid",
+            cid_key(),
+        ))
         .await
         .map_err(|e| format!("fetch AccountIdByCid {cid_number} failed: {e}"))?
     {
@@ -1293,7 +1301,11 @@ pub(crate) async fn read_chain_citizen_detail(
 
     // 3) VotingIdentityByCid
     let voting = match storage
-        .fetch(&dynamic::storage("CitizenIdentity", "VotingIdentityByCid", cid_key()))
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "VotingIdentityByCid",
+            cid_key(),
+        ))
         .await
         .map_err(|e| format!("fetch VotingIdentityByCid {cid_number} failed: {e}"))?
     {
@@ -1393,7 +1405,11 @@ pub(crate) async fn for_each_chain_citizen_cid_in_scope(
         .at_latest()
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    let query = dynamic::storage("CitizenIdentity", "CidRegistry", Vec::<dynamic::Value>::new());
+    let query = dynamic::storage(
+        "CitizenIdentity",
+        "CidRegistry",
+        Vec::<dynamic::Value>::new(),
+    );
     let mut iter = storage
         .iter(query)
         .await
@@ -1434,7 +1450,11 @@ pub(crate) async fn for_each_chain_private_institution_cid(
         .at_latest()
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    let query = dynamic::storage("PrivateManage", "Institutions", Vec::<dynamic::Value>::new());
+    let query = dynamic::storage(
+        "PrivateManage",
+        "Institutions",
+        Vec::<dynamic::Value>::new(),
+    );
     let mut iter = storage
         .iter(query)
         .await
@@ -1616,6 +1636,8 @@ pub(crate) async fn fetch_active_admins_onchain(
 }
 
 #[cfg(test)]
+// Runtime 元数据与哈希夹具必须精确匹配，断言式解包用于暴露契约回归。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::{
         decode_scale_u128, is_production_mode, parse_hex_hash32, trusted_production_chain_by_hash,

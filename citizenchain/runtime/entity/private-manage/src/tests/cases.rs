@@ -13,7 +13,7 @@ fn governance_assignment(
     account_id: AccountId32,
 ) -> entity_primitives::InstitutionAssignmentTarget<AccountId32> {
     entity_primitives::InstitutionAssignmentTarget {
-        account_id: account_id,
+        account_id,
         term_start: 0,
         term_end: 0,
         assignment_source: entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,

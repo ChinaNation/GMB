@@ -1,3 +1,6 @@
+// 仓库结构守卫读取失败必须立即中止测试，断言式解包仅限本测试目标。
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

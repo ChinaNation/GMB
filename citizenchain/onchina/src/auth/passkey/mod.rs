@@ -6,6 +6,9 @@
 //! - 独立 WebAuthn 协议,绝不复用 QR_V1 / GMB / AdminSignedPayload。
 //! - 断言失败 / RP 未配一律拒,绝不降档到 Session。
 
+// Passkey 校验失败沿用统一 Axum Response，保持 step-up 鉴权所有拒绝分支同源。
+#![allow(clippy::result_large_err)]
+
 mod store;
 
 use axum::extract::State;
@@ -412,6 +415,8 @@ pub(crate) fn require_passkey_assertion(
 }
 
 #[cfg(test)]
+// Passkey 测试必须在任一步骤失败时立即暴露夹具问题，断言式解包仅限测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -465,7 +470,7 @@ mod tests {
 
         // 断言往返:server 出挑战 → 软认证器签 → server 验证 → 命中注册凭证。
         let (rcr, auth_state) = webauthn
-            .start_passkey_authentication(&[passkey.clone()])
+            .start_passkey_authentication(std::slice::from_ref(&passkey))
             .expect("start authentication");
         let auth = authenticator
             .do_authentication(origin, rcr)

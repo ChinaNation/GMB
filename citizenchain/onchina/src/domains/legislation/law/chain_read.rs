@@ -323,6 +323,8 @@ pub async fn fetch_law_version_label(
 }
 
 #[cfg(test)]
+// 法律链上读取夹具用于锁定 SCALE 契约，失败时应立即中止测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::super::chain_propose::{ArticleArg, ClauseArg, SectionArg};
     use super::*;

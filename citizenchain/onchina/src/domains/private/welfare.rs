@@ -45,7 +45,7 @@ fn lock_input(input: &mut CreateInstitutionInput) -> Result<(), &'static str> {
     assert_module_spec(&SPEC);
     debug_assert_eq!(PROFILE.identity_code, "SFGY");
     debug_assert_eq!(PROFILE.p1, "0");
-    debug_assert!(PROFILE.has_legal_personality);
+    const { assert!(PROFILE.has_legal_personality) };
     debug_assert_eq!(PROFILE.purpose_label, "公益目的");
     let rule = fixed_rule(SPEC.private_type)?;
     lock_input_to_rule(input, rule);

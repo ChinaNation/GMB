@@ -4,6 +4,9 @@
 //! 身份 CID、护照号、护照有效期由服务端确定性生成并落库。
 //! 链账户留到链上身份推送阶段录入，并由该账户签名确认。
 
+// Handler 直接复用统一 Axum Response；日期 expect 只消费本模块已严格校验并规范化的日期。
+#![allow(clippy::result_large_err, clippy::expect_used)]
+
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -87,23 +90,11 @@ pub(crate) fn validate_citizen_input(
     ctx: &crate::auth::login::AdminAuthContext,
     input: &AdminCreateCitizenInput,
 ) -> Result<ValidatedCitizenInput, axum::response::Response> {
-    let family_name = match required_trimmed(&input.family_name, "family_name") {
-        Ok(v) => v,
-        Err(resp) => return Err(resp),
-    };
-    let given_name = match required_trimmed(&input.given_name, "given_name") {
-        Ok(v) => v,
-        Err(resp) => return Err(resp),
-    };
-    let citizen_sex = match normalize_citizen_sex(input.citizen_sex.as_str()) {
-        Ok(v) => v,
-        Err(resp) => return Err(resp),
-    };
+    let family_name = required_trimmed(&input.family_name, "family_name")?;
+    let given_name = required_trimmed(&input.given_name, "given_name")?;
+    let citizen_sex = normalize_citizen_sex(input.citizen_sex.as_str())?;
     let citizen_birth_date =
-        match parse_required_date(input.citizen_birth_date.as_str(), "citizen_birth_date") {
-            Ok(v) => v,
-            Err(resp) => return Err(resp),
-        };
+        parse_required_date(input.citizen_birth_date.as_str(), "citizen_birth_date")?;
     let today = Utc::now().date_naive();
     if citizen_birth_date > today {
         return Err(api_error(
@@ -121,10 +112,7 @@ pub(crate) fn validate_citizen_input(
     }
 
     let (province_name, city_name) =
-        match resolve_citizen_scope(&ctx, &input.province_name, &input.city_name) {
-            Ok(v) => v,
-            Err(resp) => return Err(resp),
-        };
+        resolve_citizen_scope(ctx, &input.province_name, &input.city_name)?;
     let province_code = match crate::cid::china::province_code_by_name(province_name.as_str()) {
         Some(v) => v.to_string(),
         None => return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份")),
@@ -134,10 +122,7 @@ pub(crate) fn validate_citizen_input(
             Some(v) => v.to_string(),
             None => return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理城市")),
         };
-    let town_code = match required_trimmed(&input.town_code, "town_code") {
-        Ok(v) => v,
-        Err(resp) => return Err(resp),
-    };
+    let town_code = required_trimmed(&input.town_code, "town_code")?;
     if !crate::cid::china::town_exists(
         province_code.as_str(),
         city_code.as_str(),
@@ -146,19 +131,9 @@ pub(crate) fn validate_citizen_input(
         return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的镇代码"));
     }
 
-    let birth_province_code =
-        match required_trimmed(&input.birth_province_code, "birth_province_code") {
-            Ok(v) => v,
-            Err(resp) => return Err(resp),
-        };
-    let birth_city_code = match required_trimmed(&input.birth_city_code, "birth_city_code") {
-        Ok(v) => v,
-        Err(resp) => return Err(resp),
-    };
-    let birth_town_code = match required_trimmed(&input.birth_town_code, "birth_town_code") {
-        Ok(v) => v,
-        Err(resp) => return Err(resp),
-    };
+    let birth_province_code = required_trimmed(&input.birth_province_code, "birth_province_code")?;
+    let birth_city_code = required_trimmed(&input.birth_city_code, "birth_city_code")?;
+    let birth_town_code = required_trimmed(&input.birth_town_code, "birth_town_code")?;
     let Some((birth_province_name, Some(_birth_city_name), Some(_birth_town_name))) =
         crate::cid::china::area_name_by_codes(
             birth_province_code.as_str(),
@@ -875,11 +850,19 @@ pub(crate) async fn admin_update_citizen(
     // 可变居住市镇:入参为空则保持现存(允许只改其一)。
     let residence_city = {
         let v = input.city_code.trim();
-        if v.is_empty() { existing.city_code.clone() } else { v.to_string() }
+        if v.is_empty() {
+            existing.city_code.clone()
+        } else {
+            v.to_string()
+        }
     };
     let residence_town = {
         let v = input.town_code.trim();
-        if v.is_empty() { existing.town_code.clone() } else { v.to_string() }
+        if v.is_empty() {
+            existing.town_code.clone()
+        } else {
+            v.to_string()
+        }
     };
 
     let locked = match resolve_locked_identity(&existing, &input) {
@@ -899,40 +882,38 @@ pub(crate) async fn admin_update_citizen(
     // 护照签发:现存已签发则原样保留(锁定);现存为空且出生日期就绪时确定性签发一次。
     // 号段以最终居住省市为命名空间(与建档一致)。
     let now = Utc::now();
-    let (passport_no, passport_valid_from_val, passport_valid_until_val) =
-        if !existing.passport_no.trim().is_empty() {
-            (
-                existing.passport_no.clone(),
-                existing.passport_valid_from.clone(),
-                existing.passport_valid_until.clone(),
-            )
-        } else if locked.citizen_birth_date.is_empty() {
-            (String::new(), String::new(), String::new())
-        } else {
-            let birth =
-                NaiveDate::parse_from_str(locked.citizen_birth_date.as_str(), "%Y-%m-%d")
-                    .expect("birth date validated above");
-            let passport_no = match state.db.allocate_passport_no(
-                existing.province_code.as_str(),
-                residence_city.as_str(),
-                existing.cid_number.as_str(),
-            ) {
-                Ok(v) => v,
-                Err(err) => {
-                    tracing::error!(error = %err, "allocate passport no on edit failed");
-                    return crate::api_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        1004,
-                        "护照号签发失败",
-                    );
-                }
-            };
-            (
-                passport_no,
-                passport_valid_from(now),
-                passport_valid_until(now, passport_validity_years(now, birth)),
-            )
+    let (passport_no, passport_valid_from_val, passport_valid_until_val) = if !existing
+        .passport_no
+        .trim()
+        .is_empty()
+    {
+        (
+            existing.passport_no.clone(),
+            existing.passport_valid_from.clone(),
+            existing.passport_valid_until.clone(),
+        )
+    } else if locked.citizen_birth_date.is_empty() {
+        (String::new(), String::new(), String::new())
+    } else {
+        let birth = NaiveDate::parse_from_str(locked.citizen_birth_date.as_str(), "%Y-%m-%d")
+            .expect("birth date validated above");
+        let passport_no = match state.db.allocate_passport_no(
+            existing.province_code.as_str(),
+            residence_city.as_str(),
+            existing.cid_number.as_str(),
+        ) {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::error!(error = %err, "allocate passport no on edit failed");
+                return crate::api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "护照号签发失败");
+            }
         };
+        (
+            passport_no,
+            passport_valid_from(now),
+            passport_valid_until(now, passport_validity_years(now, birth)),
+        )
+    };
 
     // ── 组装:可变字段 + 锁定身份字段 + 服务端护照;正本/链上承诺/账户/状态保留 ──
     let mut updated = existing.clone();
@@ -966,6 +947,8 @@ pub(crate) async fn admin_update_citizen(
 }
 
 #[cfg(test)]
+// 公民资料编辑契约测试使用断言式解包定位不可变字段回归。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod edit_tests {
     use super::*;
 
@@ -1046,7 +1029,7 @@ mod edit_tests {
         edit.citizen_sex = "MALE".to_string(); // 不可变一致 → 保持
         let locked = resolve_locked_identity(&existing, &edit).expect("ok");
         assert_eq!(locked.citizen_sex, "MALE"); // 不可变字段仍锁定
-        // 姓名的实际采用在 handler 直接取 input,不受 lock 影响。
+                                                // 姓名的实际采用在 handler 直接取 input,不受 lock 影响。
     }
 
     #[test]

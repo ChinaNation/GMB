@@ -133,7 +133,7 @@ pub(crate) fn do_propose_create<T: Config>(
         account_id,
         proposer_account_id: who,
         account_name,
-        admins: admins,
+        admins,
         admins_len,
         threshold: regular_threshold,
         amount,

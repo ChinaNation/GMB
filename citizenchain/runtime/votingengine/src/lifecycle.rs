@@ -16,6 +16,10 @@ use sp_runtime::{
 };
 use sp_std::vec::Vec;
 
+/// 状态推进时一次性带出的提案类型、阶段、主体和回调标记。
+type StatusTransitionOutcome<AccountId> =
+    (u8, u8, sp_std::vec::Vec<ProposalSubject<AccountId>>, bool);
+
 impl<T: Config> Pallet<T> {
     /// 根据 citizen-identity 已维护的四级人口数据生成提案人口快照。
     pub fn create_population_snapshot(
@@ -394,15 +398,7 @@ impl<T: Config> Pallet<T> {
         with_transaction(|| {
             let (kind, stage, subjects, should_run_callback) = match Proposals::<T>::try_mutate(
                 proposal_id,
-                |maybe| -> Result<
-                    (
-                        u8,
-                        u8,
-                        sp_std::vec::Vec<ProposalSubject<T::AccountId>>,
-                        bool,
-                    ),
-                    DispatchError,
-                > {
+                |maybe| -> Result<StatusTransitionOutcome<T::AccountId>, DispatchError> {
                     let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
                     let old_status = proposal.status;
                     Self::ensure_valid_status_transition(old_status, status)?;

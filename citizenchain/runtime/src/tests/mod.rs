@@ -1,4 +1,6 @@
 #![cfg(test)]
+// runtime 测试夹具异常必须立即中止，断言式解包仅限测试模块。
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 extern crate alloc;
 use admin_primitives::InstitutionAdminQuery;

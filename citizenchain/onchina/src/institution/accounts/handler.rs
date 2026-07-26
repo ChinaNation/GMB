@@ -64,7 +64,7 @@ async fn authorize_own_institution_proposal(
             ));
         }
     };
-    if proposer_role_code.is_empty() || proposer_role_code.as_bytes().len() > 64 {
+    if proposer_role_code.is_empty() || proposer_role_code.len() > 64 {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,

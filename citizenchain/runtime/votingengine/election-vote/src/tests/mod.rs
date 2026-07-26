@@ -348,7 +348,7 @@ fn create_mutual() -> u64 {
 fn popular_election_uses_population_snapshot_and_generates_result() {
     new_test_ext().execute_with(|| {
         let candidates = vec![candidate(11), candidate(12)];
-        let voters = vec![account(21), account(22), account(23)];
+        let voters = [account(21), account(22), account(23)];
         let proposal_id = create_popular(candidates.clone());
 
         // 创建后人口增长不能把新账户塞进既有普选；Popular 不保存全量选民表。
@@ -508,7 +508,7 @@ fn popular_creation_rejects_population_data_that_is_not_ready() {
 fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
     new_test_ext().execute_with(|| {
         let candidates = vec![candidate(11), candidate(12)];
-        let voters = vec![account(21), account(22), account(23)];
+        let voters = [account(21), account(22), account(23)];
         let proposal_id = create_popular(candidates.clone());
         assert_noop!(
             ElectionVote::cast_popular_vote(
@@ -671,7 +671,7 @@ fn timeout_is_rejected_before_expiry_then_finalizes_no_vote_election() {
 fn election_cleanup_removes_all_track_storage() {
     new_test_ext().execute_with(|| {
         let candidates = vec![candidate(11), candidate(12)];
-        let voters = vec![account(21), account(22), account(23)];
+        let voters = [account(21), account(22), account(23)];
         let proposal_id = create_popular(candidates.clone());
         assert_ok!(ElectionVote::cast_popular_vote(
             RuntimeOrigin::signed(voters[0].clone()),

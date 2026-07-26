@@ -77,12 +77,16 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn reward_claimed)]
     /// 按 cid_number 哈希维度防重，确保同一公民身份不会重复领取奖励。
+    // unit 是 StorageMap 的存在标记值，不是函数返回类型，不能按 lint 建议删除。
+    #[allow(clippy::unused_unit)]
     pub type IdentityRewardClaimed<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn account_rewarded)]
     /// 按账户维度再做一次防重，避免同一账户换绑 CID 后再次领奖。
+    // unit 是 StorageMap 的存在标记值，不是函数返回类型，不能按 lint 建议删除。
+    #[allow(clippy::unused_unit)]
     pub type AccountRewarded<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (), ValueQuery>;
 

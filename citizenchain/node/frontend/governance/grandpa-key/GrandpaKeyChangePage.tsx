@@ -29,6 +29,7 @@ export function GrandpaKeyChangePage({
   onBack,
   onSuccess,
 }: Props) {
+  // 正常轮换与紧急恢复共用一次管理员二维码签名流程，差异只由链端操作类型决定。
   const [changeKind, setChangeKind] = useState<GrandpaChangeKind>('routine_rotation');
   const [selectedSignerAccountId, setSelectedSignerAccountId] = useState(
     adminSigners.length === 1 ? adminSigners[0].account_id : '',

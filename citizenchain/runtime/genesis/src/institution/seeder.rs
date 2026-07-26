@@ -508,18 +508,21 @@ where
             .to_vec()
             .try_into()
             .expect("genesis institution: FSC 岗位代码超过协议上限");
-        let mut list: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
-            Vec::new();
-        list.push(InstitutionAdminAssignment {
-            cid_number: cid.clone(),
-            account_id: decode_account::<T>(&genesis_assignment.account_id, "FSC 创世任职管理员"),
-            role_code: role_code.clone(),
-            term_start: 0,
-            term_end: 0,
-            assignment_source: InstitutionAssignmentSource::Genesis,
-            assignment_source_ref: Default::default(),
-            assignment_status: InstitutionAssignmentStatus::Active,
-        });
+        // FSC 创世岗位固定只有一名管理员，直接构造单元素任职集合。
+        let list: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
+            vec![InstitutionAdminAssignment {
+                cid_number: cid.clone(),
+                account_id: decode_account::<T>(
+                    &genesis_assignment.account_id,
+                    "FSC 创世任职管理员",
+                ),
+                role_code: role_code.clone(),
+                term_start: 0,
+                term_end: 0,
+                assignment_source: InstitutionAssignmentSource::Genesis,
+                assignment_source_ref: Default::default(),
+                assignment_status: InstitutionAssignmentStatus::Active,
+            }];
         let bounded: public_manage::institution::role::RoleAssignmentsOf<T> = list
             .try_into()
             .expect("genesis institution: FSC 单岗任职数量超限");
@@ -545,8 +548,8 @@ where
             .try_into()
             .expect("genesis institution: FSC 管理员名超过协议上限"),
     };
-    let mut admin_records: Vec<Admin<T::AccountId>> = Vec::new();
-    admin_records.push(admin);
+    // FSC 创世管理员名册固定为上述唯一人员记录。
+    let admin_records: Vec<Admin<T::AccountId>> = vec![admin];
     let admins: PublicAdminsOf<T> = admin_records
         .try_into()
         .expect("genesis institution: FSC 管理员数量超过 MaxAdminsPerInstitution");

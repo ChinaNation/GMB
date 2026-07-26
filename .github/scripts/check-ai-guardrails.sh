@@ -9,15 +9,17 @@ if ! git rev-parse --verify "${base_ref}" >/dev/null 2>&1; then
 fi
 
 merge_base="$(git merge-base HEAD "${base_ref}")"
+# 中文注释：本地验收必须包含未提交修改；CI 工作树干净时，该口径与 merge-base...HEAD 等价。
+diff_target="${merge_base}"
 declare -a changed_files=()
 while IFS= read -r file; do
   changed_files+=("${file}")
-done < <(git diff --name-only "${merge_base}...HEAD")
+done < <(git diff --name-only "${diff_target}")
 
 declare -a status_lines=()
 while IFS= read -r line; do
   status_lines+=("${line}")
-done < <(git diff --name-status --find-renames "${merge_base}...HEAD")
+done < <(git diff --name-status --find-renames "${diff_target}")
 
 if [[ "${#changed_files[@]}" -eq 0 ]]; then
   echo "未检测到变更文件，跳过 AI 门禁检查。"
@@ -137,7 +139,7 @@ should_check_chinese_comment_gate() {
   esac
 
   case "$file" in
-    */test/*|*/tests/*|*.g.dart|*/GeneratedPluginRegistrant.*)
+    */test/*|*/tests/*|*.g.dart|*/GeneratedPluginRegistrant.*|citizenapp/cloudflare/worker-configuration.d.ts|citizenchain/onchina/frontend/dist/assets/*.js)
       return 1
       ;;
     *)
@@ -151,7 +153,8 @@ check_chinese_comment_gate() {
   local added_lines
   local added_count
 
-  added_lines="$(git diff --unified=0 "${merge_base}...HEAD" -- "$file" | grep '^+' | grep -v '^\+\+\+' || true)"
+  # 中文注释：统一使用 ERE 匹配字面加号，兼容 macOS BSD grep 与 GNU grep。
+  added_lines="$(git diff --unified=0 "${diff_target}" -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
 
   if [[ -z "$added_lines" ]]; then
     return 0
@@ -185,7 +188,7 @@ check_version_tag_gate() {
   esac
 
   # 中文注释：`\+` 在 BRE 下是重复算子，必须用 -E（ERE）才是字面加号，否则严格 grep 直接报错。
-  added_lines="$(git diff --unified=0 "${merge_base}...HEAD" -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+  added_lines="$(git diff --unified=0 "${diff_target}" -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
 
   if [[ -z "$added_lines" ]]; then
     return 0
@@ -213,7 +216,7 @@ check_lint_suppression_gate() {
     *) return 0 ;;
   esac
 
-  blocks="$(git diff --unified=2 "${merge_base}...HEAD" -- "$file" \
+  blocks="$(git diff --unified=2 "${diff_target}" -- "$file" \
     | grep -B2 -E '^\+.*#!?\[allow\((dead_code|unused)' || true)"
 
   if [[ -z "$blocks" ]]; then
@@ -288,6 +291,18 @@ should_skip_residual_scan() {
       ;;
     # 中文注释：Flutter 生成目录里的 CMake 文件带默认模板注释，属于框架产物，不应拦截 PR。
     citizenchain/node/linux/flutter/CMakeLists.txt|citizenchain/node/windows/flutter/CMakeLists.txt)
+      return 0
+      ;;
+    # 中文注释：固定版本的 WalletConnect 浏览器 bundle 是第三方生成物，只跳过开发残留关键字扫描。
+    citizenapp/assets/topup/walletconnect.bundle.js)
+      return 0
+      ;;
+    # 中文注释：Wrangler 固定生成类型含 Web API 英文注释和日志示例，不按手写源码规则扫描。
+    citizenapp/cloudflare/worker-configuration.d.ts)
+      return 0
+      ;;
+    # 中文注释：OnChina dist 哈希资产由 Vite 压缩生成，源码注释与残留门禁应检查其源文件。
+    citizenchain/onchina/frontend/dist/assets/*.js)
       return 0
       ;;
     *)
@@ -369,7 +384,7 @@ declare -a pqc_anchor_specs=(
 declare -a pqc_guard_hits=()
 for spec in "${pqc_anchor_specs[@]}"; do
   IFS='|' read -r anchor_file anchor_pat anchor_desc <<< "${spec}"
-  anchor_diff="$(git diff "${merge_base}...HEAD" -- "${anchor_file}" || true)"
+  anchor_diff="$(git diff "${diff_target}" -- "${anchor_file}" || true)"
   if [[ -z "${anchor_diff}" ]]; then
     continue
   fi

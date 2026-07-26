@@ -174,6 +174,8 @@ pub(crate) struct CitizenRow {
 }
 
 #[cfg(test)]
+// 日期边界夹具均为固定输入，解包失败即代表模型契约回归。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use chrono::NaiveDate;

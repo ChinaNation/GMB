@@ -85,7 +85,7 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
     };
 
     // 读取当前索引进度
-    let last_indexed = db_pool.with_client(|conn| db::read_last_indexed_block(conn))?;
+    let last_indexed = db_pool.with_client(db::read_last_indexed_block)?;
     info!(last_indexed_block = last_indexed, "indexer resuming");
 
     // 获取链上最新已最终化区块
@@ -116,7 +116,14 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
             .await
             .map_err(|e| format!("fetch block hash #{next_block}: {e}"))?
             .ok_or_else(|| format!("block #{next_block} not found"))?;
-        process_block_at_hash(&client, db_pool, next_block, hash, projection_scope.as_ref()).await?;
+        process_block_at_hash(
+            &client,
+            db_pool,
+            next_block,
+            hash,
+            projection_scope.as_ref(),
+        )
+        .await?;
         if next_block % 1000 == 0 {
             info!(block = next_block, "indexer catch-up progress");
         }
@@ -141,7 +148,7 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
         let block_num = block.number() as i64;
 
         // 跳过已索引的区块
-        let current_last = db_pool.with_client(|conn| db::read_last_indexed_block(conn))?;
+        let current_last = db_pool.with_client(db::read_last_indexed_block)?;
         if block_num <= current_last {
             continue;
         }

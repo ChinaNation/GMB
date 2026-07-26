@@ -4,6 +4,9 @@
 //! 业务模块通过 `require_admin_any` 获取认证上下文;
 //! 写操作的冷钱包扫码签名(PasskeyColdSign 档)由 admins::actions 的安全 grant 单独校验。
 
+// 登录守卫直接携带统一拒绝响应，保证所有调用方复用完全相同的状态码和错误体。
+#![allow(clippy::result_large_err)]
+
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{Duration, Utc};
 use std::sync::atomic::{AtomicI64, Ordering};

@@ -362,6 +362,8 @@ pub(crate) async fn fetch_all_federal_registry_assignments(
 }
 
 #[cfg(test)]
+// 岗位权限 fixture 必须与链上 SCALE 契约一致，断言式解包仅限测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod scale_contract_tests {
     use super::*;
     use entity_primitives::{

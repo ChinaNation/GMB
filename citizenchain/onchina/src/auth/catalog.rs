@@ -51,7 +51,11 @@ pub(crate) async fn list_federal_registry_admins(
     // 命中短 TTL 缓存直接返回,跳过后续全量链读(全省任职扫描 + 批量余额),
     // 避免每次进 tab 都阻塞在链读上。锁不跨 await。
     {
-        let cache = state.federal_admins_cache.lock().unwrap();
+        // 缓存锁即使被旧请求 poison 也只恢复当前内存缓存，不影响链上管理员授权真源。
+        let cache = state
+            .federal_admins_cache
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         if let Some((cached_at, rows)) = cache.get(&province) {
             if cached_at.elapsed() < FEDERAL_ADMINS_CACHE_TTL {
                 return Json(ApiResponse {
@@ -182,7 +186,10 @@ pub(crate) async fn list_federal_registry_admins(
     };
     // 回填短 TTL 缓存,窗口内重复打开直接命中,不再全量链读。锁不跨 await。
     {
-        let mut cache = state.federal_admins_cache.lock().unwrap();
+        let mut cache = state
+            .federal_admins_cache
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         cache.insert(province.clone(), (std::time::Instant::now(), rows.clone()));
     }
     Json(ApiResponse {

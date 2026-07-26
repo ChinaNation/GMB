@@ -393,9 +393,9 @@ fn submit_batch_same_bank_end_to_end() {
 
         // 由管理员提交
         let bank_total_before = BankTotalDeposits::<Test>::get(bank_cid());
-        let fee_account_before = Balances::free_balance(&bank_fee());
-        let bank_clearing_balance_before = Balances::free_balance(&bank_clearing());
-        let bank_main_balance_before = Balances::free_balance(&bank_main());
+        let fee_account_before = Balances::free_balance(bank_fee());
+        let bank_clearing_balance_before = Balances::free_balance(bank_clearing());
+        let bank_main_balance_before = Balances::free_balance(bank_main());
 
         assert_ok!(OffchainTx::submit_offchain_batch(
             RuntimeOrigin::signed(bank_admin()),
@@ -424,18 +424,18 @@ fn submit_batch_same_bank_end_to_end() {
         );
         // 清算账户 Balances 减 fee(转到 fee_account);主账户身份锚不受影响。
         assert_eq!(
-            Balances::free_balance(&bank_clearing()),
+            Balances::free_balance(bank_clearing()),
             bank_clearing_balance_before - expected_fee
         );
         assert_eq!(
-            Balances::free_balance(&bank_main()),
+            Balances::free_balance(bank_main()),
             bank_main_balance_before
         );
         // 费用账户先收本批手续费,再为这批手续费收益支付一次链上费(Step 3)。
         // 本批累计手续费 = 单笔 fee = 5 → 链上费 max(round(5×0.1%),10) = 10 FEN。
         let onchain_fee = primitives::fee_policy::calculate_onchain_fee(expected_fee);
         assert_eq!(
-            Balances::free_balance(&bank_fee()),
+            Balances::free_balance(bank_fee()),
             fee_account_before + expected_fee - onchain_fee
         );
         // nonce 已消费
@@ -750,9 +750,9 @@ fn submit_batch_cross_bank_end_to_end() {
         let payer_deposit_before = DepositBalance::<Test>::get(bank2_cid(), &alice);
         let bank2_total_before = BankTotalDeposits::<Test>::get(bank2_cid());
         let bank_total_before = BankTotalDeposits::<Test>::get(bank_cid());
-        let payer_clearing_before = Balances::free_balance(&bank2_clearing());
-        let recipient_clearing_before = Balances::free_balance(&bank_clearing());
-        let recipient_fee_before = Balances::free_balance(&bank_fee());
+        let payer_clearing_before = Balances::free_balance(bank2_clearing());
+        let recipient_clearing_before = Balances::free_balance(bank_clearing());
+        let recipient_fee_before = Balances::free_balance(bank_fee());
 
         // 批次提交给收款方清算行 BANK(收款方主导清算),由 BANK 管理员签名。
         assert_ok!(OffchainTx::submit_offchain_batch(
@@ -785,19 +785,19 @@ fn submit_batch_cross_bank_end_to_end() {
 
         // 资金:付款方清算账户流出 本金+fee;收款方清算账户收本金;收款方费用账户收 fee 再付链上费。
         assert_eq!(
-            Balances::free_balance(&bank2_clearing()),
+            Balances::free_balance(bank2_clearing()),
             payer_clearing_before - (transfer_amount + expected_fee)
         );
         assert_eq!(
-            Balances::free_balance(&bank_clearing()),
+            Balances::free_balance(bank_clearing()),
             recipient_clearing_before + transfer_amount
         );
         assert_eq!(
-            Balances::free_balance(&bank_fee()),
+            Balances::free_balance(bank_fee()),
             recipient_fee_before + expected_fee - onchain_fee
         );
         // 跨行 fee 落收款方费用账户,付款方费用账户(BANK2)不参与。
-        assert_eq!(Balances::free_balance(&bank2_fee()), 1_000_000);
+        assert_eq!(Balances::free_balance(bank2_fee()), 1_000_000);
 
         assert_eq!(L3PaymentNonce::<Test>::get(&alice), 1);
         // 批次序号按 actor(收款方 BANK)推进。

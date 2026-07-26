@@ -351,3 +351,16 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
 - macOS 节点二进制默认进入桌面模式；需要命令行指定 `--chain citizenchain-fresh --tmp` 做隔离验收时，必须同时设置 `CITIZENCHAIN_HEADLESS=1`，否则命令行 chain 参数不会代表实际启动的桌面节点状态。
 - fresh 验收必须读取 RPC 的 block 0、health、六项项目 Runtime 版本、metadata、genesis hash 与 state root，并在结束后停止节点。与既有 bootnode 的 genesis 不一致只说明正式 chainspec 尚未统一，不得通过削弱 NodeGuard 或复用旧链数据规避。
 - 2026-07-22 最终验收：block #0/genesis hash `0x4bd7e3f65f5ad4788e6ac8917abce9b0683f0c93d286766a7512854084ff0dd9`，state root `0xd15b1a20d972f0cc5f64aa9a08a09f6793fe51886f9445c6dc953c0f9d438f7b`，`peers=0`、`isSyncing=false`，六项项目 Runtime 版本均为 `0`，metadata 二进制 220,247 字节；验收节点已停止，未生成正式 chainspec。
+
+## 15. 正式创世前全仓静态与测试门禁
+
+- 2026-07-25 已通过
+  `cargo clippy --workspace --all-targets -- -D warnings`，范围包含全部 production、test、
+  example、Node、OnChina、runtime、协议 crate 和固定 GRANDPA vendor target，不按目录
+  跳过告警。
+- 同一源码已通过 `cargo test --workspace --all-targets`。现有 `square-post` 真实日历、
+  自动续费、取消、暂停恢复与价格重确认测试均通过，本轮没有修改订阅业务逻辑。
+- FRAME 宏生成的既定 extrinsic 参数 ABI、固定上游 vendor 和测试断言只允许使用最窄、
+  带中文原因的 lint 范围；不得以此扩展为 production 全局静音。
+- 本轮只完成正式创世前代码质量验收；没有烘焙 chainspec、切换节点数据、触发 GitHub CI、
+  部署节点或转入资金。

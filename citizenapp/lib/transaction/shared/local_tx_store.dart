@@ -10,6 +10,7 @@ class LocalTxStore {
   static const String statusPending = 'pending';
   static const String statusInBlock = 'inBlock';
   static const String statusFinalized = 'finalized';
+  static const String statusFailed = 'failed';
 
   static String requireAccountId(String accountId) {
     if (!isAccountIdText(accountId)) {
@@ -331,12 +332,65 @@ class LocalTxStore {
           .where()
           .recordKeyEqualTo(recordKey)
           .findFirst();
-      if (entity == null || entity.status == statusFinalized) return;
+      if (entity == null ||
+          entity.status == statusFinalized ||
+          entity.status == statusFailed) {
+        return;
+      }
       entity.status = statusInBlock;
       if (blockHash != null && blockHash.isNotEmpty) {
         entity.blockHash = normalizeBlockHash(blockHash);
       }
       entity.failureReason = null;
+      await isar.localTxEntitys.put(entity);
+    });
+  }
+
+  /// 非最终区块被回滚时恢复为待确认。
+  ///
+  /// `inBlock` 只是内部进度，未获得 finalized 前始终属于 UI 的“待确认”；
+  /// 回滚只清理候选区块信息，不会影响已经最终性确认或明确失败的记录。
+  static Future<void> markLocalSubmitPending({
+    required String accountId,
+    required String txHash,
+  }) async {
+    final recordKey = pendingRecordKey(accountId, txHash);
+    await WalletIsar.instance.writeTxn((isar) async {
+      final entity = await isar.localTxEntitys
+          .where()
+          .recordKeyEqualTo(recordKey)
+          .findFirst();
+      if (entity == null ||
+          entity.status == statusFinalized ||
+          entity.status == statusFailed) {
+        return;
+      }
+      entity
+        ..status = statusPending
+        ..blockHash = null
+        ..failureReason = null;
+      await isar.localTxEntitys.put(entity);
+    });
+  }
+
+  /// 把已签名提交、且被交易池明确拒绝的交易标记为失败。
+  ///
+  /// 连接中断、监听超时和未获最终性确认都不能调用本入口，避免把未知结果误报为失败。
+  static Future<void> markLocalSubmitFailed({
+    required String accountId,
+    required String txHash,
+    required String failureReason,
+  }) async {
+    final recordKey = pendingRecordKey(accountId, txHash);
+    await WalletIsar.instance.writeTxn((isar) async {
+      final entity = await isar.localTxEntitys
+          .where()
+          .recordKeyEqualTo(recordKey)
+          .findFirst();
+      if (entity == null || entity.status == statusFinalized) return;
+      entity
+        ..status = statusFailed
+        ..failureReason = failureReason;
       await isar.localTxEntitys.put(entity);
     });
   }
@@ -355,6 +409,8 @@ class LocalTxStore {
   static int _statusRank(String? status) {
     switch (status) {
       case statusFinalized:
+        return 4;
+      case statusFailed:
         return 3;
       case statusInBlock:
         return 2;

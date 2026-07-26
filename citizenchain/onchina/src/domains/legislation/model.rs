@@ -40,6 +40,8 @@ impl ProposalCategory {
 }
 
 #[cfg(test)]
+// 固定日期夹具解包失败即代表模型边界回归，断言式解包仅限测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -52,7 +52,7 @@ pub(crate) async fn account_transactions(
         );
     };
 
-    let limit = query.limit.unwrap_or(20).max(1).min(100);
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
     // 多查一条以判断 has_more
     let fetch_limit = limit + 1;
 

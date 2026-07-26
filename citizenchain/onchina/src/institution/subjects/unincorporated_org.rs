@@ -20,9 +20,8 @@ pub(crate) fn requires_parent(institution_code: &str) -> bool {
 
 pub(crate) fn can_attach_to_parent(parent_institution_code: &str) -> bool {
     // 父级是公法人或私法人才可作所属法人。
-    code::institution_code_from_str(parent_institution_code).map_or(false, |c| {
-        code::is_public_legal_code(&c) || code::is_private_legal_code(&c)
-    })
+    code::institution_code_from_str(parent_institution_code)
+        .is_some_and(|c| code::is_public_legal_code(&c) || code::is_private_legal_code(&c))
 }
 
 pub(crate) fn parent_subject_requirement_message() -> &'static str {
@@ -59,7 +58,7 @@ pub(crate) fn parent_locality_rule(parent_institution_code: &str) -> ParentLocal
         return ParentLocalityRule::SameCity;
     }
     if code::institution_code_from_str(parent_institution_code)
-        .map_or(false, |c| code::is_private_legal_code(&c))
+        .is_some_and(|c| code::is_private_legal_code(&c))
     {
         return ParentLocalityRule::Nationwide;
     }
@@ -113,7 +112,7 @@ pub(crate) fn code_consistency_violation(
 /// 非法人盈利属性附属于所属法人:公法人父级恒非盈利(0),私法人父级继承其 p1。
 pub(crate) fn inherited_p1(parent_institution_code: &str, parent_p1: &str) -> String {
     if code::institution_code_from_str(parent_institution_code)
-        .map_or(false, |c| code::is_public_legal_code(&c))
+        .is_some_and(|c| code::is_public_legal_code(&c))
     {
         "0".to_string()
     } else {

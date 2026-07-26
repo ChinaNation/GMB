@@ -61,6 +61,8 @@ pub fn routing_for(tier: u8, is_education: bool) -> Option<LawRouting> {
 }
 
 #[cfg(test)]
+// 路由夹具必须映射到确定结果，断言式解包用于暴露配置回归。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

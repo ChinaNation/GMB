@@ -357,6 +357,15 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - 失败态必须区分本地存储、链同步、权限、签名和远端服务错误，不使用笼统“网络错误”
   掩盖真实边界。
 - 禁用态不仅改变颜色，还必须阻止交互并提供可理解原因。
+- 交易页支付卡必须沿用已确认稿的字段标题、白色描边输入框、紧凑间距、主按钮和底部
+  分隔状态行；“扫一扫”左侧图标、钱包可用余额左侧图标以及底部五个 Tab 图标均使用
+  当前执行态真源，不得替换或重绘。
+- 交易页顶部链状态栏使用小圆角，并以竖线分隔连接状态和区块详情；原生币的页面币种、
+  余额、校验提示和确认弹窗统一展示为 `GMB`；多签账户入口使用圆形节点关系图标。
+- 交易流水展示只允许“待确认 / 已确认 / 失败”三态：已签名提交但尚未获得最终性确认
+  的 `pending` 与 `inBlock` 统一显示“待确认”；成功写入 finalized 链上事件后显示
+  “已确认”，最终性确认后不存在回滚；只有明确的交易池拒绝或链上执行失败才显示
+  “失败”。连接中断、监听超时、非最终区块回滚不得误判为失败。
 
 ##### 4.1.1.9 “我的”页面定稿基线
 
@@ -467,6 +476,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 当前代码已提供推荐、关注、竞选三分类前端壳、发布页和详情页；目标状态为用户图文/视频动态广场，不承载个人多签、机构账户或提案列表逻辑。
 - 广场用户身份统一使用链账户 `account_id`；会员身份、关注关系、推荐信号、发布草稿和上传任务都绑定 `account_id`。
 - 会员体系为三档（ADR-036，**会员与身份彻底解耦**）：自由会员 `freedom`、民主会员 `democracy`、薪火会员 `spark`。`membership_level` 是纯付费订阅轴，任意身份可订阅任意会员档；发帖分类权限按链上身份，Cloudflare 用量额度按平台会员档，两个权限轴互不替代。平台价格唯一真源为 finalized `SquarePost::PlatformPrice`，付款统一使用链上公民币；CitizenApp 保留三张会员卡，在 App 内完成订阅、取消和换档的一次热钱包签名，不打开外部支付页面。权益口径为未陈旧 finalized 链时钟下仍未到 `paid_until` 的 `Active` 或 `Cancelled`；`Terminated`、过期、缺失或陈旧镜像全部拒绝。
+- 会员页三张套餐卡及权益字段是 App 内置静态界面，进入页面第一帧直接渲染，不等待会话、Cloudflare 或轻节点。按 `account_id` 持久化 finalized 订阅展示快照与三档链上价格：订阅态缓存 5 分钟、价格缓存 30 分钟，有效期内不重复链读，过期后只在后台更新动态字段；首次无缓存时价格显示占位且订阅按钮禁用。手动刷新以及订阅、换档、取消等动权操作必须绕过展示缓存重新核验 finalized 状态和价格；Cloudflare 回执镜像重试不得阻塞页面链读。
 - 认证用户必须同时满足钱包反查永久 CID、CID Active、CID↔钱包双向绑定一致和 `VotingIdentityByCid` 完整有效；任一条件缺失都是未认证。身份认证与会员档位彼此独立（ADR-036）。普通动态 / 普通文章三档会员都可发布但额度不同；竞选动态 / 竞选文章按完整 `CandidateIdentityByCid` 派生的竞选身份（`candidate`）校验，与会员档无关。当前 runtime 的 `campaign` 链上发布仍按有效投票身份拦截（voting+）；App 业务侧（compose / SquarePublishService / Worker `prepareUpload`·`confirm`）按更严的竞选身份 `candidate` 校验；若未来要求链上也强制 Candidate 身份，必须按 runtime 二次确认规则单独修改。
 - 广场默认分类为推荐；用户可切换关注、竞选，后续可按产品需要增加最新分类。推荐流初期只做可解释规则，不做黑盒模型。
 - 广场媒体内容不存链上，不改造 CitizenChain 全节点存储媒体；`manifest.json` 存 Cloudflare R2，图片/首图经 Worker 有界校验后由服务端写 Cloudflare Images，视频全部使用绑定精确字节和最长时长的 Cloudflare Stream TUS，经签名 Images delivery / Stream playback URL 访问。
@@ -587,6 +597,24 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - Worker 运行配置新增 `TOPUP_INTENT_SECRET`（Secret）和
   `TOPUP_DISBURSE_ACCOUNT_ID`（规范 AccountId）。`TOPUP_SETTLE_TOKEN` 继续只用于
   CitizenConsole 与结算接口鉴权。充值不修改 runtime，复用既有链上转账和统一交易收费。
+- production 的 `TOPUP_DISBURSE_ACCOUNT_ID` 固定填写 CitizenConsole“发币地址”解码后的
+  规范 AccountId
+  `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`。
+  这是公开验签身份，不是 Secret；账户余额仍由正式创世后的资金步骤单独控制，写入配置
+  不得被解释为充值业务已经开放。
+- Worker TypeScript 绑定由 `wrangler types --env-interface CloudflareBindings` 从
+  `wrangler.toml` 生成到 `worker-configuration.d.ts`。修改绑定或 vars 后必须重新生成并运行
+  `npm run types:check`；不得恢复 `@cloudflare/workers-types` 手写全局绑定。Secret 不会由
+  Wrangler 配置生成，只在 `src/types.ts` 声明名称契约。
+- staging 验收使用独立 D1/Worker 业务态但可配置 Base 主网真实币轨；生产 Worker/D1
+  不承载试单。真实付款前必须同时满足：当前节点代码能通过冻结创世启动自检、能导入
+  正式链最新区块、best 与 finalized 均持续推进、发币账户余额可读。任一条件失败时，
+  CitizenApp 不得进入外部钱包付款确认，CitizenConsole 也不得尝试绕过节点守卫发币。
+- 2026-07-25 运行态证据：更新后的 debug/release 节点均在正式创世
+  `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`
+  同步到 #4 后拒绝 #5，守卫理由 `RewardAuditInvalid`；同时检测到管理员账户解码、
+  省储行质押账户和机构存储与冻结创世不一致。因此两币真实付款必须等正式创世重新冻结、
+  节点数据切换并通过上述门禁后再执行，禁止先收稳定币后补救。
 
 ### 4.6 二维码模块
 

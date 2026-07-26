@@ -359,7 +359,8 @@ class _ChainProgressBannerState extends State<ChainProgressBanner>
       key: const ValueKey<String>('transaction-chain-status'),
       margin: widget.margin,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+      // 交易页确认稿使用轻微圆角状态栏，不使用胶囊式大圆角。
+      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusSm),
       child: Row(
         children: [
           AnimatedBuilder(
@@ -407,8 +408,17 @@ class _ChainProgressBannerState extends State<ChainProgressBanner>
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          Flexible(
+          const SizedBox(
+            key: ValueKey<String>('transaction-chain-status-divider'),
+            height: 24,
+            child: VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: AppTheme.border,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
             child: Text(
               detail,
               maxLines: 1,

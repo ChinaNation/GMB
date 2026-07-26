@@ -211,6 +211,8 @@ pub(crate) fn private_type_code_from_institution_code(
 }
 
 #[cfg(test)]
+// 私权机构类型夹具必须可解析，断言式解包仅限测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

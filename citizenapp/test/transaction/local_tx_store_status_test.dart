@@ -226,4 +226,102 @@ void main() {
     expect(records.single.status, LocalTxStore.statusFinalized);
     expect(records.single.remark, '中华联邦创世');
   });
+
+  test('非最终区块回滚后恢复待确认，最终性确认记录不允许回滚', () async {
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      ss58Address: fromSs58Address,
+      accountId: fromAccountId,
+      txHash: '0xretracted',
+      amountDeltaFen: '-110',
+      transferAmountFen: '100',
+      feeFen: '10',
+      counterpartySs58Address: toSs58Address,
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      usedNonce: 10,
+      createdAtMillis: 4,
+    );
+    await LocalTxStore.markLocalSubmitInBlock(
+      accountId: fromAccountId,
+      txHash: '0xretracted',
+      blockHash: '0x77',
+    );
+    await LocalTxStore.markLocalSubmitPending(
+      accountId: fromAccountId,
+      txHash: '0xretracted',
+    );
+
+    final records = await LocalTxStore.queryByAccountId(fromAccountId);
+    var record = records.singleWhere((item) => item.txHash == '0xretracted');
+    expect(record.status, LocalTxStore.statusPending);
+    expect(record.blockHash, isNull);
+
+    final eventKey = LocalTxStore.blockEventRecordKey(
+      fromAccountId,
+      '0x99',
+      9,
+    );
+    await LocalTxStore.upsertBlockTransferEvent(
+      ss58Address: fromSs58Address,
+      accountId: fromAccountId,
+      recordKey: eventKey,
+      status: LocalTxStore.statusFinalized,
+      amountDeltaFen: '-100',
+      transferAmountFen: '100',
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      counterpartySs58Address: toSs58Address,
+      blockNumber: 15,
+      blockHash: '0x99',
+      eventIndex: 9,
+    );
+    await LocalTxStore.markLocalSubmitPending(
+      accountId: fromAccountId,
+      txHash: '0xretracted',
+    );
+
+    final finalizedRecords = await LocalTxStore.queryByAccountId(fromAccountId);
+    record = finalizedRecords.singleWhere(
+      (item) => item.txHash == '0xretracted',
+    );
+    expect(record.status, LocalTxStore.statusFinalized);
+    expect(record.confirmedAtMillis, isNotNull);
+  });
+
+  test('已签名提交交易被明确拒绝后写入失败状态和原因', () async {
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      ss58Address: fromSs58Address,
+      accountId: fromAccountId,
+      txHash: '0xfailed',
+      amountDeltaFen: '-110',
+      transferAmountFen: '100',
+      feeFen: '10',
+      counterpartySs58Address: toSs58Address,
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      usedNonce: 11,
+      createdAtMillis: 5,
+    );
+    await LocalTxStore.markLocalSubmitFailed(
+      accountId: fromAccountId,
+      txHash: '0xfailed',
+      failureReason: '交易无效',
+    );
+
+    var records = await LocalTxStore.queryByAccountId(fromAccountId);
+    var record = records.singleWhere((item) => item.txHash == '0xfailed');
+    expect(record.status, LocalTxStore.statusFailed);
+    expect(record.failureReason, '交易无效');
+
+    // 明确失败是终态，迟到的非最终入块进度不能把它改回待确认。
+    await LocalTxStore.markLocalSubmitInBlock(
+      accountId: fromAccountId,
+      txHash: '0xfailed',
+      blockHash: '0x88',
+    );
+    records = await LocalTxStore.queryByAccountId(fromAccountId);
+    record = records.singleWhere((item) => item.txHash == '0xfailed');
+    expect(record.status, LocalTxStore.statusFailed);
+    expect(record.failureReason, '交易无效');
+  });
 }

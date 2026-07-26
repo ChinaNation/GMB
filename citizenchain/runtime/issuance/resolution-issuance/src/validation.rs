@@ -46,7 +46,7 @@ impl<T: Config> Pallet<T> {
         }
 
         ensure!(seen == expected_set, Error::<T>::InvalidRecipientSet);
-        ensure!(sum == total_amount.clone(), Error::<T>::TotalMismatch);
+        ensure!(sum == *total_amount, Error::<T>::TotalMismatch);
         Ok(())
     }
 

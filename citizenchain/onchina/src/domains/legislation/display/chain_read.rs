@@ -125,12 +125,17 @@ pub(crate) async fn fetch_representative_ballots(
             ticket.role_subject.cid_number,
             ticket.role_subject.role_code,
         );
-        ballots.insert(format!("0x{}", hex::encode(ticket.voter_account_id)), approve);
+        ballots.insert(
+            format!("0x{}", hex::encode(ticket.voter_account_id)),
+            approve,
+        );
     }
     Ok(ballots)
 }
 
 #[cfg(test)]
+// 法规展示解码夹具必须成立，断言式解包仅限测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use codec::Encode;

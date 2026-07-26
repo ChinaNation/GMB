@@ -84,6 +84,8 @@ pub fn encode_guard_vote(proposal_id: u64, approve: bool) -> ChainCall {
 }
 
 #[cfg(test)]
+// 投票调用编码夹具为固定输入，断言式解包仅用于测试回归定位。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use codec::Encode;

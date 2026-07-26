@@ -1,3 +1,6 @@
+// 协议 fixture 缺失或不一致必须立即中止测试，断言式解包仅限本测试目标。
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use qr_protocol::export::export_registry_dart;
 use qr_protocol::registry::{actions, fields, reject_reasons, SigningCategory};
 use std::collections::HashSet;

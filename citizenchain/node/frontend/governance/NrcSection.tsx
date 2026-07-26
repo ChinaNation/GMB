@@ -76,6 +76,7 @@ export function NrcSection() {
   }
 
   if (view.page === 'grandpa-key') {
+    // 国家储委会换钥入口复用统一页面，机构 CID 与当前管理员签名集合由本层固定传入。
     return (
       <GrandpaKeyChangePage
         actorCidNumber={NRC_CID_NUMBER}

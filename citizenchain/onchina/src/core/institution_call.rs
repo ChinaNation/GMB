@@ -188,6 +188,8 @@ pub fn encode_propose_close_institution(args: &ProposeCloseInstitutionArgs) -> C
 }
 
 #[cfg(test)]
+// 机构调用编码测试要求固定夹具可解码，断言式解包仅限本模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -197,7 +199,7 @@ mod tests {
         given_name: &str,
     ) -> admin_primitives::Admin<[u8; 32]> {
         admin_primitives::Admin {
-            account_id: account_id,
+            account_id,
             // Phase 1: 私权/个人多签管理员公民 CID 预留空。
             cid_number: Default::default(),
             family_name: family_name
@@ -220,7 +222,7 @@ mod tests {
         given_name: &str,
     ) -> admin_primitives::Admin<[u8; 32]> {
         admin_primitives::Admin {
-            account_id: account_id,
+            account_id,
             cid_number: cid_number
                 .as_bytes()
                 .to_vec()

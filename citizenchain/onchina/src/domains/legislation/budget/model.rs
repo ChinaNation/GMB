@@ -114,6 +114,8 @@ impl ProposeBudgetInput {
 }
 
 #[cfg(test)]
+// 预算模型夹具异常必须立即失败，断言式解包不进入生产路径。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -25,6 +25,8 @@ impl<T: Config> Pallet<T> {
         )
     }
 
+    // 内部投票必须逐字段绑定主体、互斥类型、岗位和投票计划，不能合并为影子载荷。
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn do_create_institution_proposal_with_mutex(
         who: T::AccountId,
         institution_code: InstitutionCode,

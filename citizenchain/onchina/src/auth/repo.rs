@@ -161,6 +161,18 @@ pub(crate) fn get_admin_by_account_id_conn(
     row.as_ref().map(admin_from_row).transpose()
 }
 
+/// 管理员授权行政作用域固定为省、市、镇三级可选名称。
+type AdminScope = (Option<String>, Option<String>, Option<String>);
+/// 节点绑定候选元数据固定为 CID、全称、简称和省市镇代码。
+type BindingCandidateMetadata = (
+    String,
+    Option<String>,
+    Option<String>,
+    String,
+    String,
+    String,
+);
+
 /// 派生管理员的省/市/镇作用域。登录签发与会话重建共用此唯一入口：
 /// FRG 省作用域只认绑定中的链上 `InstitutionRoleAssignments` 省岗位码；
 /// 其它机构按绑定 CID 的机构行政区投影解析。绑定缺失或机构不一致一律失败关闭。
@@ -168,7 +180,7 @@ pub(crate) fn derive_admin_scope_conn(
     conn: &mut Client,
     account_id: &str,
     institution_code: &str,
-) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+) -> Result<AdminScope, String> {
     let Some(admin) = get_admin_by_account_id_conn(conn, account_id)? else {
         return Err("admin not found while deriving authorization scope".to_string());
     };
@@ -262,17 +274,7 @@ pub(crate) fn resolve_home_cid_short_name(
 pub(crate) fn resolve_binding_candidate_metadata_conn(
     conn: &mut Client,
     cid_number: &str,
-) -> Result<
-    Option<(
-        String,
-        Option<String>,
-        Option<String>,
-        String,
-        String,
-        String,
-    )>,
-    String,
-> {
+) -> Result<Option<BindingCandidateMetadata>, String> {
     let row = conn
         .query_opt(
             "SELECT s.cid_number, s.cid_full_name, s.cid_short_name,
@@ -329,7 +331,7 @@ fn authorization_scope_from_identity_conn(
     institution_code: &str,
     institution_cid_number: &str,
     frg_province_code: Option<&str>,
-) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+) -> Result<AdminScope, String> {
     let identity = crate::core::chain_runtime::identity_from_binding_parts(
         institution_code,
         Some(institution_cid_number),
@@ -364,8 +366,8 @@ fn authorization_scope_from_identity_conn(
 fn authorization_scope_from_sources(
     institution_code: &str,
     frg_province_code: Option<[u8; 2]>,
-    institution_scope: Option<(Option<String>, Option<String>, Option<String>)>,
-) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+    institution_scope: Option<AdminScope>,
+) -> Result<AdminScope, String> {
     if crate::core::chain_runtime::is_tier1_registry(institution_code) {
         let province_code = frg_province_code
             .ok_or_else(|| "FRG authorization requires frg_province_code".to_string())?;
@@ -938,8 +940,11 @@ pub(crate) fn insert_admin_session_conn(
 pub(crate) fn delete_admin_session(db: &Db, token: &str) -> Result<(), String> {
     let token_hash = admin_session_token_hash(token.trim());
     db.with_client(move |conn| {
-        conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token_hash])
-            .map_err(|e| format!("delete admin session failed: {e}"))?;
+        conn.execute(
+            "DELETE FROM admin_sessions WHERE token = $1",
+            &[&token_hash],
+        )
+        .map_err(|e| format!("delete admin session failed: {e}"))?;
         Ok(())
     })
 }
@@ -1063,6 +1068,8 @@ pub(crate) fn get_qr_login_result_conn(
 }
 
 #[cfg(test)]
+// 仓储契约测试使用断言式解包定位不满足的前置条件，不影响生产错误处理。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::authorization_scope_from_sources;
 

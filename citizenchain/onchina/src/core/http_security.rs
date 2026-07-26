@@ -251,7 +251,7 @@ fn actor_ip_from_request(request: &Request) -> Option<String> {
     let trusted_ips = trusted_proxy_ips();
     let peer_ip = peer_ip_from_request(request);
     if let Some(peer) = peer_ip {
-        if trusted_ips.iter().any(|ip| *ip == peer) {
+        if trusted_ips.contains(&peer) {
             return actor_ip_from_headers(request.headers()).or_else(|| Some(peer.to_string()));
         }
         return Some(peer.to_string());

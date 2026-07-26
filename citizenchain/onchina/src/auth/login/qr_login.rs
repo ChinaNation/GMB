@@ -248,7 +248,7 @@ pub(crate) async fn admin_auth_qr_complete(
             access_token,
             expire_at,
             admin,
-        } => (access_token, expire_at, admin),
+        } => (access_token, expire_at, *admin),
         onchain_gate::GateOutcome::BindingRequired(binding) => {
             return Json(ApiResponse {
                 code: 0,

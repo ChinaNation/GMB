@@ -1,6 +1,6 @@
 # 任务卡（分步执行·逐步确认）：CitizenApp 稳定币充值购买公民币
 
-> 状态：**安全闭环实现完成，等待真机 testnet 真实付款验收**。当前唯一目标态为 USDC/USDT 都走 Base、付款前账户绑定意图、本地控制台发币、四方对账三态台账。
+> 状态：**安全闭环和 staging 主网配置完成，真实付款被正式链创世/节点守卫不一致阻塞**。当前唯一目标态为 USDC/USDT 都走 Base、付款前账户绑定意图、本地 CitizenConsole 发币、四方对账三态台账。
 > 工作流约定：**每一步先输出技术方案 → 用户确认 → 执行 → 更新文档·注释·清理残留 → 输出下一步方案**。未确认不执行；不写代码前不改任何目录。
 
 ## 任务需求
@@ -11,22 +11,24 @@
 
 - citizenapp（Flutter：`wallet` 三按钮重排、`transaction/onchain-topup` 新充值页、`transaction/offchain-transaction` 零钱包详情页迁 deposit）
 - cloudflare（Worker：`topup` 订单/EVM 初验/待发币队列/结算回写 + D1 台账）
-- deploy（本地部署控制台：发币钱包管理 + Touch ID 会话解锁 + 队列消费 + 独立 EVM 复验 + 本机节点发 `ln` 转账 + 四方对账台账）
-- **citizenchain：零改**（复用 `ln` 转账 call；矿工挖矿代码绝不动）
+- citizenconsole（本机私有控制台：发币钱包管理 + Touch ID 会话解锁 + 队列消费 + 独立 EVM 复验 + 本机节点发链上转账 + 四方对账台账）
+- **citizenchain：本步骤零改**（复用 `OnchainTransaction.transfer_with_remark`；矿工与 runtime 不动）
 
 ## 关键决策（锁定，实现不得偏离）
 
 1. **WalletConnect v2 本地 WebView 轨**：App 构造 ERC-20 `transfer`，锁链锁额，用户在自托管钱包签名。WalletConnect provider 固定精确版本并随 App 打包，运行时不执行 CDN 代码。交易所账户不支持（首期不覆盖）。
 2. **两币同走 Base**：USDC + USDT 均在 Base（一条链、一种 gas，最省心；用户钱包里两币都在 Base）。EVM 底座，后续加币/加链=加配置、零新代码。
-3. **发币端 = 本地部署控制台**（`deploy/`），非常驻服务器。控制台没开机订单留队列，开机运行逐个补发。发币**不是 7×24 实时**（已接受）。
+3. **发币端 = 本机私有 CitizenConsole**（`citizenconsole/`，整目录 Git 忽略），非常驻服务器。控制台没开机订单留队列，开机运行逐个补发。发币**不是 7×24 实时**（已接受）。
 4. **专用发币热钱包**：私钥存本机 macOS Keychain，由控制台**写入/更换**（操作者本人输入，AI 全程不接触私钥值）；与主账户/矿工账户分离；主账户离线，只给发币热钱包补小额浮动。
 5. **会话解锁**：控制台启动**一次 Touch ID** 把私钥解锁到内存，本会话队列逐个发币不再二次 Touch ID；退出/重启即清、需重新 Touch ID。
-6. **每笔发币前控制台独立验 Base/Arbitrum RPC**（不只信 Cloudflare）：合约地址、收款地址、金额≥应付、确认数（用 `safe/finalized` 防 reorg）；验过才自动发公民币，验不过不发→置异常交人工。
-7. **四方对账台账**：`控制台本地台账 + 公民币区块链 + Base/Arbitrum RPC + Cloudflare` 四方一致才改订单状态；不一致→异常冻结。
+6. **每笔发币前控制台独立验 Base RPC**（不只信 Cloudflare）：合约地址、收款地址、金额≥应付、确认数（用 `finalized` 防 reorg）；验过才自动发公民币，验不过不发→置异常交人工。
+7. **四方对账台账**：`控制台本地台账 + 公民币区块链 + Base RPC + Cloudflare` 四方一致才改订单状态；不一致→异常冻结。
 8. **订单三态（仅此三种）**：`待支付`（已收到稳定币、控制台未发公民币）/`已支付`（双方都完成=成功）/`异常`（除前两种之外一切=失败，交人工）。**用户视角只有成功(已支付)/失败(异常)，无取消、无「未支付订单」态**——用户没付款=没有订单、不记录、不入台账。
 9. **幂等**：按 `(chain_id, evm_tx_hash)` 唯一；控制台崩溃/重启不重发；发成功才回写 `已支付`。
 10. **定价**：15→10,000.00 公民币、1,400→1,000,000.00 公民币（含约 7% 批量折扣，有意保留）；USDC/USDT 均按 1:1 美元；**发币量服务端按套餐+已验证到账额推导，绝不信客户端**。
-11. **沙箱期**：testnet（Base Sepolia / Arbitrum Sepolia + mock USDT）+ 测试 GMB 链 + 测试私钥；不上生产、不用 live key。
+11. **当前验收环境**：staging Worker/D1 承载验收业务态，USDC/USDT 使用 Base
+    主网真实资产；生产 Worker/D1 不承载试单。任何真实付款必须先通过正式公民链
+    创世、节点守卫、best/finalized 推进和发币余额四项门禁。
 
 ## 关键参数（落地前二次核对合约地址——错地址=收假币）
 
@@ -90,12 +92,12 @@
   - `citizenapp/test/wallet/`（改）：更新受影响 widget 测试。
 - 验收：三按钮各进正确页；零钱包页含清算行余额 + 充值到清算行；旧入口零残留；widget 测试过。
 
-### 步骤 5 · 沙箱端到端真实验收
-- 目标：Base Sepolia(真 USDC) + Arb Sepolia(mock USDT) + 测试 GMB 链 + 真 MetaMask，全链路真实验收。
+### 步骤 5 · staging 主网端到端真实验收
+- 目标：staging Worker/D1 + Base 主网 USDC/USDT + 正式公民链 + 真机外部钱包，全链路真实验收。
 - 预计修改目录：
   - 以验收为主，不新增业务目录；如需夹具/脚本再单列并授权。
   - `memory/05-modules/citizenapp/` 或 `memory/01-architecture/`（文档）：补功能技术文档。
-- 验收：真机付 testnet 稳定币 → 控制台自动发测试公民币 → App 到账；异常（错链/RPC 验不过）入异常人工；重复 txHash 不重发；四方对账一致。
+- 验收：真机分别支付最低档 USDC/USDT → CitizenConsole 自动发公民币 → App 到账；异常（错链/RPC 验不过）入异常人工；重复 txHash 不重发；四方对账一致。
 
 ## 全局验收标准
 
@@ -103,13 +105,27 @@
 - 台账三态正确；四方对账一致才改状态；异常冻结可人工处理。
 - 幂等：同一 EVM txHash 绝不重复发币；控制台重启不重发。
 - runtime 零改、矿工代码不动；三按钮重排旧入口零残留。
-- 真机 + testnet 端到端通过（非仅编译/单测）。
+- 真机 + staging 主网端到端通过（非仅编译/单测）。
 
 ## 影响范围
 
 citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchain 零改。私钥托管在本机 Keychain，发币走本地 Touch ID 会话。
 
 ## 进度记录
+
+- **2026-07-25 · staging 主网环境完成，付款前发现正式链阻塞**
+  - staging D1 已清空重建并登记唯一 `0001_square_core.sql`；充值表为空且为当前 21
+    字段结构。Worker 已写入新的意图 Secret、同步结算令牌并部署主网 Base 配置；
+    匿名健康检查和充值配置均真实返回 200。
+  - debug/release 两份节点产物都连接正式链并同步到 #4，但拒绝区块 #5，
+    节点守卫返回 `RewardAuditInvalid`；启动自检同时报告管理员账户、机构存储和省储行
+    质押状态与冻结创世不一致。最终确认高度仍为 #0。
+  - 为避免稳定币已扣而公民币无法 finalized 发放，真机支付在打开外部钱包确认前停止，
+    USDC/USDT 均未支出，D1 无订单。
+  - 临时 Access IP 放行、CitizenConsole staging/观察节点指向、链指纹和两个临时节点
+    数据目录已全部清理；CitizenConsole 已恢复 production Worker + `9944` 原配置。
+  - 下一步必须先完成“更新后代码 + 正式冻结 chainspec + 正式链状态”一致性验收，
+    再恢复两币真实付款。不得绕过节点守卫或降低 finalized 校验。
 
 - **2026-07-17 · 步骤 1 完成（Cloudflare 订单后端 + 台账 + EVM 验证 + 队列 + 结算回写）**
   - 本段记录的是当日旧实现，接口和匿名认领口径已由 2026-07-25 安全闭环彻底替换，不构成兼容契约。

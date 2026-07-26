@@ -115,9 +115,15 @@ pub(crate) fn merge_citizen_record(
         // ── 链下正本:保留 existing,新建则空 ──
         passport_no: existing.map(|e| e.passport_no.clone()).unwrap_or_default(),
         // 姓名/性别/出生日期:竞选身份链上有 → 用链上;投票身份链上无 → 保留本地正本。
-        family_name: chain_or_local_str(&chain.family_name, existing.map(|e| e.family_name.as_str())),
+        family_name: chain_or_local_str(
+            &chain.family_name,
+            existing.map(|e| e.family_name.as_str()),
+        ),
         given_name: chain_or_local_str(&chain.given_name, existing.map(|e| e.given_name.as_str())),
-        citizen_sex: chain_or_local_str(&chain.citizen_sex, existing.map(|e| e.citizen_sex.as_str())),
+        citizen_sex: chain_or_local_str(
+            &chain.citizen_sex,
+            existing.map(|e| e.citizen_sex.as_str()),
+        ),
         citizen_birth_date: chain_or_local_str(
             &chain.birth_date,
             existing.map(|e| e.citizen_birth_date.as_str()),
@@ -254,8 +260,8 @@ pub(crate) fn merge_institution_record(
 // ───────────────────────── 链读映射 + writer(接线层) ─────────────────────────
 
 fn r5_province_city(cid_number: &str) -> Result<(String, String), String> {
-    let parts = parse_cid_number_parts(cid_number)
-        .map_err(|e| format!("cid {cid_number} invalid: {e}"))?;
+    let parts =
+        parse_cid_number_parts(cid_number).map_err(|e| format!("cid {cid_number} invalid: {e}"))?;
     let province = parts
         .r5
         .get(0..2)
@@ -383,7 +389,8 @@ pub(crate) async fn project_private_institution_by_cid(
     let existing = db
         .get_institution_with_accounts(cid_number)?
         .map(|(inst, _accounts)| inst);
-    let Some(merged) = merge_institution_record(&chain, existing.as_ref(), scope, Utc::now()) else {
+    let Some(merged) = merge_institution_record(&chain, existing.as_ref(), scope, Utc::now())
+    else {
         return Ok(false);
     };
     db.upsert_institution_row(&merged)?;
@@ -432,10 +439,11 @@ pub(crate) async fn drill_in_project_private_scope(
         let Ok((province, city)) = r5_province_city(cid.as_str()) else {
             continue;
         };
-        if province == scope.province_code && city == scope.city_code {
-            if project_private_institution_by_cid(db, cid.as_str(), scope).await? {
-                institutions += 1;
-            }
+        if province == scope.province_code
+            && city == scope.city_code
+            && project_private_institution_by_cid(db, cid.as_str(), scope).await?
+        {
+            institutions += 1;
         }
     }
     Ok(institutions)
@@ -504,6 +512,8 @@ pub(crate) async fn drill_in_project_city(
 }
 
 #[cfg(test)]
+// 投影合并夹具使用固定时间与链上记录，断言式解包仅用于测试定位。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -555,8 +565,8 @@ mod tests {
 
     #[test]
     fn fresh_projection_maps_chain_fields_and_blank_offchain() {
-        let out = merge_citizen_record(&chain_voting_citizen(), None, &scope(), now())
-            .expect("in scope");
+        let out =
+            merge_citizen_record(&chain_voting_citizen(), None, &scope(), now()).expect("in scope");
         assert_eq!(out.city_code, "018");
         assert_eq!(out.town_code, "018001");
         assert_eq!(out.passport_valid_from, "20260101");
@@ -666,7 +676,9 @@ mod tests {
         assert_eq!(out.institution_code, "SFGY");
         assert_eq!(out.has_legal_personality, Some(true));
         assert_eq!(
-            out.legal_representative.as_ref().map(|l| l.given_name.as_str()),
+            out.legal_representative
+                .as_ref()
+                .map(|l| l.given_name.as_str()),
             Some("伟")
         );
         // 链下证件照:新建为空。
@@ -694,8 +706,8 @@ mod tests {
         let mut chain = chain_institution();
         chain.cid_short_name = "基金会新简称".to_string();
 
-        let out = merge_institution_record(&chain, Some(&existing), &scope(), now())
-            .expect("in scope");
+        let out =
+            merge_institution_record(&chain, Some(&existing), &scope(), now()).expect("in scope");
         // 链上来源列被更新:
         assert_eq!(out.cid_short_name.as_deref(), Some("基金会新简称"));
         // 链下正本绝不被覆盖:

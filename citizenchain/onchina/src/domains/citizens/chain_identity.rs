@@ -3,6 +3,9 @@
 //! 本模块只处理公民账户签名与 `citizen-identity` call data 构造。
 //! 本地建档不要求链账户；注册局准备推送链上身份时才绑定账户并验签。
 
+// 身份准备辅助函数必须原样返回统一 Axum 拒绝响应，禁止不同入口各自改写错误语义。
+#![allow(clippy::result_large_err)]
+
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -763,7 +766,7 @@ fn verify_citizen_identity_signature(
         primitives::sign::signing_message(primitives::sign::OP_SIGN_CITIZEN_IDENTITY, payload);
     let public = sr25519::Public::from_raw(account_id_bytes);
     let signature = sr25519::Signature::from_raw(signature);
-    sr25519::Pair::verify(&signature, &message, &public)
+    sr25519::Pair::verify(&signature, message, &public)
 }
 
 fn parse_signature_bytes(signature_hex: &str) -> Option<[u8; 64]> {

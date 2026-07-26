@@ -1,3 +1,6 @@
+// runtime 集成夹具异常必须立即中止测试，断言式解包仅限本测试文件。
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use super::*;
 // 簇 1:Runtime 整体自检(4 个用例)
 #[test]
@@ -2107,13 +2110,13 @@ fn national_member_body_first_composition_and_permanent_range_are_enforced() {
             },
             b"test".to_vec().try_into().expect("owner fits"),
             votingengine::AuthorizationSubject::Institution(votingengine::RoleSubject {
-                cid_number: cid_number.clone().try_into().expect("CID fits"),
-                role_code: member_role_code.clone().try_into().expect("role fits"),
+                cid_number: cid_number.clone(),
+                role_code: member_role_code.clone(),
             }),
             vec![votingengine::AuthorizationSubject::Institution(
                 votingengine::RoleSubject {
-                    cid_number: cid_number.clone().try_into().expect("CID fits"),
-                    role_code: member_role_code.clone().try_into().expect("role fits"),
+                    cid_number: cid_number.clone(),
+                    role_code: member_role_code.clone(),
                 },
             )],
             votingengine::VotingEngineKind::Internal,

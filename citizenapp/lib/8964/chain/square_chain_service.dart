@@ -132,12 +132,23 @@ class SquareChainService implements SquarePostChainPublisher {
     return decodePlatformPriceFen(data);
   }
 
-  /// 一次读三档平台价（自由/民主/薪火），会员页据此逐档展示；缺档不入表。
-  Future<Map<String, int>> fetchAllPlatformPrices() async {
+  /// 一次批量读三档平台价（自由/民主/薪火），会员页据此逐档展示；缺档不入表。
+  Future<Map<String, int>> fetchAllPlatformPrices({
+    bool forceFresh = false,
+  }) async {
     const levels = ['freedom', 'democracy', 'spark'];
+    final keys = <String, String>{
+      for (final level in levels)
+        level:
+            '0x${hexEncode(_platformPriceKey(SubscriptionRpc.membershipLevelByte(level)))}',
+    };
+    final values = await _rpc.fetchStorageBatch(
+      keys.values.toList(),
+      forceFresh: forceFresh,
+    );
     final prices = <String, int>{};
     for (final level in levels) {
-      final fen = await fetchPlatformPriceFen(level);
+      final fen = decodePlatformPriceFen(values[keys[level]]);
       if (fen != null) prices[level] = fen;
     }
     return prices;

@@ -32,6 +32,8 @@
 //! - `tests/`       — mock runtime + 业务/监管/黑名单测试
 
 #![cfg_attr(not(feature = "std"), no_std)]
+// FRAME 宏从既定资产发行 extrinsic 生成多参数分发函数；参数顺序属于链上编码契约。
+#![allow(clippy::too_many_arguments)]
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
@@ -360,7 +362,7 @@ pub mod pallet {
                 decimals,
                 initial_supply,
             );
-            // TODO: implement business logic (任务卡 A)
+            // 当前仅建立授权入口；资产发行与投票执行由任务卡 A 统一实装。
             //   1. validation::ensure_institution_context / ensure_decimals_in_range / ensure_class_supported
             //   2. 按业务动作校验 proposer_account_id 对目标 RoleSubject 的 Propose 权限
             //   3. 字段过黑名单
@@ -388,7 +390,7 @@ pub mod pallet {
                 false,
             )?;
             let _ = (actor_cid_number, asset_id, to_account_id, amount);
-            // TODO: implement business logic (任务卡 A)
+            // 当前仅建立授权入口；增发提案与投票执行由任务卡 A 统一实装。
             Ok(())
         }
 
@@ -412,7 +414,7 @@ pub mod pallet {
                 false,
             )?;
             let _ = (actor_cid_number, asset_id, from_account_id, amount);
-            // TODO: implement business logic (任务卡 A)
+            // 当前仅建立授权入口；销毁提案与投票执行由任务卡 A 统一实装。
             Ok(())
         }
 
@@ -434,7 +436,7 @@ pub mod pallet {
                 false,
             )?;
             let _ = (actor_cid_number, asset_id);
-            // TODO: implement business logic (任务卡 A)
+            // 当前仅建立授权入口；关闭提案与投票执行由任务卡 A 统一实装。
             Ok(())
         }
 
@@ -465,7 +467,7 @@ pub mod pallet {
                 to_account_id,
                 amount,
             );
-            // TODO: implement business logic (任务卡 A)
+            // 当前仅建立授权入口；转账提案与投票执行由任务卡 A 统一实装。
             Ok(())
         }
 
@@ -491,7 +493,7 @@ pub mod pallet {
                 true,
             )?;
             let _ = (actor_cid_number, asset_id, account_id, reason_hash);
-            // TODO: implement business logic (任务卡 B)
+            // 当前仅建立 NRC 授权入口；冻结提案与联合投票执行由任务卡 B 统一实装。
             //   校验 proposer_account_id 对 NRC 委员 RoleSubject 的监管冻结 Propose 权限
             //   构造含 NRC 委员投票主体的固定 VotePlan，再调用指定的联合投票引擎
             Ok(())
@@ -517,7 +519,7 @@ pub mod pallet {
                 true,
             )?;
             let _ = (actor_cid_number, asset_id, account_id, reason_hash);
-            // TODO: implement business logic (任务卡 B)
+            // 当前仅建立 NRC 授权入口；解冻提案与联合投票执行由任务卡 B 统一实装。
             Ok(())
         }
 
@@ -542,7 +544,7 @@ pub mod pallet {
                 true,
             )?;
             let _ = (actor_cid_number, asset_id, account_id, amount, reason_hash);
-            // TODO: implement business logic (任务卡 B)
+            // 当前仅建立 NRC 授权入口；扣押提案与联合投票执行由任务卡 B 统一实装。
             Ok(())
         }
 
@@ -575,7 +577,7 @@ pub mod pallet {
                 amount,
                 reason_hash,
             );
-            // TODO: implement business logic (任务卡 B)
+            // 当前仅建立 NRC 授权入口；追赃提案与联合投票执行由任务卡 B 统一实装。
             Ok(())
         }
 
@@ -598,7 +600,7 @@ pub mod pallet {
                 true,
             )?;
             let _ = (actor_cid_number, asset_id, reason_hash);
-            // TODO: implement business logic (任务卡 B)
+            // 当前仅建立 NRC 授权入口；整币封禁提案与联合投票执行由任务卡 B 统一实装。
             Ok(())
         }
     }

@@ -32,7 +32,9 @@ fn split_province_city(cid_number: &str) -> Result<(String, String), String> {
         .next()
         .ok_or_else(|| format!("genesis cid_number {cid_number} missing r5 segment"))?;
     if r5.len() < 5 {
-        return Err(format!("genesis cid_number {cid_number} r5 segment too short"));
+        return Err(format!(
+            "genesis cid_number {cid_number} r5 segment too short"
+        ));
     }
     Ok((r5[..2].to_string(), r5[2..5].to_string()))
 }
@@ -84,7 +86,8 @@ pub(crate) fn seed_genesis_citizen_blocking(db: &Db) -> Result<bool, String> {
     let cid_number = LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER.to_string();
     // 省码取程伟 CID(GZ);市码取基金会 CID 的市码(绥阳 018),让程伟落在联邦库的"贵州/绥阳市"下。
     let (province_code, _self_city) = split_province_city(cid_number.as_str())?;
-    let (_foundation_province, city_code) = split_province_city(CITIZENCHAIN_FOUNDATION.cid_number)?;
+    let (_foundation_province, city_code) =
+        split_province_city(CITIZENCHAIN_FOUNDATION.cid_number)?;
 
     if citizen_exists(db, province_code.as_str(), cid_number.as_str())? {
         return Ok(false);
@@ -171,12 +174,15 @@ pub(crate) fn backfill_genesis_private_blocking(db: &Db) -> Result<bool, String>
 
     let parts = parse_cid_number_parts(foundation_cid.as_str())
         .map_err(|e| format!("genesis foundation cid invalid: {e}"))?;
-    let legal_representative = chain_inst.legal_representative.map(|lr| LegalRepresentative {
-        family_name: String::from_utf8_lossy(&lr.family_name).into_owned(),
-        given_name: String::from_utf8_lossy(&lr.given_name).into_owned(),
-        cid_number: String::from_utf8_lossy(&lr.cid_number).into_owned(),
-        account_id: format!("0x{}", hex::encode(lr.account_id)),
-    });
+    // 中文注释：法定代表人姓名与账户均以链上创世记录为权威，不从本地补造或覆盖。
+    let legal_representative = chain_inst
+        .legal_representative
+        .map(|lr| LegalRepresentative {
+            family_name: String::from_utf8_lossy(&lr.family_name).into_owned(),
+            given_name: String::from_utf8_lossy(&lr.given_name).into_owned(),
+            cid_number: String::from_utf8_lossy(&lr.cid_number).into_owned(),
+            account_id: format!("0x{}", hex::encode(lr.account_id)),
+        });
     let now = Utc::now();
     // 私权列表 SQL 要求 private_type 非空;链上无此字段,按机构码确定性派生(基金会 SFGY → WELFARE)。
     let derived_private_type =

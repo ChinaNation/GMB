@@ -20,7 +20,7 @@ fn governance_assignment(
     term_end: u32,
 ) -> entity_primitives::InstitutionAssignmentTarget<AccountId32> {
     entity_primitives::InstitutionAssignmentTarget {
-        account_id: account_id,
+        account_id,
         term_start,
         term_end,
         assignment_source: entity_primitives::InstitutionAssignmentSource::InstitutionGovernance,
@@ -731,7 +731,10 @@ fn approved_close_removes_only_custom_account() {
         assert!(pallet::Institutions::<Test>::contains_key(&cid));
         assert!(public_admins::AdminAccounts::<Test>::contains_key(&cid));
         assert_eq!(Balances::free_balance(&fee), 990);
-        assert_eq!(Balances::free_balance(beneficiary_account_id), ACCOUNT_AMOUNT);
+        assert_eq!(
+            Balances::free_balance(beneficiary_account_id),
+            ACCOUNT_AMOUNT
+        );
         assert_eq!(Balances::free_balance(admin(0)), admin_balance_before);
     });
 }

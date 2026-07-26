@@ -1,3 +1,6 @@
+// ALL_CODES 与两张文本表同属 primitives 单源；缺项属于构建期不变量破坏，必须立即失败。
+#![allow(clippy::expect_used)]
+
 use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 
 use crate::cid::china::provinces;

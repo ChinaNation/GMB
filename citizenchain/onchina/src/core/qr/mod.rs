@@ -167,6 +167,8 @@ pub fn build_signature_message(
 }
 
 #[derive(Debug)]
+// 四个错误名与对外诊断文案逐项对应，统一前缀用于明确它们都是拒绝原因而非可恢复状态。
+#[allow(clippy::enum_variant_names)]
 pub enum QrParseError {
     BadJson(String),
     BadProto(String),
@@ -332,6 +334,8 @@ fn normalize_hex_no_prefix(value: &str) -> String {
 }
 
 #[cfg(test)]
+// 二维码协议夹具必须严格成立，断言式解包用于让协议偏差立即失败。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

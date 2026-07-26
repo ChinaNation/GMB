@@ -168,8 +168,7 @@ class SmoldotClientManager {
           _synced = false;
           _syncFuture = null;
           _lastError = '$debugLabel 失败: $e';
-          AppLog.d(
-              '[Smoldot] $_lastError (attempt $attempt/$_readMaxRetries)');
+          AppLog.d('[Smoldot] $_lastError (attempt $attempt/$_readMaxRetries)');
           rethrow;
         }
         AppLog.d(
@@ -1392,11 +1391,19 @@ class SmoldotClientManager {
         'getAccountNextIndex', () => _chain!.getAccountNextIndex(accountId));
   }
 
-  // `getBlockExtrinsics` 无上层调用方:上层钱包流水走区块事件监听,不逐块
-  // 拉 body 按 extrinsic hash 搜索(substrate
-  // `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 反滥用机制会对同一
-  // (peer+hash+BODY) 请求超过 2 次直接返回空并 ban peer,把轻节点打死)。
-  // smoldotdart 层 binding 保留,避免触动跨 FFI 边界。
+  /// 为本机刚提交、且已经 finalized 的单笔交易读取一次区块 extrinsics。
+  ///
+  /// 仅用于按 txHash 定位 extrinsic index，再核对同 index 的
+  /// `System.ExtrinsicFailed`。严禁把本入口用于逐块扫描；同一块 body 的重复请求
+  /// 会触发 Substrate 反滥用限制，因此这里不走 `_withRetry`。
+  Future<List<String>> getFinalizedBlockExtrinsicsOnce(
+    String blockHashHex,
+  ) async {
+    await ensureSynced();
+    _ensureReady();
+    await _waitForPeer();
+    return _chain!.getBlockExtrinsics(blockHashHex);
+  }
 
   /// 原生提交已编码 extrinsic（必须完整同步）。
   Future<String?> submitExtrinsicHex(String extrinsicHex) async {

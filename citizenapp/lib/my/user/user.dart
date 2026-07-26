@@ -84,6 +84,7 @@ class _ProfilePageState extends State<MyTab> {
   String? get _defaultWalletMembershipLevel => _membership?.membershipLevel;
   bool get _defaultWalletMembershipActive => _membership?.active ?? false;
 
+  // 个人页副标题只组合既有身份与会员快照，不新增第二套身份或订阅真源。
   String get _identityLabel => switch (_defaultWalletIdentityLevel) {
         'candidate' => '竞选身份',
         'voting' => '投票身份',

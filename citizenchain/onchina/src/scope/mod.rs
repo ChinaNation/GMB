@@ -16,7 +16,6 @@
 //!
 //! 本目录只保留范围规则；HTTP handler、账户与公钥工具归属对应业务模块。
 
-
 pub mod rules;
 
 pub use rules::get_visible_scope;

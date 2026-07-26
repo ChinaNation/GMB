@@ -6,6 +6,7 @@
 //! WORST CASE MAP SIZE: `1000000`
 //! HOSTNAME: `rhettdeMacBook-Pro.local`, CPU: `<UNKNOWN>`
 //! WASM-EXECUTION: `Compiled`, CHAIN: `Some("/var/folders/z1/h1pvtv0x76xg5h60y_2npmbc0000gn/T/citizenchain-benchmark-spec.Qlyo4NkFwz")`, DB CACHE: 1024
+// 中文说明：本文件数值由基准工具生成；本次仅补充说明，不修改任何权重、读写次数或执行逻辑。
 
 // Executed Command:
 // ./target/release/citizenchain

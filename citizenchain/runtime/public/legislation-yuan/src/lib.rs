@@ -9,6 +9,8 @@
 //! 业务壳通过它创建立法投票提案,投票终态经核心 `LegislationVoteResultCallback` 回调写回本壳。
 
 #![cfg_attr(not(feature = "std"), no_std)]
+// FRAME 宏从既定法律提案载荷生成多参数分发函数；不能为 lint 改变链上编码字段顺序。
+#![allow(clippy::too_many_arguments)]
 
 pub mod types;
 pub mod weights;
@@ -70,7 +72,6 @@ pub mod pallet {
     /// 法律内容统一结构:章 > 节 > 条 > 款(ADR-027)。
     /// 章/节/条做目录,条款做正文;所有法律统一此结构(章/节/条必有,款可空)。
     /// 宪法双语(`_en` 全填),其他法律单语(`_en` 为 None)。
-
     /// 条文款(第 N 款,正文)。
     #[derive(
         Encode,
@@ -1374,8 +1375,8 @@ pub mod pallet {
             voter_subjects.extend(
                 executive
                     .into_iter()
-                    .chain(override_signers.into_iter())
-                    .chain(guard.into_iter())
+                    .chain(override_signers)
+                    .chain(guard)
                     .map(votingengine::types::AuthorizationSubject::Institution),
             );
             let owner: BoundedVec<

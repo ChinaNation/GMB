@@ -44,7 +44,7 @@ pub(crate) fn build_propose_platform_price_call(
         return Err("actor_cid_number is required".to_string());
     }
     let proposer_role_code = proposer_role_code.trim();
-    if proposer_role_code.is_empty() || proposer_role_code.as_bytes().len() > 64 {
+    if proposer_role_code.is_empty() || proposer_role_code.len() > 64 {
         return Err("proposer_role_code length must be between 1 and 64 bytes".to_string());
     }
     if new_price_fen == 0 {
@@ -59,6 +59,8 @@ pub(crate) fn build_propose_platform_price_call(
 }
 
 #[cfg(test)]
+// 会员链调用编码夹具必须成立，断言式解包用于测试契约回归。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

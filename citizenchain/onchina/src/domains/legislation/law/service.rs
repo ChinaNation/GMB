@@ -192,6 +192,8 @@ pub fn build_representative_vote_call(
 }
 
 #[cfg(test)]
+// 法律服务夹具异常应直接中止测试，断言式解包不进入生产路径。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::domains::legislation::law::model::{LawChapter, LawSection};

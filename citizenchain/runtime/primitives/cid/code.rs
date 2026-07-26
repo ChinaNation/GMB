@@ -937,7 +937,7 @@ fn text_matches(code: &InstitutionCode, values: &[&str]) -> bool {
     let Some(text) = institution_code_text(code) else {
         return false;
     };
-    values.iter().any(|value| *value == text)
+    values.contains(&text)
 }
 
 /// 获取机构码盈利策略。
@@ -1072,9 +1072,9 @@ mod tests {
             assert_eq!(text.len(), 2);
             assert!(text.chars().all(|ch| ch.is_ascii_uppercase()));
         }
-        for i in 0..PROVINCE_CODES.len() {
-            for j in (i + 1)..PROVINCE_CODES.len() {
-                assert_ne!(PROVINCE_CODES[i], PROVINCE_CODES[j], "province duplicate");
+        for (i, province_code) in PROVINCE_CODES.iter().enumerate() {
+            for other_province_code in PROVINCE_CODES.iter().skip(i + 1) {
+                assert_ne!(province_code, other_province_code, "province duplicate");
             }
         }
         assert_eq!(province_code_by_name("广东省"), Some(*b"GD"));
@@ -1094,9 +1094,12 @@ mod tests {
                 Some(info.institution_code)
             );
         }
-        for i in 0..ALL_CODES.len() {
-            for j in (i + 1)..ALL_CODES.len() {
-                assert_ne!(ALL_CODES[i], ALL_CODES[j], "institution duplicate");
+        for (i, institution_code) in ALL_CODES.iter().enumerate() {
+            for other_institution_code in ALL_CODES.iter().skip(i + 1) {
+                assert_ne!(
+                    institution_code, other_institution_code,
+                    "institution duplicate"
+                );
             }
         }
     }

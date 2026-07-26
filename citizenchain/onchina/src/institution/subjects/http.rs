@@ -3,6 +3,9 @@
 //! 这里只放跨公权、私权、账户、资料库和主体详情共用的 HTTP 辅助。
 //! 数据读取写入统一走结构化表,不保留旧缓存回填逻辑。
 
+// 跨主体 HTTP 辅助统一返回 Axum Response，确保所有模块共享同一状态码与错误体。
+#![allow(clippy::result_large_err)]
+
 use axum::http::StatusCode;
 
 use crate::auth::login::AdminAuthContext;

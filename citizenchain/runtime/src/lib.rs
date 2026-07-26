@@ -190,7 +190,7 @@ where
         _source: TransactionSource,
     ) -> ValidateResult<Self::Val, RuntimeCall> {
         if let Some(who) = origin.as_system_origin_signer() {
-            if configs::is_stake_account(&who) {
+            if configs::is_stake_account(who) {
                 return Err(InvalidTransaction::Call.into());
             }
         }

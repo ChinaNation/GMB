@@ -130,7 +130,7 @@ impl<T: Config> Pallet<T> {
                 BlockNumberFor<T>,
                 T::AccountId,
             >>::finalize_timeout(&proposal, proposal_id)
-            .unwrap_or_else(|| Err(DispatchError::Other("ProposalTrackNotConfigured")));
+            .unwrap_or(Err(DispatchError::Other("ProposalTrackNotConfigured")));
             if finalize_result.is_ok() {
                 AutoFinalizeRetryStates::<T>::remove(proposal_id);
                 AutoFinalizeDeadLetters::<T>::remove(proposal_id);

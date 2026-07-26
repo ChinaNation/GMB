@@ -250,6 +250,8 @@ pub(crate) async fn find_extrinsic_block(tx_hash_hex: &str) -> Result<Option<u64
 }
 
 #[cfg(test)]
+// 交易编码夹具失败即代表链调用契约回归，断言式解包仅限测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use citizenchain as runtime;
     use codec::Encode;

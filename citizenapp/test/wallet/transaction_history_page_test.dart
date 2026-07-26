@@ -68,7 +68,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('交易详情'), findsOneWidget);
-    expect(find.text('已出块'), findsOneWidget);
+    expect(find.text('待确认'), findsOneWidget);
+    expect(find.text('已出块'), findsNothing);
     expect(find.text('区块号'), findsOneWidget);
   });
 }

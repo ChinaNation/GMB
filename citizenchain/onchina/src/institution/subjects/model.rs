@@ -11,7 +11,6 @@
 //!
 //! 详见 `feedback_institutions_two_layer.md`。
 
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -73,7 +72,7 @@ pub struct Institution {
     pub has_legal_personality: Option<bool>,
     /// 从属关系引用。字段值始终是另一个机构已有的 `cid_number`,不是第二套身份 ID。
     /// - 需要挂靠的非法人组织(UNIN):指向所属法人。
-    /// 个体经营(SFGT)和无限合伙(SFGP)是独立非法人,不填写本字段。
+    ///   个体经营(SFGT)和无限合伙(SFGP)是独立非法人,不填写本字段。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_cid_number: Option<String>,
     /// 法定代表人公开身份；初始化目录机构没有真实任免资料时允许为空。

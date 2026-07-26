@@ -48,10 +48,15 @@ class TransactionTabPage extends StatelessWidget {
               onTap: () => _openScan(context, wallet),
             ),
             _TransactionEntryTile(
-              icon: const Icon(
-                Icons.account_tree_rounded,
-                size: 20,
-                color: AppTheme.primary,
+              icon: const RotatedBox(
+                // Material 的分享关系图旋转后为“一上两下”圆形节点，
+                // 与确认稿的多签关系结构和线性描边最接近。
+                quarterTurns: 1,
+                child: Icon(
+                  Icons.share_outlined,
+                  size: 28,
+                  color: AppTheme.primary,
+                ),
               ),
               title: '多签账户',
               onTap: () => _openPersonalAccounts(context),
@@ -112,20 +117,12 @@ class _TransactionEntryTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withAlpha(20),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(child: icon),
-              ),
-              const SizedBox(width: 8),
+              icon,
+              const SizedBox(width: 12),
               Flexible(
                 child: Text(
                   title,

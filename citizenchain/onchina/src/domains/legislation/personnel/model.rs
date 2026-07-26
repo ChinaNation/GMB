@@ -72,6 +72,8 @@ impl ProposePersonnelInput {
 }
 
 #[cfg(test)]
+// 人事提案模型夹具必须满足固定校验，断言式解包仅限测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

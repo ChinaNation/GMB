@@ -1,6 +1,6 @@
 # 任务卡：CitizenApp 充值与 CitizenConsole 发币端到端验收
 
-> 状态：安全缺陷修复完成；真机 Base testnet 资金闭环待执行
+> 状态：安全缺陷修复和 staging 主网配置完成；真实付款在付款前被正式链节点守卫阻塞
 
 ## 任务需求
 
@@ -25,7 +25,9 @@
 
 ## 安全边界
 
-- 只允许本地或测试环境，不对生产网络、生产稳定币或生产公民币执行真实发币。
+- 默认只允许本地或测试环境。2026-07-25 用户另行明确授权在 staging Worker/D1
+  上分别执行最低档 USDC、USDT Base 主网付款；本次因公民链阻塞在外部钱包付款前停止，
+  实际未支出稳定币，也未发放公民币。
 - AI 不读取、记录或输出任何私钥、Secret、Keychain 明文或会话种子。
 - 不执行 GitHub 推送、PR、远端 workflow 或生产部署。
 - 任何可能改变 `citizenchain/runtime/` 的操作必须先取得单独的第二次确认。
@@ -81,9 +83,9 @@
 | CitizenConsole 语法/脚本检查 | PASS | `npm run check` 通过 |
 | CitizenConsole 资金安全测试 | **FAIL** | 22 项中 16 通过、6 失败；结算 happy path、双幂等、交叉校验和并发锁测试全部失效 |
 | CitizenConsole 真实页面 | PASS（只读） | 配置页、两币合约子行、台账页均正常渲染，无 console error |
-| USDC Base testnet 真实付款→发币 | **BLOCKED** | staging vars、D1 迁移和结算 Secret 未就绪 |
-| USDT Base testnet 真实付款→发币 | **BLOCKED** | 同上，且 Base Sepolia 的 mock USDT 合约未进入 staging vars |
-| CitizenConsole 真实发币 | **BLOCKED** | 当前控制台指向 production Worker；未获生产试单授权且不得使用真实资产测试 |
+| USDC Base 主网真实付款→发币 | **BLOCKED（付款前）** | staging 已就绪，但更新后节点守卫拒绝正式链区块 #5，无法提供 finalized 发币证明 |
+| USDT Base 主网真实付款→发币 | **BLOCKED（付款前）** | 与 USDC 相同；未打开外部钱包确认页，未产生稳定币支出 |
+| CitizenConsole 真实发币 | **BLOCKED（链前置条件）** | 控制台、结算令牌和发币会话均已验证；正式链观察节点无法导入区块 #5 |
 
 ## 审计发现
 
@@ -154,8 +156,45 @@
 ## 当前结论
 
 - H1、H2、H3、M1、M2 已于 2026-07-25 按唯一目标态修复：匿名交易认领已删除；本地台账损坏 fail-closed；WalletConnect 精确版本随 App 打包；Worker 独立核验 finalized 公民链发币事实；CitizenConsole 资金安全测试恢复并扩展到 27/27。
-- 本地真实 Worker/D1/HTTP 已验证账户会话、短期付款意图、篡改拒绝和付款前零订单。**仍不能把整个业务判定为完全跑通**，因为尚未使用真机外部钱包和 Base testnet 资产完成付款→EVM finalized→CitizenConsole 发币→CitizenChain finalized→CitizenApp 到账。
-- 在下一步真机 testnet 两币轨验收通过前，仍不开放 production 充值。
+- 本地真实 Worker/D1/HTTP 已验证账户会话、短期付款意图、篡改拒绝和付款前零订单。**仍不能把整个业务判定为完全跑通**，因为正式链节点守卫尚未通过，真机 Base 主网付款→EVM finalized→CitizenConsole 发币→CitizenChain finalized→CitizenApp 到账尚未执行。
+- 在正式链门禁和真机 staging 两币轨验收通过前，仍不开放 production 充值。
+
+## 2026-07-25 staging 主网预验收与阻塞证据
+
+- 已按用户确认清空并重建 staging D1，唯一基线迁移 `0001_square_core.sql`
+  成功登记；`topup_orders` 为新 21 字段结构且为空，历史业务数据未保留。
+- staging Worker 已配置 Base 主网：收款地址
+  `0x5ce9b56b9d1812a7cf29841e21756f09ca7d223b`，USDC 合约
+  `0x833589fcd6edb6e08f4c7c32d4f71b54bda02913`，USDT 合约
+  `0xfde4c96c8593536e31f229ea8f37b2ada2699bb2`，RPC
+  `https://mainnet.base.org`，最小 EVM 确认口径为 finalized。
+- 新 `TOPUP_INTENT_SECRET` 已写入 staging Worker；`TOPUP_SETTLE_TOKEN`
+  与 CitizenConsole 已配置值一致。部署版本为
+  `3fc28e6e-6d5b-43d2-84ad-0ea4d87ee400`。匿名临时 Access 放行仅用于预验收，
+  结束后已删除并复核接口重新返回 Access 302。
+- Worker `typecheck` 通过，全量测试 174/174。后续经用户确认已把 lockfile 中的开发依赖
+  `postcss` 更新到 `8.5.23`，并随其最低依赖要求把 `nanoid` 更新到 `3.3.16`；
+  未新增直接依赖、未改 Worker 生产代码。重新执行 `npm ci`、typecheck、174 项测试和
+  `npm audit --audit-level=low` 均通过，当前审计为 0 项漏洞。
+- CitizenConsole 临时指向 staging Worker 和独立正式链观察节点时，发币钱包会话保持解锁，
+  创世哈希 `0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`
+  与正式链一致，节点连接到 1—2 个对等节点并同步到区块 #4。
+- debug 与 release 两份现有节点产物都稳定拒绝同一个正式链区块 #5
+  `0x15129239cf7a517832ee923108655d4552b3e46b97a2374877ffdd4c52556c7b`，
+  节点守卫理由为 `RewardAuditInvalid`。启动自检同时报告管理员账户解码、
+  省储行质押账户和机构存储结构与当前冻结创世状态不一致。
+- 因 Worker 只接受 finalized 公民币发币证明，继续付款会形成“稳定币已扣、公民币无法
+  finalized 发放”的资金风险。本次严格停止在外部钱包付款前：USDC/USDT 均未支出，
+  D1 订单仍为零。
+- 测试结束后已恢复 CitizenConsole 的 production Worker URL 和 `9944` 节点配置，
+  删除临时链指纹、临时观察节点数据和 Access 放行策略；生产 Worker、生产 D1、
+  GitHub、runtime 和正式创世均未触碰。
+
+### 下一步门禁
+
+必须先让更新后的节点代码、冻结 chainspec 和正式链状态采用同一套创世结构，并用至少
+两个节点真实验证：启动自检全通过、区块 #5 可导入、best/finalized 持续推进、发币账户
+余额可读。上述四项全部通过后，才重新执行真机 USDC/USDT 主网付款。
 
 ## 2026-07-25 修复验收
 
@@ -167,3 +206,44 @@
 | M1 Worker 不验公民链事实 | RESOLVED | 控制台提交完整 finalized 证明；Worker 验 genesis、signer、call 参数、canonical/finalized 包含关系 |
 | M2 控制台回归测试失效 | RESOLVED | CitizenConsole 全量 27/27；包含完整证明回写、双幂等、claim、独立守卫和台账损坏 fail-closed |
 | 真机 testnet 完整资金流 | BLOCKED | 尚未配置并授权 testnet 外部钱包、收款资产与测试发币环境 |
+
+## 2026-07-25 正式创世前充值前置条件复核
+
+- 当前源码 fresh block#0 与完整 NodeGuard 扫描均通过，旧正式链 block#5
+  `RewardAuditInvalid` 问题不再用旧链状态判断新版源码；正式冻结仍必须以新 CI WASM、
+  新 chainspec 和清空后的正式数据重新验收。
+- 两个隔离节点已建立真实 P2P 连接并读取同一创世哈希；由于交易池为空、临时矿工账户
+  创世余额为 0，且本机没有正式 GRANDPA 私钥，本轮未能验证非创世区块导入及
+  finalized 持续推进。不得通过修改创世余额或替换正式权威来伪造该结果。
+- CitizenConsole 截图中“发币地址”解码后的规范 AccountId 为
+  `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`；
+  fresh 创世中该账户可读但余额为 0。`transfer_with_remark` 入口与链上交易费路由专项测试
+  已通过，但余额为 0 时不能向充值用户发放公民币。
+- 基金会费用账户在 fresh 创世中同样为 0，基金会机构操作在合法注资前不能支付交易费；
+  该账户与 CitizenConsole 发币账户必须分别确定资金来源、金额和执行时点，不能混为一个账户。
+- 因此正式创世前仍有两类硬门禁：用户先确认两类账户的合法资金安排；再在至少一名
+  正式出块/终局权威可工作的隔离窗口验证 best、跨节点导入和 finalized 持续推进。两项完成前
+  不恢复 USDC/USDT 主网真实付款。
+
+## 2026-07-25 CitizenConsole 与 Worker 冻结前复验
+
+- CitizenConsole 实际配置项以现有页面和源码为准：发币地址、`WORKER_BASE_URL`、
+  `SETTLE_TOKEN`、`BASE_RPC_URL`、`RECV_ADDRESS`、USDC/USDT 合约白名单、
+  `NODE_WS`、`MIN_CONFIRMATIONS`。没有把 Worker 内部的
+  `TOPUP_INTENT_SECRET`、`TOPUP_DISBURSE_ACCOUNT_ID` 或 Cloudflare 绑定误加到控制台 UI。
+- CitizenConsole 27 项测试全部通过，覆盖 Base EVM finalized 转账核验、收款地址与代币
+  白名单交叉校验、台账原子写、损坏 fail-closed、Touch ID 回显限制、发币幂等和并发锁；
+  `npm audit --audit-level=low` 为 0。
+- Worker typecheck、174 项全量测试和依赖审计全部通过；USDC/USDT 同走 Base 的配置与
+  CitizenConsole 当前字段映射一致。
+- production Worker 的 `TOPUP_DISBURSE_ACCOUNT_ID` 已按 CitizenConsole“发币地址”
+  解码后的规范 AccountId 写入
+  `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`；
+  Worker 可据此独立核验最终链上转账签名者，不再依赖空配置。
+- 写入公开 AccountId 不等于业务开放：正式创世时该账户仍为零余额；正式创世后必须先部署
+  国储会 GRANDPA 节点并验证 finalized 持续推进，再按用户确认向该账户转入合法资金。
+  两项完成前不得执行真实主网付款。
+- Worker 环境类型已从手写 `@cloudflare/workers-types` 改为
+  `wrangler types --env-interface CloudflareBindings` 生成
+  `worker-configuration.d.ts`；普通变量和资源绑定以 `wrangler.toml` 为类型真源，
+  Secret 只在源码声明名称，不写入配置或生成物。

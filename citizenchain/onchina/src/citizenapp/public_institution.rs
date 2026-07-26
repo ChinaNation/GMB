@@ -449,6 +449,8 @@ fn custom_account_names_for(
 }
 
 #[cfg(test)]
+// 公共机构映射夹具异常应直接中止测试，断言式解包不进入生产路径。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

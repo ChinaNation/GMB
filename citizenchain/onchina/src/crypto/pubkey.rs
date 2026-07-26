@@ -49,6 +49,8 @@ pub(crate) fn account_id_to_ss58(account_id: &str) -> Option<String> {
 }
 
 #[cfg(test)]
+// 公钥夹具是固定常量，解析失败应直接中止测试。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

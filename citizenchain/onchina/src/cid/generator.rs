@@ -50,6 +50,8 @@ pub fn generate_cid_number(input: GenerateCidInput<'_>) -> Result<String, &'stat
 }
 
 #[cfg(test)]
+// CID 生成夹具必须满足固定格式，断言式解包用于让契约偏差立即失败。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

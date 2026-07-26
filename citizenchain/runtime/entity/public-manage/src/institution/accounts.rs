@@ -65,20 +65,20 @@ pub(crate) fn build_required_protocol_accounts<T: Config>(
 /// - 主账户 AccountId
 /// - 费用账户 AccountId
 /// - 初始余额合计
+///
 /// `parent_cid_number` 语义同 `build_required_protocol_accounts`。
+type ValidatedInitialAccounts<T> = (
+    CreateInstitutionAccountsOf<T>,
+    <T as frame_system::Config>::AccountId,
+    <T as frame_system::Config>::AccountId,
+    BalanceOf<T>,
+);
+
 pub(crate) fn validate_initial_accounts<T: Config>(
     cid_number: &CidNumberOf<T>,
     accounts: &InstitutionInitialAccountsOf<T>,
     parent_cid_number: Option<&[u8]>,
-) -> Result<
-    (
-        CreateInstitutionAccountsOf<T>,
-        T::AccountId,
-        T::AccountId,
-        BalanceOf<T>,
-    ),
-    DispatchError,
-> {
+) -> Result<ValidatedInitialAccounts<T>, DispatchError> {
     ensure!(!accounts.is_empty(), Error::<T>::EmptyInstitutionAccounts);
 
     let mut seen = BTreeSet::new();

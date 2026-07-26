@@ -285,21 +285,23 @@ impl entity_primitives::InstitutionRoleAuthorizationQuery<AccountId32>
     }
 }
 
+type ExtraAdminsByInstitution =
+    std::collections::BTreeMap<(InstitutionCode, Vec<u8>), Vec<AccountId32>>;
+type NamedAccountByInstitution = std::collections::BTreeMap<(Vec<u8>, Vec<u8>), AccountId32>;
+
 thread_local! {
-    static PROTECTED_ACCOUNT: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
-    static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
-    static EXTRA_ADMINS: core::cell::RefCell<
-        std::collections::BTreeMap<(InstitutionCode, Vec<u8>), Vec<AccountId32>>,
-    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
+    static PROTECTED_ACCOUNT: core::cell::RefCell<Option<AccountId32>> = const { core::cell::RefCell::new(None) };
+    static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = const { core::cell::RefCell::new(None) };
+    static EXTRA_ADMINS: core::cell::RefCell<ExtraAdminsByInstitution> =
+        const { core::cell::RefCell::new(std::collections::BTreeMap::new()) };
     static INSTITUTION_THRESHOLDS: core::cell::RefCell<
         std::collections::BTreeMap<(InstitutionCode, Vec<u8>), u32>,
-    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
+    > = const { core::cell::RefCell::new(std::collections::BTreeMap::new()) };
     static INSTITUTION_ACCOUNTS: core::cell::RefCell<
         std::collections::BTreeMap<AccountId32, (Vec<u8>, InstitutionCode)>,
-    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
-    static INSTITUTION_NAMED_ACCOUNTS: core::cell::RefCell<
-        std::collections::BTreeMap<(Vec<u8>, Vec<u8>), AccountId32>,
-    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
+    > = const { core::cell::RefCell::new(std::collections::BTreeMap::new()) };
+    static INSTITUTION_NAMED_ACCOUNTS: core::cell::RefCell<NamedAccountByInstitution> =
+        const { core::cell::RefCell::new(std::collections::BTreeMap::new()) };
 }
 
 /// 测试注入：机构管理员只按 `(institution_code, cid_number)` 寻址。

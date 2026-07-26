@@ -182,3 +182,12 @@ DIFFICULTY_MIN_ADJUST_FACTOR` 是创世默认和节点守卫基线，运行期�
 - **`fee_policy::min_fees_positive`** — 最低费用 > 0,防零费用攻击
 - **`fee_policy::onchain_rate_positive`** — 链上费率 > 0,防零费率绕过
 - **`code::tests::*`** — 国家/省/机构码格式、唯一性、分类谓词和 CID 号机构码解析一致性
+
+2026-07-25 正式创世前复验：
+
+- `cargo clippy --workspace --all-targets -- -D warnings` 与
+  `cargo test --workspace --all-targets` 均通过。
+- `china_ch.rs` 的 43 个 `stake_amount` 只按 Rust 可读性分组数字，脚本逐项对比确认
+  数值与修改前完全一致；省级质押、人口和创世发行规则未改变。
+- `count_const.rs` 与 `cid/code.rs` 仅清理冗余转换和手写包含判断，不改变常量、编码或
+  CID 派生规则。

@@ -9,7 +9,6 @@ use frame_support::{
     traits::{ConstU128, ConstU32, Hooks, VariantCountOf},
 };
 use frame_system as system;
-use pallet_balances;
 use primitives::citizen_const::{CITIZEN_ISSUANCE_HIGH_REWARD, CITIZEN_ISSUANCE_MAX_COUNT};
 use sp_runtime::{
     traits::{Hash, IdentityLookup},
@@ -218,11 +217,25 @@ fn payload(account_id: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
 fn candidate_payload(account_id: u64, cid_number: &[u8]) -> CandidateIdentityPayload<u64> {
     CandidateIdentityPayload {
         voting: payload(account_id, cid_number),
-        birth_province_code: b"43".to_vec().try_into().expect("birth province should fit"),
+        birth_province_code: b"43"
+            .to_vec()
+            .try_into()
+            .expect("birth province should fit"),
         birth_city_code: b"4301".to_vec().try_into().expect("birth city should fit"),
-        birth_town_code: b"4301001".to_vec().try_into().expect("birth town should fit"),
-        family_name: "李".as_bytes().to_vec().try_into().expect("family name should fit"),
-        given_name: "四".as_bytes().to_vec().try_into().expect("given name should fit"),
+        birth_town_code: b"4301001"
+            .to_vec()
+            .try_into()
+            .expect("birth town should fit"),
+        family_name: "李"
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("family name should fit"),
+        given_name: "四"
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("given name should fit"),
         citizen_sex: CitizenSex::Male,
         birth_date: 20000101,
     }

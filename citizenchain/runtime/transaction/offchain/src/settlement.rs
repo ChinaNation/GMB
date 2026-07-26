@@ -3,7 +3,7 @@
 //!
 //! - 同行清算(payer_bank_cid == recipient_bank_cid):仅 `DepositBalance` 轧差 + 手续费从清算账户到费用账户
 //! - 跨行清算(payer_bank_cid != recipient_bank_cid):
-//!     付款方清算账户 → 收款方清算账户(本金)
+//!   付款方清算账户 → 收款方清算账户(本金)
 //!   + 付款方清算账户 → 收款方费用账户(fee)
 //!   + 双方 `DepositBalance` / `BankTotalDeposits` 同步
 //! - 每条 `OffchainBatchItem` 必经:

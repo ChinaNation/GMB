@@ -123,7 +123,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             NRC | PRC => CHINA_CB
                 .iter()
                 .find(|node| node.cid_number.as_bytes() == cid_number)
-                .map(|node| node.admins.iter().any(|admin| *admin == who_raw))
+                .map(|node| node.admins.contains(&who_raw))
                 .unwrap_or(false),
             _ => false,
         }
@@ -302,9 +302,9 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext.execute_with(|| {
         System::set_block_number(1);
         // 测试使用可签名的确定性 authority 私钥；创世目录只提供公开生产 key。
-        for node_index in 0..3 {
+        for (node_index, node) in CHINA_CB.iter().enumerate().take(3) {
             let actor_cid_number = cb_cid(node_index);
-            GrandpaKeyOwnerByKey::<Test>::remove(CHINA_CB[node_index].grandpa_key);
+            GrandpaKeyOwnerByKey::<Test>::remove(node.grandpa_key);
             CurrentGrandpaKeys::<Test>::insert(
                 actor_cid_number.clone(),
                 grandpa_public_key(node_index),

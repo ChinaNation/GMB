@@ -2,6 +2,7 @@ import type { VoteSubmitResult } from '../types';
 
 export type GrandpaChangeKind = 'routine_rotation' | 'emergency_recovery';
 
+// 请求字段完整绑定候选密钥证明窗口，提交时不得只凭 requestId 省略其余校验值。
 export type GrandpaKeyChangeRequest = {
   requestJson: string;
   requestId: string;

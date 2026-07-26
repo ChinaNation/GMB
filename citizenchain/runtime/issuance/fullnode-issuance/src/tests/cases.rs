@@ -137,7 +137,7 @@ fn no_reward_outside_reward_range() {
 
         // 超出结束高度不发放
         <FullnodeIssuance as Hooks<u32>>::on_finalize(
-            (primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1).into(),
+            primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1,
         );
         assert_eq!(Balances::free_balance(reward_account_id), 0);
         assert_eq!(RewardedBlockCount::<Test>::get(), 0);

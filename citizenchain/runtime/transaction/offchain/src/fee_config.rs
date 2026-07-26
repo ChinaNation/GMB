@@ -85,17 +85,6 @@ pub fn do_propose_l2_fee_rate<T: Config>(
     Ok(())
 }
 
-#[cfg(test)]
-mod delay_tests {
-    use super::*;
-
-    #[test]
-    fn seven_day_delay_uses_fixed_six_minute_block_calendar() {
-        assert_eq!(primitives::pow_const::BLOCKS_PER_DAY, 240);
-        assert_eq!(RATE_CHANGE_DELAY_BLOCKS, 1_680);
-    }
-}
-
 /// `on_initialize` 钩子激活到期提案:把 `L2FeeRateProposed` 里 `effective_at <= now`
 /// 的提案搬到 `L2FeeRateBp`,然后删除提案记录。
 ///
@@ -139,8 +128,9 @@ pub fn activate_pending_rates<T: Config>(now: BlockNumberFor<T>) -> Weight {
 /// 本函数做校验,写入 `MaxL2FeeRateBp`,联合投票回调后改为
 /// 只由投票引擎回调可达(把 extrinsic 改为免费的 `execute_*` 类)。
 pub fn do_set_max_l2_fee_rate<T: Config>(new_max: u32) -> DispatchResult {
+    // 最大费率必须完整落在协议规定的闭区间内。
     ensure!(
-        new_max >= L2_FEE_RATE_BP_MIN && new_max <= L2_FEE_RATE_BP_MAX,
+        (L2_FEE_RATE_BP_MIN..=L2_FEE_RATE_BP_MAX).contains(&new_max),
         Error::<T>::InvalidL2FeeRate
     );
     MaxL2FeeRateBp::<T>::put(new_max);
@@ -151,4 +141,15 @@ pub fn do_set_max_l2_fee_rate<T: Config>(new_max: u32) -> DispatchResult {
 /// 查询清算行当前生效费率。未配置时返回 0(调用方自己决定是否用全局默认)。
 pub fn current_rate_bp<T: Config>(bank_cid: &crate::InstitutionCidNumber) -> u32 {
     L2FeeRateBp::<T>::get(bank_cid)
+}
+
+#[cfg(test)]
+mod delay_tests {
+    use super::*;
+
+    #[test]
+    fn seven_day_delay_uses_fixed_six_minute_block_calendar() {
+        assert_eq!(primitives::pow_const::BLOCKS_PER_DAY, 240);
+        assert_eq!(RATE_CHANGE_DELAY_BLOCKS, 1_680);
+    }
 }

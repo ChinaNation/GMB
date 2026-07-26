@@ -6,6 +6,9 @@
 //! - Passkey         本地写:会话 + WebAuthn passkey 断言;只改 onchina 本地库、不产生 extrinsic。
 //! - PasskeyColdSign 链上写:会话 + passkey + 冷钱包对真实链载荷签名。
 
+// 权限校验失败必须直接返回统一 Axum Response，不另造可被业务模块分叉解释的错误类型。
+#![allow(clippy::result_large_err)]
+
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
@@ -204,6 +207,8 @@ pub(crate) fn ensure_action_role_allowed(
 }
 
 #[cfg(test)]
+// 测试需要在前置条件失效时立即失败，断言式解包仅限本测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

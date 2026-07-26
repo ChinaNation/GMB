@@ -3,6 +3,9 @@
 //! 这里只负责把已确定的签名原文包装成统一二维码 envelope;
 //! 业务模块仍负责决定签名内容和权限语义。
 
+// QR 构造失败必须保留统一 HTTP 拒绝响应，禁止业务调用方重新映射为不同错误口径。
+#![allow(clippy::result_large_err)]
+
 use crate::{
     api_error,
     core::qr::{bytes_to_b64, public_key_hex_to_b64, QR_V1},

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
@@ -24,22 +27,13 @@ class _FakeSessionProvider extends SquareSessionProvider {
       );
 }
 
-class _FakeApiClient extends SquareApiClient {
-  _FakeApiClient(this._state) : super(baseUrl: 'https://membership.test');
+class _PendingSessionProvider extends SquareSessionProvider {
+  _PendingSessionProvider(this.pending) : super();
 
-  final SquareMembershipState _state;
-
-  @override
-  Future<SquareMembershipState> fetchMembership(SquareSession session) async =>
-      _state;
-}
-
-class _FailingApiClient extends SquareApiClient {
-  _FailingApiClient() : super(baseUrl: 'https://membership.test');
+  final Future<SquareSession?> pending;
 
   @override
-  Future<SquareMembershipState> fetchMembership(SquareSession session) =>
-      Future.error(StateError('Cloudflare unavailable'));
+  Future<SquareSession?> ensureSession() => pending;
 }
 
 /// 平台档价格链上单源（`PlatformPrice[level]`，分）；测试直接注入 mock 价表。
@@ -47,9 +41,29 @@ class _FakeChainService extends SquareChainService {
   _FakeChainService(this._prices);
 
   final Map<String, int> _prices;
+  int fetchCount = 0;
+  final List<bool> forceFreshCalls = [];
 
   @override
-  Future<Map<String, int>> fetchAllPlatformPrices() async => _prices;
+  Future<Map<String, int>> fetchAllPlatformPrices({
+    bool forceFresh = false,
+  }) async {
+    fetchCount++;
+    forceFreshCalls.add(forceFresh);
+    return _prices;
+  }
+}
+
+class _FailingChainService extends SquareChainService {
+  int fetchCount = 0;
+
+  @override
+  Future<Map<String, int>> fetchAllPlatformPrices({
+    bool forceFresh = false,
+  }) async {
+    fetchCount++;
+    throw StateError('chain unavailable');
+  }
 }
 
 /// 记录订阅 / 取消动作的假编排：不触发真钱包与真上链。
@@ -57,11 +71,16 @@ class _RecordingSubscriptionService extends SubscriptionService {
   final List<String> subscribed = [];
   final List<String> changed = [];
   int cancelCount = 0;
+  int finalizedFetchCount = 0;
+  int cacheReadCount = 0;
+  int cacheWriteCount = 0;
   SquareMembershipState? mirror;
+  MembershipDisplaySnapshot? cachedSnapshot;
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState(
       String accountId) async {
+    finalizedFetchCount++;
     final source = mirror!;
     final status = source.subscriptionStatus ??
         (source.subscriptionActive ? 'active' : null);
@@ -86,6 +105,22 @@ class _RecordingSubscriptionService extends SubscriptionService {
       chainNowMs: now,
       blockHashHex: '0x${List.filled(64, '0').join()}',
     );
+  }
+
+  @override
+  Future<MembershipDisplaySnapshot?> readDisplaySnapshot(
+      String accountId) async {
+    cacheReadCount++;
+    return cachedSnapshot;
+  }
+
+  @override
+  Future<void> writeDisplaySnapshot(
+    String accountId,
+    MembershipDisplaySnapshot snapshot,
+  ) async {
+    cacheWriteCount++;
+    cachedSnapshot = snapshot;
   }
 
   @override
@@ -131,7 +166,8 @@ Future<void> _pump(
   SquareMembershipState state, {
   Map<String, int> prices = const {},
   SubscriptionService? service,
-  SquareApiClient? apiClient,
+  SquareSessionProvider? sessionProvider,
+  SquareChainService? chainService,
 }) async {
   final effectiveService = service ?? _RecordingSubscriptionService();
   if (effectiveService is _RecordingSubscriptionService) {
@@ -140,9 +176,8 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       home: MembershipPage(
-        apiClient: apiClient ?? _FakeApiClient(state),
-        chainService: _FakeChainService(prices),
-        sessionProvider: _FakeSessionProvider(),
+        chainService: chainService ?? _FakeChainService(prices),
+        sessionProvider: sessionProvider ?? _FakeSessionProvider(),
         subscriptionService: effectiveService,
       ),
     ),
@@ -202,12 +237,118 @@ void main() {
     expect(find.text('薪火会员'), findsOneWidget);
   });
 
-  testWidgets('Cloudflare 不可用时仍按链上真态和兜底名称展示', (tester) async {
+  testWidgets('会话请求未完成时首帧已经显示三张静态会员卡', (tester) async {
+    final pendingSession = Completer<SquareSession?>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MembershipPage(
+          chainService: _FakeChainService(const {}),
+          sessionProvider: _PendingSessionProvider(pendingSession.future),
+          subscriptionService: _RecordingSubscriptionService(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('自由会员'), findsOneWidget);
+    expect(find.text('民主会员'), findsOneWidget);
+    expect(find.text('薪火会员'), findsOneWidget);
+    expect(find.text('请先创建热钱包'), findsNWidgets(3));
+
+    pendingSession.complete(null);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('有效缓存直接展示且不重复读取链上订阅和价格', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final service = _RecordingSubscriptionService()
+      ..cachedSnapshot = MembershipDisplaySnapshot(
+        state: _state(
+          active: true,
+          subscriptionActive: true,
+          membershipLevel: 'democracy',
+        ),
+        prices: const {'freedom': 29900, 'democracy': 99900, 'spark': 199900},
+        subscriptionFetchedAtMs: now,
+        pricesFetchedAtMs: now,
+      );
+    final chain = _FakeChainService(const {
+      'freedom': 1,
+      'democracy': 2,
+      'spark': 3,
+    });
+
+    await _pump(
+      tester,
+      _state(),
+      service: service,
+      chainService: chain,
+    );
+
+    expect(find.text('999.00 元'), findsOneWidget);
+    expect(find.text('当前会员'), findsOneWidget);
+    expect(service.finalizedFetchCount, 0);
+    expect(chain.fetchCount, 0);
+  });
+
+  testWidgets('手动刷新绕过有效缓存强制读取 finalized 状态和价格', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final service = _RecordingSubscriptionService()
+      ..cachedSnapshot = MembershipDisplaySnapshot(
+        state: _state(),
+        prices: const {'freedom': 29900},
+        subscriptionFetchedAtMs: now,
+        pricesFetchedAtMs: now,
+      );
+    final chain = _FakeChainService(const {'freedom': 39900});
+
+    await _pump(
+      tester,
+      _state(),
+      service: service,
+      chainService: chain,
+    );
+    await tester.tap(find.byTooltip('刷新'));
+    await tester.pumpAndSettle();
+
+    expect(service.finalizedFetchCount, 1);
+    expect(chain.fetchCount, 1);
+    expect(chain.forceFreshCalls, [isTrue]);
+    expect(find.text('399.00 元'), findsOneWidget);
+  });
+
+  testWidgets('后台价格刷新失败时保留上一次缓存价格和三张卡', (tester) async {
+    final stale = DateTime.now()
+        .subtract(const Duration(hours: 1))
+        .millisecondsSinceEpoch;
+    final service = _RecordingSubscriptionService()
+      ..cachedSnapshot = MembershipDisplaySnapshot(
+        state: _state(),
+        prices: const {'freedom': 29900},
+        subscriptionFetchedAtMs: stale,
+        pricesFetchedAtMs: stale,
+      );
+    final chain = _FailingChainService();
+
+    await _pump(
+      tester,
+      _state(),
+      service: service,
+      chainService: chain,
+    );
+
+    expect(chain.fetchCount, 1);
+    expect(find.text('自由会员'), findsOneWidget);
+    expect(find.text('民主会员'), findsOneWidget);
+    expect(find.text('薪火会员'), findsOneWidget);
+    expect(find.text('299.00 元'), findsOneWidget);
+  });
+
+  testWidgets('会员页不依赖 Cloudflare 套餐接口也能展示静态名称', (tester) async {
     await _pump(
       tester,
       _state(),
       prices: const {'freedom': 29900},
-      apiClient: _FailingApiClient(),
     );
 
     expect(find.text('自由会员'), findsOneWidget);
@@ -398,5 +539,36 @@ void main() {
     );
     // 缺 last_charged_at（=0）→ 无可展示窗口。
     expect(noWindow.hasSubscriptionWindow, isFalse);
+  });
+
+  test('会员动态展示快照按账户持久化且不包含静态套餐', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final service = SubscriptionService(preferences: preferences);
+    const accountId =
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const snapshot = MembershipDisplaySnapshot(
+      state: SquareMembershipState(
+        active: true,
+        paidUntil: 2000,
+        membershipLevel: 'democracy',
+        subscriptionStatus: 'active',
+        subscriptionActive: true,
+        lastChargedAt: 1000,
+      ),
+      prices: {'freedom': 29900, 'democracy': 99900, 'spark': 199900},
+      subscriptionFetchedAtMs: 3000,
+      pricesFetchedAtMs: 4000,
+    );
+
+    await service.writeDisplaySnapshot(accountId, snapshot);
+    final restored = await service.readDisplaySnapshot(accountId);
+
+    expect(restored, isNotNull);
+    expect(restored!.state.membershipLevel, 'democracy');
+    expect(restored.state.plans, isEmpty);
+    expect(restored.prices['spark'], 199900);
+    expect(restored.subscriptionFetchedAtMs, 3000);
+    expect(restored.pricesFetchedAtMs, 4000);
   });
 }

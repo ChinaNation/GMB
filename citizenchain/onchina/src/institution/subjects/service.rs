@@ -3,7 +3,6 @@
 //! 凡是要在 handler 里做的业务级校验(不是简单的格式校验),都放这里。
 //! handler 只负责调用 service + 转 HTTP 响应。
 
-
 use crate::cid::code;
 use crate::cid::{validate_cid_number_format, AdminLevel};
 use crate::institution::subjects::model::Institution;
@@ -106,9 +105,9 @@ pub fn resolve_legal_representative_scope_for_codes(
     parent: Option<&Institution>,
 ) -> LegalRepresentativeCitizenScope {
     let parsed_institution_code = code::institution_code_from_str(institution_code);
-    let is_public_legal = parsed_institution_code.map_or(false, |c| code::is_public_legal_code(&c));
+    let is_public_legal = parsed_institution_code.is_some_and(|c| code::is_public_legal_code(&c));
     let is_unincorporated =
-        parsed_institution_code.map_or(false, |c| code::is_unincorporated_code(&c));
+        parsed_institution_code.is_some_and(|c| code::is_unincorporated_code(&c));
     if is_public_legal {
         return public_org_scope(institution_code, province_code, city_code);
     }
@@ -116,7 +115,7 @@ pub fn resolve_legal_representative_scope_for_codes(
     let parent_is_public_legal_person = parent
         .map(|parent| {
             code::institution_code_from_str(parent.institution_code.as_str())
-                .map_or(false, |c| code::is_public_legal_code(&c))
+                .is_some_and(|c| code::is_public_legal_code(&c))
         })
         .unwrap_or(false);
     if is_unincorporated && parent_is_public_legal_person {
@@ -313,5 +312,4 @@ mod tests {
         let too_long = "x".repeat(31);
         assert!(validate_account_name(&too_long).is_err());
     }
-
 }

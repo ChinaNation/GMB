@@ -331,4 +331,3 @@ fn issuance_event_comes_from_unified_pallet() {
         }));
     });
 }
-

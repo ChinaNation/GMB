@@ -7,7 +7,6 @@
 //!
 //! - GET    /api/v1/institutions/gov                  → list_official_institutions
 
-
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},

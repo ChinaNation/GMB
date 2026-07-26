@@ -52,8 +52,9 @@ fn account_to_genesis_ss58(account: &AccountId) -> String {
 
 #[cfg(feature = "std")]
 fn grandpa_key_to_genesis_ss58(key: &[u8; 32]) -> String {
-    let authority = sp_consensus_grandpa::AuthorityId::from_slice(key)
-        .expect("grandpa authority id must decode from 32 bytes");
+    let authority = sp_consensus_grandpa::AuthorityId::from_slice(key).unwrap_or_else(|error| {
+        panic!("grandpa authority id must decode from 32 bytes: {error:?}")
+    });
     authority.to_ss58check_with_version(Ss58AddressFormat::custom(SS58_FORMAT))
 }
 
@@ -72,13 +73,13 @@ fn build_genesis() -> Value {
     let nrc_account = CHINA_CB
         .first()
         .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
-        .expect("NRC main_account must decode to AccountId");
+        .unwrap_or_else(|| panic!("NRC main_account must decode to AccountId"));
 
     // 每位国家储委会管理员创世预置 1000 万元（单位：分）。
     let admin_each: u128 = 1_000_000_000; // 1000万元 = 10亿分
     let nrc_admins = &CHINA_CB
         .first()
-        .expect("CHINA_CB must have NRC entry")
+        .unwrap_or_else(|| panic!("CHINA_CB must have NRC entry"))
         .admins;
     let admin_total: u128 = admin_each * nrc_admins.len() as u128;
 
@@ -99,7 +100,7 @@ fn build_genesis() -> Value {
     let fsc_cid_number = CHINA_ZF
         .iter()
         .find(|inst| institution_code_from_cid_number(inst.cid_number) == Some(FSC))
-        .expect("CHINA_ZF must contain the Federal Security Bureau (FSC)")
+        .unwrap_or_else(|| panic!("CHINA_ZF must contain the Federal Security Bureau (FSC)"))
         .cid_number;
     let fcsf_account = AccountId::new(
         AccountKind::InstitutionFederalCitizenSecurityFund {
@@ -112,11 +113,11 @@ fn build_genesis() -> Value {
     let frg_main_account = CHINA_ZF
         .iter()
         .find(|inst| institution_code_from_cid_number(inst.cid_number) == Some(FRG))
-        .expect("CHINA_ZF must contain the Federal Registry Bureau (FRG)")
+        .unwrap_or_else(|| panic!("CHINA_ZF must contain the Federal Registry Bureau (FRG)"))
         .main_account;
     let njd_main_account = CHINA_SF
         .first()
-        .expect("CHINA_SF must contain the National Judicial Yuan")
+        .unwrap_or_else(|| panic!("CHINA_SF must contain the National Judicial Yuan"))
         .main_account;
 
     // 国家储委会多签账户 = 创世发行总量 - 管理员预置总额 - 分账总额，创世发行总量不变。
@@ -176,8 +177,9 @@ fn build_genesis() -> Value {
         .iter()
         .skip(1)
         .map(|n| {
-            let account = AccountId::decode(&mut &n.main_account[..])
-                .expect("PRC main_account must decode to AccountId");
+            let account = AccountId::decode(&mut &n.main_account[..]).unwrap_or_else(|error| {
+                panic!("PRC main_account must decode to AccountId: {error:?}")
+            });
             Value::String(account_to_genesis_ss58(&account))
         })
         .collect();
@@ -190,11 +192,11 @@ fn build_genesis() -> Value {
     ])];
 
     let mut genesis = serde_json::to_value(crate::RuntimeGenesisConfig::default())
-        .expect("default runtime genesis config should serialize");
+        .unwrap_or_else(|error| panic!("default runtime genesis config should serialize: {error}"));
 
     let root = genesis
         .as_object_mut()
-        .expect("runtime genesis config should serialize to a JSON object");
+        .unwrap_or_else(|| panic!("runtime genesis config should serialize to a JSON object"));
 
     root.insert(
         "balances".into(),
@@ -252,7 +254,9 @@ pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
         };
         Some(
             serde_json::to_string(&patch)
-                .expect("serialization to json is expected to work. qed.")
+                .unwrap_or_else(|error| {
+                    panic!("serialization to json is expected to work: {error}")
+                })
                 .into_bytes(),
         )
     }
@@ -266,6 +270,8 @@ pub fn preset_names() -> Vec<PresetId> {
 }
 
 #[cfg(all(test, feature = "std"))]
+// 创世夹具异常必须立即中止测试，断言式解包仅限本测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::RuntimeGenesisConfig;

@@ -381,10 +381,10 @@ impl entity_primitives::InstitutionCapabilityPolicy for TestInstitutionCapabilit
 
 thread_local! {
     /// 测试相位开关;默认 Genesis(false),每个测试经 new_test_ext 复位。
-    static IS_OPERATION: core::cell::Cell<bool> = core::cell::Cell::new(false);
+    static IS_OPERATION: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
     /// 换绑测试用:某 CID 当前绑定的钱包(再次 bind 即换绑)。
     static CID_WALLET: core::cell::RefCell<Option<(alloc::vec::Vec<u8>, AccountId32)>> =
-        core::cell::RefCell::new(None);
+        const { core::cell::RefCell::new(None) };
 }
 
 /// 可切换的相位 mock:Genesis(默认)放行、Operation 强制 LR 岗四要素完整。

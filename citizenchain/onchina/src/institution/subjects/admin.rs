@@ -43,11 +43,7 @@ pub(crate) async fn check_cid_full_name(
         return api_error(StatusCode::BAD_REQUEST, 1001, "cid_full_name is required");
     }
     // 公法人/公权机构走"同市同全称"查重;私权机构仍全国查重。
-    let is_public_legal = params
-        .subject_property
-        .as_deref()
-        .map(str::trim)
-        .map_or(false, |value| value == "G");
+    let is_public_legal = params.subject_property.as_deref().map(str::trim) == Some("G");
     let city = params.city_name.as_deref().unwrap_or("").trim().to_string();
     let exists = if is_public_legal {
         if city.is_empty() {

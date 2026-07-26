@@ -136,7 +136,7 @@ thread_local! {
 }
 thread_local! {
     static TEST_INSTITUTION_THRESHOLDS: RefCell<BTreeMap<Vec<u8>, u32>> =
-        RefCell::new(BTreeMap::new());
+        const { RefCell::new(BTreeMap::new()) };
 }
 thread_local! {
     static TEST_NOW_SECS: RefCell<u64> = const { RefCell::new(DEFAULT_TEST_NOW_SECS) };
@@ -335,27 +335,23 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                 .iter()
                 .take(1)
                 .find(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.contains(&who_arr))
                 .unwrap_or(false),
             PRC => CHINA_CB
                 .iter()
                 .skip(1)
                 .find(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.contains(&who_arr))
                 .unwrap_or(false),
             PRB => CHINA_CH
                 .iter()
                 .find(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
+                .map(|n| n.admins.contains(&who_arr))
                 .unwrap_or(false),
             NJD => CHINA_SF
                 .first()
                 .filter(|n| n.cid_number.as_bytes() == cid_number)
-                .map(|_| {
-                    NATIONAL_JUDICIAL_YUAN_ADMINS
-                        .iter()
-                        .any(|admin| *admin == who_arr)
-                })
+                .map(|_| NATIONAL_JUDICIAL_YUAN_ADMINS.contains(&who_arr))
                 .unwrap_or(false),
             PERMANENT_SINGLETON_CODE if cid_number == permanent_singleton_cid().as_slice() => {
                 (0..3).any(|index| permanent_singleton_admin(index) == *who)
@@ -505,7 +501,7 @@ fn test_citizen_subject(who: &AccountId32) -> votingengine::CitizenSubject<Accou
 impl JointVoteResultCallback for TestJointVoteResultCallback {
     fn on_joint_vote_finalized(
         vote_proposal_id: u64,
-        approved: bool,
+        _approved: bool,
     ) -> Result<ProposalExecutionOutcome, DispatchError> {
         if JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
             Err(DispatchError::Other("joint callback failed"))
@@ -519,11 +515,7 @@ impl JointVoteResultCallback for TestJointVoteResultCallback {
                 });
             }
             let _ = vote_proposal_id;
-            Ok(if approved {
-                ProposalExecutionOutcome::Executed
-            } else {
-                ProposalExecutionOutcome::Executed
-            })
+            Ok(ProposalExecutionOutcome::Executed)
         }
     }
 }

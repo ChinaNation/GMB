@@ -28,6 +28,7 @@
 //! 2. 奖励起止区块高度；
 //! 3. 永久停止发行的规则；
 //! 4. 发行触发条件（PoW 铸块）。
+//!
 //! 上述内容不得修改。
 //! ============================================================================
 
@@ -70,6 +71,8 @@ pub mod pallet {
     /// 余额类型别名
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+    /// 最近一次奖励审计记录的固定字段布局。
+    pub type RewardAudit<AccountId, Balance> = (u32, AccountId, AccountId, Balance);
 
     /// 矿工身份账户（powr）到奖励接收账户的绑定表。
     #[pallet::storage]
@@ -99,7 +102,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn last_reward_audit)]
     pub type LastRewardAudit<T: Config> =
-        StorageValue<_, (u32, T::AccountId, T::AccountId, BalanceOf<T>), OptionQuery>;
+        StorageValue<_, RewardAudit<T::AccountId, BalanceOf<T>>, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]

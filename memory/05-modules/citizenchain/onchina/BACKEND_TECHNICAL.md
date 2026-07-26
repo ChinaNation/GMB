@@ -195,6 +195,14 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 ## 11. 验收
 
+2026-07-25 正式创世前依赖告警复验：OnChina 生产二进制和全部测试目标自身均通过
+`cargo clippy -p onchina --all-targets --no-deps -- -D warnings`，144 项单元测试全部通过。
+测试夹具允许在各自 `#[cfg(test)]` 模块内使用断言式 `expect/unwrap`，生产模块不得据此
+扩大豁免范围。用户完成 runtime 路径二次确认后，
+`cargo clippy --workspace --all-targets -- -D warnings` 与
+`cargo test --workspace --all-targets` 均已通过，OnChina 传递依赖不再遗留 Clippy 告警。
+本轮只处理 lint、测试夹具与注释边界，没有修改订阅业务逻辑。
+
 2026-07-17 机构治理运行态补验：当前源码 `citizenchain-fresh --tmp` 使用 `WASM_BUILD_FROM_SOURCE=1` 构建后启动成功，OnChina 使用临时内嵌 PostgreSQL 和 `ONCHAIN_WS_URL=ws://127.0.0.1:19944` 连接 fresh 链启动成功；启动期完成公权链投影 `49,593` 个机构与 `99,231` 个账户，首页 HTTP 返回 200，`subjects` 表旧 `legal_rep_*` 列为 0，新 `legal_representative_*` 三字段列齐备。交互式 CitizenWallet 扫码签名需要真实管理员登录会话和扫码设备，本次仅完成链、数据库、服务和页面基础运行态，不伪造扫码签名结果。
 
 正式创世前曾使用管理员三字段布局；该布局现已全部废弃。OnChina 当前对公权、私权机构统一按四字段 `Admin` 解码与治理/登记编码，不兼容任何旧三字段机构布局；个人多签同样使用统一四字段 SCALE 结构。

@@ -2257,10 +2257,11 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 }
 
 pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
+    // NRC 是固定创世机构，清单缺失属于不可恢复的 runtime 配置错误。
     let nrc_cid_number = primitives::cid::china::china_cb::CHINA_CB
         .first()
         .map(|n| n.cid_number.as_bytes())
-        .expect("NRC CID must exist");
+        .unwrap_or_else(|| panic!("NRC CID must exist"));
 
     // 创世后只信任链上管理员治理模块中的统一账户表。
     RuntimeInstitutionAdminQuery::is_institution_admin(
@@ -2773,11 +2774,11 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
         pallet_timestamp::Pallet::<Runtime>::set_timestamp(1_800_000_000_000);
         PopulationReadyDate::<Runtime>::put(citizen_identity::Pallet::<Runtime>::current_date_int());
         let now = frame_system::Pallet::<Runtime>::block_number();
-        // 每个 benchmark 账户必须得到不同的公民 CID，防止多候选夹具互相覆盖。
+        // 每个 benchmark 账户必须得到不同的公民 CID；固定哈希长度不会超过协议边界。
         let cid_number: citizen_identity::CidNumberBound = sp_io::hashing::blake2_256(who.as_ref())
             .to_vec()
             .try_into()
-            .expect("bounded CID");
+            .unwrap_or_else(|error| panic!("bounded CID: {error:?}"));
         let identity = VotingIdentity {
             passport_valid_from: 19700101,
             passport_valid_until: 29991231,
@@ -2823,7 +2824,7 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
                 registrar_cid_number: b"benchmark-registrar"
                     .to_vec()
                     .try_into()
-                    .expect("bounded registrar CID"),
+                    .unwrap_or_else(|error| panic!("bounded registrar CID: {error:?}")),
                 commitment: [0u8; 32],
                 residence_province_code: Default::default(),
                 residence_city_code: Default::default(),
@@ -2841,8 +2842,11 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
                 family_name: b"benchmark"
                     .to_vec()
                     .try_into()
-                    .expect("bounded family name"),
-                given_name: b"citizen".to_vec().try_into().expect("bounded given name"),
+                    .unwrap_or_else(|error| panic!("bounded family name: {error:?}")),
+                given_name: b"citizen"
+                    .to_vec()
+                    .try_into()
+                    .unwrap_or_else(|error| panic!("bounded given name: {error:?}")),
                 citizen_sex: citizen_identity::CitizenSex::Male,
                 birth_date: 20000101,
                 updated_at: now,

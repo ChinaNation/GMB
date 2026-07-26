@@ -2,6 +2,9 @@
 //!
 //! 联邦注册局管理员/市注册局管理员只通过 admins 结构化表查询同省域市注册局管理员,不做全量内存过滤。
 
+// 鉴权失败需要原样返回统一 Axum Response，避免为单个辅助函数引入第二套错误包装。
+#![allow(clippy::result_large_err)]
+
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},

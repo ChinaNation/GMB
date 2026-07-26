@@ -77,10 +77,14 @@ pub fn export_registry_dart() -> Result<String, RegistryError> {
 
     out.push_str("  static const Map<String, String> fieldValueZhByKey = {\n");
     for field in fields.iter().filter(|field| field.field_value_zh.is_some()) {
+        // 上方过滤已保证字段值存在；保留防御分支，避免生成器使用断言式解包。
+        let Some(field_value_zh) = field.field_value_zh.as_ref() else {
+            continue;
+        };
         out.push_str(&format!(
             "    {}: {},\n",
             dart_string(&field.field_key),
-            dart_string(field.field_value_zh.as_ref().expect("checked above"))
+            dart_string(field_value_zh)
         ));
     }
     out.push_str("  };\n\n");

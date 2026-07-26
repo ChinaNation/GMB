@@ -482,6 +482,8 @@ fn emit_fee_share_burn<T: pallet::Config>(reason: pallet::BurnReason, amount: u1
 
 type ChargeDetails<AccountId, Balance> = Option<(AccountId, Balance)>;
 
+// 费用计算返回类型同时绑定 runtime 账户和 Currency 余额，保持两者的编译期一致性。
+#[allow(clippy::type_complexity)]
 fn charge_details<T, Currency, FeeRouteProvider>(
     who: &T::AccountId,
     call: &T::RuntimeCall,

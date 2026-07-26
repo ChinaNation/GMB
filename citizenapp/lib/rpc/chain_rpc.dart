@@ -270,11 +270,10 @@ class ChainRpc {
   /// - 主流程仅调原生 `submitExtrinsicHex`(底层走 `author_submitExtrinsic`),
   ///   拿到 txHash 立即返回,UI 永不卡住。
   /// - 后台 fire-and-forget 启一条 `author_submitAndWatchExtrinsic` 订阅,
-  ///   8 秒内观察到 invalid/dropped/usurped/future 仅打印日志,不回灌 UI。
+  ///   把交易池进度回灌业务层，直到明确拒绝或 finalized 后结束。
   ///
-  /// 客户端不拦截 mempool reject(smoldot native binding 转发首条 event 有调度
-  /// 延迟,在 6 分钟出块节奏下经常拿不到 txHash 误判失败);reject 排查走
-  /// polkadot.js apps + 终端日志。
+  /// `future/retracted/finalityTimeout/连接异常` 都不能作为最终失败；
+  /// 只有 invalid/dropped/usurped 是明确交易池失败。
   Future<Uint8List> submitExtrinsic(
     Uint8List encoded, {
     TxPoolWatchCallback? onWatchEvent,
@@ -500,14 +499,13 @@ class ChainRpc {
             final cls = _classifyTxStatus(raw);
             final watchEvent = _toWatchEvent(raw);
             onWatchEvent?.call(watchEvent);
-            AppLog.d(
-                '[ChainRpc.bgWatch] $txHashHex status=$raw classify=$cls');
+            AppLog.d('[ChainRpc.bgWatch] $txHashHex status=$raw classify=$cls');
             if (cls == _TxResult.failure) {
               AppLog.d(
                   '[ChainRpc.bgWatch] $txHashHex 被拒绝: ${_describeTxStatus(raw)}');
               if (!done.isCompleted) done.complete();
-            } else if (watchEvent.isIncluded) {
-              AppLog.d('[ChainRpc.bgWatch] $txHashHex 已入块，结束后台监听');
+            } else if (watchEvent.kind == TxPoolWatchKind.finalized) {
+              AppLog.d('[ChainRpc.bgWatch] $txHashHex 已最终性确认，结束后台监听');
               if (!done.isCompleted) done.complete();
             }
           } catch (e) {
@@ -544,11 +542,12 @@ class ChainRpc {
         case 'ready':
         case 'broadcast':
           return _TxResult.success;
-        case 'future':
         case 'invalid':
         case 'dropped':
-        case 'finalityTimeout':
           return _TxResult.failure;
+        case 'future':
+        case 'finalityTimeout':
+          return _TxResult.pending;
         default:
           return _TxResult.pending;
       }
@@ -560,11 +559,13 @@ class ChainRpc {
         return _TxResult.success;
       }
       if (status.containsKey('future') ||
-          status.containsKey('invalid') ||
-          status.containsKey('dropped') ||
-          status.containsKey('usurped') ||
           status.containsKey('retracted') ||
           status.containsKey('finalityTimeout')) {
+        return _TxResult.pending;
+      }
+      if (status.containsKey('invalid') ||
+          status.containsKey('dropped') ||
+          status.containsKey('usurped')) {
         return _TxResult.failure;
       }
     }
@@ -714,11 +715,46 @@ class ChainRpc {
     return _hexDecode(_stripHexPrefix(valueHex));
   }
 
+  /// 在已经 finalized 的目标区块中按 txHash 定位 extrinsic index。
+  ///
+  /// 只允许用于本机刚提交交易的一次性最终结果核对，不得用于历史区块扫描。
+  Future<int?> findSubmittedExtrinsicIndexAtFinalizedBlock({
+    required String blockHashHex,
+    required String txHashHex,
+  }) async {
+    final extrinsics = await SmoldotClientManager.instance
+        .getFinalizedBlockExtrinsicsOnce(blockHashHex);
+    return findExtrinsicIndexInHexList(
+      extrinsics,
+      txHashHex: txHashHex,
+    );
+  }
+
+  @visibleForTesting
+  static int? findExtrinsicIndexInHexList(
+    List<String> extrinsics, {
+    required String txHashHex,
+  }) {
+    final normalizedTxHash = txHashHex.toLowerCase();
+    for (var index = 0; index < extrinsics.length; index++) {
+      final encoded = _hexDecodeStatic(_stripHexPrefixStatic(
+        extrinsics[index],
+      ));
+      final hash = Hasher.blake2b256.hash(encoded);
+      final hashHex = '0x${_hexEncodeStatic(hash)}';
+      if (hashHex == normalizedTxHash) return index;
+    }
+    return null;
+  }
+
   /// 从 `System.Events` 中提取本区块的 `System.ExtrinsicFailed` 模块错误。
   ///
   /// 创建类交易已经入块但业务事件缺失时，必须优先回显真实
   /// DispatchError，不能再把“未找到成功事件”误报成原因。
-  ChainExtrinsicFailure? findExtrinsicFailureInEvents(Uint8List data) {
+  ChainExtrinsicFailure? findExtrinsicFailureInEvents(
+    Uint8List data, {
+    int? extrinsicIndex,
+  }) {
     final (_, countSize) = _decodeCompact(data, 0);
     if (countSize <= 0 || countSize >= data.length) return null;
 
@@ -727,9 +763,17 @@ class ChainRpc {
       var eventOffset = -1;
       if (phase == 0x00) {
         // Phase::ApplyExtrinsic(u32)
+        if (offset + 5 > data.length) continue;
+        final phaseExtrinsicIndex =
+            ByteData.sublistView(data, offset + 1, offset + 5)
+                .getUint32(0, Endian.little);
+        if (extrinsicIndex != null && phaseExtrinsicIndex != extrinsicIndex) {
+          continue;
+        }
         eventOffset = offset + 5;
       } else if (phase == 0x01 || phase == 0x02) {
         // Phase::Finalization / Initialization
+        if (extrinsicIndex != null) continue;
         eventOffset = offset + 1;
       }
       if (eventOffset < 0 || eventOffset + 8 > data.length) continue;
@@ -751,6 +795,25 @@ class ChainRpc {
       );
     }
     return null;
+  }
+
+  static String _stripHexPrefixStatic(String input) {
+    return input.startsWith('0x') ? input.substring(2) : input;
+  }
+
+  static Uint8List _hexDecodeStatic(String hex) {
+    final output = Uint8List(hex.length ~/ 2);
+    for (var index = 0; index < output.length; index++) {
+      output[index] = int.parse(
+        hex.substring(index * 2, index * 2 + 2),
+        radix: 16,
+      );
+    }
+    return output;
+  }
+
+  static String _hexEncodeStatic(Uint8List bytes) {
+    return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   }
 
   /// 查询 finalized 块上的链上余额(free，yuan)。账户不存在返回 0.0。

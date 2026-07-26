@@ -42,7 +42,8 @@ pub(super) enum GateOutcome {
     Session {
         access_token: String,
         expire_at: DateTime<Utc>,
-        admin: AdminIdentifyOutput,
+        // 会话输出远大于绑定提示，装箱避免每个枚举值都按最大变体占用栈空间。
+        admin: Box<AdminIdentifyOutput>,
     },
     BindingRequired(NodeBindingRequiredOutput),
 }
@@ -202,13 +203,11 @@ pub(super) async fn issue_session_after_onchain_gate(
         return Err(GateError::NotOnchainAdmin);
     };
     let (access_token, expire_at, admin) =
-        issue_session_for_candidate(state, normalized.as_str(), &candidate, now)
-            .await
-            .map_err(|err| err)?;
+        issue_session_for_candidate(state, normalized.as_str(), &candidate, now).await?;
     Ok(GateOutcome::Session {
         access_token,
         expire_at,
-        admin,
+        admin: Box::new(admin),
     })
 }
 

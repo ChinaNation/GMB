@@ -143,6 +143,8 @@ pub struct LegislationProcedureConfig {
 /// 业务模块创建立法机关表决的唯一接口。
 pub trait LegislationVoteEngine<AccountId> {
     /// 创建代表表决完成即终局的提案，供后续任免和预算业务使用。
+    // 表决路由、规则、主体和业务数据均是独立协议字段，接口必须保持逐字段传递。
+    #[allow(clippy::too_many_arguments)]
     fn create_representative_vote(
         who: AccountId,
         actor_cid_number: CidNumber,

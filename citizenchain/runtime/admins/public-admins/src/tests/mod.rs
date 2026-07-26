@@ -106,7 +106,7 @@ impl admin_primitives::CitizenIdentityBindingQuery<AccountId32> for TestCitizenI
 
 thread_local! {
     /// 测试相位开关;默认 Genesis(false),每个测试经 new_test_ext 复位。
-    static IS_OPERATION: core::cell::Cell<bool> = core::cell::Cell::new(false);
+    static IS_OPERATION: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
 }
 
 /// 可切换的相位 mock:Genesis(默认)放行、Operation 强制。

@@ -1,3 +1,6 @@
+// 地址 handler 的校验辅助函数直接返回统一 Axum Response，错误体不另建包装层。
+#![allow(clippy::result_large_err)]
+
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},

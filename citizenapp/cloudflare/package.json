@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "wrangler dev --local",
     "dev:local": "wrangler dev --local",
-    "typecheck": "tsc --noEmit",
+    "generate:types": "wrangler types --env-interface CloudflareBindings",
+    "types:check": "wrangler types --env-interface CloudflareBindings --check",
+    "typecheck": "npm run generate:types && tsc --noEmit",
     "test": "vitest run",
     "db:local": "wrangler d1 execute citizenapp-square-db --local --file migrations/0001_square_core.sql",
     "db:staging": "wrangler d1 execute citizenapp-square-db-staging --env staging --remote --file migrations/0001_square_core.sql",
@@ -19,7 +21,6 @@
     "aws4fetch": "^1.0.20"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260723.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "wrangler": "^4.114.0"

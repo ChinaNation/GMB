@@ -291,6 +291,8 @@ fn set_state_root(
 }
 
 #[cfg(test)]
+// 测试夹具构建失败必须立即中止，断言式解包仅限本测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

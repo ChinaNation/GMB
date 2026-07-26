@@ -67,8 +67,7 @@ impl<T: Config> Pallet<T> {
         let mut total_imbalance =
             <<T as Config>::Currency as Currency<T::AccountId>>::PositiveImbalance::zero();
         for item in allocations.iter() {
-            let imbalance =
-                T::Currency::deposit_creating(&item.recipient_account_id, item.amount.clone());
+            let imbalance = T::Currency::deposit_creating(&item.recipient_account_id, item.amount);
             ensure!(imbalance.peek() == item.amount, Error::<T>::DepositFailed);
             total_imbalance.subsume(imbalance);
         }
@@ -92,5 +91,4 @@ impl<T: Config> Pallet<T> {
 
         Ok(())
     }
-
 }

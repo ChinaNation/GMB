@@ -171,7 +171,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let admins = admins_vec(3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(admin).collect();
         let name = account_name(b"alice-personal");
         let dq = proposed_account_id(&c, b"alice-personal");
 
@@ -216,7 +216,7 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let admins = admins_vec(3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(admin).collect();
         let name = account_name(b"alice-personal");
         let dq = proposed_account_id(&c, b"alice-personal");
 

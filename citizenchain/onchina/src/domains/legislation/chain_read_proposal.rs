@@ -264,6 +264,8 @@ pub async fn fetch_proposal_state(proposal_id: u64) -> Result<Option<LegProposal
 }
 
 #[cfg(test)]
+// 提案 SCALE 夹具必须精确解码，断言式解包用于暴露链契约变化。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use codec::Encode;

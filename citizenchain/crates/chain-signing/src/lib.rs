@@ -275,6 +275,8 @@ pub fn preflight_reject_message(error: &str) -> String {
 }
 
 #[cfg(test)]
+// 签名材料夹具异常必须立即中止测试，断言式解包仅限本测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

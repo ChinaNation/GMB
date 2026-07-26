@@ -1,5 +1,8 @@
 //! 行政区划管理员只读接口。
 
+// 参数校验辅助函数直接返回统一 Axum Response，错误仅发生在请求拒绝路径。
+#![allow(clippy::result_large_err)]
+
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
