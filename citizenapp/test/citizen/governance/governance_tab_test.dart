@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/citizen/governance/governance_tab.dart';
+import 'package:citizenapp/citizen/citizen_tab_page.dart';
 import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
@@ -100,6 +101,26 @@ void main() {
       const ['prc-b', 'missing', 'prc-a', 'prc-b'],
     );
     expect(ordered.map((i) => i.cidNumber), ['prc-b', 'prc-a', 'prc-c']);
+  });
+
+  testWidgets('公民首页展示标题、五段导航和提案摘要', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(
+          width: 390,
+          height: 844,
+          child: CitizenTabPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('公民'), findsOneWidget);
+    for (final label in ['提案', '立法', '选举', '治理', '公权']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('提案动态'), findsOneWidget);
+    expect(find.text('待我投票 0'), findsOneWidget);
   });
 
   test('reorderGovernanceInstitutions 按拖拽目标位置重排', () {

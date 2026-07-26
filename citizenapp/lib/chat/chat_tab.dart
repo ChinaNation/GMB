@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../8964/profile/user_qr_page.dart';
+import '../8964/profile/widgets/local_identity_avatar.dart';
 import '../my/user/contact_book_page.dart';
 import '../qr/scan_dispatch_flow.dart';
 import '../ui/app_theme.dart';
@@ -710,6 +711,8 @@ class _ChatTabState extends State<ChatTab> {
                     final preview = _conversations[index];
                     return _ConversationTile(
                       preview: preview,
+                      isFirst: index == 0,
+                      isLast: index == _conversations.length - 1,
                       onTap: () => _openConversation(preview),
                       onDelete: () => _confirmAndDeleteConversation(preview),
                       onManage: preview.isGroup
@@ -849,11 +852,22 @@ class _ChatHeader extends StatelessWidget {
           ),
           // Builder 提供按钮自身的 context，用于取其屏幕坐标做三角对齐。
           Builder(
-            builder: (buttonContext) => IconButton(
-              tooltip: '新建',
-              icon:
-                  const Icon(Icons.add_rounded, color: AppTheme.textSecondary),
-              onPressed: () => unawaited(_open(buttonContext)),
+            builder: (buttonContext) => Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.primary, width: 1.5),
+              ),
+              child: IconButton(
+                tooltip: '新建',
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.add_rounded,
+                  color: AppTheme.primary,
+                ),
+                onPressed: () => unawaited(_open(buttonContext)),
+              ),
             ),
           ),
         ],
@@ -997,12 +1011,16 @@ class _CaretPainter extends CustomPainter {
 class _ConversationTile extends StatelessWidget {
   const _ConversationTile({
     required this.preview,
+    required this.isFirst,
+    required this.isLast,
     required this.onTap,
     required this.onDelete,
     this.onManage,
   });
 
   final ChatConversationPreview preview;
+  final bool isFirst;
+  final bool isLast;
   final VoidCallback onTap;
   final Future<void> Function() onDelete;
   final VoidCallback? onManage;
@@ -1021,13 +1039,16 @@ class _ConversationTile extends StatelessWidget {
         return false;
       },
       child: _ListTileShell(
-        title: preview.isGroup ? '👥 ${preview.title}' : preview.title,
+        title: preview.title,
         subtitle: subtitle,
-        trailing: _statusText(preview.deliveryState),
+        trailing: _conversationTime(preview.lastUpdatedAt),
         unreadCount: preview.unreadCount,
         onTap: onTap,
         onLongPress: onManage,
         isGroup: preview.isGroup,
+        peerAccountId: preview.peerAccountId,
+        isFirst: isFirst,
+        isLast: isLast,
       ),
     );
   }
@@ -1059,9 +1080,14 @@ class _SearchEntry extends StatelessWidget {
                   color: AppTheme.textTertiary,
                 ),
                 SizedBox(width: 8),
-                Text(
-                  '搜索',
-                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 15),
+                Expanded(
+                  child: Text(
+                    '搜索会话、联系人和聊天记录',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        TextStyle(color: AppTheme.textTertiary, fontSize: 15),
+                  ),
                 ),
               ],
             ),
@@ -1078,7 +1104,7 @@ class _DeleteDismissBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Colors.red.shade600,
@@ -1103,6 +1129,9 @@ class _ListTileShell extends StatelessWidget {
     required this.trailing,
     required this.unreadCount,
     required this.onTap,
+    required this.peerAccountId,
+    required this.isFirst,
+    required this.isLast,
     this.onLongPress,
     this.isGroup = false,
   });
@@ -1112,86 +1141,109 @@ class _ListTileShell extends StatelessWidget {
   final String trailing;
   final int unreadCount;
   final VoidCallback onTap;
+  final String peerAccountId;
+  final bool isFirst;
+  final bool isLast;
   final VoidCallback? onLongPress;
   final bool isGroup;
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.vertical(
+      top: isFirst ? const Radius.circular(AppTheme.radiusLg) : Radius.zero,
+      bottom: isLast ? const Radius.circular(AppTheme.radiusLg) : Radius.zero,
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Material(
-        color: AppTheme.surfaceCard,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          onLongPress: onLongPress,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppTheme.primary.withAlpha(24),
-                  child: Icon(
-                    isGroup ? Icons.groups_outlined : Icons.person_outline,
-                    color: AppTheme.primary,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceCard,
+          borderRadius: radius,
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: radius,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  if (isGroup)
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppTheme.primary.withAlpha(20),
+                      child: const Icon(
+                        Icons.groups_outlined,
+                        color: AppTheme.primary,
+                      ),
+                    )
+                  else
+                    LocalIdentityAvatar(
+                      path: null,
+                      size: 44,
+                      seed: peerAccountId,
+                    ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        trailing,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           color: AppTheme.textSecondary,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      trailing,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    if (unreadCount > 0) ...[
-                      const SizedBox(height: 6),
-                      CircleAvatar(
-                        radius: 10,
-                        backgroundColor: AppTheme.primary,
-                        child: Text(
-                          '$unreadCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
+                      if (unreadCount > 0) ...[
+                        const SizedBox(height: 6),
+                        CircleAvatar(
+                          radius: 10,
+                          backgroundColor: AppTheme.primary,
+                          child: Text(
+                            '$unreadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1260,14 +1312,22 @@ class _EmptyConversationList extends StatelessWidget {
   }
 }
 
-String _statusText(ChatMessageDeliveryState state) {
-  return switch (state) {
-    ChatMessageDeliveryState.queued => '排队',
-    ChatMessageDeliveryState.sending => '发送中',
-    ChatMessageDeliveryState.sent => '已发送',
-    ChatMessageDeliveryState.receivedByDevice => '已接收',
-    ChatMessageDeliveryState.failed => '失败',
-  };
+String _conversationTime(DateTime value) {
+  final local = value.toLocal();
+  final now = DateTime.now();
+  final day = DateTime(local.year, local.month, local.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final difference = today.difference(day).inDays;
+  if (difference == 0) {
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+  if (difference == 1) return '昨天';
+  if (difference > 1 && difference < 7) {
+    const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    return weekdays[local.weekday - 1];
+  }
+  return '${local.month}/${local.day}';
 }
 
 Future<bool> _confirmDeleteConversation(BuildContext context) async {

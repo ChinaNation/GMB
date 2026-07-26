@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; connect-src https: wss:; frame-src https:; child-src https:; base-uri 'none'; form-action 'none'" />
     <title>连接钱包支付</title>
     <style>
       :root { color-scheme: light; }
@@ -26,12 +28,17 @@
       <p class="sub" id="sub">在弹出的钱包中确认连接与支付</p>
       <p class="amount" id="amount"></p>
     </div>
-    <script type="module">
+    <!-- 由 @walletconnect/ethereum-provider 2.23.10 精确版本生成并随 App 发布。 -->
+    <script src="walletconnect.bundle.js"></script>
+    <script>
       // 稳定币支付:WalletConnect v2 provider 连自托管钱包(MetaMask/OKX/Bitget)→ 发 ERC-20 转账。
-      // App 通过 window.__TOPUP__ 注入参数,拿到 txHash 后经 TopupBridge 回传;失败回传 error。
-      import { EthereumProvider } from 'https://esm.sh/@walletconnect/ethereum-provider@2';
+      // SDK 固定打包进 App；禁止运行时从 CDN 执行第三方脚本。
+      // 连接后先把 payer 回传 CitizenApp 创建账户绑定意图，收到 App 明确放行后才发送交易。
 
       const $ = (id) => document.getElementById(id);
+      let provider = null;
+      let payer = null;
+      let paymentStarted = false;
       function report(payload) {
         if (window.TopupBridge && window.TopupBridge.postMessage) {
           window.TopupBridge.postMessage(JSON.stringify(payload));
@@ -42,7 +49,7 @@
         $('title').textContent = '未完成';
         $('title').className = 'title err';
         $('sub').textContent = message;
-        report({ ok: false, error: message });
+        report({ kind: 'error', error: message });
       }
 
       window.startTopup = async () => {
@@ -50,7 +57,11 @@
         if (!cfg || !cfg.projectId) { fail('WalletConnect 未配置'); return; }
         $('amount').textContent = `支付 ${cfg.payDisplay} ${cfg.token} · ${cfg.label}`;
         try {
-          const provider = await EthereumProvider.init({
+          if (!window.WalletConnectEthereumProvider) {
+            fail('WalletConnect 本地组件未加载');
+            return;
+          }
+          provider = await window.WalletConnectEthereumProvider.init({
             projectId: cfg.projectId,
             chains: [cfg.chainId],
             showQrModal: true,
@@ -62,17 +73,34 @@
             },
           });
           await provider.connect();
-          const from = Array.isArray(provider.accounts) ? provider.accounts[0] : null;
-          if (!from) { fail('未获取到钱包地址'); return; }
+          payer = Array.isArray(provider.accounts) ? provider.accounts[0] : null;
+          if (!payer) { fail('未获取到钱包地址'); return; }
+          $('title').textContent = '正在创建付款意图';
+          $('sub').textContent = '即将由当前公民钱包账户接收公民币';
+          report({ kind: 'connected', payer });
+        } catch (e) {
+          fail((e && e.message) ? e.message : '钱包连接未完成或已取消');
+        }
+      };
+
+      window.submitTopupPayment = async () => {
+        const cfg = window.__TOPUP__;
+        if (!provider || !payer || paymentStarted) {
+          if (!paymentStarted) fail('付款意图创建失败，请重新发起');
+          return;
+        }
+        paymentStarted = true;
+        try {
           $('title').textContent = '请在钱包中确认支付';
+          $('sub').textContent = '付款完成后将自动返回公民';
           const txHash = await provider.request({
             method: 'eth_sendTransaction',
-            params: [{ from, to: cfg.to, data: cfg.data, value: '0x0' }],
+            params: [{ from: payer, to: cfg.to, data: cfg.data, value: '0x0' }],
           });
           $('spinner').style.display = 'none';
           $('title').textContent = '已提交';
           $('sub').textContent = '正在返回 App 确认到账…';
-          report({ ok: true, txHash, payer: from });
+          report({ kind: 'paid', txHash, payer });
         } catch (e) {
           fail((e && e.message) ? e.message : '支付未完成或已取消');
         }

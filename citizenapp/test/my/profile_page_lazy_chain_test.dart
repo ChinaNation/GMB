@@ -77,6 +77,14 @@ void main() {
     expect(startCount, 0);
     expect(myIdService.liveReadCount, 0);
     expect(find.byType(IdentityBadge), findsOneWidget);
+    expect(find.text('钱包'), findsOneWidget);
+    expect(find.text('管理账户'), findsOneWidget);
+    expect(find.text('电子护照'), findsOneWidget);
+    expect(find.text('查看身份'), findsOneWidget);
+    expect(find.text('个人服务'), findsOneWidget);
+    expect(find.text('会员｜订阅'), findsOneWidget);
+    expect(find.text('创作者'), findsOneWidget);
+    expect(find.text('通讯录'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await smoldot.dispose();

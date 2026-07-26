@@ -497,7 +497,7 @@ class _ProposalViewState extends State<ProposalTab> {
       },
       child: ListView.separated(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         itemCount: _items.length + (_hasMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {

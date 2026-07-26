@@ -95,7 +95,6 @@ export interface Env {
   TOPUP_RECV_ADDRESS?: string;
   // 各链 EVM JSON-RPC（必须 https）；若 URL 内嵌 API key 则改用 wrangler secret。
   TOPUP_BASE_RPC_URL?: string;
-  TOPUP_ARBITRUM_RPC_URL?: string;
   // 覆盖代币合约地址（testnet mock USDT 必填；mainnet 用代码内置默认）。
   TOPUP_USDC_CONTRACT?: string;
   TOPUP_USDT_CONTRACT?: string;
@@ -103,6 +102,10 @@ export interface Env {
   TOPUP_MIN_CONFIRMATIONS?: string;
   // 本地部署控制台↔Worker 结算接口鉴权令牌，只放 Worker Secret。
   TOPUP_SETTLE_TOKEN?: string;
+  // 付款意图 HMAC 密钥，只放 Worker Secret；用于把登录账户、付款钱包和报价绑定为短期令牌。
+  TOPUP_INTENT_SECRET?: string;
+  // 公民币发放账户的规范 AccountId；Worker 用它独立核验最终链上转账签名者。
+  TOPUP_DISBURSE_ACCOUNT_ID?: string;
 }
 
 export interface SessionState {

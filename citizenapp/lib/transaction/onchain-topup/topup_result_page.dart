@@ -6,7 +6,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'topup_api.dart';
 import 'topup_models.dart';
 
-/// 支付结果页(第 3 屏):上报付款交易 → 轮询到账。
+/// 支付结果页(第 3 屏)：用付款前意图确认交易 → 按账户归属订单轮询到账。
 ///
 /// 只有成功/失败两种终态(契合三态台账 paid/exception);出结果前显示「处理中」,
 /// 超时不判失败,只提示仍在确认。
@@ -20,7 +20,7 @@ class TopupResultPage extends StatefulWidget {
     required this.package,
     required this.accountId,
     required this.evmTxHash,
-    this.payerAddress,
+    required this.paymentIntent,
   });
 
   final TopupApi api;
@@ -28,7 +28,7 @@ class TopupResultPage extends StatefulWidget {
   final TopupPackage package;
   final String accountId;
   final String evmTxHash;
-  final String? payerAddress;
+  final String paymentIntent;
 
   @override
   State<TopupResultPage> createState() => _TopupResultPageState();
@@ -56,22 +56,27 @@ class _TopupResultPageState extends State<TopupResultPage> {
 
   Future<void> _run() async {
     var submitted = false;
+    String? orderId;
     for (var attempt = 0; attempt < _maxAttempts; attempt++) {
       if (_cancelled) return;
       try {
         if (!submitted) {
-          final result = await widget.api.submit(
-            token: widget.rail.token,
-            packageId: widget.package.packageId,
+          final result = await widget.api.confirm(
             accountId: widget.accountId,
+            paymentIntent: widget.paymentIntent,
             evmTxHash: widget.evmTxHash,
-            payerAddress: widget.payerAddress,
           );
           if (_settleFromStatus(result.status)) return;
-          if (result.status == TopupOrderStatus.pending) submitted = true;
+          if (result.status == TopupOrderStatus.pending &&
+              result.orderId != null) {
+            submitted = true;
+            orderId = result.orderId;
+          }
         } else {
           final status = await widget.api.status(
-              chainId: widget.rail.chainId, evmTxHash: widget.evmTxHash);
+            accountId: widget.accountId,
+            orderId: orderId!,
+          );
           if (_settleFromStatus(status)) return;
         }
       } on TopupApiException catch (e) {

@@ -693,7 +693,7 @@ void main() {
   testWidgets('顶部为搜索框、右上角为加号，旧「新建群聊」卡片已删', (tester) async {
     await pumpTab(tester);
 
-    expect(find.text('搜索'), findsOneWidget);
+    expect(find.text('搜索会话、联系人和聊天记录'), findsOneWidget);
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
     expect(find.text('新建群聊'), findsNothing);
     expect(find.byIcon(Icons.group_add_outlined), findsNothing);
@@ -774,7 +774,7 @@ void main() {
   testWidgets('点搜索框进入聊天搜索页', (tester) async {
     await pumpTab(tester);
 
-    await tester.tap(find.text('搜索'));
+    await tester.tap(find.text('搜索会话、联系人和聊天记录'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 

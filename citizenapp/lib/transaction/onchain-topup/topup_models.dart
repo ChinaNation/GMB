@@ -123,15 +123,33 @@ TopupOrderStatus topupOrderStatusFrom(String? raw) {
   }
 }
 
-/// POST /topup/submit 结果。
-class TopupSubmitResult {
-  const TopupSubmitResult({required this.status, this.orderId});
+/// POST /topup/intent 结果。令牌把登录账户、付款地址和报价绑定到同一个短期意图。
+class TopupPaymentIntent {
+  const TopupPaymentIntent({
+    required this.token,
+    required this.expiresAt,
+  });
+
+  final String token;
+  final int expiresAt;
+
+  factory TopupPaymentIntent.fromJson(Map<String, dynamic> json) {
+    return TopupPaymentIntent(
+      token: json['payment_intent']?.toString() ?? '',
+      expiresAt: _asInt(json['expires_at']),
+    );
+  }
+}
+
+/// POST /topup/confirm 结果。
+class TopupConfirmResult {
+  const TopupConfirmResult({required this.status, this.orderId});
 
   final TopupOrderStatus status;
   final String? orderId;
 
-  factory TopupSubmitResult.fromJson(Map<String, dynamic> json) {
-    return TopupSubmitResult(
+  factory TopupConfirmResult.fromJson(Map<String, dynamic> json) {
+    return TopupConfirmResult(
       status: topupOrderStatusFrom(json['status']?.toString()),
       orderId: json['order_id']?.toString(),
     );

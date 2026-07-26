@@ -3,8 +3,7 @@ import { HttpError } from '../shared/http';
 
 /// 稳定币充值购买公民币 · 静态配置真源。
 ///
-/// 首期只两条入金轨:USDC→Base、USDT→Arbitrum(方案 B / WalletConnect)。
-/// 后续加币/加链 = 往下面表里加一条配置,零新代码。
+/// 当前两条入金轨都固定在 Base：USDC→Base、USDT→Base。
 /// 合约地址是安全关键项:错地址 = 收假币,任何改动必须二次核对。
 
 /// 支持的稳定币币种(首期两种)。
@@ -22,7 +21,7 @@ export interface TopupRail {
   /// 代币精度(USDC/USDT 均为 6 位)。
   token_decimals: number;
   /// 该链 EVM JSON-RPC 的 Env 变量名(URL 值放 wrangler vars/secret,不硬编码)。
-  rpc_env_key: 'TOPUP_BASE_RPC_URL' | 'TOPUP_ARBITRUM_RPC_URL';
+  rpc_env_key: 'TOPUP_BASE_RPC_URL';
   /// Env 中覆盖该币合约地址的变量名(testnet mock / 勘误用)。
   contract_env_key: 'TOPUP_USDC_CONTRACT' | 'TOPUP_USDT_CONTRACT';
   label: string;

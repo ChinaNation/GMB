@@ -70,6 +70,7 @@ flutter:
     - assets/profile_defaults/
     - assets/badges/
     - assets/topup/walletconnect.html
+    - assets/topup/walletconnect.bundle.js
     - assets/stickers/fluent3d/
     - assets/chainspec.json
     - assets/light_sync_state.json

@@ -5,15 +5,21 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:citizenapp/ui/app_theme.dart';
+import 'topup_api.dart';
 import 'topup_erc20.dart';
 import 'topup_models.dart';
 
-/// WebView WalletConnect 返回结果:付款交易哈希 + 付款地址。
+/// WebView WalletConnect 返回结果：付款交易哈希 + 付款前已绑定账户的短期意图。
 class TopupWebResult {
-  const TopupWebResult({required this.txHash, this.payerAddress});
+  const TopupWebResult({
+    required this.txHash,
+    required this.paymentIntent,
+    required this.payerAddress,
+  });
 
   final String txHash;
-  final String? payerAddress;
+  final String paymentIntent;
+  final String payerAddress;
 }
 
 /// WalletConnect 支付页(方案 A):在 WebView 内加载打包的 AppKit JS 页,连自托管钱包并发
@@ -26,12 +32,14 @@ class TopupWebviewPage extends StatefulWidget {
     required this.package,
     required this.recvAddress,
     required this.accountId,
+    required this.api,
   });
 
   final TopupRail rail;
   final TopupPackage package;
   final String recvAddress;
   final String accountId;
+  final TopupApi api;
 
   /// WalletConnect(Reown)Project ID —— 公开标识(非私钥,内嵌客户端本就可见)。
   /// 默认即用已注册的正式 Project ID,充值发币开箱可付款;要换项目时显式传
@@ -51,6 +59,8 @@ class TopupWebviewPage extends StatefulWidget {
 class _TopupWebviewPageState extends State<TopupWebviewPage> {
   late final WebViewController _controller;
   String? _error;
+  String? _paymentIntent;
+  bool _creatingIntent = false;
 
   @override
   void initState() {
@@ -101,19 +111,48 @@ class _TopupWebviewPageState extends State<TopupWebviewPage> {
     );
   }
 
-  void _onBridgeMessage(JavaScriptMessage message) {
+  Future<void> _onBridgeMessage(JavaScriptMessage message) async {
     Map<String, dynamic> payload;
     try {
       payload = jsonDecode(message.message) as Map<String, dynamic>;
     } catch (_) {
       return;
     }
-    if (payload['ok'] == true) {
+    if (payload['kind'] == 'connected') {
+      final payer = payload['payer']?.toString() ?? '';
+      if (payer.isEmpty || _creatingIntent || _paymentIntent != null) return;
+      _creatingIntent = true;
+      try {
+        final intent = await widget.api.createIntent(
+          token: widget.rail.token,
+          packageId: widget.package.packageId,
+          accountId: widget.accountId,
+          payerAddress: payer,
+        );
+        if (intent.token.isEmpty) {
+          throw const TopupApiException('充值服务未返回付款意图');
+        }
+        _paymentIntent = intent.token;
+        await _controller.runJavaScript(
+          'if(window.submitTopupPayment){window.submitTopupPayment();}',
+        );
+      } on TopupApiException catch (error) {
+        if (!mounted) return;
+        setState(() => _error = error.message);
+      } finally {
+        _creatingIntent = false;
+      }
+      return;
+    }
+    if (payload['kind'] == 'paid') {
       final txHash = payload['txHash']?.toString() ?? '';
-      if (txHash.isEmpty) return;
+      final payer = payload['payer']?.toString() ?? '';
+      final paymentIntent = _paymentIntent;
+      if (txHash.isEmpty || payer.isEmpty || paymentIntent == null) return;
       Navigator.of(context).pop(TopupWebResult(
         txHash: txHash,
-        payerAddress: payload['payer']?.toString(),
+        paymentIntent: paymentIntent,
+        payerAddress: payer,
       ));
       return;
     }

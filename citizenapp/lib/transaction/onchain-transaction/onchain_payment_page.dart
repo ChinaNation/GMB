@@ -828,6 +828,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                   children: [
                     ChainProgressBanner(
                       busy: _refreshing,
+                      compactThreeState: true,
                       onProgressChanged: _handleChainProgressChanged,
                       onErrorChanged: _handleChainProgressErrorChanged,
                     ),

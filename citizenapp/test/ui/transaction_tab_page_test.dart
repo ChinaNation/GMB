@@ -86,6 +86,7 @@ void main() {
     expect(find.byTooltip('我的通讯录'), findsOneWidget);
     expect(find.byTooltip('选择交易钱包'), findsOneWidget);
     expect(find.byType(ChainProgressBanner), findsOneWidget);
+    expect(find.text('公民链 更新中'), findsOneWidget);
     expect(find.text('扫一扫'), findsOneWidget);
     expect(find.text('多签账户'), findsOneWidget);
     expect(find.text('个人多签'), findsNothing);

@@ -7,6 +7,67 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smoldot/smoldot.dart';
 
 void main() {
+  testWidgets('交易紧凑状态从蓝色更新中切换为绿色已更新', (tester) async {
+    final snapshots = Queue<LightClientStatusSnapshot>.from([
+      _snapshot(
+        isSyncing: true,
+        isUsable: false,
+        syncPhase: LightClientSyncPhase.warpVerifyingFragments,
+        warpRequestCount: 1,
+        warpReceivedFragmentCount: 1,
+        warpVerifiedFragmentCount: 0,
+      ),
+      _snapshot(
+        isSyncing: false,
+        isUsable: true,
+        syncPhase: LightClientSyncPhase.regular,
+        warpRequestCount: 1,
+        warpReceivedFragmentCount: 1,
+        warpVerifiedFragmentCount: 1,
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: ChainProgressBanner(
+            compactThreeState: true,
+            pollInterval: const Duration(milliseconds: 10),
+            progressLoader: () async => snapshots.removeFirst(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final updating = tester.widget<Text>(find.text('公民链 更新中'));
+    expect(updating.style?.color, AppTheme.info);
+
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump();
+    final updated = tester.widget<Text>(find.text('公民链 已更新'));
+    expect(updated.style?.color, AppTheme.success);
+  });
+
+  testWidgets('交易紧凑状态读取失败时显示红色连接失败', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: ChainProgressBanner(
+            compactThreeState: true,
+            progressLoader: () async => throw StateError('offline'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final failed = tester.widget<Text>(find.text('公民链 连接失败'));
+    expect(failed.style?.color, AppTheme.danger);
+  });
+
   testWidgets('runtime 已近头但 warp 未结束时继续轮询直到 regular', (tester) async {
     final snapshots = Queue<LightClientStatusSnapshot>.from([
       _snapshot(

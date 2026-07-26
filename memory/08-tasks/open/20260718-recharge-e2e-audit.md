@@ -1,6 +1,6 @@
 # 任务卡：CitizenApp 充值与 CitizenConsole 发币端到端验收
 
-> 状态：执行中
+> 状态：安全缺陷修复完成；真机 Base testnet 资金闭环待执行
 
 ## 任务需求
 
@@ -153,5 +153,17 @@
 
 ## 当前结论
 
-- **不能判定整个业务完全跑通。** 静态检查、CitizenApp/Worker 单测和 CitizenConsole 页面通过，但 CitizenConsole 资金安全测试失败，staging 完全未就绪，两个币轨都没有完成真机 testnet 付款→Worker→CitizenConsole→公民链到账的真实闭环。
-- 在 H1、H2、H3 修复并完成 staging 真机验收前，不建议开放 production 充值。
+- H1、H2、H3、M1、M2 已于 2026-07-25 按唯一目标态修复：匿名交易认领已删除；本地台账损坏 fail-closed；WalletConnect 精确版本随 App 打包；Worker 独立核验 finalized 公民链发币事实；CitizenConsole 资金安全测试恢复并扩展到 27/27。
+- 本地真实 Worker/D1/HTTP 已验证账户会话、短期付款意图、篡改拒绝和付款前零订单。**仍不能把整个业务判定为完全跑通**，因为尚未使用真机外部钱包和 Base testnet 资产完成付款→EVM finalized→CitizenConsole 发币→CitizenChain finalized→CitizenApp 到账。
+- 在下一步真机 testnet 两币轨验收通过前，仍不开放 production 充值。
+
+## 2026-07-25 修复验收
+
+| 原发现 | 当前结论 | 修复证据 |
+|---|---|---|
+| H1 匿名 tx hash 抢绑 | RESOLVED | `intent` 的 `account_id` 只取 Bearer 会话，HMAC 绑定 payer/报价；`confirm` 后才入库，`status` 强制账户归属 |
+| H2 台账损坏重复发币 | RESOLVED | 台账仅 `ENOENT` 视为空；解析/IO 错误停止结算；Worker 原子 claim 不自动过期 |
+| H3 WalletConnect CDN 供应链 | RESOLVED | provider `2.23.10` 本地 bundle + CSP；HTML 无远端 module import |
+| M1 Worker 不验公民链事实 | RESOLVED | 控制台提交完整 finalized 证明；Worker 验 genesis、signer、call 参数、canonical/finalized 包含关系 |
+| M2 控制台回归测试失效 | RESOLVED | CitizenConsole 全量 27/27；包含完整证明回写、双幂等、claim、独立守卫和台账损坏 fail-closed |
+| 真机 testnet 完整资金流 | BLOCKED | 尚未配置并授权 testnet 外部钱包、收款资产与测试发币环境 |

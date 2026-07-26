@@ -18,6 +18,7 @@ class ChainProgressBanner extends StatefulWidget {
     super.key,
     this.margin = const EdgeInsets.only(bottom: 12),
     this.busy = false,
+    this.compactThreeState = false,
     this.pollInterval = const Duration(seconds: 6),
     this.onProgressChanged,
     this.onErrorChanged,
@@ -26,6 +27,11 @@ class ChainProgressBanner extends StatefulWidget {
 
   final EdgeInsetsGeometry margin;
   final bool busy;
+
+  /// 交易首页专用的三态紧凑展示。
+  ///
+  /// 默认关闭，避免改变提案、多签等页面依赖的详细轻节点进度文案。
+  final bool compactThreeState;
   final Duration pollInterval;
   final ValueChanged<LightClientStatusSnapshot?>? onProgressChanged;
   final ValueChanged<String?>? onErrorChanged;
@@ -37,9 +43,11 @@ class ChainProgressBanner extends StatefulWidget {
   State<ChainProgressBanner> createState() => _ChainProgressBannerState();
 }
 
-class _ChainProgressBannerState extends State<ChainProgressBanner> {
+class _ChainProgressBannerState extends State<ChainProgressBanner>
+    with SingleTickerProviderStateMixin {
   final ChainRpc _chainRpc = ChainRpc();
 
+  late final AnimationController _breathingController;
   LightClientStatusSnapshot? _progress;
   String? _error;
   bool _loading = false;
@@ -49,6 +57,16 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   @override
   void initState() {
     super.initState();
+    _breathingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+      lowerBound: 0.35,
+      upperBound: 1,
+    );
+    // Widget test 中不启动无限动画，避免 pumpAndSettle 无法稳定；真机保持呼吸效果。
+    if (!_isTestProcess) {
+      _breathingController.repeat(reverse: true);
+    }
     if (_isFlutterTest) return;
     unawaited(_loadProgress());
   }
@@ -65,6 +83,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _breathingController.dispose();
     super.dispose();
   }
 
@@ -152,6 +171,10 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   Widget build(BuildContext context) {
     final progress = _progress;
     final error = _error;
+
+    if (widget.compactThreeState) {
+      return _buildCompactThreeState(progress: progress, error: error);
+    }
 
     final Color color;
     final IconData icon;
@@ -301,4 +324,104 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   bool get _isFlutterTest =>
       widget.progressLoader == null &&
       Platform.environment.containsKey('FLUTTER_TEST');
+
+  bool get _isTestProcess => Platform.environment.containsKey('FLUTTER_TEST');
+
+  Widget _buildCompactThreeState({
+    required LightClientStatusSnapshot? progress,
+    required String? error,
+  }) {
+    final Color color;
+    final String status;
+    final String detail;
+
+    if (error != null) {
+      color = AppTheme.danger;
+      status = '连接失败';
+      detail = '下拉刷新后重试';
+    } else if (progress?.isUsable == true) {
+      color = AppTheme.success;
+      status = '已更新';
+      detail = '最终区块 ${progress!.currentVerifiedFinalizedBlockNumber}';
+    } else {
+      color = AppTheme.info;
+      status = '更新中';
+      if (progress == null) {
+        detail = '正在读取连接状态';
+      } else if (!progress.hasPeers) {
+        detail = '正在连接网络';
+      } else {
+        detail = '已连接节点 ${progress.peerCount}';
+      }
+    }
+
+    return Container(
+      key: const ValueKey<String>('transaction-chain-status'),
+      margin: widget.margin,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+      child: Row(
+        children: [
+          AnimatedBuilder(
+            animation: _breathingController,
+            builder: (context, _) {
+              final opacity = _isTestProcess ? 1.0 : _breathingController.value;
+              return SizedBox(
+                width: 20,
+                height: 20,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: opacity * 0.22,
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '公民链 $status',
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              detail,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

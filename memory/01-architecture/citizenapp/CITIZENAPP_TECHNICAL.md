@@ -368,7 +368,25 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - “会员｜订阅 / 创作者 / 通讯录”放入一个“个人服务”分组列表；设置使用独立分组。
 - 底部五个 Tab 严格遵守本节导航硬规则，不因单页视觉稿重新生成图标。
 
-##### 4.1.1.10 UI 任务验收
+##### 4.1.1.10 四个主页面落地基线
+
+- “我的”页遵守 §4.1.1.9；照片头部、资料行、紧凑双列主入口和个人服务分组使用同一
+  纵向节奏，头像右下角继续由 `IdentityBadge` 区分身份与有效会员。
+- “交易”页固定保留“通讯录 / 交易标题 / 交易钱包”顶栏、链连接状态、扫一扫与多签
+  双入口、链上支付表单和交易结果统计，不添加设计稿中不存在的交易能力。
+- 交易页链连接状态只允许三种紧凑展示，并由真实 `LightClientStatusSnapshot` 与读取
+  错误驱动呼吸圆点、文字和颜色：绿色“公民链 已更新”、蓝色“公民链 更新中”、红色
+  “公民链 连接失败”。不得恢复 `CitizenChain 已同步`、固定成功文案或第四种模糊状态。
+- “聊天”页固定使用左侧页面标题、右侧圆形描边新建按钮、单行搜索入口和统一分组会话
+  表面；会话时间、未读数、头像与摘要读取真实本机数据，无数据时展示空态，不填充演示
+  会话。
+- “公民”页固定使用居中标题、“提案 / 立法 / 选举 / 治理 / 公权”五段二级导航和
+  “提案动态 / 待我投票 N”摘要行；`N` 必须来自当前提案数据，不使用设计稿示例数字。
+- 本轮不改造“广场”页。广场后续 UI 任务仍必须复用同一全局语言，并单独获得实现确认。
+- 四页底部导航继续直接复用 §4.1.1.5 的现有图标、顺序、标签和选中态，页面实现不得
+  各自复制或重画导航图标。
+
+##### 4.1.1.11 UI 任务验收
 
 - 设计前已读取本节、目标页面代码、`AppTheme` 和实际使用的 SVG / 图片资产。
 - 设计稿中的导航顺序、图标、身份徽章和业务入口与当前仓库一致。
@@ -492,15 +510,20 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 
 ### 4.4 交易 Tab
 
-- 底部第 3 个按钮文案仍为"交易"，不因目录拆分改名
+- 底部第 4 个按钮文案仍为“交易”，不因目录拆分改名
 - 当前 `交易` Tab 进入 `lib/transaction/transaction_tab_page.dart`
 - `transaction_tab_page.dart` 复用 `lib/transaction/onchain-transaction/onchain_payment_page.dart` 中的 `OnchainPaymentPanel`，交易页直接展示原链上支付表单
 - 交易页顶部保持原结构：
   - 左上角：我的通讯录
   - 中间标题：交易
   - 右上角：选择交易钱包
-- `ChainProgressBanner` 保留在交易页内容顶部
-  - Flutter widget test 环境下保留提示条结构，但不读取轻节点状态、不启动轮询定时器；真机/debug/release 环境继续正常展示 peer / best / finalized / syncing
+- `ChainProgressBanner` 保留在交易页内容顶部；交易页启用三态紧凑模式：
+  - finalized 状态可用时显示绿色“公民链 已更新”，右侧显示最终区块。
+  - 正在初始化、连接或同步时显示蓝色“公民链 更新中”。
+  - 真实状态读取失败时显示红色“公民链 连接失败”。
+  - 呼吸圆点与状态文字必须使用同一状态色，状态来自真实轻节点快照和读取错误，不得
+    固定伪造；其他页面继续使用 `ChainProgressBanner` 原详细模式。
+  - Flutter widget test 环境保留状态结构，但不启动呼吸动画或轮询定时器。
 - 交易页在链上支付表单上方保留/插入一行双入口：
   - 扫码支付 → `lib/transaction/offchain-transaction/services/offchain_scan_flow.dart`
   - 多签账户 → `lib/transaction/personal-manage/personal_account_list_page.dart`
@@ -535,6 +558,35 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 链上交易签名前
 
 签名前守卫：`WalletManager._readMnemonic()` 内置生物识别/设备密码验证，所有读取助记词的路径自动触发。
+
+#### 4.5.1 稳定币购买公民币
+
+- 入口固定为 `我的 → 我的钱包 → 钱包详情 → 充值`。CitizenApp 使用随包
+  `assets/topup/walletconnect.html` 和精确版本构建的 `walletconnect.bundle.js`
+  连接设备里的外部钱包；运行时禁止从 CDN 加载付款执行代码。
+- USDC 与 USDT 当前都走 Base；币轨、合约、收款地址和套餐由 Worker `config`
+  返回，CitizenApp 不把客户端报价当成结算真源。
+- 外部钱包连接并返回 `payer_address` 后，CitizenApp 使用默认热钱包已有的静默设备会话调用
+  `POST /v1/square/topup/intent`。Worker 只从 Bearer 会话取得 `account_id`，用
+  Web Crypto HMAC 生成短期付款意图，绑定账户、付款地址、币种、链、合约、收款地址、
+  金额和套餐。付款意图不写 D1，未付款不产生订单。
+- 外部钱包完成 ERC-20 转账后，CitizenApp 调用 `POST /v1/square/topup/confirm`。
+  Worker 同时校验会话归属、付款意图签名与有效期、当前配置以及 finalized EVM 到账；
+  全部一致才写 `topup_orders`。状态查询固定为
+  `GET /v1/square/topup/status/:order_id`，并强制订单 `account_id` 等于会话账户，
+  禁止用公开交易哈希匿名认领或查询。
+- D1 用户业务态只有 `pending / paid / exception`。`settlement_claim_id` 只是内部
+  防重复发币锁：CitizenConsole 必须在发币前原子 claim，claim 不自动过期；本地台账
+  缺失、损坏或与 Worker claim 不一致时一律停止自动发币并转人工核链。
+- CitizenConsole 发币前复核 EVM 到账，并校验本机节点创世哈希等于节点升级页冻结的
+  `CHAIN_GENESIS_HASH`。发币完成后向 Worker 提交完整 signed extrinsic、交易哈希、
+  finalized 区块哈希和 extrinsic index。Worker 通过受保护链 RPC 独立核验创世身份、
+  签名发币账户、`OnchainTransaction.transfer_with_remark` 的收款人/金额/
+  `topup:{order_id}` 备注及 finalized 主链包含关系；不能只凭控制台声明的交易哈希
+  把订单置为 `paid`。
+- Worker 运行配置新增 `TOPUP_INTENT_SECRET`（Secret）和
+  `TOPUP_DISBURSE_ACCOUNT_ID`（规范 AccountId）。`TOPUP_SETTLE_TOKEN` 继续只用于
+  CitizenConsole 与结算接口鉴权。充值不修改 runtime，复用既有链上转账和统一交易收费。
 
 ### 4.6 二维码模块
 

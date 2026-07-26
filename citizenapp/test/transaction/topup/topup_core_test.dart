@@ -7,6 +7,8 @@ import 'package:http/testing.dart';
 import 'package:citizenapp/transaction/onchain-topup/topup_api.dart';
 import 'package:citizenapp/transaction/onchain-topup/topup_erc20.dart';
 import 'package:citizenapp/transaction/onchain-topup/topup_models.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart'
+    show SquareSession;
 
 void main() {
   group('encodeErc20Transfer', () {
@@ -63,8 +65,17 @@ void main() {
   });
 
   group('TopupApi', () {
-    TopupApi apiWith(MockClient client) =>
-        TopupApi(baseUrl: 'https://x.test/api', httpClient: client);
+    const accountId =
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    TopupApi apiWith(MockClient client) => TopupApi(
+          baseUrl: 'https://x.test/api',
+          httpClient: client,
+          sessionResolver: () async => SquareSession(
+            sessionToken: 'session-token',
+            accountId: accountId,
+            expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
+          ),
+        );
 
     test('fetchConfig 走 /v1/square/topup/config', () async {
       final api = apiWith(MockClient((request) async {
@@ -84,30 +95,36 @@ void main() {
       expect(config.network, 'testnet');
     });
 
-    test('submit 已确认 → pending(待支付)', () async {
+    test('createIntent 携带会话且不上传 account_id', () async {
       final api = apiWith(MockClient((request) async {
         expect(request.method, 'POST');
+        expect(request.url.path, '/api/v1/square/topup/intent');
+        expect(request.headers['authorization'], 'Bearer session-token');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body, isNot(contains('account_id')));
         return http.Response(
-            jsonEncode({'ok': true, 'status': 'pending', 'order_id': 'top_x'}),
+            jsonEncode({
+              'ok': true,
+              'payment_intent': 'signed-intent',
+              'expires_at': 123
+            }),
             200);
       }));
-      final result = await api.submit(
+      final result = await api.createIntent(
         token: 'USDC',
         packageId: 'pkg_15',
-        accountId: 'gmbaddr',
-        evmTxHash: '0x${'11' * 32}',
+        accountId: accountId,
+        payerAddress: '0x${'22' * 20}',
       );
-      expect(result.status, TopupOrderStatus.pending);
-      expect(result.orderId, 'top_x');
+      expect(result.token, 'signed-intent');
     });
 
-    test('submit 未确认 → confirming', () async {
+    test('confirm 未确认 → confirming', () async {
       final api = apiWith(MockClient((request) async => http.Response(
           jsonEncode({'ok': true, 'status': 'confirming'}), 200)));
-      final result = await api.submit(
-        token: 'USDT',
-        packageId: 'pkg_1400',
-        accountId: 'gmbaddr',
+      final result = await api.confirm(
+        accountId: accountId,
+        paymentIntent: 'signed-intent',
         evmTxHash: '0x${'22' * 32}',
       );
       expect(result.status, TopupOrderStatus.confirming);
@@ -115,11 +132,14 @@ void main() {
 
     test('status 解析已支付', () async {
       final api = apiWith(MockClient((request) async {
-        expect(request.url.query, contains('chain_id=84532'));
+        expect(request.url.path, '/api/v1/square/topup/status/top_123');
+        expect(request.headers['authorization'], 'Bearer session-token');
         return http.Response(jsonEncode({'ok': true, 'status': 'paid'}), 200);
       }));
-      final status =
-          await api.status(chainId: 84532, evmTxHash: '0x${'11' * 32}');
+      final status = await api.status(
+        accountId: accountId,
+        orderId: 'top_123',
+      );
       expect(status, TopupOrderStatus.paid);
     });
 
@@ -134,10 +154,9 @@ void main() {
             headers: {'content-type': 'application/json; charset=utf-8'},
           )));
       expect(
-        () => api.submit(
-            token: 'USDC',
-            packageId: 'pkg_15',
-            accountId: 'g',
+        () => api.confirm(
+            accountId: accountId,
+            paymentIntent: 'signed-intent',
             evmTxHash: '0x${'11' * 32}'),
         throwsA(isA<TopupApiException>()
             .having((e) => e.errorCode, 'errorCode', 'topup_payment_invalid')),

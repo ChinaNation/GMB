@@ -84,6 +84,29 @@ class _ProfilePageState extends State<MyTab> {
   String? get _defaultWalletMembershipLevel => _membership?.membershipLevel;
   bool get _defaultWalletMembershipActive => _membership?.active ?? false;
 
+  String get _identityLabel => switch (_defaultWalletIdentityLevel) {
+        'candidate' => '竞选身份',
+        'voting' => '投票身份',
+        _ => '匿名访客',
+      };
+
+  String? get _membershipLabel {
+    if (!_defaultWalletMembershipActive) return null;
+    return switch (_defaultWalletMembershipLevel) {
+      'freedom' => '自由会员',
+      'democracy' => '民主会员',
+      'spark' => '薪火会员',
+      _ => null,
+    };
+  }
+
+  String get _profileSubtitle {
+    final membership = _membershipLabel;
+    return membership == null
+        ? _identityLabel
+        : '$_identityLabel · $membership';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -271,20 +294,45 @@ class _ProfilePageState extends State<MyTab> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              _nickname,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 19,
-                fontWeight: FontWeight.w600,
-                shadows: [
-                  Shadow(
-                    color: Color(0x80000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    shadows: [
+                      Shadow(
+                        color: Color(0x80000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _profileSubtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    shadows: [
+                      Shadow(
+                        color: Color(0x99000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           SizedBox(
@@ -316,9 +364,10 @@ class _ProfilePageState extends State<MyTab> {
     );
   }
 
-  Widget _buildEntryCard({
+  Widget _buildPrimaryEntry({
     required Widget leading,
     required String title,
+    required String subtitle,
     required VoidCallback onTap,
   }) {
     return Container(
@@ -326,36 +375,93 @@ class _ProfilePageState extends State<MyTab> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             child: Row(
               children: [
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceMuted,
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppTheme.primary.withAlpha(14),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                   child: Center(child: leading),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: AppTheme.textPrimary,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const Icon(Icons.chevron_right,
-                    size: 20, color: AppTheme.textTertiary),
+                    size: 18, color: AppTheme.textTertiary),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceEntry({
+    required Widget leading,
+    required String title,
+    required VoidCallback onTap,
+    Widget? trailing,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              SizedBox(width: 36, height: 36, child: Center(child: leading)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              trailing ??
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: AppTheme.textTertiary,
+                  ),
+            ],
           ),
         ),
       ),
@@ -418,102 +524,127 @@ class _ProfilePageState extends State<MyTab> {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildPrimaryEntry(
+                      leading: SvgPicture.asset(
+                        'assets/icons/wallet.svg',
+                        width: 24,
+                        height: 24,
+                        colorFilter: const ColorFilter.mode(
+                          AppTheme.primary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      title: '钱包',
+                      subtitle: '管理账户',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const WalletTab()),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildPrimaryEntry(
+                      leading: const Icon(
+                        Icons.badge_outlined,
+                        color: AppTheme.primary,
+                        size: 24,
+                      ),
+                      title: '电子护照',
+                      subtitle: '查看身份',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const MyIdPage()),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 22, 20, 10),
+              child: Text(
+                '个人服务',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                child: Column(
+                  children: [
+                    _buildServiceEntry(
+                      leading: const Icon(
+                        Icons.workspace_premium_outlined,
+                        color: AppTheme.primary,
+                        size: 22,
+                      ),
+                      title: '会员｜订阅',
+                      onTap: _openMembership,
+                    ),
+                    const Divider(height: 1, indent: 62, endIndent: 14),
+                    _buildServiceEntry(
+                      leading: const Icon(
+                        Icons.edit_outlined,
+                        color: AppTheme.primary,
+                        size: 22,
+                      ),
+                      title: '创作者',
+                      onTap: _openCreator,
+                    ),
+                    const Divider(height: 1, indent: 62, endIndent: 14),
+                    _buildServiceEntry(
+                      leading: SvgPicture.asset(
+                        'assets/icons/contact-round.svg',
+                        width: 22,
+                        height: 22,
+                        colorFilter: const ColorFilter.mode(
+                          AppTheme.primary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      title: '通讯录',
+                      onTap: _openContacts,
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: SvgPicture.asset(
-                  'assets/icons/wallet.svg',
-                  width: 22,
-                  height: 22,
-                  colorFilter:
-                      const ColorFilter.mode(AppTheme.danger, BlendMode.srcIn),
-                ),
-                title: '钱包',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const WalletTab()),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: const Icon(
-                  Icons.workspace_premium_outlined,
-                  color: AppTheme.warning,
-                  size: 22,
-                ),
-                title: '会员｜订阅',
-                onTap: _openMembership,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: const Icon(
-                  Icons.storefront_outlined,
-                  color: AppTheme.info,
-                  size: 22,
-                ),
-                title: '创作者',
-                onTap: _openCreator,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: SvgPicture.asset(
-                  'assets/icons/contact-round.svg',
-                  width: 22,
-                  height: 22,
-                  colorFilter:
-                      const ColorFilter.mode(AppTheme.primary, BlendMode.srcIn),
-                ),
-                title: '通讯录',
-                onTap: _openContacts,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: const Icon(
-                  Icons.badge_outlined,
-                  color: AppTheme.primaryDark,
-                  size: 22,
-                ),
-                title: '电子护照',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const MyIdPage()),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: UpdateDotBadge(
-                  show: widget.showSettingsUpdateDot,
-                  dotKey: const Key('settings-entry-update-dot'),
-                  child: const Icon(
-                    Icons.settings_outlined,
-                    color: AppTheme.textSecondary,
-                    size: 22,
+              child: Container(
+                decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                child: _buildServiceEntry(
+                  leading: UpdateDotBadge(
+                    show: widget.showSettingsUpdateDot,
+                    dotKey: const Key('settings-entry-update-dot'),
+                    child: const Icon(
+                      Icons.settings_outlined,
+                      color: AppTheme.textSecondary,
+                      size: 22,
+                    ),
                   ),
+                  title: '设置',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const _SettingsPage()),
+                    );
+                  },
                 ),
-                title: '设置',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const _SettingsPage()),
-                  );
-                },
               ),
             ),
             const SizedBox(height: 32),

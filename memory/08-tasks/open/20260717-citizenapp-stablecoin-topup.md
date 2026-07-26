@@ -1,11 +1,11 @@
 # 任务卡（分步执行·逐步确认）：CitizenApp 稳定币充值购买公民币
 
-> 状态：**已定稿设计，分步实现**。用户已逐点拍板（方案 B / USDC→Base·USDT→Arbitrum / 本地部署控制台发币 / 四方对账三态台账 / 二元成功失败）。
+> 状态：**安全闭环实现完成，等待真机 testnet 真实付款验收**。当前唯一目标态为 USDC/USDT 都走 Base、付款前账户绑定意图、本地控制台发币、四方对账三态台账。
 > 工作流约定：**每一步先输出技术方案 → 用户确认 → 执行 → 更新文档·注释·清理残留 → 输出下一步方案**。未确认不执行；不写代码前不改任何目录。
 
 ## 任务需求
 
-在「CitizenApp → 我的 → 钱包 → 我的钱包 → 钱包详情」把「充值」改成**购买公民币**：用户用自托管钱包（MetaMask / OKX 钱包 / Bitget 钱包）通过 WalletConnect 支付 **USDC(Base) / USDT(Arbitrum)** 到指定收款地址；本地部署控制台确认到账后，用**专用发币热钱包**发一笔 `ln` 转账把对应公民币打到用户公民链钱包。同时把钱包详情第 2 卡三个按钮重排：充值=购买公民币、提现=零钱包→链上、零钱包=进清算行零钱包详情页（原「充值到清算行」迁入该页）。
+在「CitizenApp → 我的 → 钱包 → 我的钱包 → 钱包详情」把「充值」改成**购买公民币**：用户用自托管钱包（MetaMask / OKX 钱包 / Bitget 钱包）通过 WalletConnect 支付 **USDC(Base) / USDT(Base)** 到指定收款地址；本地部署控制台确认到账后，用**专用发币热钱包**发一笔链上转账把对应公民币打到用户公民链钱包。同时把钱包详情第 2 卡三个按钮重排：充值=购买公民币、提现=零钱包→链上、零钱包=进清算行零钱包详情页（原「充值到清算行」迁入该页）。
 
 ## 所属模块
 
@@ -16,7 +16,7 @@
 
 ## 关键决策（锁定，实现不得偏离）
 
-1. **支付模型 B（WalletConnect v2 / `reown_appkit`）**：App 构造 ERC-20 `transfer`，锁链锁额，用户在自托管钱包签名。交易所账户不支持（首期不覆盖）。
+1. **WalletConnect v2 本地 WebView 轨**：App 构造 ERC-20 `transfer`，锁链锁额，用户在自托管钱包签名。WalletConnect provider 固定精确版本并随 App 打包，运行时不执行 CDN 代码。交易所账户不支持（首期不覆盖）。
 2. **两币同走 Base**：USDC + USDT 均在 Base（一条链、一种 gas，最省心；用户钱包里两币都在 Base）。EVM 底座，后续加币/加链=加配置、零新代码。
 3. **发币端 = 本地部署控制台**（`deploy/`），非常驻服务器。控制台没开机订单留队列，开机运行逐个补发。发币**不是 7×24 实时**（已接受）。
 4. **专用发币热钱包**：私钥存本机 macOS Keychain，由控制台**写入/更换**（操作者本人输入，AI 全程不接触私钥值）；与主账户/矿工账户分离；主账户离线，只给发币热钱包补小额浮动。
@@ -54,8 +54,8 @@
 
 ## 推荐步骤拆分（后端→发币端→前端支付→UI 重排→端到端）
 
-### 步骤 1 · Cloudflare 订单后端 + D1 台账 + EVM 到账初验 + 待发币队列 + 结算回写
-- 目标：`/topup` 建单/查单 + `topup_orders` 表 + Worker EVM(Base/Arb) 到账初验 + 待发币队列 + 供本地控制台鉴权拉取/回写的结算接口。
+### 步骤 1 · Cloudflare 付款意图 + D1 台账 + EVM 到账初验 + 待发币队列 + 结算回写
+- 目标：账户会话绑定的 `/topup/intent`、`/topup/confirm`、`/topup/status/:order_id` + `topup_orders` 表 + Worker EVM(Base) 到账初验 + 原子 claim 待发币队列 + 供本地控制台鉴权回写完整 finalized 证明的结算接口。
 - 预计修改目录：
   - `citizenapp/cloudflare/src/topup/`（代码/**新建**）：订单、EVM 初验、队列、结算接口。
   - `citizenapp/cloudflare/migrations/`（SQL/**新建**）：`topup_orders`（`UNIQUE(chain_id, evm_tx_hash)` 幂等）。
@@ -112,6 +112,7 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
 ## 进度记录
 
 - **2026-07-17 · 步骤 1 完成（Cloudflare 订单后端 + 台账 + EVM 验证 + 队列 + 结算回写）**
+  - 本段记录的是当日旧实现，接口和匿名认领口径已由 2026-07-25 安全闭环彻底替换，不构成兼容契约。
   - 新增 `citizenapp/cloudflare/src/topup/{config,evm_verify,orders,settlement,routes}.ts` + `migrations/0005_topup.sql`。
   - 改 `src/routes.ts`（挂 `/v1/square/topup/*`）、`src/types.ts`（Env 补 topup 配置/令牌）、`src/limits/catalog.ts`（路由白名单）、`src/security/request_guard.ts`（topup 免广场会话、结算免限流）、`wrangler.toml`（沙箱 vars + 令牌走 secret 说明）。
   - 接口：`GET /v1/square/topup/config`、`POST /v1/square/topup/submit`、`GET /v1/square/topup/status`；结算（`TOPUP_SETTLE_TOKEN` 鉴权）：`GET /v1/square/topup/settlement/pending`、`POST /v1/square/topup/settlement/:id/settled`、`POST /v1/square/topup/settlement/:id/exception`。
@@ -127,6 +128,7 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
   - 私钥边界：发币私钥只经页面输入→Keychain（`topup:DISBURSE_KEY`，Touch ID），会话仅驻内存；AI 全程不接触私钥值。
 
 - **2026-07-17 · 步骤 3 完成（CitizenApp 链上充值页 + WalletConnect 支付轨）**
+  - 本段记录的是当日旧实现；`config/submit/status session-free` 与运行时 CDN 依赖已于 2026-07-25 删除，不构成当前契约。
   - **通道改为方案 A（WebView WalletConnect）**：`reown_appkit` 与本 App 硬冲突（`reown_core` 钉 `flutter_secure_storage ^9.2.4` vs App `10.3.1`；`freezed_annotation 2.x` vs 聊天 `3.x`），所有版本无解 → 用户拍板走 WebView 里的 WalletConnect JS（`@walletconnect/ethereum-provider`），零 Dart 依赖冲突、用户体验一致。UI 已出稿并经用户确认。
   - 新增（`lib/transaction/onchain-topup/`）：`topup_models.dart`、`topup_erc20.dart`（ERC-20 transfer 编码）、`topup_api.dart`（config/submit/status，session-free，复用 `SquareApiConfig` 基址）、`onchain_topup_page.dart`（充值页+套餐弹窗，按确认稿）、`topup_result_page.dart`（处理中/已到账/失败，轮询）、`topup_webview_page.dart`（WebView+JS 桥+钱包深链唤起）；资产 `assets/topup/walletconnect.html`（WC JS 页）；`pubspec.yaml` 注册资产。
   - WalletConnect Project ID 走 `--dart-define=WALLETCONNECT_PROJECT_ID`（当前值 `8830074307d80484b839db4eb10b1f2c`，公开标识非密钥、dashboard.reown.com 注册；旧值 `11cdceaa…` 作废）。
@@ -215,6 +217,14 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
   - 控制台清理 `ARBITRUM_RPC_URL` 配置项（`topup/routes.mjs` + `web/citizenconsole.{html,js}`）；`rpcForChain` 只留 Base。
   - 收款地址：`TOPUP_RECV_ADDRESS = 0x5ce9b56b9d1812a7cf29841e21756f09ca7d223b`。
   - 验收：Worker `tsc` + topup `vitest` 10/10；Flutter topup 11/11；控制台 `node --check` 通过。
+
+- **2026-07-25 · 充值资金安全闭环完成**
+  - CitizenApp：外部钱包先连接取得付款地址，默认热钱包静默会话再创建短期付款意图，拿到意图后才允许发送 ERC-20；付款完成以意图 + tx hash 确认，之后只按所属账户的 `order_id` 轮询。
+  - WalletConnect：`@walletconnect/ethereum-provider` 固定为 `2.23.10` 并生成随包 `walletconnect.bundle.js`（SHA-256 `b9b3447779f0b8e370a9516b1b65cef3186ad96ed0b0a6b9b82a20a120c285a8`）；HTML 改本地脚本与 CSP，删除运行时 `esm.sh` 导入。
+  - Worker：删除匿名 `submit` 和按公开 tx hash 查询；新增会话绑定 `intent/confirm/status/:order_id`，HMAC 使用 `TOPUP_INTENT_SECRET`，付款前不写 D1。
+  - 结算：D1 增加 `intent_id`、不可空付款地址、内部 claim 和 finalized 公民链定位字段。CitizenConsole 发币前原子 claim、台账读取异常 fail-closed、本机节点校验冻结创世哈希；Worker 独立验证 signed extrinsic 的哈希、签名发币账户、收款人、金额、备注、finalized canonical 区块包含关系后才置 `paid`。
+  - 验收：Worker `typecheck` 通过，全量 174 项测试通过；CitizenConsole 27 项通过；CitizenApp 充值定向 11 项通过。本地真实 Wrangler/D1 基线执行 55 条 SQL 成功，真实 HTTP 验证 config 200、无会话 intent 401、有效会话 intent 200、篡改意图 confirm 400，付款前订单数为 0。
+  - 边界：未部署 staging/production，未推送 GitHub，未使用真实稳定币或公民币，未修改 runtime。真机 WalletConnect + Base testnet 真实付款 → CitizenConsole 发币 → CitizenApp 到账仍属于下一步验收。
 
 ## 待用户拍板的遗留小项（不阻塞步骤 1）
 

@@ -107,9 +107,8 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   // 结算子接口只给本地部署控制台调用，handler 内用 TOPUP_SETTLE_TOKEN 鉴权，
   // 不套 IP 限流（避免控制台批量补发被节流）。
   if (path.startsWith('/v1/square/topup/settlement/')) return;
-  // 充值(topup)不挂广场会话：钱包功能独立于广场登录，正确性来自链上真实到账。
-  // 仅按 IP 粗限流，防刷 EVM RPC。
-  if (path.startsWith('/v1/square/topup/')) {
+  // 充值配置是公开只读；创建付款意图、确认付款和查单必须绑定默认热钱包会话。
+  if (path === '/v1/square/topup/config') {
     await enforceRateLimit(env, `topup:${ipKey}`, 60, 60);
     return;
   }
@@ -146,6 +145,10 @@ function requiresDeviceProof(path: string, method: string): boolean {
   ) {
     return false;
   }
+  // 充值付款由外部 EVM 钱包对真实转账签名；intent/confirm 已同时受账户会话、
+  // 短期 HMAC 意图和链上付款事实约束，再要求 P-256 设备签名会造成同一付款业务二次签名。
+  // status 是账户归属只读查询，同样只需 Bearer 会话。
+  if (path.startsWith('/v1/square/topup/')) return false;
   // Image.network 只能稳定携带 Bearer header；资料媒体仍由 handler 强制校验钱包
   // session，但不要求它动态生成 P-256 请求签名。
   if (path.startsWith('/v1/square/media/')) return false;

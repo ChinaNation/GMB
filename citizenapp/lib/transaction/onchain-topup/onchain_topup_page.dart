@@ -126,6 +126,7 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
           package: package,
           recvAddress: config.recvAddress,
           accountId: widget.accountId,
+          api: _api,
         ),
       ),
     );
@@ -138,7 +139,7 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
           package: package,
           accountId: widget.accountId,
           evmTxHash: web.txHash,
-          payerAddress: web.payerAddress,
+          paymentIntent: web.paymentIntent,
         ),
       ),
     );

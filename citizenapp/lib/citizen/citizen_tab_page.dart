@@ -21,6 +21,7 @@ class CitizenTabPage extends StatefulWidget {
 
 class _CitizenTabPageState extends State<CitizenTabPage> {
   int _selectedTab = 0;
+  int _pendingVoteCount = 0;
   static const List<String> _tabs = ['提案', '立法', '选举', '治理', '公权'];
 
   @override
@@ -28,7 +29,17 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
     return SafeArea(
       child: Column(
         children: [
-          const SizedBox(height: 10),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Text(
+              '公民',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
           _StyledTabs(
             tabs: _tabs,
             selectedIndex: _selectedTab,
@@ -38,6 +49,41 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
               });
             },
           ),
+          if (_selectedTab == 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '提案动态',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withAlpha(10),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      border: Border.all(color: AppTheme.primary),
+                    ),
+                    child: Text(
+                      '待我投票 $_pendingVoteCount',
+                      style: const TextStyle(
+                        color: AppTheme.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(child: _buildTabContent()),
         ],
       ),
@@ -48,7 +94,7 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
     switch (_selectedTab) {
       case 0: // 提案:全局治理提案流。
         return ProposalTab(
-          onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
+          onPendingVoteCountChanged: _onPendingVoteCountChanged,
         );
       case 1: // 立法(P3 接法律浏览)
         return const LegislationTab();
@@ -61,6 +107,12 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  void _onPendingVoteCountChanged(int count) {
+    widget.onPendingVoteCountChanged?.call(count);
+    if (!mounted || count == _pendingVoteCount) return;
+    setState(() => _pendingVoteCount = count);
   }
 }
 
@@ -79,7 +131,7 @@ class _StyledTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 48, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppTheme.surfaceMuted,
