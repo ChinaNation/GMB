@@ -338,7 +338,34 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - 自定义 SVG 默认使用 `ColorFilter(BlendMode.srcIn)` 接入主题色，不在页面复制固定颜色。
 - 图标只辅助识别，文字仍是业务入口的主要语义；不得用图标猜测或扩展业务能力。
 
-##### 4.1.1.7 头像与身份会员徽章
+##### 4.1.1.7 公民币标志
+
+- 公民币的中文名固定为“公民币”，币种代码固定为 `GMB`，前端金额单位继续使用“元”；
+  标志只提供视觉识别，不替代名称、代码、金额单位或任何链上字段。
+- 标志由一个近圆形开放共同体外环和右侧两条等长授权横线组成。外环在右侧以中心横向
+  负空间断开，断口上下端向内延伸为等长双横线；双横线表达公民平等与平等授权，开放
+  外环表达公民共同治理、公权来自公民授权和去中心化。
+- 构造以外环直径 `D` 为基准：外环与双横线保持统一几何体系，双横线长度、粗细必须
+  完全一致，中心负空间不得闭合；不得改成普通字母 `G`、`C=`、欧元、人民币、美元或
+  USDT 的近似符号。
+- 标志默认使用单一纯色，不使用渐变、阴影、描边叠色、透明纹理或立体效果。浅色背景
+  使用 `AppTheme.primary (#007A74)`；深色背景使用纯白；黑白印刷使用
+  `AppTheme.textPrimary (#1A2B3C)` 或纯黑。`AppTheme.primaryDark (#005A55)` 与
+  `AppTheme.primaryLight (#4DB6AC)` 只用于标志所在背景或辅助品牌表面，不在单个标志
+  内混色。
+- 独立标志四周最小安全留白为 `0.25D`；无文字标志最小显示尺寸为 16×16，和 `GMB`
+  并列时建议使用 18×18、间距 6。小于 16×16 时不得继续缩放，应仅显示文本 `GMB`。
+- 中文主组合 Logo 固定为“标志 + 公民币”，`GMB` 作为紧邻的辅助代码；使用系统中文
+  无衬线字体和清晰中等以上字重，不使用书法字、装饰字或另引品牌字体。
+- 交易页“链上支付 → 币种”固定显示“公民币标志 + GMB”，标志位于 `GMB` 左侧并与
+  文本整体居中。`GMB` 仍是无障碍与业务语义真源，标志只作装饰，不单独朗读。
+- 标志资产必须来自 `citizenapp/assets/icons/` 的定稿源文件并通过主题色消费；页面不得
+  用文本字符、emoji、Material 通用币种图标、`CustomPainter` 或临时几何代码重画。
+- 禁止拉伸、旋转、倾斜、裁切、改变双横线比例、关闭中心负空间、塞入圆形币章、添加
+  国旗花徽、链节点、人物或其它装饰；也不得把公民币标志替代 CitizenApp 产品 Logo、
+  国旗花徽、机构徽标或身份会员徽章。
+
+##### 4.1.1.8 头像与身份会员徽章
 
 - 用户头像默认是圆角方形；圆形头像只允许在已经明确采用圆形的局部入口使用，不得全局
   改成圆形。
@@ -351,7 +378,7 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - 身份与会员是两个独立信号；不得用会员档改变身份底色，也不得用徽章替代真实业务资格
   校验。
 
-##### 4.1.1.8 卡片、列表与状态
+##### 4.1.1.9 卡片、列表与状态
 
 - 并列主入口可以使用等高双列卡片；卡片高度应紧凑，只容纳图标、标题、单行说明和进入
   箭头，不得用空白撑高。
@@ -373,7 +400,7 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
   “已确认”，最终性确认后不存在回滚；只有明确的交易池拒绝或链上执行失败才显示
   “失败”。连接中断、监听超时、非最终区块回滚不得误判为失败。
 
-##### 4.1.1.9 “我的”页面定稿基线
+##### 4.1.1.10 “我的”页面定稿基线
 
 - 顶部使用真实或稳定默认背景照片，并叠加克制的深色可读性遮罩。
 - 标题“我的”置于顶部安全区域；资料行位于背景下部。
@@ -383,9 +410,9 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - “会员｜订阅 / 创作者 / 通讯录”放入一个“个人服务”分组列表；设置使用独立分组。
 - 底部五个 Tab 严格遵守本节导航硬规则，不因单页视觉稿重新生成图标。
 
-##### 4.1.1.10 四个主页面落地基线
+##### 4.1.1.11 四个主页面落地基线
 
-- “我的”页遵守 §4.1.1.9；照片头部、资料行、紧凑双列主入口和个人服务分组使用同一
+- “我的”页遵守 §4.1.1.10；照片头部、资料行、紧凑双列主入口和个人服务分组使用同一
   纵向节奏，头像右下角继续由 `IdentityBadge` 区分身份与有效会员。
 - “交易”页固定保留“通讯录 / 交易标题 / 交易钱包”顶栏、链连接状态、扫一扫与多签
   双入口、链上支付表单和交易结果统计，不添加设计稿中不存在的交易能力。
@@ -401,7 +428,7 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - 四页底部导航继续直接复用 §4.1.1.5 的现有图标、顺序、标签和选中态，页面实现不得
   各自复制或重画导航图标。
 
-##### 4.1.1.11 UI 任务验收
+##### 4.1.1.12 UI 任务验收
 
 - 设计前已读取本节、目标页面代码、`AppTheme` 和实际使用的 SVG / 图片资产。
 - 设计稿中的导航顺序、图标、身份徽章和业务入口与当前仓库一致。
@@ -466,6 +493,13 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 管理员列表、当前用户管理员身份、主账户余额和机构提案列表属于动态数据，进入详情页后分区后台读取；任何单项读取失败只能影响对应区域，不得让详情页整页转圈
 - 管理员模型统一为 `Admin { account_id, cid_number, family_name, given_name }`；公权、私权机构和个人多签使用相同 SCALE 字段顺序，但个人多签不复用机构岗位模型。机构管理员与 entity 岗位任职做左连接，无岗位管理员仍保留但不具备业务权限。
 - 更多制度账户余额只在用户展开账户区时按需读取；下拉刷新会强制刷新管理员、主余额、提案和已展开的更多账户余额
+- 公权目录快照的 `custom_account_names` 是“主账户、费用账户之外的附加账户名称”传输字段，
+  其中既可包含协议账户，也可包含普通命名账户；CitizenApp 必须统一经
+  `deriveInstitutionAccountIdByName()` 路由，禁止直接一律按 `OP_NAME` 派生。
+- 机构保留账户名固定为七个：主账户、费用账户、永久质押、安全基金、两和基金、清算账户、
+  联邦公民安全基金。联邦安全局的联邦公民安全基金必须使用
+  `OP_FCSF(0x08) + FSC cid_number` 派生并读取 finalized 余额，不得作为普通自定义账户
+  注册、过滤或展示错误的空账户。
 - 治理机构详情页使用机构提案索引和摘要缓存；公民-提案使用当前年提案缓存按可见范围过滤，默认机构码为 `NRC/NLG/NSN/NRP/NED/NJD/NSP/PRS`，再叠加当前钱包订阅公权机构的主账户命中提案。提案摘要可写入 `AppKvEntity` 复用，但公民-提案不得读取或保存全局治理索引。
 - 提案列表本地缓存只用于展示，不得作为投票资格、是否已投票、执行状态提交前校验的最终真相；这些关键判断仍必须实时读取 runtime storage
 - 提案详情页使用 `ProposalDetailLocalStore` 持久化详情快照：转账提案、多签管理提案、Runtime 升级提案进入详情页时先读本机快照；`Voting` 状态按短 TTL 后台刷新链上状态/计票/投票记录，终态提案默认只展示本地快照，手动刷新才重读链
@@ -487,7 +521,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 广场默认分类为推荐；用户可切换关注、竞选，后续可按产品需要增加最新分类。推荐流初期只做可解释规则，不做黑盒模型。
 - 广场媒体内容不存链上，不改造 CitizenChain 全节点存储媒体；`manifest.json` 存 Cloudflare R2，图片/首图经 Worker 有界校验后由服务端写 Cloudflare Images，视频全部使用绑定精确字节和最长时长的 Cloudflare Stream TUS，经签名 Images delivery / Stream playback URL 访问。
 - CitizenChain 负责发布交易入块、统一链上交易收费、竞选发布权限校验、发布索引和事件；`SquarePost` pallet index 为 `34`、发布 call index 为 `0`。同一 pallet 的订阅 call、状态、价格、扣款和自动续费契约见 P-TX-014/P-STORAGE-006。
-- Cloudflare Worker 负责设备子钥钱包登录、finalized 订阅镜像与权益门禁、链上身份资格校验、加密通讯录密文 CRUD、统一资源限制、D1 原子额度预留、R2/Images/Stream 写入、上传回执、Stream webhook 实际时长/分辨率复核、链上发布事件确认、帖子删除和 feed。登录 Session 不读取 `System.Account` 或余额；链身份/余额只在需要它的业务入口校验。`citizenapp/cloudflare/src/limits/catalog.ts` 是所有请求体、文件、账户数量、周期用量和出站载荷的唯一硬上限；环境变量只能收紧。`POST /v1/square/uploads/prepare` 在调用媒体提供商前先用未陈旧链时钟校验平台订阅，再原子预留活动上传数、订阅周期图片数和视频秒数；`complete` 核销一次，删除帖子只回收实际存储总量而不返还周期上传额度。
+- Cloudflare Worker 负责设备子钥钱包登录、finalized 订阅镜像与权益门禁、链上身份资格校验、加密通讯录密文 CRUD、统一资源限制、D1 原子额度预留、R2/Images/Stream 写入、上传回执、Stream webhook 实际时长/分辨率复核、链上发布事件确认、帖子删除和 feed。登录 Session 不读取 `System.Account` 或余额；链身份/余额只在需要它的业务入口校验。登录挑战先以 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期必须同时命中；并发重放只允许一个 Session，后续 KV 写入失败也不恢复挑战并删除孤立 Session。设备子密钥登记只接受五分钟窗口内的安全整数 `issued_at`，同一账户用条件 UPSERT 保证严格单调更新，拒绝重复与回滚。`citizenapp/cloudflare/src/limits/catalog.ts` 是所有请求体、文件、账户数量、周期用量和出站载荷的唯一硬上限；环境变量只能收紧。`POST /v1/square/uploads/prepare` 在调用媒体提供商前先用未陈旧链时钟校验平台订阅，再原子预留活动上传数、订阅周期图片数和视频秒数；`complete` 核销一次，删除帖子只回收实际存储总量而不返还周期上传额度。
 - App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
 - Worker 链上游由 `citizenapp/cloudflare/src/chain/rpc.ts` 通过 `CHAIN_URL` 与两项 `CHAIN_ID / CHAIN_SECRET` Secret 访问 Access 保护的 HTTPS 服务。内部方法白名单只包含 finalized storage、签名交易广播、区块头/区块体/规范区块哈希读取所需方法，不接收 App 指定的 method 或 RPC URL。订阅镜像必须复核完整已签名 extrinsic 的 finalized 区块包含关系和同一区块 storage；发布确认继续交叉校验链上事件、上传记录和 R2 manifest。
 - 阶段 6 已在 App 端改为正式 feed 口径：`SquarePublishService` 链上入块后调用 Worker `POST /v1/square/posts/confirm`，`SquareHomePage` 默认和分类切换均通过 `SquareApiClient.fetchFeed()` 拉取 Worker 推荐、关注、竞选 feed。
@@ -525,6 +559,13 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - `citizenapp/cloudflare/.gitignore` 必须忽略 `.dev.vars`、`.wrangler/`、`node_modules/`、`coverage/` 和 `dist/`；Cloudflare token、R2 access key、R2 secret key 不得写入仓库。
 - CitizenApp 聊天、广场、会员和媒体共用同一套 Worker 源码，但 Cloudflare 远端严格分为 staging 与 production 两套 Worker、D1、KV、R2、路由和 Secret。唯一人工发布与运行态测试入口是根 `citizenconsole/` 本地控制台；该目录属于本机私有运维工具，整目录由 Git 忽略，不得提交或推送 GitHub。生产部署逐次通过 Touch ID，Secret 只保存在 macOS Keychain 或 GitHub Secrets。会员部署验收必须使用真实 signed extrinsic、finalized 链状态、真实 Worker/D1/HTTP 和门禁结果，不再包含外部支付 Sandbox、支付 webhook 或链下订阅授权。
 - `citizenapp/cloudflare/migrations/0001_square_core.sql` 是清空数据库后的唯一重建基线，不是可重复执行的增量迁移；通讯录与充值结构已合并进 0001，当前不存在后续 migration 文件。旧 Stripe、订阅、创作者、通讯录和充值增量迁移均不允许恢复。双环境部署脚本禁止自动重放基线或未审核迁移；检测到未来新增 migration 文件时必须停止发布并单独审查。
+- CitizenConsole 使用 Xcode 签名的 `com.gmb.citizenconsole.security` 原生安全代理，
+  仅接受 Touch ID，禁止 Mac 密码回退。所有本机 Secret 使用 Data Protection Keychain、
+  `biometryCurrentSet`、`WhenUnlockedThisDeviceOnly` 与独立 access group；缺少有效签名、
+  Provisioning Profile 或 entitlement 时拒绝启动。Cloudflare 本机管理令牌固定拆分为
+  `CF_DEPLOY_TOKEN`、`CF_DATA_TOKEN`、`CF_ZT_TOKEN`，旧 Wrangler OAuth 已退出并
+  删除。充值发币是唯一可在一次 Touch ID 后随页面连接持续持有内存 Secret 的模块；
+  无超时，点击锁定、离页、断连或进程退出立即清除。
 - staging 与 production 的 `citizenapp-chat-relay*` 桶都启用全前缀 `delete-relay-ciphertext-after-1-day` lifecycle，未领取的聊天中转密文最迟按 Cloudflare 生命周期规则过期；默认 7 天终止未完成 multipart upload 规则继续保留。
 - App 本地 Isar 只缓存草稿、上传任务、feed 快照、浏览状态和推荐信号同步状态；本地缓存不得作为发布权限、认证状态或链上发布成功的最终真相。
 - 发布流程当前状态：App 校验 finalized 余额 → 钱包签名登录 Worker → Worker 校验会员和内容并原子预留额度、生成 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划 → App 提交链上发布并等待入块 → manifest 与图片以原始字节签名上传 Worker，视频上传 Stream TUS → Worker 按真实文件和 provider 结果核销额度 → complete/confirm 交叉校验链上事件、R2 manifest 与媒体索引后写正式 feed。任一步失败都不得绕过资源限制或回退旧上传路径。
@@ -616,12 +657,14 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`。
   这是公开验签身份，不是 Secret；账户余额仍由正式创世后的资金步骤单独控制，写入配置
   不得被解释为充值业务已经开放。
-- 2026-07-26 已查明此前只为 staging 保存 `TOPUP_INTENT_SECRET`；CitizenConsole
-  现已提供 CSPRNG“生成并保存”入口，production 专用 48 字节随机密钥已经一次 Touch ID
-  写入 macOS Keychain，值不回显。该密钥须等冻结资产对应的 CitizenApp/CitizenChain
-  软件 CI 成功后随 production Worker 部署同步；同步前生产充值继续失败关闭。两套 Worker
-  远端废弃的 `STRIPE_API_KEY` 与 `STRIPE_HOOK_SECRET` 已经一次 Touch ID 删除并复核
-  不存在，不得恢复任何 Stripe 接口、表或兼容分支。
+- CitizenConsole 提供 CSPRNG“生成并保存”入口，可在一次 Touch ID 后把 production
+  专用 48 字节 `TOPUP_INTENT_SECRET` 直接写入受生物识别保护的 Keychain，值不回显。
+  2026-07-26 生物识别改造验收确认：当前 Keychain 和已清理的旧服务均不存在充值发币
+  配置，包括发币私钥；历史“已写入”记录不再构成当前配置事实。页面因此保持未配置、
+  未解锁并失败关闭。`TOPUP_INTENT_SECRET` 可以通过控制台重新生成；发币私钥不能从公开
+  发币地址反推，必须由用户提供正式密钥后逐项 Touch ID 重配，AI 不得伪造、替换或从
+  其它钱包借用。两套 Worker 远端废弃的 `STRIPE_API_KEY` 与 `STRIPE_HOOK_SECRET`
+  已删除并复核不存在，不得恢复任何 Stripe 接口、表或兼容分支。
 - Worker TypeScript 绑定由 `wrangler types --env-interface CloudflareBindings` 从
   `wrangler.toml` 生成到 `worker-configuration.d.ts`。修改绑定或 vars 后必须重新生成并运行
   `npm run types:check`；不得恢复 `@cloudflare/workers-types` 手写全局绑定。Secret 不会由

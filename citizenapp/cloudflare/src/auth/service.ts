@@ -10,6 +10,7 @@ import { indexSessionToken } from './session_index';
 import {
   assertP256PublicKeyHex,
   buildDeviceBindingSigningMessage,
+  DEVICE_SKEW_MS,
   normalizeP256SignatureHex,
   verifyP256Signature
 } from './device_subkey';
@@ -143,6 +144,26 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(401, 'invalid_signature', '设备子钥签名校验失败');
   }
 
+  // 中文注释：签名通过后用条件 UPDATE 原子占用挑战。并发请求即使都在上方读到
+  // used_at=NULL，也只有一个能把 changes 改成 1；挑战一经占用便不释放。
+  const claimedAt = nowMs();
+  const claimed = await env.DB.prepare(
+    `UPDATE square_login_challenges
+      SET used_at = ?
+      WHERE challenge_id = ?
+        AND account_id = ?
+        AND used_at IS NULL
+        AND expires_at > ?`
+  )
+    .bind(claimedAt, challenge.challenge_id, accountId, claimedAt)
+    .run();
+  if ((claimed.meta?.changes ?? 0) !== 1) {
+    if (challenge.expires_at <= claimedAt) {
+      throw new HttpError(401, 'expired_challenge', '钱包登录挑战已过期');
+    }
+    throw new HttpError(401, 'used_challenge', '钱包登录挑战已使用');
+  }
+
   // Session 只证明当前设备控制已登记的钱包子钥。链账户是否存在、余额和公民资格
   // 必须由具体业务动作自行校验，不能阻塞会员页和端到端加密数据同步。
   const sessionTtlSeconds = parsePositiveInt(env.SESSION_TTL_SECONDS, 86_400);
@@ -154,14 +175,19 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     expires_at: secondsFromNow(sessionTtlSeconds)
   };
 
-  await env.DB.prepare(`UPDATE square_login_challenges SET used_at = ? WHERE challenge_id = ?`)
-    .bind(nowMs(), challenge.challenge_id)
-    .run();
-  await putKvJson(env, `square_session:${sessionToken}`, session, 'session_cache', {
-    expirationTtl: sessionTtlSeconds
-  });
-  // 记入「账户→token」索引，使注销可定向失效该账户全部会话（零残留）。
-  await indexSessionToken(env, accountId, sessionToken, sessionTtlSeconds);
+  const sessionKey = `square_session:${sessionToken}`;
+  try {
+    await putKvJson(env, sessionKey, session, 'session_cache', {
+      expirationTtl: sessionTtlSeconds
+    });
+    // 记入「账户→token」索引，使注销可定向失效该账户全部会话（零残留）。
+    await indexSessionToken(env, accountId, sessionToken, sessionTtlSeconds);
+  } catch (error) {
+    // 中文注释：KV/索引失败时烧毁挑战但删除可能已写入的孤立 Session，客户端只能
+    // 重新申请挑战，禁止恢复旧挑战造成并发重放窗口。
+    await env.SQUARE_CACHE.delete(sessionKey).catch(() => undefined);
+    throw error;
+  }
 
   return jsonResponse({
     ok: true,
@@ -185,7 +211,12 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
     throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
   }
   const p256PublicKey = assertP256PublicKeyHex(body.p256_public_key);
-  if (typeof body.issued_at !== 'number' || !Number.isFinite(body.issued_at)) {
+  const now = nowMs();
+  if (
+    typeof body.issued_at !== 'number' ||
+    !Number.isSafeInteger(body.issued_at) ||
+    Math.abs(now - body.issued_at) > DEVICE_SKEW_MS
+  ) {
     throw new HttpError(400, 'invalid_issued_at', '设备绑定时间戳不合法');
   }
   if (typeof body.binding_signature !== 'string') {
@@ -206,18 +237,21 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
     throw new HttpError(401, 'invalid_binding_signature', '设备绑定签名校验失败');
   }
 
-  const now = nowMs();
-  await env.DB.prepare(
+  const updated = await env.DB.prepare(
     `INSERT INTO square_device_subkeys
       (account_id, p256_public_key, issued_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(account_id) DO UPDATE SET
         p256_public_key = excluded.p256_public_key,
         issued_at = excluded.issued_at,
-        updated_at = excluded.updated_at`
+        updated_at = excluded.updated_at
+      WHERE excluded.issued_at > square_device_subkeys.issued_at`
   )
     .bind(accountId, p256PublicKey, body.issued_at, now, now)
     .run();
+  if ((updated.meta?.changes ?? 0) !== 1) {
+    throw new HttpError(409, 'stale_device_binding', '设备绑定证明已使用或早于当前绑定');
+  }
 
   return jsonResponse({ ok: true, account_id: accountId });
 }

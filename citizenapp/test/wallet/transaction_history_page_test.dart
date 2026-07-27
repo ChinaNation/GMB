@@ -43,6 +43,21 @@ void main() {
     expect(find.text('+1.20'), findsOneWidget);
   });
 
+  testWidgets('钱包详情最近记录可显示进入详情箭头', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LocalTxRecordTile(
+            record: _record(),
+            showChevron: true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+  });
+
   testWidgets('点击交易记录条目进入交易详情页', (tester) async {
     final record = _record(status: LocalTxStore.statusInBlock);
     await tester.pumpWidget(

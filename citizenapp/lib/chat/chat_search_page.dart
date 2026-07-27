@@ -189,36 +189,44 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        titleSpacing: 0,
-        title: TextField(
-          key: const ValueKey('chat-search-input'),
-          controller: _controller,
-          autofocus: true,
-          onChanged: (value) => unawaited(_onQueryChanged(value)),
-          decoration: const InputDecoration(
-            hintText: '搜索会话、联系人、聊天记录',
-            border: InputBorder.none,
-          ),
-        ),
+        // 导航栏：返回键(左向 chevron，走全局主题) +「搜索」标题 +「清除」文字键。
+        title: const Text('搜索'),
         actions: [
           if (hasQuery)
-            IconButton(
-              tooltip: '清空',
+            TextButton(
               onPressed: () {
                 _controller.clear();
                 unawaited(_onQueryChanged(''));
               },
-              icon: const Icon(Icons.close_rounded),
+              child: const Text('清除'),
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : !hasQuery
-              ? const _SearchHint()
-              : noHit
-                  ? const Center(child: Text('没有找到相关内容'))
-                  : ListView(
+      body: Column(
+        children: [
+          // 搜索输入框移到导航栏下方独立一行；套用全局输入框主题(填充 +
+          // 聚焦 primary 描边)，autofocus 进页即可输入。
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              key: const ValueKey('chat-search-input'),
+              controller: _controller,
+              autofocus: true,
+              onChanged: (value) => unawaited(_onQueryChanged(value)),
+              decoration: const InputDecoration(
+                hintText: '搜索会话、联系人、聊天记录',
+                prefixIcon: Icon(Icons.search_rounded, size: 20),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : !hasQuery
+                    ? const _SearchHint()
+                    : noHit
+                        ? const Center(child: Text('没有找到相关内容'))
+                        : ListView(
                       padding: const EdgeInsets.only(bottom: 24),
                       children: [
                         if (conversationHits.isNotEmpty) ...[
@@ -286,6 +294,9 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
                         ],
                       ],
                     ),
+              ),
+            ],
+          ),
     );
   }
 }

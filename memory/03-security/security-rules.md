@@ -39,8 +39,26 @@
 - 文档未更新视为未完成
 - 主要 review 问题未处理不能发布
 - 目标结构和真实运行态验收未完成时不能发布
-- 本机部署只能从根 `citizenconsole/` 控制台进入；该目录只追踪不含密钥的源码，`.runtime/`、日志、编译产物和私密文件必须被 Git 忽略。服务只监听 `127.0.0.1`，使用随机 HttpOnly 会话 Cookie、严格 Origin 校验、单任务互斥和日志脱敏。
-- 本机部署 Secret 只允许保存在 macOS Keychain，远端流水线 Secret 只允许保存在 GitHub Secrets；禁止明文 Secret 文件、浏览器回传、前端存储或日志输出。
+- 本机部署只能从根 `citizenconsole/` 控制台进入；该目录属于本机私有运维工具，整目录
+  必须由 Git 忽略，不得提交或推送；`.runtime/`、日志、编译产物和私密文件同样不得脱离
+  该边界。服务只监听 `127.0.0.1`，使用随机 HttpOnly 会话 Cookie、严格 Origin 校验、
+  单任务互斥和日志脱敏。
+- CitizenConsole 总入口和所有本机 Secret 读取、写入、删除、使用必须经 Apple 签名的
+  `com.gmb.citizenconsole.security` 原生应用调用 Touch ID；只允许
+  `deviceOwnerAuthenticationWithBiometrics`，禁止设备密码回退。Secret 必须写入
+  Data Protection Keychain，并使用 `kSecUseDataProtectionKeychain`、
+  `biometryCurrentSet`、`WhenUnlockedThisDeviceOnly` 和独立 Keychain access group；
+  签名、Provisioning Profile 或 entitlements 任一缺失时必须失败关闭。
+- 本机部署 Secret 只允许保存在上述受生物识别保护的 macOS Keychain，远端流水线
+  Secret 只允许保存在 GitHub Secrets；禁止明文 Secret 文件、浏览器回传、前端存储、
+  日志输出、普通 `security` 命令读取、整服务枚举或 Wrangler OAuth 回退。
+- `CitizenConsole · 充值发币` 是唯一允许一次 Touch ID 后在页面连接生命周期内持续持有
+  内存 Secret 的模块；不设置时间超时，点击“锁定”、离开页面、连接断开或进程退出必须
+  清除内存 Secret。其他敏感动作仍逐次 Touch ID，不得复用充值发币解锁状态。
+- Cloudflare 本机管理权限必须拆分为 `CF_DEPLOY_TOKEN`、`CF_DATA_TOKEN`、
+  `CF_ZT_TOKEN`：分别限定部署、数据和 Zero Trust/DNS 资源；三者只保存在
+  CitizenConsole 生物识别 Keychain。Worker 运行时 `CF_API_TOKEN` 保持独立，
+  不得借用管理令牌。
 - 测试部署和 CI 无需密码；production、Release 和服务器部署在启动目标命令前必须逐次通过 Touch ID 生物识别，不允许设备密码降级。
 - CitizenChain 的44个权威节点必须使用逐节点隔离的 Keychain 项保存服务器 IP、节点身份私钥和 GRANDPA 验证私钥；这些共识身份私钥永远不得共享。需要部署控制台管理的服务器统一使用 `deploy` SSH 身份，私钥只允许写入已配置节点的 Keychain 项和 GitHub Secret，不得留在 `.ssh`、仓库、明文清单或 workflow 普通输入中；本机只允许保留非机密的 `deploy.pub`。明确不使用该身份的节点不得强行写入。
 - 节点密钥只允许覆盖写入，不允许网页读取旧值；写入前必须验证私钥推导的 PeerId/GRANDPA 公钥与权威节点公开目录一致。修改节点 IP、覆盖任何节点密钥和部署节点均必须先完成 Touch ID。
@@ -50,6 +68,11 @@
 - CitizenApp production API 唯一入口为 `https://www.crcfrcn.com/api/*`；staging 唯一入口为受 Cloudflare Access 保护的 `https://www.crcfrcn.com/api-staging/*`，禁止恢复 `workers.dev`、Preview URL 或独立 API 子域名。
 - 官网浏览器请求只允许精确 Origin `https://www.crcfrcn.com`；原生 App 无 Origin 时必须使用钱包 Session、P-256 设备逐请求签名、时间窗和一次性 nonce，不能仅凭 User-Agent、IP 或客户端声明授权。
 - Cloudflare 钱包 Session 只验证已登记 P-256 设备子钥及其钱包归属，不得以 `System.Account` 是否存在、钱包余额或存在性存款作为登录门禁；需要链上身份、余额或业务资格的动作必须在各自业务入口独立校验。
+- 登录挑战必须用 D1 条件更新原子 claim：账户、挑战编号、未消费状态和有效期同时命中
+  才能签发 Session；并发重放只允许一个成功。Session/KV 写入失败时挑战仍保持已消费，
+  并清除可能写入的孤立 Session，客户端只能重新申请挑战。
+- 设备子密钥登记的 `issued_at` 必须是五分钟窗口内的安全整数，并用 D1 条件 UPSERT
+  保证同一 `account_id` 严格单调递增；相同或更旧绑定一律拒绝，禁止设备换钥回滚。
 - 首次设备绑定、设备换钥和风险升级必须通过 Turnstile；Stripe 与 Stream webhook 分别使用提供商签名，不叠加设备签名。
 - Worker 必须在解析 JSON 前限制请求体，并按 IP 哈希、钱包账户、接口类别分层限流；staging 还必须由 Cloudflare Access 限定维护账户。
 - Cloudflare WAF 规则 `citizenapp-api-edge-limit` 对 production/staging API 按 IP 执行 60 次/10 秒的边缘阻断，阻断持续 10 秒；Stripe 与 Stream 签名 webhook 必须排除，避免提供商回调被普通客户端限流误伤。

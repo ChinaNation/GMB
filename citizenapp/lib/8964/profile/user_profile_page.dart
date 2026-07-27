@@ -502,7 +502,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 foregroundColor: Colors.white,
                 elevation: 0,
                 leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.chevron_left),
                   // 背景图明暗不定：加半透明深色圆形底衬保证白色返回箭头始终可读。
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.black.withValues(alpha: 0.32),

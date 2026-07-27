@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_accounts.dart';
+import 'package:citizenapp/citizen/institution/institution_accounts_page.dart';
 import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
 import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
@@ -13,6 +14,7 @@ import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
 import 'package:citizenapp/citizen/institution/institution_role_models.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/shared/reserved_account_names.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
 import '../public/public_nav_harness.dart';
@@ -20,15 +22,24 @@ import '../public/public_nav_harness.dart';
 const _cid = 'LN001-CREG0-944805165-2026';
 const _adminAccountId =
     '0xabababababababababababababababababababababababababababababababab';
+const _fscCid = 'ZS001-FSC0W-434172688-2026';
+const _fcsfAccountId =
+    '0xc0e4ce3c11401ad661ae139081bbc797db51d0efe71df3ffb107f3dcb0064802';
 
 class _FakeChainState implements InstitutionChainState {
-  _FakeChainState({this.adminList = const [], this.proposalList = const []});
+  _FakeChainState({
+    this.adminList = const [],
+    this.proposalList = const [],
+    this.balanceByAccountId = const {},
+  });
   final List<String> adminList;
   final List<InstitutionProposalSummary> proposalList;
+  final Map<String, double> balanceByAccountId;
 
   @override
-  Future<Map<String, double>> balances(List<String> publicKeyes) async =>
-      {for (final h in publicKeyes) h: 12.5};
+  Future<Map<String, double>> balances(List<String> publicKeyes) async => {
+        for (final h in publicKeyes) h: balanceByAccountId[h] ?? 12.5,
+      };
 
   @override
   Future<List<InstitutionAdminView>> adminViews(
@@ -75,6 +86,19 @@ PublicInstitutionEntity _entity() => PublicInstitutionDto.fromJson(
       },
     ).toEntity(catalogVersion: 'v', updatedAtMillis: 0);
 
+PublicInstitutionEntity _fscEntity() => PublicInstitutionDto.fromJson(
+      <String, dynamic>{
+        'cid_number': _fscCid,
+        'cid_full_name': '总统府联邦安全局',
+        'cid_short_name': '联邦安全局',
+        'province_code': 'ZS',
+        'city_code': '001',
+        'institution_code': 'FSC',
+        'account_count': 3,
+        'custom_account_names': [kReservedNameFcsf],
+      },
+    ).toEntity(catalogVersion: 'v', updatedAtMillis: 0);
+
 Widget _wrap(Widget child) => MaterialApp(home: child);
 
 void main() {
@@ -90,6 +114,43 @@ void main() {
         accountIdText(deriveInstitutionCustomAccountId(_cid, '业务专户')),
       );
     });
+
+    test('联邦安全局第三行走 OP_FCSF，不回落普通 OP_NAME', () {
+      final rows = institutionAccountIdRows(
+        Institution.fromPublicEntity(_fscEntity()),
+      );
+      expect(
+        rows.map((r) => r.label),
+        [kReservedNameMain, kReservedNameFee, kReservedNameFcsf],
+      );
+      expect(rows, hasLength(3));
+      expect(rows.last.accountId, _fcsfAccountId);
+      expect(
+        rows.last.accountId,
+        isNot(
+          '0x1f5f77852f56e6d97b7f300d0ee883909e7ebbcd5b68d2a59c38a5520fcd1204',
+        ),
+      );
+    });
+  });
+
+  testWidgets('联邦安全局全部账户页显示 FCSF 正确余额', (tester) async {
+    final institution = Institution.fromPublicEntity(_fscEntity());
+    await tester.pumpWidget(
+      _wrap(
+        InstitutionAccountsPage(
+          institution: institution,
+          chainState: _FakeChainState(
+            balanceByAccountId: const {_fcsfAccountId: 10000000000.0},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('全部账户'), findsOneWidget);
+    expect(find.text(kReservedNameFcsf), findsOneWidget);
+    expect(find.text('10,000,000,000.00 元'), findsOneWidget);
   });
 
   testWidgets('详情页:全称/ID/主账户/余额/法代/所属地 + 账户/提案占位/管理员/提案列表', (tester) async {

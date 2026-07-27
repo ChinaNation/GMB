@@ -228,6 +228,19 @@ void main() {
     expect(addressField.controller?.text, recipient);
     expect(find.textContaining('钱包可用余额：100'), findsOneWidget);
     expect(find.text('GMB'), findsOneWidget);
+    final gmbMark = tester.widget<Image>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName ==
+                'assets/icons/gmb-mark.png',
+      ),
+    );
+    expect(gmbMark.width, 18);
+    expect(gmbMark.height, 18);
+    expect(gmbMark.color, AppTheme.primary);
+    expect(gmbMark.colorBlendMode, BlendMode.srcIn);
     expect(find.text('CNY'), findsNothing);
     expect(find.textContaining('钱包可用余额：100.00 GMB'), findsOneWidget);
   });

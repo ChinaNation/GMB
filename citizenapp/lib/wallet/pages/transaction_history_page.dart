@@ -256,10 +256,14 @@ class LocalTxRecordTile extends StatelessWidget {
     super.key,
     required this.record,
     this.onTap,
+    this.showChevron = false,
   });
 
   final LocalTxEntity record;
   final VoidCallback? onTap;
+
+  /// 钱包详情页最近记录需要显式展示进入详情的箭头；完整列表保持原布局。
+  final bool showChevron;
 
   double get _amountDeltaYuan => LocalTxStore.fenToYuan(record.amountDeltaFen);
   bool get _isExpense => _amountDeltaYuan < 0;
@@ -340,13 +344,26 @@ class LocalTxRecordTile extends StatelessWidget {
         style: const TextStyle(fontSize: 12, height: 1.5),
       ),
       isThreeLine: true,
-      trailing: Text(
-        '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: '')}',
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: _iconColor,
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: '')}',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: _iconColor,
+            ),
+          ),
+          if (showChevron) ...[
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: AppTheme.textTertiary,
+            ),
+          ],
+        ],
       ),
     );
   }

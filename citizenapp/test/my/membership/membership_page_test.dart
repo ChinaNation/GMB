@@ -13,6 +13,7 @@ import 'package:citizenapp/my/membership/membership_page.dart';
 import 'package:citizenapp/my/membership/subscription_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart' show TxPoolWatchCallback;
 import 'package:citizenapp/rpc/subscription_rpc.dart';
+import 'package:citizenapp/ui/app_theme.dart';
 
 const String _owner = '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U';
 
@@ -411,6 +412,45 @@ void main() {
     expect(find.text('299.00 元'), findsOneWidget);
     expect(find.text('999.00 元'), findsOneWidget);
     expect(find.text('1,999.00 元'), findsOneWidget);
+    for (final level in const ['freedom', 'democracy', 'spark']) {
+      final image = tester.widget<Image>(
+        find.byKey(ValueKey('membership-price-gmb-mark-$level')),
+      );
+      expect(
+          (image.image as AssetImage).assetName, 'assets/icons/gmb-mark.png');
+      expect(image.width, 18);
+      expect(image.height, 18);
+      expect(image.colorBlendMode, BlendMode.srcIn);
+    }
+  });
+
+  testWidgets('会员详情价格左侧显示公民币标志', (tester) async {
+    await _pump(
+      tester,
+      _state(),
+      prices: const {'freedom': 199900},
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('membership-front-card')),
+        matching: find.text('查看详细权益'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('会员详情'), findsOneWidget);
+    expect(find.text('1,999.00 元'), findsOneWidget);
+    final image = tester.widget<Image>(
+      find.byKey(
+        const ValueKey('membership-detail-price-gmb-mark-freedom'),
+      ),
+    );
+    expect((image.image as AssetImage).assetName, 'assets/icons/gmb-mark.png');
+    expect(image.width, 18);
+    expect(image.height, 18);
+    expect(image.color, AppTheme.textPrimary);
+    expect(image.colorBlendMode, BlendMode.srcIn);
   });
 
   testWidgets('链上未设价 → 显示占位且禁止发起订阅', (tester) async {

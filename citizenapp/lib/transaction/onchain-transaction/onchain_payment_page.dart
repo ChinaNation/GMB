@@ -811,14 +811,31 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                         decoration: _transactionFieldDecoration(
                           hintText: '',
                         ),
-                        child: const Text(
-                          'GMB',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 公民币标志只辅助识别；GMB 文本继续承担币种语义与无障碍朗读。
+                            ExcludeSemantics(
+                              child: Image.asset(
+                                'assets/icons/gmb-mark.png',
+                                width: 18,
+                                height: 18,
+                                color: AppTheme.primary,
+                                colorBlendMode: BlendMode.srcIn,
+                                filterQuality: FilterQuality.high,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'GMB',
+                              style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

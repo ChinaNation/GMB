@@ -391,6 +391,13 @@ propose_sweep_to_main / propose_relay_submitters` 四项治理 Call。新清算�
 | 机构可见提案列表 | 链上机构提案索引 + 年度联合提案索引 | 后台读取，短缓存，下拉刷新/提案详情返回后强制更新 | 提案区局部加载 |
 | 更多制度账户余额 | finalized 链上账户余额 | 用户展开后按需读取 | 不进入首屏请求 |
 
+机构目录快照的 `custom_account_names` 表示主账户、费用账户之外的附加账户名称，不等于
+“允许用户新建的普通自定义账户名”。`institutionAccountIdRows()` 必须把每个附加名称交给
+`deriveInstitutionAccountIdByName()` 统一路由：七个链上保留名分别使用其固定协议
+`op_tag`，其余非空名称才回落 `OP_NAME`。联邦安全局的“联邦公民安全基金”固定使用
+`OP_FCSF(0x08) + FSC cid_number`，不得按普通命名账户追加名称派生；余额继续从该正确
+AccountId 的 finalized `System.Account` 按需读取。
+
 治理机构详情页不得使用单个 `_loading` 等待全部链上请求。管理员、余额、提案任一读取失败时，只能影响对应区域；固定本地数据必须始终可见。余额缓存只允许写入 finalized 读取结果，不得把 best 视图余额写入同一展示缓存。
 
 ### 7.2.2 提案列表本地持久化读库
@@ -563,6 +570,8 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
 | `lib/citizen/shared/institution_info.dart + lib/transaction/organization-manage/institution_registry.dart` | 治理机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
 | `lib/transaction/organization-manage/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户 |
+| `lib/citizen/shared/reserved_account_names.dart + account_derivation.dart` | 七个机构保留账户名与名称到协议 `op_tag` 的统一派生路由 |
+| `lib/citizen/institution/institution_accounts.dart` | 统一构造固定治理账户、协议附加账户和普通命名账户的展示行 |
 | `lib/citizen/proposal/admins-change/services/institution_admin_service.dart` | 机构管理员只读门面：联合读取 admins 钱包集合与 entity 岗位任职 |
 | `lib/citizen/institution/institution_detail_page.dart` | 统一机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
 | `lib/citizen/shared/proposal/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |

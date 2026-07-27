@@ -9,6 +9,7 @@
 //   preimage = b"GMB" || op_tag || ss58.to_le_bytes() || payload
 //   OP_MAIN(0x01)/OP_FEE(0x02)/OP_SAFETY(0x04)/OP_HE(0x05): payload = cid_number
 //   OP_CLEARING(0x07): payload = cid_number
+//   OP_FCSF(0x08): payload = 联邦安全局 cid_number
 //   OP_NAME(0x00,永久冻结): payload = cid_number || account_name
 
 import 'dart:convert';
@@ -36,6 +37,10 @@ void main() {
       '0x54bad80b12cedbf7a1569fb96d18d90c4793949a356eb16c6304841af81001dd';
   const prcFee =
       '0x1f88202bf56fad5c7acfb08bc95322bb0149f8561cdb1f10a9331d46067b353a';
+  // 联邦安全局与正式创世 FCSF 账户（链上 finalized 余额账户）。
+  const fscCid = 'ZS001-FSC0W-434172688-2026';
+  const fcsfAccountId =
+      '0xc0e4ce3c11401ad661ae139081bbc797db51d0efe71df3ffb107f3dcb0064802';
 
   group('机构账户派生 golden 向量(链上注册表交叉验证)', () {
     test('国家储委会主账户 OP_MAIN', () {
@@ -80,6 +85,17 @@ void main() {
         nrcHe,
       );
     });
+
+    test('名字路由:联邦公民安全基金 OP_FCSF', () {
+      expect(
+        accountIdText(
+          deriveInstitutionAccountIdByName(fscCid, kReservedNameFcsf),
+        ),
+        fcsfAccountId,
+      );
+      expect(kReservedAccountNames, contains(kReservedNameFcsf));
+      expect(isForbiddenAccountName(kReservedNameFcsf), isTrue);
+    });
   });
 
   group('自定义账户 OP_NAME(0x00)', () {
@@ -118,6 +134,10 @@ void main() {
     test('自定义名命中受限保留名抛错', () {
       expect(
         () => deriveInstitutionCustomAccountId(nrcCid, kReservedNameMain),
+        throwsArgumentError,
+      );
+      expect(
+        () => deriveInstitutionCustomAccountId(fscCid, kReservedNameFcsf),
         throwsArgumentError,
       );
     });

@@ -29,11 +29,23 @@ class AuthStmt {
         expires_at: this.binds[3] as number,
         used_at: null
       });
-    } else if (this.sql.includes('UPDATE square_login_challenges SET used_at')) {
+      return { meta: { changes: 1 } };
+    } else if (this.sql.includes('UPDATE square_login_challenges')) {
       const row = this.db.challenges.get(this.binds[1] as string);
-      if (row) row.used_at = this.binds[0] as number;
+      const accountId = this.binds[2] as string;
+      const claimedAt = this.binds[3] as number;
+      if (
+        row &&
+        row.account_id === accountId &&
+        row.used_at === null &&
+        row.expires_at > claimedAt
+      ) {
+        row.used_at = this.binds[0] as number;
+        return { meta: { changes: 1 } };
+      }
+      return { meta: { changes: 0 } };
     }
-    return { meta: { changes: 1 } };
+    return { meta: { changes: 0 } };
   }
   async first<T>(): Promise<T | null> {
     if (this.sql.includes('FROM square_login_challenges')) {
@@ -57,10 +69,15 @@ class AuthDb {
 
 class FakeKv {
   store = new Map<string, string>();
+  failNextPut = false;
   async get(key: string): Promise<string | null> {
     return this.store.get(key) ?? null;
   }
   async put(key: string, value: string): Promise<void> {
+    if (this.failNextPut) {
+      this.failNextPut = false;
+      throw new Error('kv_write_failed');
+    }
     this.store.set(key, value);
   }
   async delete(key: string): Promise<void> {
@@ -170,5 +187,68 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
         env
       )
     ).rejects.toMatchObject({ code: 'invalid_signature' });
+  });
+
+  it('并发提交同一挑战时只签发一个 Session', async () => {
+    const { env, db, kv, keyPair } = await setup();
+    const challenge = await jsonBody(
+      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+    );
+    const signature = await signChallenge(
+      keyPair,
+      challenge.op_tag as number,
+      challenge.signing_payload_hex as string
+    );
+    const requestBody = {
+      account_id: ACCOUNT_ID,
+      challenge_id: challenge.challenge_id,
+      signature
+    };
+
+    const results = await Promise.allSettled([
+      createSession(req('/v1/square/auth/session', requestBody), env),
+      createSession(req('/v1/square/auth/session', requestBody), env)
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected).toMatchObject({ reason: { code: 'used_challenge' } });
+    expect(db.challenges.get(challenge.challenge_id as string)?.used_at).not.toBeNull();
+    expect([...kv.store.keys()].filter((key) => key.startsWith('square_session:'))).toHaveLength(1);
+  });
+
+  it('KV 写入失败后仍烧毁挑战且不留下孤立 Session', async () => {
+    const { env, db, kv, keyPair } = await setup();
+    const challenge = await jsonBody(
+      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+    );
+    const signature = await signChallenge(
+      keyPair,
+      challenge.op_tag as number,
+      challenge.signing_payload_hex as string
+    );
+    kv.failNextPut = true;
+
+    await expect(
+      createSession(
+        req('/v1/square/auth/session', {
+          account_id: ACCOUNT_ID,
+          challenge_id: challenge.challenge_id,
+          signature
+        }),
+        env
+      )
+    ).rejects.toThrow('kv_write_failed');
+    expect(db.challenges.get(challenge.challenge_id as string)?.used_at).not.toBeNull();
+    expect([...kv.store.keys()].filter((key) => key.startsWith('square_session:'))).toHaveLength(0);
+    await expect(
+      createSession(
+        req('/v1/square/auth/session', {
+          account_id: ACCOUNT_ID,
+          challenge_id: challenge.challenge_id,
+          signature
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'used_challenge' });
   });
 });

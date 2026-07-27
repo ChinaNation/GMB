@@ -798,8 +798,8 @@ const List<_ChatEntryItem> _chatEntryItems = [
   ),
 ];
 
-/// 弹窗底色：淡淡的深色（带透明度，能透出一点背景）。
-const Color _entryMenuColor = Color(0xE83D4A52);
+/// 弹窗底色：浅板岩，100% 不透明（实心遮住页面，绝不透出背景）。
+const Color _entryMenuColor = Color(0xFF66727D);
 
 class _ChatHeader extends StatelessWidget {
   const _ChatHeader({required this.onAction});
@@ -837,7 +837,8 @@ class _ChatHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+      // 右内边距略大于左侧：把圆圈加号稍向左收，配合弹窗右移让三角尖对准圆心。
+      padding: const EdgeInsets.fromLTRB(20, 18, 24, 12),
       child: Row(
         children: [
           const Expanded(
@@ -851,17 +852,23 @@ class _ChatHeader extends StatelessWidget {
             ),
           ),
           // Builder 提供按钮自身的 context，用于取其屏幕坐标做三角对齐。
+          // 圆圈与加号一起等比缩小：圈 28、描边 1.25、加号 16。
           Builder(
             builder: (buttonContext) => Container(
-              width: 40,
-              height: 40,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.primary, width: 1.5),
+                border: Border.all(color: AppTheme.primary, width: 1.25),
               ),
               child: IconButton(
                 tooltip: '新建',
                 padding: EdgeInsets.zero,
+                iconSize: 16,
+                constraints: const BoxConstraints.tightFor(
+                  width: 28,
+                  height: 28,
+                ),
                 icon: const Icon(
                   Icons.add_rounded,
                   color: AppTheme.primary,
@@ -884,24 +891,28 @@ class _ChatEntryMenu extends StatelessWidget {
   final double anchorCenterX;
   final double top;
 
-  // 内容实际占宽 = 16(左) + 20(图标) + 12(间距) + 约45(三字) + 16(右) ≈ 109，
-  // 取 126 留少量余量即可，再宽就是空荡的留白。
-  static const double _width = 126;
+  // 面板按内容自适应：16(左) + 20(图标) + 12(间距) + 约45(三字) + 22(右) ≈ 115，
+  // 取 116；右内边距(22)略大于左(16)，右侧比左侧宽一点点。
+  static const double _width = 116;
   static const double _caretWidth = 14;
   static const double _caretHeight = 7;
   static const double _edgeGap = 8;
+
+  /// 面板圆角半径（与下方 borderRadius 一致）；三角必须落在圆角以内的平边上。
+  static const double _panelRadius = 12;
 
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final screenWidth = media.size.width;
-    // 让三角顶点落在加号中心：先按"三角距菜单右边 20"反推菜单左边界，
-    // 再夹到屏幕内；夹取后用实际左边界回算三角位置，保证仍对准加号。
-    final rawLeft = anchorCenterX - _width + 20;
+    // 让三角顶点落在加号中心：按"三角距菜单右边 24"反推菜单左边界（面板整体右移，
+    // 三角与右圆角留出足够间距），再夹到屏幕内；夹取后用实际左边界回算三角位置。
+    final rawLeft = anchorCenterX - _width + 24;
     final left = rawLeft.clamp(_edgeGap, screenWidth - _width - _edgeGap);
+    // 三角中心须离两侧至少 圆角(12)+半个三角(7)，保证三角底完全落在平边、不压圆角。
     final caretCenter = (anchorCenterX - left).clamp(
-      _caretWidth,
-      _width - _caretWidth,
+      _panelRadius + _caretWidth / 2,
+      _width - _panelRadius - _caretWidth / 2,
     );
 
     return Stack(
@@ -929,15 +940,13 @@ class _ChatEntryMenu extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       for (final item in _chatEntryItems)
                         InkWell(
                           onTap: () => Navigator.of(context).pop(item.action),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
+                            // 行距收紧(上下 6)；右内边距(22)略大于左(16)。
+                            padding: const EdgeInsets.fromLTRB(16, 6, 22, 6),
                             child: Row(
                               children: [
                                 SizedBox(
@@ -973,7 +982,7 @@ class _ChatEntryMenu extends StatelessWidget {
                             ),
                           ),
                         ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                     ],
                   ),
                 ),

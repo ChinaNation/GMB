@@ -37,8 +37,8 @@ class TransactionTabPage extends StatelessWidget {
             _TransactionEntryTile(
               icon: SvgPicture.asset(
                 'assets/icons/scan-line.svg',
-                width: 18,
-                height: 18,
+                width: 22,
+                height: 22,
                 colorFilter: const ColorFilter.mode(
                   AppTheme.primary,
                   BlendMode.srcIn,
@@ -54,7 +54,7 @@ class TransactionTabPage extends StatelessWidget {
                 quarterTurns: 1,
                 child: Icon(
                   Icons.share_outlined,
-                  size: 28,
+                  size: 24,
                   color: AppTheme.primary,
                 ),
               ),

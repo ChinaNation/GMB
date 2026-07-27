@@ -5,17 +5,13 @@ import 'package:citizenapp/8964/profile/user_qr_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 钱包身份卡(钱包详情页第 2 张卡)。
+/// 钱包详情页主视觉中的身份区。
 ///
-///
-/// - 样式参照 citizenwallet 公民钱包 `citizenwallet/lib/ui/wallet_detail_page.dart:277-342`,
-///   翠绿 primaryGradient 背景 + 左图标 + 中钱包名/地址 + 右 QR 图标。
+/// - 与 [WalletOnchainBalanceCard] 共用外层纯色主视觉面板，本组件只负责身份内容。
 /// - 钱包名可点击进入编辑态;提交(回车 / onTapOutside)时通过 [onNameChanged]
 ///   回调让外层落盘。空字符串或与现值相同则回滚不报错,由编辑态自行处理。
-/// - 地址点击复制并弹 SnackBar,展示规则为短地址 `前 8...后 6`。
-/// - 右侧 QR 小图标进入全 App 唯一 [UserQrPage],内容为 QR_V1 `k=3` 用户联系码。
-/// - 编辑态 TextField 字体/光标/下划线改黑色系,避开 Material TextField 默认
-///   白底导致白字看不见的问题。展示态保持白色不变。
+/// - 地址完整展示，空间不足时从第二行左对齐换行；复制按钮独立位于分隔线左侧。
+/// - 右侧 QR 入口进入全 App 唯一 [UserQrPage],内容为 QR_V1 `k=3` 用户联系码。
 class WalletIdentityCard extends StatefulWidget {
   const WalletIdentityCard({
     super.key,
@@ -55,13 +51,6 @@ class _WalletIdentityCardState extends State<WalletIdentityCard> {
     super.dispose();
   }
 
-  /// 短地址:前 8 位 + ... + 后 6 位。地址过短时按原样返回。
-  String get _shortAddress {
-    final addr = widget.wallet.ss58Address;
-    if (addr.length <= 14) return addr;
-    return '${addr.substring(0, 8)}...${addr.substring(addr.length - 6)}';
-  }
-
   /// 提交钱包名。trim 后空或与当前相同则回滚编辑态,不调用回调。
   Future<void> _submitName(String raw) async {
     final trimmed = raw.trim();
@@ -97,123 +86,272 @@ class _WalletIdentityCardState extends State<WalletIdentityCard> {
     );
   }
 
+  /// 按最终设计稿把完整地址拆成两行：
+  /// 第一行预留复制按钮槽位，第二行使用全部可用宽度并保持左对齐。
+  ({String firstLine, String secondLine}) _splitAddressForTwoLines(
+    double availableWidth,
+    TextStyle style,
+  ) {
+    final address = widget.wallet.ss58Address;
+    const copySlotWidth = 36.0;
+
+    bool fits(String text, double width) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      return painter.width <= width;
+    }
+
+    if (fits(address, availableWidth - copySlotWidth)) {
+      return (firstLine: address, secondLine: '');
+    }
+
+    var splitAt = 1;
+    for (var split = 1; split < address.length; split += 1) {
+      if (fits(address.substring(0, split), availableWidth - copySlotWidth)) {
+        // 第一行必须尽量排满，第二行只承接第一行确实放不下的剩余地址。
+        splitAt = split;
+      } else {
+        break;
+      }
+    }
+
+    return (
+      firstLine: address.substring(0, splitAt),
+      secondLine: address.substring(splitAt),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: AppTheme.primaryGradient,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primary.withAlpha(40),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
+    return Padding(
+      key: const ValueKey('wallet-identity-section'),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 左:钱包图标 48x48 半透明白底。
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(30),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.account_balance_wallet_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          // 中:钱包名(点击可编辑) + 短地址(点击复制)。
+          // 左侧不放钱包装饰图标，账户信息直接与主视觉的左边距对齐。
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _isEditingName
-                    ? TextField(
-                        controller: _nameController,
-                        autofocus: true,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                        ),
-                        cursorColor: Colors.black87,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 4),
-                          enabledBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black54),
-                          ),
-                          focusedBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(color: Colors.black54),
-                          ),
-                        ),
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: _submitName,
-                        onTapOutside: (_) {
-                          _submitName(_nameController.text);
-                        },
-                      )
-                    : GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _isEditingName = true;
-                            _nameController.text = _walletName;
-                          });
-                        },
-                        child: Text(
-                          _walletName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                SizedBox(
+                  height: 44,
+                  child: _isEditingName
+                      ? TextField(
+                          controller: _nameController,
+                          autofocus: true,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                           ),
+                          cursorColor: Colors.white,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 8),
+                            enabledBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.white.withAlpha(150),
+                              ),
+                            ),
+                            focusedBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(color: Colors.white),
+                            ),
+                          ),
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: _submitName,
+                          onTapOutside: (_) {
+                            _submitName(_nameController.text);
+                          },
+                        )
+                      : Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusSm),
+                            onTap: () {
+                              setState(() {
+                                _isEditingName = true;
+                                _nameController.text = _walletName;
+                              });
+                            },
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _walletName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.edit_outlined,
+                                  size: 19,
+                                  color: Colors.white,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                const SizedBox(height: 4),
-                GestureDetector(
-                  onTap: _copyAddress,
-                  child: Text(
-                    _shortAddress,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withAlpha(180),
-                      fontFamily: 'monospace',
+                ),
+                Material(
+                  color: Colors.transparent,
+                  child: SizedBox(
+                    height: 44,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final addressStyle = TextStyle(
+                          fontSize: 12,
+                          height: 1.35,
+                          color: Colors.white.withAlpha(190),
+                          fontFamily: 'monospace',
+                        );
+                        final lines = _splitAddressForTwoLines(
+                          constraints.maxWidth,
+                          addressStyle,
+                        );
+                        return Stack(
+                          children: [
+                            Positioned.fill(
+                              child: InkWell(
+                                borderRadius:
+                                    BorderRadius.circular(AppTheme.radiusSm),
+                                onTap: _copyAddress,
+                              ),
+                            ),
+                            Positioned(
+                              left: 0,
+                              right: 36,
+                              top: 0,
+                              height: 28,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  lines.firstLine,
+                                  key: const ValueKey(
+                                    'wallet-identity-address-line-1',
+                                  ),
+                                  maxLines: 1,
+                                  textAlign: TextAlign.left,
+                                  style: addressStyle,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 22,
+                              height: 22,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  lines.secondLine,
+                                  key: const ValueKey(
+                                    'wallet-identity-address-line-2',
+                                  ),
+                                  maxLines: 1,
+                                  textAlign: TextAlign.left,
+                                  style: addressStyle,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              // 向左校准 1.25 逻辑像素，使原子图形的可见右缘与
+                              // 二维码原子图形的可见左缘到分隔线完全等距。
+                              right: 1.25,
+                              top: 0,
+                              child: Semantics(
+                                key: const ValueKey(
+                                  'wallet-identity-copy-button',
+                                ),
+                                button: true,
+                                label: '复制钱包地址',
+                                child: Tooltip(
+                                  message: '复制钱包地址',
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(
+                                        AppTheme.radiusSm,
+                                      ),
+                                      onTap: _copyAddress,
+                                      child: SizedBox(
+                                        width: 28,
+                                        height: 28,
+                                        child: Transform.translate(
+                                          // 最终确认稿只下移可见图标，不改变原子形状、
+                                          // 点击热区、横向位置或与竖线的视觉等距。
+                                          offset: const Offset(0, 4),
+                                          child: Icon(
+                                            Icons.copy_outlined,
+                                            key: const ValueKey(
+                                              'wallet-identity-copy-icon',
+                                            ),
+                                            size: 12,
+                                            color: Colors.white.withAlpha(210),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          // 右:QR 小图标 36x36,点击进入全 App 唯一用户二维码页。
-          GestureDetector(
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute<void>(
-                builder: (_) => UserQrPage(
-                  accountId: widget.wallet.accountId,
-                  contactName: _walletName,
+          // 按真机可见图形边缘校准：复制图标到竖线与竖线到二维码图标等距。
+          const SizedBox(width: 20),
+          // 方案 2 明确使用竖线分开账户信息和二维码入口。
+          Container(
+            key: const ValueKey('wallet-identity-qr-divider'),
+            width: 1,
+            height: 48,
+            color: Colors.white.withAlpha(55),
+          ),
+          const SizedBox(width: 16),
+          // 右：二维码仍进入现有用户二维码页，48×48 满足点击目标。
+          Material(
+            key: const ValueKey('wallet-identity-qr-button'),
+            // 最终确认稿删除二维码白色底，只保留透明点击热区和白色原子图标。
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => UserQrPage(
+                    accountId: widget.wallet.accountId,
+                    contactName: _walletName,
+                  ),
                 ),
               ),
-            ),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(30),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.qr_code_rounded,
-                color: Colors.white,
-                size: 20,
+              child: const SizedBox(
+                width: 48,
+                height: 48,
+                child: Icon(
+                  Icons.qr_code_rounded,
+                  key: ValueKey('wallet-identity-qr-icon'),
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
             ),
           ),

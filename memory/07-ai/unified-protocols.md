@@ -276,7 +276,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - HTTP API 字段：
   - `GET /health` 响应：`ok`、`service`、`storage_backend`、`content_on_chain`
   - `POST /v1/square/auth/challenge` 请求：`account_id`；响应：`challenge_id`、`account_id`、`signing_payload`、`expires_at`
-  - `POST /v1/square/auth/session` 请求：`account_id`、`challenge_id`、`signature`；响应：`session_token`、`account_id`、`expires_at`。会话只验证已登记 P-256 设备子钥对挑战的签名及钱包归属，不读取 `System.Account`，不要求链上账户已经存在，也不以余额或存在性存款作为 Cloudflare 登录门禁。
+  - `POST /v1/square/auth/session` 请求：`account_id`、`challenge_id`、`signature`；响应：`session_token`、`account_id`、`expires_at`。会话只验证已登记 P-256 设备子钥对挑战的签名及钱包归属，不读取 `System.Account`，不要求链上账户已经存在，也不以余额或存在性存款作为 Cloudflare 登录门禁。挑战必须通过 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期同时命中才允许继续；并发请求只允许一个成功。KV Session 或索引写入失败时挑战保持已消费，并删除可能写入的孤立 Session，不得恢复旧挑战。
+  - `POST /v1/square/auth/device/register` 的 `issued_at` 必须是服务端当前时间前后五分钟内的安全整数；同一 `account_id` 的 D1 条件 UPSERT 只接受严格更大的 `issued_at`，重复、旧绑定和并发回滚返回冲突，不得覆盖当前设备子密钥。
   - `GET /v1/square/membership` 请求：Bearer `session_token`；响应：`plans[]`、`membership`、`subscription_active`、`active`。`plans[]` 只返回权益配额和平台档位标识，不返回价格；平台价格由 CitizenApp 直接读取 finalized `PlatformPrice`。`membership` 镜像字段至少包含 `membership_level`、`subscription_status`、`last_charged_price_fen`、`last_charged_at`、`paid_until`、`pending_plan`、`updated_at`。
   - `POST /v1/square/membership/confirm` 请求：Bearer `session_token`，`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`action`(`subscribe`/`cancel`/`change`)，订阅或换档时另带 `membership_level`；响应：finalized 链上平台订阅镜像。account_id 只从 session 派生，Worker 必须复算交易哈希、严格解码签名者与调用参数、确认完整 extrinsic 位于指定 finalized 主链区块，并读取同一区块订阅状态；禁止采信请求自报价格、状态或期限。该镜像路由只用 Bearer，不生成第二次账户或设备签名。
   - `GET /v1/square/creator/plan` 与 `GET /v1/square/creator/plan/{creator_account_id}`：返回创作者展示资料和链上 `tier_id` 引用；名称、说明、权益文案不进入链上，扣款价格不由 D1 返回为真源。

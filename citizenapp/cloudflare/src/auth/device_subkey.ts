@@ -18,6 +18,9 @@ import {
 
 const P256_PUBKEY_BYTES = 65; // 0x04 || X(32) || Y(32)
 const P256_SIG_BYTES = 64; // r(32) || s(32)
+// 中文注释：设备绑定证明与普通设备请求使用同一五分钟时间偏差口径，防止长期保存
+// 的旧绑定签名在设备轮换后重新覆盖当前子钥。
+export const DEVICE_SKEW_MS = 5 * 60 * 1000;
 
 export interface DeviceBindingInput {
   account_id: string;

@@ -1155,26 +1155,49 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         body: RefreshIndicator(
           onRefresh: _onPullRefresh,
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.zero,
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              // 第 1 张卡:钱包身份卡(钱包名 + 短地址 + QR 入口)。
-              WalletIdentityCard(
-                wallet: widget.wallet,
-                onNameChanged: _saveWalletName,
+              // 方案 2：身份与链上余额共用全宽纯色主视觉，不恢复旧渐变和卡片堆叠。
+              Container(
+                color: AppTheme.primary,
+                child: Column(
+                  children: [
+                    WalletIdentityCard(
+                      wallet: widget.wallet,
+                      onNameChanged: _saveWalletName,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Divider(
+                        height: 1,
+                        color: Colors.white.withAlpha(55),
+                      ),
+                    ),
+                    WalletOnchainBalanceCard(
+                      key: _balanceCardKey,
+                      wallet: widget.wallet,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              // 第 2 张卡:充值 / 提现 / 余额(3 列,余额为静态展示)。
+              // 三项操作紧接主视觉，保留原跳转和清算行绑定状态。
               WalletActionCard(key: _actionCardKey, wallet: widget.wallet),
-              const SizedBox(height: 16),
-              // 第 3 张卡:链上 total 余额(free + reserved)。
-              WalletOnchainBalanceCard(
-                key: _balanceCardKey,
-                wallet: widget.wallet,
+              const SizedBox(height: 24),
+              // 交易区使用一张完整白色卡片；标题和单条记录入口保持不变。
+              Padding(
+                key: const ValueKey('wallet-transaction-section-padding'),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration:
+                      AppTheme.cardDecoration(radius: AppTheme.radiusMd),
+                  child: Column(
+                    children: _buildTransactionHistorySection(),
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
-              // 交易记录区块标题进入完整列表，单条记录进入该笔详情。
-              ..._buildTransactionHistorySection(),
             ],
           ),
         ),
@@ -1197,7 +1220,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           );
         },
         child: const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
+          padding: EdgeInsets.fromLTRB(16, 14, 12, 14),
           child: Row(
             children: [
               Text(
@@ -1216,7 +1239,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       const Divider(height: 1),
       if (_recentRecords.isEmpty)
         const Padding(
-          padding: EdgeInsets.symmetric(vertical: 32),
+          padding: EdgeInsets.symmetric(vertical: 36),
           child: Center(
             child: Text(
               '暂无交易记录',
@@ -1232,6 +1255,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               // 标题行进入完整列表；单条最近记录直接进入该笔交易详情。
               LocalTxRecordTile(
                 record: record,
+                showChevron: true,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(

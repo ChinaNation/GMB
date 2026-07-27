@@ -557,7 +557,7 @@ class _MembershipTierCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildHeader(tierColor, onTier, isCurrentTier, priceFen),
+          _buildHeader(level, tierColor, onTier, isCurrentTier, priceFen),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -665,8 +665,11 @@ class _MembershipTierCard extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(
-      Color tierColor, Color onTier, bool isCurrentTier, int? priceFen) {
+  Widget _buildHeader(String level, Color tierColor, Color onTier,
+      bool isCurrentTier, int? priceFen) {
+    // 自由金底使用规范允许的主文字色；民主蓝/薪火红深色底使用纯白标志。
+    final gmbMarkColor =
+        level == 'freedom' ? AppTheme.textPrimary : Colors.white;
     return Container(
       color: tierColor,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -724,13 +727,31 @@ class _MembershipTierCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                priceFen == null ? '—' : fenToYuanMoneyLabel(priceFen),
-                style: TextStyle(
-                  color: onTier,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 标志只辅助识别，价格文本继续承担金额和无障碍语义。
+                  ExcludeSemantics(
+                    child: Image.asset(
+                      'assets/icons/gmb-mark.png',
+                      key: ValueKey('membership-price-gmb-mark-$level'),
+                      width: 18,
+                      height: 18,
+                      color: gmbMarkColor,
+                      colorBlendMode: BlendMode.srcIn,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    priceFen == null ? '—' : fenToYuanMoneyLabel(priceFen),
+                    style: TextStyle(
+                      color: onTier,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
               if (priceFen != null)
                 Text(

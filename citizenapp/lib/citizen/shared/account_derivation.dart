@@ -148,7 +148,7 @@ Uint8List deriveInstitutionClearingAccountId(
 ///
 /// 字节对齐链端:account_name 取原始字节不 trim;空名/主/费/制度专属名一律拒绝
 /// (对齐链端注册策略 is_registrable_custom_name:空→EmptyAccountName,
-/// 主/费走各自 op_tag,质押/安全/两和禁注册)。
+/// 主/费走各自 op_tag,其余协议账户名禁注册)。
 Uint8List deriveInstitutionCustomAccountId(
   String cidNumber,
   String accountName, {
@@ -165,8 +165,8 @@ Uint8List deriveInstitutionCustomAccountId(
 }
 
 /// 按 account_name 路由派生机构账户 id —— 镜像 onchina `accounts/derive.rs` 单一源:
-/// 主/费/质押/安全基金/两和基金 → 各自 op_tag(payload 不含名字);其他非空名
-/// → OP_NAME(payload 追加名字)。空名抛错。
+/// 主/费/质押/安全基金/两和基金/清算账户/联邦公民安全基金 → 各自 op_tag
+/// (payload 不含名字);其他非空名 → OP_NAME(payload 追加名字)。空名抛错。
 Uint8List deriveInstitutionAccountIdByName(
   String cidNumber,
   String accountName, {
@@ -182,6 +182,7 @@ Uint8List deriveInstitutionAccountIdByName(
     kReservedNameSafetyFund => (kOpSafetyFund, false),
     kReservedNameHe => (kOpHe, false),
     kReservedNameClearing => (kOpClearing, false),
+    kReservedNameFcsf => (kOpFcsf, false),
     _ => (kOpName, true),
   };
   final payload = <int>[

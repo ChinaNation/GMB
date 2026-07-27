@@ -1,7 +1,7 @@
 # 创世发行分账给六个指定账户
 
-> 状态：已完成并随 2026-07-26 正式创世生效；分账、管理员公钥、全量机构与 FCSF
-> 权限均已纳入正式创世状态。
+> 状态：已完成并随 2026-07-26 正式创世生效；CitizenApp 的 FCSF 协议账户派生与余额
+> 展示错误已修复并通过全量验收，任务重新归档。
 
 ## 任务目标
 
@@ -134,3 +134,58 @@
 - 重生 `local-docs.generated.ts` + 重新构建官网 dist;链上 `genesis.rs` 未动(仅文字口径)。
 
 ## 状态:分账+公钥+全量机构核验+去重断言+FCSF 支出 全部完成并验收
+
+## 2026-07-26 CitizenApp 机构账户修复
+
+### 只读诊断结论
+
+- 正式链 finalized `#6` 的 FCSF 正确账户
+  `0xc0e4ce3c11401ad661ae139081bbc797db51d0efe71df3ffb107f3dcb0064802`
+  实际余额为 `1_000_000_000_000` 分（100 亿元），资金没有丢失。
+- CitizenApp 已声明 `kOpFcsf = 0x08`，但账户名路由漏掉“联邦公民安全基金”，并把链快照
+  `custom_account_names` 中的该协议账户按普通 `OP_NAME` 派生为
+  `0x1f5f77852f56e6d97b7f300d0ee883909e7ebbcd5b68d2a59c38a5520fcd1204`；
+  该错误账户未激活，所以 App 显示没有余额。
+- runtime、OnChina、节点读取、正式创世余额均正确；本次不修改 runtime、不重新创世、
+  不补发、不转账、不修改订阅逻辑。
+
+### 预计修改目录
+
+- `citizenapp/lib/citizen/shared/`：补齐 FCSF 保留账户名和 `OP_FCSF` 名称派生路由；
+  涉及 Dart 代码、中文注释和旧“6 个保留名”残留清理。
+- `citizenapp/lib/citizen/institution/`：机构附加账户统一经名称路由构造，协议账户不再按
+  普通自定义账户过滤或派生；涉及 Dart 代码和中文注释。
+- `citizenapp/test/governance/shared/`：增加 FCSF 链端固定 AccountId 派生回归测试；
+  仅涉及测试代码。
+- `citizenapp/test/citizen/institution/`：增加联邦安全局三账户、基金 AccountId 和
+  100 亿元余额页面验收；仅涉及测试代码。
+- `memory/05-modules/citizenapp/governance/`、`memory/01-architecture/citizenapp/`：
+  更新机构账户名称路由、链快照和按需余额读取边界；仅涉及文档和旧口径清理。
+- `memory/08-tasks/`：复用并恢复本任务卡，记录修复与真实验收结果；仅涉及文档。
+
+### 验收边界
+
+- Flutter 派生测试必须得到链上正确 FCSF AccountId，且该保留名禁止作为普通自定义账户注册。
+- 联邦安全局账户列表必须固定为主账户、费用账户、联邦公民安全基金三个账户。
+- 使用本地正式链 RPC 读取正确账户的 finalized 余额，并在真实 Flutter 页面显示
+  `10,000,000,000.00 元`。
+- 不执行真实购买、订阅、转账或任何链上写操作。
+
+### 修复结果与真实验收
+
+- `reserved_account_names.dart` 已补齐第七个保留名“联邦公民安全基金”，并纳入禁止普通
+  自定义注册规则。
+- `account_derivation.dart` 已把该名称路由到 `kOpFcsf(0x08)`；普通非空名称仍唯一回落
+  `OP_NAME`，没有兼容旧错误账户。
+- `institution_accounts.dart` 已将快照附加账户统一交给名称路由，联邦安全局账户列表稳定为
+  主账户、费用账户、联邦公民安全基金三行；固定治理账户显示名同时统一为链上保留名。
+- 定向 Flutter 测试：`18 passed / 0 failed`，包含 FCSF 固定 AccountId、禁止自定义注册、
+  联邦安全局三账户和页面显示 `10,000,000,000.00 元`。
+- CitizenApp 全量测试：`809 passed / 5 skipped / 0 failed`；5 项为仓库原有条件跳过。
+- CitizenApp 全量 `flutter analyze`：`No issues found`。
+- 正式链只读验收：finalized `#6`
+  (`0xf1375204579d3e73f407388a639f71f388a7c2b07bda93f241cac82c79d4763b`) 的正确账户
+  `0xc0e4ce3c11401ad661ae139081bbc797db51d0efe71df3ffb107f3dcb0064802`
+  余额为 `1_000_000_000_000` 分（100 亿元）；CitizenApp 中枢省目录快照同步确认
+  `account_count=3` 和唯一附加名称“联邦公民安全基金”。
+- 未修改 runtime、OnChina、节点、创世数据或订阅逻辑；未执行转账、购买、订阅或其它链上写操作。

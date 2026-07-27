@@ -3,19 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_onchain_balance_card.dart';
 
-/// WalletOnchainBalanceCard 基础渲染测试(v4 删刷新按钮)。
+/// WalletOnchainBalanceCard 方案 2 基础渲染测试。
 ///
 /// 布局变化:
 /// - 删除了卡内刷新按钮(整个 IconButton 体系),改由外层 RefreshIndicator
 ///   下拉触发,通过 [GlobalKey<WalletOnchainBalanceCardState>] 调 [refresh()]。
-/// - 第 1 行:仅标题「链上余额」。
-/// - 第 2 行:金额(左)+ 「GMB」(右下,与金额 baseline 对齐)。
+/// - 第 1 行:标题「链上余额」。
+/// - 第 2 行:金额 + 唯一单位「元」。
 ///
 /// ChainRpc 走 smoldot 原生通道,单元测试环境没有轻节点;本轮只验证:
 /// - 卡片能挂载,不崩溃
-/// - 标题 + GMB 文案均可见
+/// - 标题 + 单一金额单位均可见
 /// - 整卡内无 IconButton(刷新按钮已删)
-/// - 错误态下可通过 GestureDetector 点击触发 refresh
+/// - 错误态下可通过 InkWell 点击触发 refresh
 void main() {
   const wallet = WalletProfile(
     walletIndex: 0,
@@ -59,7 +59,8 @@ void main() {
     expect(find.byType(IconButton), findsNothing);
   });
 
-  testWidgets('title and GMB labels visible', (tester) async {
+  testWidgets('loading state shows title and exactly one yuan label',
+      (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -67,10 +68,31 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
-    // 标题固定在第 1 行,金额单位「元」固定在第 2 行右下角,均需可见。
+    // 初始加载帧中单位与占位金额分开渲染，且单位只允许出现一次。
     expect(find.text('链上余额'), findsOneWidget);
     expect(find.text('元'), findsOneWidget);
+  });
+
+  testWidgets('方案 2 余额区保持紧凑高度', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: WalletOnchainBalanceCard(wallet: wallet),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('wallet-onchain-balance-section')),
+          )
+          .height,
+      123,
+    );
   });
 
   testWidgets('GlobalKey<WalletOnchainBalanceCardState> can call refresh',

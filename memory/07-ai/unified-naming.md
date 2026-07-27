@@ -307,6 +307,9 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 薪火会员档 | `spark` | API / D1 / chain enum | 三档 `membership_level` 之一（ADR-036 取代旧 `voting`/`candidate` 会员档）；与身份解耦，不绑定 `identity_level` |
 | Cloudflare 账户 ID | `CF_ACCOUNT_ID` | Worker secret | R2、Images、Stream 共用的唯一 Cloudflare 账户字段 |
 | Cloudflare API Token | `CF_API_TOKEN` | Worker secret | Worker 调用 Images / Stream API 的令牌 |
+| Cloudflare 部署令牌 | `CF_DEPLOY_TOKEN` | CitizenConsole Keychain | Worker、Worker Secret、Routes 与 Pages 最小权限；只允许部署用途 |
+| Cloudflare 数据令牌 | `CF_DATA_TOKEN` | CitizenConsole Keychain | D1、KV、R2 与 Queues 最小权限；只允许数据资源用途 |
+| Cloudflare零信任令牌 | `CF_ZT_TOKEN` | CitizenConsole Keychain | Tunnel、Access 与限定 Zone DNS 最小权限；只允许 Zero Trust 与 DNS 用途 |
 | R2 Access ID | `R2_ACCESS_ID` | Worker secret | 仅供 Worker 内部签发冷归档回灌只读地址 |
 | R2 Secret Key | `R2_SECRET_KEY` | Worker secret | 仅供 Worker 内部签发冷归档回灌只读地址 |
 | R2 Bucket | `R2_BUCKET` | Worker var | R2 bucket 名称 |

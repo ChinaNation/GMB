@@ -1,10 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/auth/wallet_signature', () => ({
+  verifyWalletSignature: vi.fn()
+}));
+vi.mock('../src/security/turnstile', () => ({
+  verifyTurnstile: vi.fn()
+}));
+
 import {
   assertP256PublicKeyHex,
   buildDeviceBindingSigningMessage,
+  DEVICE_SKEW_MS,
   normalizeP256SignatureHex,
   verifyP256Signature
 } from '../src/auth/device_subkey';
+import { registerDeviceSubkey } from '../src/auth/service';
+import { verifyWalletSignature } from '../src/auth/wallet_signature';
+import type { Env } from '../src/types';
 import {
   OP_SIGN_SQUARE_DEVICE_BIND,
   bytesToHex,
@@ -29,6 +41,59 @@ const DEVICE_BIND_INPUT = {
 };
 const DEVICE_BIND_GOLDEN_HEX =
   '0089e293c8ef5c4d7bb5820e18dcb0bdac4eb374eaf6675c1bc2e53e50c3b960';
+const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
+
+interface StoredSubkey {
+  account_id: string;
+  p256_public_key: string;
+  issued_at: number;
+  created_at: number;
+  updated_at: number;
+}
+
+class DeviceStmt {
+  private binds: unknown[] = [];
+  constructor(private readonly rows: Map<string, StoredSubkey>) {}
+  bind(...args: unknown[]): DeviceStmt {
+    this.binds = args;
+    return this;
+  }
+  async run(): Promise<{ meta: { changes: number } }> {
+    const accountId = this.binds[0] as string;
+    const issuedAt = this.binds[2] as number;
+    const current = this.rows.get(accountId);
+    if (current && issuedAt <= current.issued_at) {
+      return { meta: { changes: 0 } };
+    }
+    this.rows.set(accountId, {
+      account_id: accountId,
+      p256_public_key: this.binds[1] as string,
+      issued_at: issuedAt,
+      created_at: current?.created_at ?? (this.binds[3] as number),
+      updated_at: this.binds[4] as number
+    });
+    return { meta: { changes: 1 } };
+  }
+}
+
+class DeviceDb {
+  readonly rows = new Map<string, StoredSubkey>();
+  prepare(): DeviceStmt {
+    return new DeviceStmt(this.rows);
+  }
+}
+
+function registerRequest(issuedAt: number, publicKey = `0x04${'a'.repeat(128)}`): Request {
+  return new Request('https://worker.test/v1/square/auth/device/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      account_id: DEVICE_BIND_INPUT.account_id,
+      p256_public_key: publicKey,
+      issued_at: issuedAt,
+      binding_signature: `0x${'1'.repeat(128)}`
+    })
+  });
+}
 
 describe('buildDeviceBindingSigningMessage', () => {
   it('is signing_message(OP_SIGN_SQUARE_DEVICE_BIND, accountId ‖ pubkey ‖ issued_at)', () => {
@@ -112,5 +177,47 @@ describe('verifyP256Signature', () => {
     expect(
       await verifyP256Signature(message, '0'.repeat(128), '05' + '0'.repeat(128))
     ).toBe(false);
+  });
+});
+
+describe('registerDeviceSubkey 原子单调更新', () => {
+  beforeEach(() => {
+    mockVerify.mockReset();
+    mockVerify.mockResolvedValue(true);
+  });
+
+  it('只接受时间窗内且严格更新的设备绑定', async () => {
+    const db = new DeviceDb();
+    const env = { DB: db } as unknown as Env;
+    const now = Date.now();
+    await expect(registerDeviceSubkey(registerRequest(now), env)).resolves.toBeInstanceOf(Response);
+    expect(db.rows.get(DEVICE_BIND_INPUT.account_id)?.issued_at).toBe(now);
+
+    await expect(
+      registerDeviceSubkey(registerRequest(now), env)
+    ).rejects.toMatchObject({ code: 'stale_device_binding' });
+    await expect(
+      registerDeviceSubkey(registerRequest(now - 1), env)
+    ).rejects.toMatchObject({ code: 'stale_device_binding' });
+
+    await expect(
+      registerDeviceSubkey(registerRequest(now + 1, `0x04${'b'.repeat(128)}`), env)
+    ).resolves.toBeInstanceOf(Response);
+    expect(db.rows.get(DEVICE_BIND_INPUT.account_id)?.p256_public_key).toBe(
+      `04${'b'.repeat(128)}`
+    );
+  });
+
+  it('拒绝非安全整数以及超出五分钟窗口的时间戳', async () => {
+    const env = { DB: new DeviceDb() } as unknown as Env;
+    await expect(
+      registerDeviceSubkey(registerRequest(Date.now() - DEVICE_SKEW_MS - 1), env)
+    ).rejects.toMatchObject({ code: 'invalid_issued_at' });
+    await expect(
+      registerDeviceSubkey(registerRequest(Date.now() + DEVICE_SKEW_MS + 1_000), env)
+    ).rejects.toMatchObject({ code: 'invalid_issued_at' });
+    await expect(
+      registerDeviceSubkey(registerRequest(Number.MAX_SAFE_INTEGER + 1), env)
+    ).rejects.toMatchObject({ code: 'invalid_issued_at' });
   });
 });

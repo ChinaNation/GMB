@@ -124,4 +124,33 @@
   加强独立币种符号识别，避免被理解为普通 `C=` 或欧元变体。
 - 修订稿：已完成第二轮精修并在当前会话展示；圆环端点与平等双横线已合并为单一几何
   字形，待用户确认。
-- UI 设计标准写入：待修订稿确认后执行。
+- 最终定版范围：以用户指定的右侧图标为基础，统一完善品牌配色、独立币种图标、中文
+  Logo、`GMB` 组合标志和反白应用，先生成定版展示图供用户确认。
+- 最终定版展示图：已在当前会话展示，包含主组合 Logo、独立货币标志、黑色单色版、
+  右侧 App 图标、反白标志和现有 UI 色板；待用户最终确认。
+- 用户最终确认：已确认定版，并要求在“公民 App → 交易 → 链上交易 → 币种”中的
+  `GMB` 左侧显示公民币标志。
+- UI 设计标准写入：已完成，新增公民币标志的语义、构造、色彩、留白、最小尺寸、
+  组合 Logo、交易页使用方式和禁用规范。
+- 预计实现文件：
+  - `citizenapp/assets/icons/gmb-mark.png`：从用户确认的定稿视觉生成透明单色公民币标志，
+    由 Flutter 通过 `ColorFilter` 接入主题色；涉及新增文件、Git 跟踪，创建前等待用户
+    按仓库规则单独确认。
+  - `citizenapp/pubspec.yaml`：注册公民币标志资产；涉及配置。
+  - `citizenapp/lib/transaction/onchain-transaction/onchain_payment_page.dart`：在币种
+    `GMB` 左侧显示 18×18 标志；涉及 Flutter UI 代码。
+  - `citizenapp/test/ui/transaction_tab_page_test.dart`：补充币种标志存在性与 `GMB`
+    文案不被替代的验收；涉及现有测试代码。
+  - `citizenapp/design-qa.md`：记录确认稿与真实页面截图的视觉对照和最终通过状态；涉及
+    新增文件、Git 跟踪，创建前等待用户按仓库规则单独确认。
+- 新增文件确认：用户已明确允许创建 `gmb-mark.png` 与 `design-qa.md`。
+- Flutter 落地：已在币种 `GMB` 左侧接入 18×18 公民币标志，使用
+  `AppTheme.primary` 单色着色并排除重复无障碍朗读；币种代码和业务语义未改变。
+- 自动验收：`flutter test test/ui/transaction_tab_page_test.dart` 与目标文件
+  `flutter analyze` 均通过。
+- 真实页面验收：已在 Pixel 8a（Android 16）安装并运行真实 CitizenApp，进入“交易”
+  页面，等待轻节点显示“公民链 已更新”后核对币种栏；标志与 `GMB` 整体居中、边缘
+  清楚、颜色和间距符合定稿规范，运行日志没有本次接入相关异常。
+- 视觉 QA：`citizenapp/design-qa.md` 已记录全屏与币种栏局部同图对照，
+  `final result: passed`。
+- 追加任务状态：已完成。

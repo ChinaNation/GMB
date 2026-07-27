@@ -363,8 +363,14 @@ class _ChainProgressBannerState extends State<ChainProgressBanner>
       decoration: AppTheme.cardDecoration(radius: AppTheme.radiusSm),
       child: Row(
         children: [
-          AnimatedBuilder(
-            animation: _breathingController,
+          // 左段(呼吸点+公民链状态)整体放进一个 Expanded，与右段(区块)等宽；
+          // 竖线两侧再留等宽间距 → 竖线落在卡片几何正中，
+          // 与下方扫一扫/多签账户栏正中的竖线上下对齐同一垂直线。
+          Expanded(
+            child: Row(
+              children: [
+                AnimatedBuilder(
+                  animation: _breathingController,
             builder: (context, _) {
               final opacity = _isTestProcess ? 1.0 : _breathingController.value;
               return SizedBox(
@@ -397,17 +403,23 @@ class _ChainProgressBannerState extends State<ChainProgressBanner>
               );
             },
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '公民链 $status',
-              style: TextStyle(
-                color: color,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '公民链 $status',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 14),
           const SizedBox(
             key: ValueKey<String>('transaction-chain-status-divider'),
             height: 24,

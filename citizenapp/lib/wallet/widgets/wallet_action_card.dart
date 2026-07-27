@@ -8,7 +8,7 @@ import 'package:citizenapp/transaction/offchain-transaction/pages/withdraw_page.
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 钱包详情页第 2 卡片:3 列等宽布局(充值/提现/零钱包)。
+/// 钱包详情页方案 2 的 3 列等宽操作区（充值/提现/零钱包）。
 ///
 ///
 /// - 充值:进「链上充值」页(稳定币购买公民币,与清算行无关,**不需要绑定清算行**)。
@@ -64,11 +64,14 @@ class WalletActionCardState extends State<WalletActionCard> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-      // 三列布局相对原两列更拥挤,padding 调小避免卡片臃肿。
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: const BoxDecoration(
+        color: AppTheme.surfaceCard,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.divider),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           Expanded(
             child: _ClickableAction(
@@ -77,6 +80,7 @@ class WalletActionCardState extends State<WalletActionCard> {
               onTap: () => _openTopup(context),
             ),
           ),
+          const _ActionDivider(),
           Expanded(
             child: _ClickableAction(
               icon: Icons.arrow_circle_up_outlined,
@@ -84,6 +88,7 @@ class WalletActionCardState extends State<WalletActionCard> {
               onTap: () => _openWithdraw(context),
             ),
           ),
+          const _ActionDivider(),
           Expanded(
             child: _BalanceAction(
               balanceText: _balanceText,
@@ -160,12 +165,21 @@ class WalletActionCardState extends State<WalletActionCard> {
   }
 }
 
-/// 充值 / 提现两列共用的可点击按钮:圆形图标 + 标签 + 等高占位文本。
-///
-///
-/// - 使用 `Material + InkWell` 组合,ripple 限制在 `CircleBorder` 内,不溢出圆圈。
-/// - 底部用一个非断空格 ` ` 占位,保证和零钱包列的 `0.00 元` 行高对齐,
-///   避免 3 列底部不齐。
+/// 三列之间的轻量分隔线，只组织视觉关系，不形成新的卡片。
+class _ActionDivider extends StatelessWidget {
+  const _ActionDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 88,
+      color: AppTheme.divider,
+    );
+  }
+}
+
+/// 充值 / 提现两列共用的可点击入口：整列响应，保留 44 以上点击目标。
 class _ClickableAction extends StatelessWidget {
   const _ClickableAction({
     required this.icon,
@@ -179,50 +193,50 @@ class _ClickableAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: AppTheme.primary.withAlpha(15),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: Icon(
-                icon,
-                size: 28,
-                color: AppTheme.primaryDark,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 96),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  size: 26,
+                  color: AppTheme.primaryDark,
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryDark,
+                ),
+              ),
+              const SizedBox(height: 4),
+              // 保持三列和零钱包状态行等高，不引入可见占位文案。
+              const SizedBox(height: 15),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.primaryDark,
-          ),
-        ),
-        const SizedBox(height: 4),
-        // 非断空格占位,保证三列底部和零钱包列的 0.00 元对齐。
-        const Text(
-          ' ',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppTheme.textTertiary,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
 
-/// 零钱包列:**可点击**进零钱包详情页;圆形图标 ripple + 标签 + 余额文本。
+/// 零钱包列：整列可点击进入零钱包详情页，并保留实时绑定/余额状态。
 class _BalanceAction extends StatelessWidget {
   const _BalanceAction({required this.balanceText, required this.onTap});
 
@@ -231,44 +245,52 @@ class _BalanceAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: AppTheme.primary.withAlpha(15),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-            child: const SizedBox(
-              width: 56,
-              height: 56,
-              child: Icon(
-                Icons.account_balance_wallet_outlined,
-                size: 28,
-                color: AppTheme.primaryDark,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 96),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  size: 26,
+                  color: AppTheme.primaryDark,
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              const Text(
+                '零钱包',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryDark,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                balanceText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textTertiary,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        const Text(
-          '零钱包',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.primaryDark,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          balanceText,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppTheme.textTertiary,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
