@@ -99,7 +99,7 @@ void main() {
       final bytes = Uint8List.fromList([
         ...codeBytes('CGOV'),
         0x08, // Compact(2)
-        ...publicAdminBytes('GZ000-CTZN6-198805200-2026', '', '', a1),
+        ...publicAdminBytes('CN220-CTZN2-198805200-2026', '', '', a1),
         ...publicAdminBytes('', '李', '四', a2),
       ]);
       final r = AdminAccountStorageCodec.tryDecode(
@@ -112,7 +112,7 @@ void main() {
         r.admins.map((admin) => admin.account_id),
         ['0x${'44' * 32}', '0x${'55' * 32}'],
       );
-      expect(r.admins.first.cid_number, 'GZ000-CTZN6-198805200-2026');
+      expect(r.admins.first.cid_number, 'CN220-CTZN2-198805200-2026');
       expect(r.admins.first.family_name, isEmpty);
       expect(r.admins.last.cid_number, isEmpty);
     });

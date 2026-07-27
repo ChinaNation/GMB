@@ -120,7 +120,7 @@ mod tests {
                 Admin {
                     account_id: [0xaau8; 32],
                     cid_number: admin_primitives::AdminCidNumber::truncate_from(
-                        b"GZ000-CTZN6-198805200-2026".to_vec(),
+                        b"CN220-CTZN2-198805200-2026".to_vec(),
                     ),
                     family_name: admin_primitives::FamilyName::truncate_from(
                         "张".as_bytes().to_vec(),
@@ -144,7 +144,7 @@ mod tests {
             decoded.admins[0].account_id,
             format!("0x{}", "aa".repeat(32))
         );
-        assert_eq!(decoded.admins[0].cid_number, "GZ000-CTZN6-198805200-2026");
+        assert_eq!(decoded.admins[0].cid_number, "CN220-CTZN2-198805200-2026");
         assert_eq!(decoded.admins[0].family_name, "张");
         assert_eq!(decoded.admins[0].given_name, "三");
         assert!(decoded.admins[1].cid_number.is_empty());
@@ -181,7 +181,7 @@ mod tests {
             admins: vec![Admin {
                 account_id: [0x24u8; 32],
                 cid_number: admin_primitives::AdminCidNumber::truncate_from(
-                    b"GZ000-CTZN6-198805200-2026".to_vec(),
+                    b"CN220-CTZN2-198805200-2026".to_vec(),
                 ),
                 family_name: admin_primitives::FamilyName::truncate_from("程".as_bytes().to_vec()),
                 given_name: admin_primitives::GivenName::truncate_from("伟".as_bytes().to_vec()),
@@ -191,7 +191,7 @@ mod tests {
 
         let decoded = decode_institution_admins(&bytes, false).unwrap();
         assert_eq!(decoded.institution_code, *b"SFGY");
-        assert_eq!(decoded.admins[0].cid_number, "GZ000-CTZN6-198805200-2026");
+        assert_eq!(decoded.admins[0].cid_number, "CN220-CTZN2-198805200-2026");
         assert_eq!(decoded.admins[0].family_name, "程");
         assert_eq!(decoded.admins[0].given_name, "伟");
     }

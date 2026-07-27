@@ -287,6 +287,8 @@ pub trait WeightInfo {
 	/// Storage: `CitizenIdentity::CidRegistry` (r:1 w:1)
 	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
 	fn occupy_cid() -> Weight;
+	fn self_occupy_cid() -> Weight;
+	fn self_rebind_cid_account() -> Weight;
 	/// Storage: `PublicManage::Institutions` (r:1 w:0)
 	/// Proof: `PublicManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
 	/// Storage: `PrivateManage::Institutions` (r:1 w:0)
@@ -709,6 +711,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(1))
+	}
+	/// 自助占号(手工权重,dev):无注册局授权读,故远轻于 occupy_cid;待 benchmark 精化。
+	fn self_occupy_cid() -> Weight {
+		Weight::from_parts(50_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 8000))
+			.saturating_add(T::DbWeight::get().reads(3))
+			.saturating_add(T::DbWeight::get().writes(3))
+	}
+	/// 自助换绑(手工权重,dev):读 AccountIdByCid/VotingIdentityByCid/CidByAccountId(3)、
+	/// 写双向绑定(3);待 benchmark 精化。
+	fn self_rebind_cid_account() -> Weight {
+		Weight::from_parts(50_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 8000))
+			.saturating_add(T::DbWeight::get().reads(3))
+			.saturating_add(T::DbWeight::get().writes(3))
 	}
 	/// Storage: `PublicManage::Institutions` (r:1 w:0)
 	/// Proof: `PublicManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
@@ -1188,6 +1205,18 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(7))
 			.saturating_add(RocksDbWeight::get().writes(1))
+	}
+	fn self_occupy_cid() -> Weight {
+		Weight::from_parts(50_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 8000))
+			.saturating_add(RocksDbWeight::get().reads(3))
+			.saturating_add(RocksDbWeight::get().writes(3))
+	}
+	fn self_rebind_cid_account() -> Weight {
+		Weight::from_parts(50_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 8000))
+			.saturating_add(RocksDbWeight::get().reads(3))
+			.saturating_add(RocksDbWeight::get().writes(3))
 	}
 	/// Storage: `PublicManage::Institutions` (r:1 w:0)
 	/// Proof: `PublicManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)

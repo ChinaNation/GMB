@@ -77,10 +77,15 @@ pub fn parse_cid_number_parts_bytes(raw: &[u8]) -> Result<CidNumberParts, &'stat
 
 /// 从已校验的机构 CID 唯一解析省、市作用域码。
 ///
-/// CID 的 R5 固定为“省码 2 字节 + 市码 3 字节”。所有需要按机构 CID
+/// 机构 CID 的 R5 固定为“省码 2 字节 + 市码 3 字节”。所有需要按机构 CID
 /// 推导治理或登记作用域的模块必须复用本函数，不得自行切割字符串形成第二真源。
+/// 人主体(公民/居民/智能人)CID 去地域化,R5 = CN 国家码 + 号段,不承载省/市作用域;
+/// 传入人主体 CID 即 fail-closed 返回错误,杜绝把号段误读成区划码。
 pub fn cid_scope_codes(raw: &[u8]) -> Result<([u8; 2], [u8; 3]), &'static str> {
     let parts = parse_cid_number_parts_bytes(raw)?;
+    if code::is_person_code(&parts.institution) {
+        return Err("person cid has no province/city scope");
+    }
     let bytes = parts.r5.as_bytes();
     if bytes.len() != CID_NUMBER_SEGMENT_R5_LEN {
         return Err("cid_number r5 segment invalid");
@@ -261,6 +266,28 @@ mod tests {
             (*b"GD", *b"001")
         );
         assert!(cid_scope_codes(b"GD001-CGOVX-944805165").is_err());
+    }
+
+    #[test]
+    fn person_cid_parses_but_has_no_scope() {
+        // 人主体 CID(公民/居民/智能人):CN 前缀号段能生成+解析,但不产出省/市作用域(fail-closed)。
+        for institution in ["CTZN", "NATP", "SMTP"] {
+            let code = generate_cid_number(GenerateCidNumberInput {
+                public_key: "0xabcd",
+                p1: "1",
+                province_code: "",
+                province_name: "",
+                city_code: "",
+                city_name: "",
+                year: "2026",
+                institution,
+            })
+            .unwrap_or_else(|e| panic!("{institution} cid should generate: {e}"));
+            assert_eq!(&code[0..2], "CN");
+            let parts = parse_cid_number_parts(&code).expect("person cid must parse");
+            assert!(cid_scope_codes(code.as_bytes()).is_err(), "{institution} must have no scope");
+            let _ = parts;
+        }
     }
 
     #[test]

@@ -226,4 +226,46 @@ void main() {
     // 隔离:两账户私钥互不相同,单把泄漏不牵连另一把。
     expect(key0, isNot(equals(key1)));
   });
+
+  test('addAccount 指定序号:仅[0]时加 //3,非连续,accountId 对齐 fromUri', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    final a3 = await manager.addAccount(created.wallet.masterId, index: 3);
+    expect(a3.accountIndex, 3);
+    final ref = await Keyring.sr25519.fromUri('$kDevPhrase//3');
+    ref.ss58Format = 2027;
+    final refId =
+        '0x${ref.bytes().map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+    expect(a3.accountId, refId);
+
+    final accounts = await manager.getAccounts(created.wallet.masterId);
+    expect(accounts.map((e) => e.accountIndex).toList(), [0, 3]);
+  });
+
+  test('addAccount 指定序号:回填低于 max 的空缺([0,3]→加//1→[0,1,3])', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    await manager.addAccount(created.wallet.masterId, index: 3);
+    await manager.addAccount(created.wallet.masterId, index: 1);
+    final accounts = await manager.getAccounts(created.wallet.masterId);
+    expect(accounts.map((e) => e.accountIndex).toList(), [0, 1, 3]);
+  });
+
+  test('addAccount 指定序号:已存在/序号0/越界 均被拒', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    await manager.addAccount(created.wallet.masterId); // //1
+    expect(() => manager.addAccount(created.wallet.masterId, index: 1),
+        throwsA(isA<WalletAuthException>()));
+    expect(() => manager.addAccount(created.wallet.masterId, index: 0),
+        throwsA(isA<WalletAuthException>()));
+    expect(
+        () => manager.addAccount(created.wallet.masterId,
+            index: WalletManager.maxAccountIndex + 1),
+        throwsA(isA<WalletAuthException>()));
+  });
+
+  test('addAccount 指定序号:上界 1989 可加', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    final top = await manager.addAccount(created.wallet.masterId,
+        index: WalletManager.maxAccountIndex);
+    expect(top.accountIndex, WalletManager.maxAccountIndex);
+  });
 }

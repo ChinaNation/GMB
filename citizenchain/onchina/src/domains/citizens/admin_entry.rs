@@ -955,7 +955,7 @@ mod edit_tests {
     fn base_record() -> CitizenRecord {
         CitizenRecord {
             id: 1,
-            cid_number: "GZ000-CTZN6-198805200-2026".to_string(),
+            cid_number: "CN220-CTZN2-198805200-2026".to_string(),
             passport_no: String::new(),
             family_name: String::new(),
             given_name: String::new(),

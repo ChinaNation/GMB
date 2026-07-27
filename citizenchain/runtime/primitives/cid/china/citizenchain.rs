@@ -19,7 +19,7 @@ pub const ROLE_NAME_GENESIS_PRODUCT_MANAGER: &[u8] = "创世产品经理".as_byt
 pub const ROLE_NAME_GENESIS_PROGRAMMER: &[u8] = "创世程序员".as_bytes();
 
 /// 法定代表人对应的公民 CID；注册局后续直接从链上读取该公民资料。
-pub const LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER: &str = "GZ000-CTZN6-198805200-2026";
+pub const LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER: &str = "CN220-CTZN2-198805200-2026";
 /// 法定代表人的姓；全仓人员姓名只使用 `family_name` 与 `given_name` 两个字段。
 pub const LEGAL_REPRESENTATIVE_FAMILY_NAME: &str = "程";
 /// 法定代表人的名；禁止恢复合并姓名字段。
@@ -74,7 +74,7 @@ pub const CITIZENCHAIN_FOUNDATION: ChinaCitizenChain = ChinaCitizenChain {
 
 /// 一名创世管理员程伟；账户是授权字段，姓、名仅用于人员展示。
 pub const CITIZENCHAIN_GENESIS_ADMINS: &[CitizenChainGenesisAdmin] = &[CitizenChainGenesisAdmin {
-    account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
+    account_id: hex!("0cb1d05c0c9c7f05679b60d6f24c7e5719a3985264e41c5e899d4822dca4b06b"),
     family_name: "程",
     given_name: "伟",
 }];
@@ -82,17 +82,17 @@ pub const CITIZENCHAIN_GENESIS_ADMINS: &[CitizenChainGenesisAdmin] = &[CitizenCh
 /// 程伟对三个固定岗位的三条独立创世任职。
 pub const CITIZENCHAIN_GENESIS_ASSIGNMENTS: &[CitizenChainGenesisAssignment] = &[
     CitizenChainGenesisAssignment {
-        account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
+        account_id: hex!("0cb1d05c0c9c7f05679b60d6f24c7e5719a3985264e41c5e899d4822dca4b06b"),
         role_code: ROLE_CODE_LEGAL_REPRESENTATIVE,
         role_name: ROLE_NAME_LEGAL_REPRESENTATIVE,
     },
     CitizenChainGenesisAssignment {
-        account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
+        account_id: hex!("0cb1d05c0c9c7f05679b60d6f24c7e5719a3985264e41c5e899d4822dca4b06b"),
         role_code: ROLE_CODE_GENESIS_PRODUCT_MANAGER,
         role_name: ROLE_NAME_GENESIS_PRODUCT_MANAGER,
     },
     CitizenChainGenesisAssignment {
-        account_id: hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
+        account_id: hex!("0cb1d05c0c9c7f05679b60d6f24c7e5719a3985264e41c5e899d4822dca4b06b"),
         role_code: ROLE_CODE_GENESIS_PROGRAMMER,
         role_name: ROLE_NAME_GENESIS_PROGRAMMER,
     },

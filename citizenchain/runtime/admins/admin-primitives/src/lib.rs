@@ -613,7 +613,7 @@ mod tests {
     fn admin_field_order_is_account_cid_family_given() {
         use codec::Encode;
 
-        let cid_number = AdminCidNumber::truncate_from(b"GZ000-CTZN6-198805200-2026".to_vec());
+        let cid_number = AdminCidNumber::truncate_from(b"CN220-CTZN2-198805200-2026".to_vec());
         let admin = Admin {
             account_id: 7u8,
             cid_number: cid_number.clone(),
@@ -692,7 +692,7 @@ mod tests {
 
         let full = Admin {
             account_id: 1u8,
-            cid_number: AdminCidNumber::truncate_from(b"GZ000-CTZN6-198805200-2026".to_vec()),
+            cid_number: AdminCidNumber::truncate_from(b"CN220-CTZN2-198805200-2026".to_vec()),
             family_name: FamilyName::truncate_from("张".as_bytes().to_vec()),
             given_name: GivenName::truncate_from("三".as_bytes().to_vec()),
         };

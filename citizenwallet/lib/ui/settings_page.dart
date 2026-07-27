@@ -42,22 +42,22 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _toggleDeviceLock(bool value) async {
     if (value) {
-      final canCheck = await _localAuth.canCheckBiometrics;
-      final isDeviceSupported = await _localAuth.isDeviceSupported();
-      if (!canCheck && !isDeviceSupported) {
+      // 强制生物识别:未录入指纹/面容一律不给开设备锁(禁密码/图案回退)。
+      final available = await _localAuth.getAvailableBiometrics();
+      if (available.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('您的设备不支持生物识别或设备密码，无法开启设备锁')),
+          const SnackBar(content: Text('您的设备未录入生物识别（指纹/面容），无法开启设备锁')),
         );
         return;
       }
 
       try {
         final authenticated = await _localAuth.authenticate(
-          localizedReason: '验证身份以开启设备锁',
+          localizedReason: '用生物识别验证身份以开启设备锁',
           options: const AuthenticationOptions(
             stickyAuth: true,
-            biometricOnly: false,
+            biometricOnly: true,
           ),
         );
         if (!authenticated) return;

@@ -952,7 +952,10 @@ pub fn profit_policy(code: &InstitutionCode) -> Option<ProfitPolicy> {
     Some(policy)
 }
 
-/// 是否个人主体。
+/// 是否个人主体(公民 CTZN / 居民 NATP / 智能人 SMTP)。
+///
+/// 人主体 CID 去地域化,与机构 CID 生成方式彻底分开:R5 = CN 国家码 + 号码高 3 位、
+/// N9 低 9 位(号段 12 位 = 1e12/年,不承载省/市码);机构 CID 才用省码 + 市码。
 pub fn is_person_code(code: &InstitutionCode) -> bool {
     text_matches(code, &["CTZN", "NATP", "SMTP"])
 }

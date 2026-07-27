@@ -365,6 +365,11 @@ fn checksum_acc(parts: &[&[u8]]) -> usize {
 }
 
 fn valid_province_city(code: InstitutionCode, r5: &[u8]) -> bool {
+    // 人主体(公民/居民/智能人)去地域化:R5 = CN 国家码 + 号码高 3 位(数字),不承载省/市码。
+    if is_person_code(&code) {
+        return r5.len() == 5 && &r5[..2] == b"CN" && r5[2..].iter().all(u8::is_ascii_digit);
+    }
+    // 机构:省码 + 市码必须都命中区划真源。
     let Ok(province): Result<[u8; 2], _> = r5[..2].try_into() else {
         return false;
     };
@@ -372,10 +377,6 @@ fn valid_province_city(code: InstitutionCode, r5: &[u8]) -> bool {
         return false;
     }
     let city = &r5[2..];
-    if is_person_code(&code) {
-        return city == b"000";
-    }
-
     let mut found = false;
     primitives::cid::china::area::for_each_area(|item| {
         if let primitives::cid::china::area::AreaItem::City(candidate) = item {

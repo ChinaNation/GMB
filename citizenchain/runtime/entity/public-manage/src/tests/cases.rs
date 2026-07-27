@@ -290,7 +290,7 @@ fn operation_phase_authorizes_by_cid_and_survives_wallet_rebind() {
 
         // 用带合法 CTZN CID 的名册覆盖：admin(0) 携 CID（先绑定 OLD 让 Phase 2 seed 校验通过），
         // admin(1)/admin(2) 无 CID（对照无 CID 语义）。
-        let citizen_cid = b"GZ000-CTZN6-198805200-2026".to_vec();
+        let citizen_cid = b"CN220-CTZN2-198805200-2026".to_vec();
         bind_cid(&citizen_cid, admin(0));
         let admins: crate::InstitutionAdminsInputOf<Test> = vec![
             admin_primitives::Admin {

@@ -139,10 +139,10 @@ class _AppLockGateState extends State<_AppLockGate>
   Future<void> _authenticateDevice() async {
     try {
       final success = await _localAuth.authenticate(
-        localizedReason: '请验证身份以进入应用',
+        localizedReason: '请用生物识别验证身份以进入应用',
         options: const AuthenticationOptions(
           stickyAuth: true,
-          biometricOnly: false,
+          biometricOnly: true,
         ),
       );
       if (!mounted) return;

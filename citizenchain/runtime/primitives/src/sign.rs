@@ -40,7 +40,7 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 }
 
 // 签名 op_tag 单一权威源:
-// - 0x10/0x13-0x17:哈希域,走 `signing_message`,进入 `SIGN_OP_TAGS`。
+// - 0x10-0x11/0x13-0x17:哈希域,走 `signing_message`,进入 `SIGN_OP_TAGS`。
 // - 0x18/0x19:二进制前缀域,只签原始 payload,不进入 `SIGN_OP_TAGS`。
 // - 0x1A:Chat 设备绑定哈希域,走 `signing_message`。
 // - 0x1B-0x1D:广场 BFF 登录/设备绑定/账户动作哈希域,走 `signing_message`,进入
@@ -50,6 +50,8 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 
 /// 公民档案上链确认。
 pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
+/// 匿名 CID 自助换绑:旧绑定账户对 `(cid_number, new_account_id)` 的授权签名(哈希域)。
+pub const OP_SIGN_CID_REBIND: u8 = 0x11;
 /// CID 机构登记(历史 op_tag,已无独立凭证构造入口;仅作为四端 `SIGN_OP_TAGS` 金标
 /// 注册表成员保留,删除会扰动四端字节契约与金标向量)。
 pub const OP_SIGN_INST: u8 = 0x13;
@@ -156,8 +158,9 @@ pub fn decrypt_admin_payload(
 }
 
 /// 全部哈希域签名 op_tag。新增哈希域 op_tag 必须同步追加并刷新金标。
-pub const SIGN_OP_TAGS: [u8; 11] = [
+pub const SIGN_OP_TAGS: [u8; 12] = [
     OP_SIGN_CITIZEN_IDENTITY,
+    OP_SIGN_CID_REBIND,
     OP_SIGN_INST,
     OP_SIGN_DEREGISTER,
     OP_SIGN_L3_PAY,

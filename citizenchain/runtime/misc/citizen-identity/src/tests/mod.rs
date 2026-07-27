@@ -125,6 +125,14 @@ impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIde
     ) -> bool {
         signature.as_slice() == b"valid"
     }
+
+    fn verify_rebind_signature(
+        _account_id: &u64,
+        _payload: &[u8],
+        signature: &pallet::SignatureOf<Test>,
+    ) -> bool {
+        signature.as_slice() == b"valid"
+    }
 }
 
 impl Config for Test {
@@ -304,6 +312,287 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
         assert_eq!(ProvinceVotingCount::<Test>::get(code(b"43")), 1);
         assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_some());
+    });
+}
+
+#[test]
+fn self_occupy_cid_binds_account_and_stays_anonymous() {
+    use codec::Encode;
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("self1");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        // 占即绑:双向绑定成立。
+        assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(1));
+        assert_eq!(CidByAccountId::<Test>::get(1), Some(cid(&cid_bytes)));
+        // 登记记录:SELF registrar + 空居住地 + Active + commitment = blake2_256(account_id)。
+        let rec = CidRegistry::<Test>::get(cid(&cid_bytes)).expect("record");
+        assert_eq!(rec.registrar_cid_number.to_vec(), SELF_OCCUPY_REGISTRAR.to_vec());
+        assert!(rec.residence_province_code.is_empty());
+        assert!(rec.residence_city_code.is_empty());
+        assert_eq!(rec.status, CidRecordStatus::Active);
+        assert_eq!(rec.commitment, sp_io::hashing::blake2_256(&1u64.encode()));
+        // 匿名:无投票身份。
+        assert!(!VotingIdentityByCid::<Test>::contains_key(cid(&cid_bytes)));
+    });
+}
+
+#[test]
+fn self_occupy_cid_is_idempotent_for_same_account() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("self2");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        // 同账户同 CID 重放幂等(commitment 同值,SELF registrar 同值),不报错。
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        assert_eq!(CidByAccountId::<Test>::get(1), Some(cid(&cid_bytes)));
+    });
+}
+
+#[test]
+fn self_occupy_cid_rejects_second_cid_for_same_account() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&citizen_cid_number("self3a")),
+        ));
+        // 一账户一 CID:同账户再占另一个 CID 被拒。
+        assert_noop!(
+            CitizenIdentity::self_occupy_cid(
+                RuntimeOrigin::signed(1),
+                cid(&citizen_cid_number("self3b")),
+            ),
+            Error::<Test>::AccountIdAlreadyBoundToAnotherCid
+        );
+    });
+}
+
+#[test]
+fn self_occupy_cid_rejects_cid_taken_by_another_account() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("self4");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        // CID 已被账户 1 占绑,账户 2 占同一 CID 被拒(双向闭环)。
+        assert_noop!(
+            CitizenIdentity::self_occupy_cid(RuntimeOrigin::signed(2), cid(&cid_bytes)),
+            Error::<Test>::CidAccountIdBindingMismatch
+        );
+    });
+}
+
+#[test]
+fn self_occupy_cid_rejects_non_citizen_code() {
+    new_test_ext().execute_with(|| {
+        // 自助占号只认 CTZN;机构码(CGOV)CID 被 ensure_valid_citizen_cid 拒。
+        assert_noop!(
+            CitizenIdentity::self_occupy_cid(
+                RuntimeOrigin::signed(1),
+                cid(&public_cid_number("self5")),
+            ),
+            Error::<Test>::InvalidCitizenCode
+        );
+    });
+}
+
+#[test]
+fn self_occupy_cid_accepts_resident_natp_type() {
+    new_test_ext().execute_with(|| {
+        // q3:用户可自选 NATP(居民)作为匿名身份类型(与 CTZN 公民并列)。
+        let natp = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                public_key: "natp-self",
+                p1: "1",
+                province_code: "",
+                province_name: "",
+                city_code: "",
+                city_name: "",
+                year: "2026",
+                institution: "NATP",
+            },
+        )
+        .expect("natp cid should generate")
+        .into_bytes();
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(3),
+            cid(&natp),
+        ));
+        assert_eq!(CidByAccountId::<Test>::get(3), Some(cid(&natp)));
+        // 匿名:居民也不写投票身份。
+        assert!(!VotingIdentityByCid::<Test>::contains_key(cid(&natp)));
+    });
+}
+
+#[test]
+fn self_occupy_cid_rejects_smtp_type() {
+    new_test_ext().execute_with(|| {
+        // 自助只限 CTZN/NATP:智能人 SMTP 不可自助占号(须其它流程)。
+        let smtp = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                public_key: "smtp-self",
+                p1: "1",
+                province_code: "",
+                province_name: "",
+                city_code: "",
+                city_name: "",
+                year: "2026",
+                institution: "SMTP",
+            },
+        )
+        .expect("smtp cid should generate")
+        .into_bytes();
+        assert_noop!(
+            CitizenIdentity::self_occupy_cid(RuntimeOrigin::signed(3), cid(&smtp)),
+            Error::<Test>::InvalidCitizenCode
+        );
+    });
+}
+
+#[test]
+fn self_rebind_cid_account_moves_binding_to_new_account() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("rebind1");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        // 新账户 2 作 origin(证新账户受控),旧账户 1 授权签名。
+        assert_ok!(CitizenIdentity::self_rebind_cid_account(
+            RuntimeOrigin::signed(2),
+            cid(&cid_bytes),
+            valid_signature(),
+        ));
+        // 换绑后:cid 绑新账户 2,旧账户 1 反向索引清除。
+        assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(2));
+        assert_eq!(CidByAccountId::<Test>::get(2), Some(cid(&cid_bytes)));
+        assert_eq!(CidByAccountId::<Test>::get(1), None);
+    });
+}
+
+#[test]
+fn self_rebind_cid_account_rejects_unoccupied_cid() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account(
+                RuntimeOrigin::signed(2),
+                cid(&citizen_cid_number("rebind_none")),
+                valid_signature(),
+            ),
+            Error::<Test>::NotBoundToAnyCid
+        );
+    });
+}
+
+#[test]
+fn self_rebind_cid_account_rejects_invalid_old_signature() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("rebind2");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        let bad_sig: pallet::SignatureOf<Test> =
+            b"nope".to_vec().try_into().expect("sig fits");
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account(
+                RuntimeOrigin::signed(2),
+                cid(&cid_bytes),
+                bad_sig,
+            ),
+            Error::<Test>::InvalidRebindSignature
+        );
+    });
+}
+
+#[test]
+fn self_rebind_cid_account_rejects_new_account_bound_to_another_cid() {
+    new_test_ext().execute_with(|| {
+        // 账户 1 占 cidA;账户 2 占 cidB;把 cidA 换绑到已绑 cidB 的账户 2 → 拒。
+        let cid_a = citizen_cid_number("rebind3a");
+        let cid_b = citizen_cid_number("rebind3b");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_a),
+        ));
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(2),
+            cid(&cid_b),
+        ));
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account(
+                RuntimeOrigin::signed(2),
+                cid(&cid_a),
+                valid_signature(),
+            ),
+            Error::<Test>::AccountIdAlreadyBoundToAnotherCid
+        );
+    });
+}
+
+#[test]
+fn self_rebind_cid_account_rejects_civic_cid() {
+    new_test_ext().execute_with(|| {
+        // civic:占号 + 注册投票身份 → 有 VotingIdentity → 自助换绑拒(q1,走注册局)。
+        occupy_tag("0001");
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            voting_payload(1, &citizen_cid_number("0001")),
+            valid_signature(),
+        ));
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account(
+                RuntimeOrigin::signed(2),
+                cid(&citizen_cid_number("0001")),
+                valid_signature(),
+            ),
+            Error::<Test>::CivicRebindRequiresRegistrar
+        );
+    });
+}
+
+#[test]
+fn natp_resident_cannot_become_voting_citizen() {
+    new_test_ext().execute_with(|| {
+        // q3 补充约束:NATP 居民永远无法升级投票/竞选公民(register 走 CTZN 校验)。
+        let natp = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                public_key: "natp-civic",
+                p1: "1",
+                province_code: "",
+                province_name: "",
+                city_code: "",
+                city_name: "",
+                year: "2026",
+                institution: "NATP",
+            },
+        )
+        .expect("natp cid should generate")
+        .into_bytes();
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(5),
+            cid(&natp),
+        ));
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                voting_payload(5, &natp),
+                valid_signature(),
+            ),
+            Error::<Test>::InvalidCitizenCode
+        );
     });
 }
 

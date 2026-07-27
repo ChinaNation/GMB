@@ -114,11 +114,150 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
   }
 
-  Future<void> _addAccount() async {
+  int get _nextIndex =>
+      _accounts.map((e) => e.accountIndex).fold<int>(-1, (m, e) => e > m ? e : m) +
+      1;
+
+  /// 混合式添加:默认"下一个" + 高级"指定序号"(恢复非连续账户 / 特定注资账户)。
+  void _showAddAccountSheet() {
+    if (_addingAccount) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.textTertiary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              _sheetItem(
+                icon: Icons.add_circle_outline,
+                label: '添加下一个账户',
+                subtitle: '将派生 //$_nextIndex',
+                onTap: () {
+                  Navigator.pop(context);
+                  _doAdd();
+                },
+              ),
+              const SizedBox(height: 8),
+              _sheetItem(
+                icon: Icons.tag_rounded,
+                label: '指定序号添加',
+                subtitle: '填 1–${WalletManager.maxAccountIndex}（恢复特定账户）',
+                onTap: () {
+                  Navigator.pop(context);
+                  _promptIndexAndAdd();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetItem({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.cardDecoration(),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(25),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+                child: Icon(icon, color: AppTheme.primaryLight, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textSecondary)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  color: AppTheme.textTertiary, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _promptIndexAndAdd() async {
+    final controller = TextEditingController();
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('指定账户序号'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            hintText: '1–${WalletManager.maxAccountIndex}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    );
+    if (raw == null) return;
+    final index = int.tryParse(raw.trim());
+    if (index == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入有效序号')),
+      );
+      return;
+    }
+    await _doAdd(index: index);
+  }
+
+  Future<void> _doAdd({int? index}) async {
     if (_addingAccount) return;
     setState(() => _addingAccount = true);
     try {
-      await _walletManager.addAccount(widget.wallet.masterId);
+      await _walletManager.addAccount(widget.wallet.masterId, index: index);
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -296,7 +435,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                         color: AppTheme.textPrimary)),
                 const Spacer(),
                 TextButton.icon(
-                  onPressed: _addingAccount ? null : _addAccount,
+                  onPressed: _addingAccount ? null : _showAddAccountSheet,
                   icon: _addingAccount
                       ? const SizedBox(
                           width: 14,
@@ -312,7 +451,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 4, 16, 14),
             child: Text(
-              '提示:重装或换设备后,重导助记词只自动恢复账户0,其余账户需在此按顺序重新添加(离线设备无法链上探活)。',
+              '提示:重装或换设备后,重导助记词只自动恢复账户0,其余账户需在此重新添加,可指定序号精确还原(离线设备无法链上探活)。',
               style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
             ),
           ),

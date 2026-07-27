@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn public_admin_payload_encodes_account_cid_family_name_and_given_name() {
-        let admins = vec![public_admin([3; 32], "GZ000-CTZN6-198805200-2026", "", "")];
+        let admins = vec![public_admin([3; 32], "CN220-CTZN2-198805200-2026", "", "")];
         let expected = admins
             .iter()
             .map(|admin| {

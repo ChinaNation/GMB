@@ -100,7 +100,7 @@ pub struct TestCitizenIdentityBinding;
 
 impl admin_primitives::CitizenIdentityBindingQuery<AccountId32> for TestCitizenIdentityBinding {
     fn matches_citizen_account(cid_number: &[u8], account: &AccountId32) -> bool {
-        cid_number == b"GZ000-CTZN6-198805200-2026" && account == &self::account(9)
+        cid_number == b"CN220-CTZN2-198805200-2026" && account == &self::account(9)
     }
 }
 
@@ -207,7 +207,7 @@ fn operation_phase_requires_complete_public_admin_fields() {
         // 运行期:四要素齐全 + citizen-identity 绑定匹配 → Ok。
         let mut complete = admins(1);
         complete[0].account_id = account(9);
-        complete[0].cid_number = b"GZ000-CTZN6-198805200-2026"
+        complete[0].cid_number = b"CN220-CTZN2-198805200-2026"
             .to_vec()
             .try_into()
             .expect("cid fits");
@@ -227,7 +227,7 @@ fn public_admin_nonempty_citizen_cid_must_match_citizen_identity_binding() {
     new_test_ext().execute_with(|| {
         let mut valid = admins(1);
         valid[0].account_id = account(9);
-        valid[0].cid_number = b"GZ000-CTZN6-198805200-2026"
+        valid[0].cid_number = b"CN220-CTZN2-198805200-2026"
             .to_vec()
             .try_into()
             .expect("citizen cid fits");

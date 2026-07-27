@@ -2005,7 +2005,7 @@ void main() {
           List<int>.filled(32, 0x31),
           '张',
           '三',
-          citizenCidNumber: 'GZ000-CTZN6-198805200-2026',
+          citizenCidNumber: 'CN220-CTZN2-198805200-2026',
         ),
         ...adminPerson(List<int>.filled(32, 0x32), '', ''),
       ];
@@ -2018,7 +2018,7 @@ void main() {
           List<int>.filled(32, 0x31),
           '张',
           '三',
-          citizenCidNumber: 'GZ000-CTZN6-198805200-2026',
+          citizenCidNumber: 'CN220-CTZN2-198805200-2026',
         ),
         ...adminPerson(List<int>.filled(32, 0x32), '李', '四'),
       ];
@@ -2165,7 +2165,7 @@ void main() {
       expect(
         decoded.reviewFields['admins'],
         contains(
-          '张三 / GZ000-CTZN6-198805200-2026'
+          '张三 / CN220-CTZN2-198805200-2026'
           '(${ss58FromBytes(List<int>.filled(32, 0x31))})',
         ),
       );

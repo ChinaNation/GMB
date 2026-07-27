@@ -59,7 +59,8 @@ mod tests {
     const ACCOUNT_ID_2: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";
 
     #[test]
-    fn citizen_uses_reserved_province_city_code() {
+    fn citizen_cid_is_country_prefixed() {
+        // 公民(CTZN)去地域化:R5 = CN 国家码 + 号码高 3 位,不再是省码。
         let code = generate_cid_number(GenerateCidInput {
             account_id: ACCOUNT_ID_1,
             p1: "1",
@@ -68,7 +69,9 @@ mod tests {
             institution: "CTZN",
         })
         .expect("citizen cid should generate");
-        assert_eq!(code.split('-').next(), Some("GD000"));
+        let r5 = code.split('-').next().expect("r5 segment");
+        assert_eq!(&r5[0..2], "CN");
+        assert!(r5[2..5].chars().all(|c| c.is_ascii_digit()));
     }
 
     #[test]

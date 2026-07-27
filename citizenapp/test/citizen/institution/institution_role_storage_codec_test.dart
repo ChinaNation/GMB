@@ -167,7 +167,7 @@ void main() {
       ...utf8.encode('NRCG'),
       4,
       ...List.filled(32, 3),
-      ...bytes('GZ000-CTZN6-198805200-2026'),
+      ...bytes('CN220-CTZN2-198805200-2026'),
       ...bytes(''),
       ...bytes(''),
     ]);
@@ -175,7 +175,7 @@ void main() {
     expect(decoded.admins.single.account_id, '0x${'03' * 32}');
     expect(
       decoded.admins.single.cid_number,
-      'GZ000-CTZN6-198805200-2026',
+      'CN220-CTZN2-198805200-2026',
     );
     expect(decoded.admins.single.family_name, isEmpty);
     expect(decoded.admins.single.given_name, isEmpty);

@@ -105,6 +105,14 @@ impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
     ) -> bool {
         signature.as_slice() == b"valid"
     }
+
+    fn verify_rebind_signature(
+        _account_id: &u64,
+        _payload: &[u8],
+        signature: &citizen_identity::pallet::SignatureOf<Test>,
+    ) -> bool {
+        signature.as_slice() == b"valid"
+    }
 }
 
 /// 固定链上时间(2026-07-02 00:00 UTC),集成测试夹具护照落在有效期窗口内。

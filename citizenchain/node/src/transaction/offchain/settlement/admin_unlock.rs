@@ -386,8 +386,11 @@ mod tests {
         assert_eq!(r.len(), 1);
         assert!(r[0].signer_public_key.contains("aa"));
 
-        // 清理(避免污染其他 case)
-        decrypted_map().lock().unwrap().clear();
+        // 清理:只移除本用例插入的两个 key,绝不 clear() 整表——否则并行执行时
+        // 会误删其他用例(如 lock_decrypted_admin_removes_entry 的 cc… )刚插入的条目。
+        let mut guard = decrypted_map().lock().unwrap();
+        guard.remove(&format!("0x{}", "aa".repeat(32)));
+        guard.remove(&format!("0x{}", "bb".repeat(32)));
     }
 
     #[test]

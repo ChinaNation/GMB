@@ -192,7 +192,7 @@ void main() {
       rpc.responses[accountKey] = institutionAdminBytes(
         institutionCode: entry.key,
         admin: List<int>.filled(32, 0xee),
-        cidNumber: 'GZ000-CTZN6-198805200-2026',
+        cidNumber: 'CN220-CTZN2-198805200-2026',
         familyName: '',
         givenName: '',
       );
@@ -206,7 +206,7 @@ void main() {
 
       expect((await service.fetchByIdentity(identity))?.threshold, entry.value);
       final state = await service.fetchByIdentity(identity);
-      expect(state?.admins.single.cid_number, 'GZ000-CTZN6-198805200-2026');
+      expect(state?.admins.single.cid_number, 'CN220-CTZN2-198805200-2026');
       expect(state?.admins.single.family_name, isEmpty);
       expect(rpc.requestedKeys, [accountKey, thresholdStorageKey]);
     }

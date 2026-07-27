@@ -1663,7 +1663,7 @@ mod tests {
             institution_code: *b"CREG",
             admins: vec![admin_primitives::Admin {
                 account_id: [0x42u8; 32],
-                cid_number: "GZ000-CTZN6-198805200-2026"
+                cid_number: "CN220-CTZN2-198805200-2026"
                     .as_bytes()
                     .to_vec()
                     .try_into()
@@ -1694,7 +1694,7 @@ mod tests {
             institution_code: *b"SFGY",
             admins: vec![admin_primitives::Admin {
                 account_id: [0x24u8; 32],
-                cid_number: "GZ000-CTZN6-198805200-2026"
+                cid_number: "CN220-CTZN2-198805200-2026"
                     .as_bytes()
                     .to_vec()
                     .try_into()
@@ -1720,7 +1720,7 @@ mod tests {
         assert_eq!(decoded.admins[0].account_id, [0x24; 32]);
         assert_eq!(
             decoded.admins[0].cid_number,
-            "GZ000-CTZN6-198805200-2026".as_bytes()
+            "CN220-CTZN2-198805200-2026".as_bytes()
         );
         assert_eq!(decoded.admins[0].family_name, "程".as_bytes());
         assert_eq!(decoded.admins[0].given_name, "伟".as_bytes());

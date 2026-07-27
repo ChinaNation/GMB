@@ -321,6 +321,41 @@ mod benchmarks {
     }
 
     #[benchmark]
+    fn self_occupy_cid() {
+        let account_id: T::AccountId = whitelisted_caller();
+        let cid_number = citizen_cid(7);
+
+        #[extrinsic_call]
+        _(RawOrigin::Signed(account_id.clone()), cid_number.clone());
+
+        assert!(CidRegistry::<T>::contains_key(&cid_number));
+        assert_eq!(AccountIdByCid::<T>::get(&cid_number), Some(account_id));
+    }
+
+    #[benchmark]
+    fn self_rebind_cid_account() {
+        // 先自助占号建匿名 CID(旧账户绑定),再换绑到新账户。
+        let old_account_id: T::AccountId = account("rebind_old", 0, 0);
+        let new_account_id: T::AccountId = whitelisted_caller();
+        let cid_number = citizen_cid(8);
+        Pallet::<T>::self_occupy_cid(
+            RawOrigin::Signed(old_account_id).into(),
+            cid_number.clone(),
+        )
+        .expect("self occupy sets up the binding");
+        let signature = signature::<T>();
+
+        #[extrinsic_call]
+        _(
+            RawOrigin::Signed(new_account_id.clone()),
+            cid_number.clone(),
+            signature,
+        );
+
+        assert_eq!(AccountIdByCid::<T>::get(&cid_number), Some(new_account_id));
+    }
+
+    #[benchmark]
     fn occupy_cids_batch(n: Linear<1, MAX_CID_OCCUPY_BATCH>) {
         let authority = authority::<T>();
         let items: Vec<CidOccupyItem> = (0..n)

@@ -1,5 +1,7 @@
 # Wallet 模块技术文档（当前实现态）
 
+> ⚠️ **2026-07-27 model B**：下文"扁平单账户 / seed 存储 / `fromSeed(miniSecret)` 直接派生"为**旧态**，已被 model B 全 `//index` 无根派生取代（账户0=`//0`，无 bare 根；派生真源 [ADR-022 §2](../../../04-decisions/ADR-022-unified-pqc-crypto.md)）。citizenapp 无根多账户存储改造见 `memory/08-tasks/open/20260727-citizenapp-cid-identity-rootless-wallet.md`（Step 2）；**派生核心已改 `//index`（下文已更新）**，存储/多账户段落以 Step 2 卡为准。
+
 ## 1. 模块目标
 
 `lib/wallet` 是钱包能力唯一收口模块，负责：
@@ -111,7 +113,7 @@ lib/
 
 1. 生成 `bip39` 助记词
 2. 派生 mini-secret：`mnemonic → entropy → PBKDF2(substrate_bip39) → 64 字节 → 前 32 字节`
-3. 用 `Keyring.sr25519.fromSeed(miniSecret)` 派生 SS58(2027) 地址与公钥
+3. 用 `Keyring.sr25519.fromSeed(child_N)` 派生 SS58(2027) 地址与公钥（model B：`child_N`=助记词`//N` 硬派生，账户0=`//0`，无 bare 根）
 4. 钱包元信息通过 `WalletIsar.instance.writeTxn()` 写入 Isar（`signMode: 'local'`）
 5. seed（32 字节 hex）写入 secure storage
 6. 创建流程立即复读 Isar 与 secure storage；校验失败必须回滚钱包记录和机密材料，不能展示助记词后留下空钱包列表
@@ -365,8 +367,9 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 mnemonic
   → entropy (bip39_mnemonic Mnemonic.fromSentence)
   → PBKDF2 (substrate_bip39 CryptoScheme.miniSecretFromEntropy)
-  → 32 字节 mini-secret
-  → Keyring.sr25519.fromSeed(miniSecret)
+  → 32 字节 mini-secret（master）
+  → //N 硬 junction 派生 child_N（账户0=//0，无 bare 根）
+  → Keyring.sr25519.fromSeed(child_N)
   → sr25519 keypair
 ```
 
@@ -391,7 +394,7 @@ mnemonic
 
 热钱包随全系统从 sr25519 **在位升级**到 ML-DSA-65 签名,"四不变"(不换助记词/账户/地址/余额)。以 ADR-022 为准:
 
-- **派生(sr25519 不套 HKDF)**:`§10.3` 的 32B mini-secret = `AccountSeedV1`;sr25519 地址锚点沿用现有 `sr25519.fromSeed(AccountSeedV1)` **直接派生**(不经 HKDF → 地址比特级不变);ML-DSA-65/ML-KEM-768 用 `HKDF-SHA512(AccountSeedV1, "GMB/account/ml-dsa-65/v1" | ".../ml-kem-768/v1")`。ML-DSA keygen/sign 走 Rust FFI(`gmb-pqc`),非 Dart。
+- **派生(model B //index,sr25519 不套 HKDF)**:每账户 `AccountSeedV1_N` = 该账户 child mini-secret(账户 N=助记词`//N`,账户0=`//0`,无 bare 根);sr25519 地址锚点 = `sr25519.fromSeed(AccountSeedV1_N)` **直接派生**(不经 HKDF);ML-DSA-65/ML-KEM-768 用 `HKDF-SHA512(AccountSeedV1_N, "GMB/account/ml-dsa-65/v1" | ".../ml-kem-768/v1")`。ML-DSA keygen/sign 走 Rust FFI(`gmb-pqc`),非 Dart。
 - **签名/交易**:无感 bootstrap——未绑定账户首次交易构造 `bootstrap_pqc_dispatch`(sr25519 bootstrap 签名 + ML-DSA 交易签名,一次确认);后续走 `pqc_dispatch` general-tx(`signed_extrinsic_builder.dart:103/186`,**不扩 MultiSignature**)。
 - **QR**:`sig_alg(sr25519|ml-dsa-65)` + `auth_mode(normal|pqc|bootstrap-pqc)` + `key_version` + `chunk_index/chunk_total` 分片(ML-DSA ~3.3KB,最坏体积按 bootstrap 实测)。
 - **UI**:只展示一个账户/地址/余额,不暴露多公钥/绑定状态机/换账户。

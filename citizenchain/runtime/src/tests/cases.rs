@@ -1855,7 +1855,7 @@ fn genesis_citizenchain_foundation_is_complete_and_protected() {
         assert_eq!(legal_representative.given_name.as_slice(), "伟".as_bytes());
         assert_eq!(
             legal_representative.cid_number.as_slice(),
-            "GZ000-CTZN6-198805200-2026".as_bytes()
+            "CN220-CTZN2-198805200-2026".as_bytes()
         );
         assert_eq!(
             legal_representative.account_id,
@@ -1876,7 +1876,7 @@ fn genesis_citizenchain_foundation_is_complete_and_protected() {
         assert_eq!(admins.admins.len(), 1);
         assert_eq!(
             admins.admins[0].cid_number.as_slice(),
-            "GZ000-CTZN6-198805200-2026".as_bytes()
+            "CN220-CTZN2-198805200-2026".as_bytes()
         );
         assert_eq!(admins.admins[0].family_name.as_slice(), "程".as_bytes());
         assert_eq!(admins.admins[0].given_name.as_slice(), "伟".as_bytes());

@@ -558,6 +558,11 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
             ) => proposal_operation_route(who, *proposal_id),
 
             RuntimeCall::CitizenIdentity(
+                citizen_identity::pallet::Call::self_occupy_cid { .. }
+                | citizen_identity::pallet::Call::self_rebind_cid_account { .. },
+            ) => signer_onchain_route(who, 0),
+
+            RuntimeCall::CitizenIdentity(
                 citizen_identity::pallet::Call::register_voting_identity {
                     actor_cid_number, ..
                 }
@@ -1420,6 +1425,34 @@ impl
             let public = sr25519::Public::from_raw(raw_account);
             let msg = primitives::sign::signing_message(
                 primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+                payload,
+            );
+            sr25519_verify(&signature, &msg, &public)
+        }
+    }
+
+    fn verify_rebind_signature(
+        account_id: &AccountId,
+        payload: &[u8],
+        signature: &citizen_identity::pallet::SignatureOf<Runtime>,
+    ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (account_id, payload);
+            return !signature.is_empty();
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
+                return false;
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+                return false;
+            };
+            let public = sr25519::Public::from_raw(raw_account);
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_CID_REBIND,
                 payload,
             );
             sr25519_verify(&signature, &msg, &public)

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kReleaseMode, visibleForTesting;
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:isar/isar.dart';
 import 'package:local_auth/local_auth.dart';
@@ -121,9 +121,13 @@ class WalletManager {
   /// 生物识别门禁（读密钥 / 签名前调用）。测试可经 [debugAuthGate] 注入。
   static Future<void> Function() _authGate = _defaultAuthGate;
 
+  /// 仅供测试注入放行门禁;**release 构建下彻底无效**(拒绝任何注入),杜绝生产
+  /// 环境经此绕过生物识别——门禁恒为真实强制生物识别。
   @visibleForTesting
-  static set debugAuthGate(Future<void> Function()? gate) =>
-      _authGate = gate ?? _defaultAuthGate;
+  static set debugAuthGate(Future<void> Function()? gate) {
+    if (kReleaseMode) return;
+    _authGate = gate ?? _defaultAuthGate;
+  }
 
   // ── 查询 ──
   Future<List<Wallet>> getWallets() async {
@@ -220,8 +224,14 @@ class WalletManager {
     }
   }
 
-  /// 在指定钱包下新增账户：读存储种子，派生下一个 `//index`（不产生新助记词）。
-  Future<Account> addAccount(String masterId) async {
+  /// 账户序号上界（`//index` 的 index 最大值;账户0 为创建时主账户）。
+  static const int maxAccountIndex = 1989;
+
+  /// 在指定钱包下新增账户：读存储种子，派生 `//index`（不产生新助记词）。
+  ///
+  /// [index] 为空 = 添加"下一个"(max+1);非空 = 指定序号(`1..maxAccountIndex`,
+  /// 用于恢复非连续账户 / 加别处已注资的特定账户)。序号可非连续。校验先于读种子。
+  Future<Account> addAccount(String masterId, {int? index}) async {
     await _authGate();
     final isar = await WalletIsar.instance.db();
     final wallet =
@@ -229,29 +239,44 @@ class WalletManager {
     if (wallet == null) {
       throw const WalletAuthException('未找到钱包');
     }
+    final accounts = await isar.accountEntitys
+        .filter()
+        .masterIdEqualTo(masterId)
+        .findAll();
+    final existing = accounts.map((e) => e.accountIndex).toSet();
+
+    final int targetIndex;
+    if (index == null) {
+      final maxIndex = existing.fold<int>(-1, (m, i) => i > m ? i : m);
+      targetIndex = maxIndex + 1;
+      if (targetIndex > maxAccountIndex) {
+        throw const WalletAuthException('已达账户序号上限 $maxAccountIndex');
+      }
+    } else {
+      // 账户0 是创建时主账户(masterId 锚点),指定序号仅允许 1..maxAccountIndex。
+      if (index < 1 || index > maxAccountIndex) {
+        throw const WalletAuthException('账户序号需在 1–$maxAccountIndex');
+      }
+      if (existing.contains(index)) {
+        throw WalletAuthException('账户$index 已存在');
+      }
+      targetIndex = index;
+    }
+
     final seedHex = await _readMasterSeedRaw(masterId);
     if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
     }
     final seed = _hexToBytes(seedHex);
     try {
-      final accounts = await isar.accountEntitys
-          .filter()
-          .masterIdEqualTo(masterId)
-          .findAll();
-      final nextIndex = accounts
-              .map((e) => e.accountIndex)
-              .fold<int>(-1, (m, i) => i > m ? i : m) +
-          1;
-
-      final derived = _deriveAccount(seed, nextIndex);
+      final derived = _deriveAccount(seed, targetIndex);
       final now = DateTime.now().millisecondsSinceEpoch;
       final entity = AccountEntity()
         ..masterId = masterId
-        ..accountIndex = nextIndex
+        ..accountIndex = targetIndex
         ..accountId = derived.accountId
         ..ss58Address = derived.ss58Address
-        ..accountName = '账户$nextIndex'
+        ..accountName = '账户$targetIndex'
         ..createdAtMillis = now;
       await isar.writeTxn(() async {
         await isar.accountEntitys.put(entity);
@@ -602,37 +627,36 @@ class WalletManager {
       _secureStorage.delete(key: WalletSecureKeys.masterMnemonicV1(masterId));
 
   // ── 生物识别 ──
-  /// 优先生物识别，回退设备密码/图案；无锁屏或认证异常一律拒绝访问。
+  /// **强制生物识别(指纹/面容),绝不回退设备密码/图案**;无生物识别硬件/未录入
+  /// 一律 fail-closed 拒绝(连创建/导入/签名都不给)——冷钱包死规则。
   static Future<void> _defaultAuthGate() async {
-    bool supported;
+    final List<Object?> available;
     try {
-      supported = await _localAuth.isDeviceSupported();
+      available = await _localAuth.getAvailableBiometrics();
     } on PlatformException catch (e) {
       throw WalletAuthException('认证服务异常：${e.message}，无法访问钱包');
     }
-    if (!supported) {
+    if (available.isEmpty) {
       throw const WalletAuthException(
-        '设备未设置锁屏密码或安全措施，请先在系统设置中启用锁屏保护后再使用冷钱包',
+        '必须启用生物识别（指纹/面容）才能使用冷钱包，请先在系统设置中录入',
       );
     }
     try {
       final ok = await _localAuth.authenticate(
-        localizedReason: '请验证身份以访问钱包密钥',
+        localizedReason: '请用生物识别验证身份以访问钱包密钥',
         options: const AuthenticationOptions(
-          biometricOnly: false,
+          biometricOnly: true,
           stickyAuth: true,
           useErrorDialogs: true,
         ),
       );
       if (!ok) {
-        throw const WalletAuthException('未通过身份验证');
+        throw const WalletAuthException('未通过生物识别验证');
       }
     } on PlatformException catch (e) {
       final code = e.code;
       if (code == 'NotAvailable' || code == 'NotEnrolled') {
-        throw const WalletAuthException(
-          '设备未设置锁屏密码或安全措施，请先在系统设置中启用锁屏保护后再使用冷钱包',
-        );
+        throw const WalletAuthException('设备未录入生物识别，无法使用冷钱包');
       }
       throw WalletAuthException('认证服务异常：${e.message}，请稍后重试');
     }

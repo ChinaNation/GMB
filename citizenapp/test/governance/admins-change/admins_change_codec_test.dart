@@ -44,7 +44,7 @@ void main() {
     final value = Uint8List.fromList([
       ...code('CGOV'),
       8,
-      ...publicAdmin('GZ000-CTZN6-198805200-2026', '张', '三', 1),
+      ...publicAdmin('CN220-CTZN2-198805200-2026', '张', '三', 1),
       ...publicAdmin('', '', '', 2),
     ]);
     final decoded = AdminAccountCodec.decodeInstitution(
@@ -58,7 +58,7 @@ void main() {
     );
     expect(decoded.cidNumber, 'CID-1');
     expect(decoded.isActive, isTrue);
-    expect(decoded.admins.first.cid_number, 'GZ000-CTZN6-198805200-2026');
+    expect(decoded.admins.first.cid_number, 'CN220-CTZN2-198805200-2026');
     expect(decoded.admins.last.cid_number, isEmpty);
     expect(decoded.admins.last.family_name, isEmpty);
   });

@@ -114,7 +114,7 @@ fn operation_phase_lr_without_roster_cid_falls_back_to_identity_record() {
         ));
         // 名册保持 create_institution 默认：admin(1)/admin(2) 均【不带 cid】
         //（分层规则：私权名册 cid 不强制），LR 的四要素只落在 InstitutionInfo 身份记录上。
-        let citizen_cid = b"GZ000-CTZN6-198805200-2026".to_vec();
+        let citizen_cid = b"CN220-CTZN2-198805200-2026".to_vec();
         let lr_code = primitives::institution_constraints::ROLE_CODE_LEGAL_REPRESENTATIVE.to_vec();
         assert_ok!(PrivateManage::apply_institution_governance_result(
             entity_primitives::InstitutionGovernanceResult {
@@ -214,7 +214,7 @@ fn operation_phase_authorizes_by_cid_and_survives_wallet_rebind() {
         ));
 
         // 用带 CID 的名册覆盖：admin(1) 携 CID、admin(2) 无 CID（private-admins 无 seed 期绑定校验）。
-        let citizen_cid = b"GZ000-CTZN6-198805200-2026".to_vec();
+        let citizen_cid = b"CN220-CTZN2-198805200-2026".to_vec();
         let admins: crate::InstitutionAdminsInputOf<Test> = vec![
             admin_primitives::Admin {
                 account_id: admin(1),
