@@ -85,11 +85,7 @@ export async function readLimitedJson<T, H = unknown, C = CfProperties<H>>(reque
 /** 同域部署前缀属于入口层，返回给 App 的 Worker 上传地址必须保留当前前缀。 */
 export function apiRouteUrl<H, C>(request: Request<H, C>, path: string, query: Record<string, string>): string {
   const current = new URL(request.url);
-  const prefix = current.pathname.startsWith('/api-staging/')
-    ? '/api-staging'
-    : current.pathname.startsWith('/api/')
-      ? '/api'
-      : '';
+  const prefix = current.pathname.startsWith('/api/') ? '/api' : '';
   const url = new URL(`${prefix}${path}`, current.origin);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   return url.toString();
@@ -111,9 +107,8 @@ function contentLength<H, C>(request: Request<H, C>): number | null {
 }
 
 function normalizePath(pathname: string): string {
-  for (const prefix of ['/api-staging', '/api']) {
-    if (pathname === prefix) return '/';
-    if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
-  }
+  const prefix = '/api';
+  if (pathname === prefix) return '/';
+  if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
   return pathname;
 }

@@ -266,7 +266,7 @@ class FakeKv {
 describe('purgeAccount', () => {
   afterEach(() => vi.unstubAllGlobals());
   // 会员订阅与注销已解耦（公民币轨）：注销只硬删本地数据，不代签链上退订，
-  // 因此不再有 stripe 退订成功/失败分支，purge 也不再抛支付相关错误。
+  // 因此不再有外部支付退订成功/失败分支，purge 也不再抛支付相关错误。
   function buildEnv(): {
     env: Env;
     db: PurgeDb;

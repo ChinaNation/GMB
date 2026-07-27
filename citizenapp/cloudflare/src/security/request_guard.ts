@@ -22,14 +22,11 @@ interface RateWindowRow {
   expires_at: number;
 }
 
-/**
- * `/api` 与 `/api-staging` 只是同域部署前缀，业务路由始终使用唯一 `/v1` 契约。
- */
+/** `/api` 是唯一生产部署前缀，业务路由始终使用唯一 `/v1` 契约。 */
 export function normalizeApiPath(pathname: string): string {
-  for (const prefix of ['/api-staging', '/api']) {
-    if (pathname === prefix) return '/';
-    if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
-  }
+  const prefix = '/api';
+  if (pathname === prefix) return '/';
+  if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
   return pathname;
 }
 

@@ -36,11 +36,11 @@ class _ImportWalletPageState extends State<ImportWalletPage>
 
     setState(() => _importing = true);
     try {
-      final profile = await _walletManager.importWallet(mnemonic);
+      final result = await _walletManager.importWallet(mnemonic);
       _mnemonicController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已导入「${profile.walletName}」')),
+        SnackBar(content: Text('已导入「${result.wallet.walletName}」')),
       );
       Navigator.of(context).pop(true);
     } catch (e) {

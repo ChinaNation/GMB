@@ -1,5 +1,5 @@
 -- CitizenApp Cloudflare 唯一目标基线。
--- 新环境和清空后的 staging/production 只执行本文件，不保留历史迁移链。
+-- 唯一生产环境清空重建时只执行本文件，不保留历史迁移链。
 
 CREATE TABLE square_login_challenges (
   challenge_id TEXT PRIMARY KEY,

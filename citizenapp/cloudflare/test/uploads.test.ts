@@ -39,7 +39,7 @@ describe('upload validation', () => {
 
   it('normalizes only the two same-domain API prefixes', () => {
     expect(normalizeApiPath('/api/v1/square/feed')).toBe('/v1/square/feed');
-    expect(normalizeApiPath('/api-staging/v1/square/feed')).toBe('/v1/square/feed');
+    expect(normalizeApiPath('/api/v1/square/feed')).toBe('/v1/square/feed');
     expect(normalizeApiPath('/v1/square/feed')).toBe('/v1/square/feed');
   });
 

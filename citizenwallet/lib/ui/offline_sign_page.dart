@@ -1,12 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'app_theme.dart';
-import 'scan_overlay.dart';
 import '../signer/field_labels.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
@@ -15,80 +12,48 @@ import '../wallet/wallet_manager.dart';
 
 /// 离线签名页面。
 ///
-/// 扫描在线手机展示的签名请求二维码，
-/// 在本机完成签名后展示签名响应二维码。
+/// 扫码与账户定位由 [ScanPage] 全局完成并传入 [account]+[raw];本页只解析该
+/// 签名请求、展示中文摘要、在本机完成签名并展示响应二维码(不再自带扫码)。
 class OfflineSignPage extends StatefulWidget {
   const OfflineSignPage({
     super.key,
-    required this.wallet,
-    this.raw,
+    required this.account,
+    required this.walletName,
+    required this.raw,
   });
 
-  final WalletProfile wallet;
-  final String? raw;
+  /// 签名主体账户（由 ScanPage 按 QR 的 signerPublicKey 定位后传入）。
+  final Account account;
+  final String walletName;
+  final String raw;
 
   @override
   State<OfflineSignPage> createState() => _OfflineSignPageState();
 }
 
 class _OfflineSignPageState extends State<OfflineSignPage> {
-  late final MobileScannerController _controller;
   final OfflineSignService _offlineSignService = OfflineSignService();
   final QrSigner _qrSigner = QrSigner();
 
   Timer? _timer;
-  bool _handled = false;
   bool _signing = false;
-  bool _torchOn = false;
   SignRequestEnvelope? _request;
   SignResponseEnvelope? _response;
   OfflineSignVerification? _verification;
+  String? _parseError;
   int _remainingSeconds = 0;
 
   @override
   void initState() {
     super.initState();
     ScreenshotGuard.enable();
-    _controller = MobileScannerController(
-      detectionSpeed: DetectionSpeed.normal,
-      facing: CameraFacing.back,
-      torchEnabled: false,
-    );
-    final code = widget.raw;
-    if (code != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _handleCode(code));
-    }
-  }
-
-  Future<void> _toggleTorch() async {
-    await _controller.toggleTorch();
-    setState(() {
-      _torchOn = !_torchOn;
-    });
-  }
-
-  Future<void> _scanFromGallery() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-    final capture = await _controller.analyzeImage(image.path);
-    if (capture == null || capture.barcodes.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未识别到二维码')),
-      );
-      return;
-    }
-    final code = capture.barcodes.first.rawValue;
-    if (code != null && code.isNotEmpty) {
-      await _handleCode(code);
-    }
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _parseRequest(widget.raw));
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _controller.dispose();
     ScreenshotGuard.disable();
     super.dispose();
   }
@@ -110,59 +75,20 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     });
   }
 
-  Future<void> _handleCode(String raw) async {
-    if (_handled) return;
-    _handled = true;
-    await _controller.stop();
-
+  void _parseRequest(String raw) {
     try {
       final request = _offlineSignService.parseRequest(raw);
       final verification = _offlineSignService.verifyPayload(request);
       if (!mounted) return;
       setState(() {
         _request = request;
-        _response = null;
         _verification = verification;
       });
       _startCountdown(request);
     } on QrSignException catch (e) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('签名请求解析失败'),
-          content: Text(e.message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('继续扫描'),
-            ),
-          ],
-        ),
-      );
-      if (mounted) {
-        await _controller.start();
-      }
-    } finally {
-      _handled = false;
+      setState(() => _parseError = e.message);
     }
-  }
-
-  Future<void> _resetToScanner() async {
-    _timer?.cancel();
-    if (!mounted) return;
-    setState(() {
-      _request = null;
-      _response = null;
-      _verification = null;
-      _remainingSeconds = 0;
-      _signing = false;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted) {
-        await _controller.start();
-      }
-    });
   }
 
   Future<void> _signRequest() async {
@@ -182,7 +108,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     });
     try {
       final response = await _offlineSignService.signParsedRequest(
-        walletIndex: widget.wallet.walletIndex,
+        accountId: widget.account.accountId,
         request: request,
       );
       if (!mounted) return;
@@ -226,120 +152,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   String _truncate(String text, {int head = 12, int tail = 8}) {
     if (text.length <= head + tail + 3) return text;
     return '${text.substring(0, head)}...${text.substring(text.length - tail)}';
-  }
-
-  Widget _buildScanner() {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        MobileScanner(
-          controller: _controller,
-          onDetect: (capture) {
-            final code = capture.barcodes.first.rawValue;
-            if (code == null || code.isEmpty) return;
-            _handleCode(code);
-          },
-        ),
-
-        // 扫描框 + 半透明遮罩
-        CustomPaint(
-          painter: ScanOverlayPainter(
-            scanBoxSize: scanBoxSize,
-            offsetY: scanBoxOffsetY,
-          ),
-          child: const SizedBox.expand(),
-        ),
-
-        // 扫描框四角装饰
-        Center(
-          child: Transform.translate(
-            offset: const Offset(0, scanBoxOffsetY),
-            child: SizedBox(
-              width: scanBoxSize,
-              height: scanBoxSize,
-              child: CustomPaint(
-                painter: ScanCornerPainter(),
-              ),
-            ),
-          ),
-        ),
-
-        // 提示文字
-        Center(
-          child: Transform.translate(
-            offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 28),
-            child: Text(
-              '扫描签名请求二维码\n当前钱包：${widget.wallet.walletName}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 14,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-        ),
-
-        // 底部工具栏
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 48, left: 48, right: 48),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceCard.withAlpha(200),
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              border: Border.all(color: AppTheme.border.withAlpha(80)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildToolButton(
-                  icon: Icons.photo_library_outlined,
-                  label: '相册',
-                  onTap: _scanFromGallery,
-                  active: false,
-                ),
-                Container(width: 1, height: 32, color: AppTheme.border),
-                _buildToolButton(
-                  icon: _torchOn
-                      ? Icons.flashlight_on_rounded
-                      : Icons.flashlight_off_outlined,
-                  label: _torchOn ? '关闭' : '手电筒',
-                  onTap: _toggleTorch,
-                  active: _torchOn,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToolButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required bool active,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 26, color: active ? AppTheme.gold : Colors.white),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: active ? AppTheme.gold : Colors.white70,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   // 扫码确认页字段名必须显示中文,翻译单源在 signer/field_labels.dart。
@@ -536,8 +348,8 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: _resetToScanner,
-                child: const Text('重新扫描'),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('返回'),
               ),
             ),
             const SizedBox(width: 12),
@@ -634,17 +446,42 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
   Widget build(BuildContext context) {
     final request = _request;
     final response = _response;
+    final parseError = _parseError;
     return Scaffold(
-      backgroundColor:
-          (response != null || request != null) ? null : Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
         title: const Text('扫码签名'),
         centerTitle: true,
       ),
-      body: response != null
-          ? _buildResponseView(response)
-          : (request != null ? _buildRequestSummary(request) : _buildScanner()),
+      body: parseError != null
+          ? _buildParseError(parseError)
+          : response != null
+              ? _buildResponseView(response)
+              : request != null
+                  ? _buildRequestSummary(request)
+                  : const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildParseError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 56, color: AppTheme.danger),
+            const SizedBox(height: 16),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppTheme.danger, fontSize: 15)),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('返回'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

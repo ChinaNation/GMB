@@ -33,6 +33,13 @@ GMB **当前继续用 sr25519 签名**(链上已有真实用户);**未来通过�
 ```
 - `AccountSeedV1` = 现有 32B mini secret,不为 PQC 改变;sr25519 派生路径**不改**,地址逐字节不变;`AccountId` 永远=sr25519 锚点;不允许用 ML-DSA 公钥/哈希生成新地址。
 
+> 🔴 **修订(2026-07-26,HD 多账户改造 —— 取代本节"单账户/派生路径不改"口径)**
+> 见任务卡 `memory/08-tasks/open/20260726-citizenapp-citizenwallet-hd-wallet-derivation.md`。钱包升级为 substrate 官方 HD:**一套助记词/一个 `AccountSeedV1` → 多账户**。
+> - **账户 0(主账户)= `sr25519.fromSeed(AccountSeedV1)` 根派生,逐字节不变**——本节"地址逐字节不变"只对账户 0 继续成立,护住已上链 bare 地址(如创世 `9c3e…1068`)。
+> - **账户 N≥1 = `<助记词>//N` 硬 junction 派生**(等价 seed-only `0x<AccountSeedV1>//N`);每账户各自 sr25519 公钥/AccountId/ss58。Phase 0 已用 `//Alice` 对齐 substrate 权威向量、并证 `seedFromEntropy==miniSecretFromEntropy`、seed-only 等价(金标 `citizenwallet/test/wallet/derivation_golden_test.dart`)。
+> - **ML-DSA-65 改为按账户派生**:`AccountSeedV1_N` = 账户 N 的派生密钥种子(账户0=`AccountSeedV1`;N≥1=`//N` 派生所得 32B),再走下方同一 `HKDF-SHA512(…, info)`。原"单一 master AccountSeedV1 → 一套 ML-DSA"改为"每账户一套"。info 串与 KDF 定义不变。golden vector(含 ξ)按账户逐一钉。
+> - sr25519 分支仍**绝不套 HKDF**;`AccountId` 仍=sr25519 锚点。PQC 切换机制(bootstrap→绑定→PQC 主签)不变,按账户独立进行(见 card3,其"sr25519 fromSeed 直出/单 AccountSeedV1"假设被本修订取代)。
+
 **派生规则(只两支;sr25519 不套 HKDF):**
 ```
 sr25519 地址锚点: sr25519.fromSeed(AccountSeedV1) -> AccountId        ← 现有直接派生, 绝不经 HKDF

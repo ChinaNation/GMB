@@ -13,7 +13,7 @@ import 'scan_page.dart';
 import 'settings_page.dart';
 import 'wallet_detail_page.dart';
 
-/// 钱包列表首页。
+/// Lv1 钱包列表首页：只显示钱包名（+分组）。点钱包进 Lv2 详情；顶部全局扫码。
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -23,10 +23,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final WalletManager _walletManager = WalletManager();
-  List<WalletProfile> _wallets = [];
+  List<Wallet> _wallets = [];
   List<WalletGroupEntity> _groups = [];
   String _selectedGroup = allGroup;
-  int? _activeIndex;
   bool _loading = true;
   bool _isRooted = false;
 
@@ -47,14 +46,12 @@ class _HomePageState extends State<HomePage> {
     if (showLoading) setState(() => _loading = true);
     try {
       final wallets = await _walletManager.getWallets();
-      final activeIndex = await _walletManager.getActiveWalletIndex();
       final isar = await WalletIsar.instance.db();
       final groups =
           await isar.walletGroupEntitys.where().sortBySortOrder().findAll();
       if (!mounted) return;
       setState(() {
         _wallets = wallets;
-        _activeIndex = activeIndex;
         _groups = groups;
         _loading = false;
       });
@@ -69,7 +66,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadWallets() => _loadAll();
 
-  List<WalletProfile> get _filteredWallets {
+  List<Wallet> get _filteredWallets {
     if (_selectedGroup == allGroup) return _wallets;
     return _wallets.where((w) => w.inGroup(_selectedGroup)).toList();
   }
@@ -92,6 +89,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// 全局扫码签名：扫完由设备按 QR 的 signerPublicKey 自动匹配账户。
+  Future<void> _openScan() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ScanPage()),
+    );
+    await _loadWallets();
+  }
+
   void _showAddWalletMenu() {
     showModalBottomSheet(
       context: context,
@@ -101,7 +106,6 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 拖拽指示条
               Container(
                 width: 36,
                 height: 4,
@@ -114,7 +118,7 @@ class _HomePageState extends State<HomePage> {
               _buildBottomSheetItem(
                 icon: Icons.add_circle_outline,
                 label: '创建钱包',
-                subtitle: '生成新的助记词和密钥对',
+                subtitle: '生成新的助记词和账户0',
                 onTap: () {
                   Navigator.pop(context);
                   _openCreateWallet();
@@ -167,22 +171,15 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
+                    Text(label,
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary)),
                     const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -195,41 +192,20 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openScan(WalletProfile wallet) async {
+  Future<void> _openWalletDetail(Wallet wallet) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ScanPage(wallet: wallet),
-      ),
-    );
-  }
-
-  Future<void> _openWalletDetail(WalletProfile wallet) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => WalletDetailPage(wallet: wallet),
-      ),
+      MaterialPageRoute(builder: (_) => WalletDetailPage(wallet: wallet)),
     );
     await _loadWallets();
   }
 
-  Future<void> _setActive(int walletIndex) async {
-    try {
-      await _walletManager.setActiveWallet(walletIndex);
-      await _loadWallets();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('切换钱包失败：$e')),
-      );
-    }
-  }
-
-  Future<void> _confirmDelete(WalletProfile wallet) async {
+  Future<void> _confirmDelete(Wallet wallet) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除钱包'),
-        content: Text('确定删除「${wallet.walletName}」？\n删除后私钥将被清除，请确保已备份助记词。'),
+        content: Text('确定删除「${wallet.walletName}」？\n'
+            '删除后该钱包全部账户与私钥将被清除，请确保已备份助记词。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -245,7 +221,7 @@ class _HomePageState extends State<HomePage> {
     );
     if (confirmed != true) return;
     try {
-      await _walletManager.deleteWallet(wallet.walletIndex);
+      await _walletManager.deleteWallet(wallet.masterId);
       await _loadWallets();
     } catch (e) {
       if (!mounted) return;
@@ -255,7 +231,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _renameWallet(WalletProfile wallet) async {
+  Future<void> _renameWallet(Wallet wallet) async {
     final controller = TextEditingController(text: wallet.walletName);
     final newName = await showDialog<String>(
       context: context,
@@ -264,7 +240,8 @@ class _HomePageState extends State<HomePage> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: '请输入新名称'),
+          maxLength: WalletManager.maxWalletNameLength,
+          decoration: const InputDecoration(hintText: '请输入新名称', counterText: ''),
         ),
         actions: [
           TextButton(
@@ -288,12 +265,6 @@ class _HomePageState extends State<HomePage> {
         SnackBar(content: Text('重命名失败：$e')),
       );
     }
-  }
-
-  String _truncateSs58Address(String ss58Address) {
-    if (ss58Address.length <= 16) return ss58Address;
-    return '${ss58Address.substring(0, 8)}...'
-        '${ss58Address.substring(ss58Address.length - 6)}';
   }
 
   @override
@@ -327,7 +298,18 @@ class _HomePageState extends State<HomePage> {
         ),
         centerTitle: true,
         actions: [
-          if (hasWallets)
+          if (hasWallets) ...[
+            IconButton(
+              icon: SvgPicture.asset(
+                'assets/icons/scan-line.svg',
+                width: 22,
+                height: 22,
+                colorFilter: const ColorFilter.mode(
+                    AppTheme.primaryLight, BlendMode.srcIn),
+              ),
+              tooltip: '扫码签名',
+              onPressed: _openScan,
+            ),
             IconButton(
               icon: Container(
                 width: 32,
@@ -342,15 +324,13 @@ class _HomePageState extends State<HomePage> {
               tooltip: '添加钱包',
               onPressed: _showAddWalletMenu,
             ),
+          ],
         ],
       ),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(
-                color: AppTheme.primary,
-                strokeWidth: 2.5,
-              ),
-            )
+                  color: AppTheme.primary, strokeWidth: 2.5))
           : Column(
               children: [
                 if (_isRooted)
@@ -369,10 +349,9 @@ class _HomePageState extends State<HomePage> {
                           child: Text(
                             '检测到设备已 root/越狱，密钥安全无法保障',
                             style: TextStyle(
-                              color: AppTheme.danger,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
+                                color: AppTheme.danger,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500),
                           ),
                         ),
                       ],
@@ -401,29 +380,18 @@ class _HomePageState extends State<HomePage> {
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: AppTheme.border),
               ),
-              child: const Icon(
-                Icons.account_balance_wallet_outlined,
-                size: 40,
-                color: AppTheme.textTertiary,
-              ),
+              child: const Icon(Icons.account_balance_wallet_outlined,
+                  size: 40, color: AppTheme.textTertiary),
             ),
             const SizedBox(height: 24),
-            const Text(
-              '还没有钱包',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
+            const Text('还没有钱包',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary)),
             const SizedBox(height: 8),
-            const Text(
-              '创建或导入一个钱包来开始使用',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 14,
-              ),
-            ),
+            const Text('创建或导入一个钱包来开始使用',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
             const SizedBox(height: 36),
             SizedBox(
               width: 220,
@@ -466,9 +434,7 @@ class _HomePageState extends State<HomePage> {
             child: ChoiceChip(
               label: const Text(allGroup),
               selected: _selectedGroup == allGroup,
-              onSelected: (_) {
-                setState(() => _selectedGroup = allGroup);
-              },
+              onSelected: (_) => setState(() => _selectedGroup = allGroup),
             ),
           ),
           Expanded(
@@ -482,9 +448,8 @@ class _HomePageState extends State<HomePage> {
                     child: ChoiceChip(
                       label: Text(g.name),
                       selected: selected,
-                      onSelected: (_) {
-                        setState(() => _selectedGroup = g.name);
-                      },
+                      onSelected: (_) =>
+                          setState(() => _selectedGroup = g.name),
                     ),
                   );
                 }).toList(),
@@ -510,10 +475,8 @@ class _HomePageState extends State<HomePage> {
         Expanded(
           child: wallets.isEmpty
               ? const Center(
-                  child: Text(
-                    '该分组下没有钱包',
-                    style: TextStyle(color: AppTheme.textTertiary),
-                  ),
+                  child: Text('该分组下没有钱包',
+                      style: TextStyle(color: AppTheme.textTertiary)),
                 )
               : ReorderableListView.builder(
                   padding:
@@ -521,24 +484,20 @@ class _HomePageState extends State<HomePage> {
                   itemCount: wallets.length,
                   onReorder: (oldIndex, newIndex) =>
                       _onReorderWallet(wallets, oldIndex, newIndex),
-                  proxyDecorator: (child, index, animation) {
-                    return AnimatedBuilder(
-                      animation: animation,
-                      builder: (context, child) => Material(
-                        elevation: 0,
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        child: child,
-                      ),
+                  proxyDecorator: (child, index, animation) => AnimatedBuilder(
+                    animation: animation,
+                    builder: (context, child) => Material(
+                      elevation: 0,
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       child: child,
-                    );
-                  },
+                    ),
+                    child: child,
+                  ),
                   itemBuilder: (context, index) {
                     final wallet = wallets[index];
-                    final isActive = wallet.walletIndex == _activeIndex;
                     return _buildWalletCard(
                       wallet,
-                      isActive,
                       key: ValueKey(wallet.walletIndex),
                     );
                   },
@@ -549,11 +508,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _onReorderWallet(
-    List<WalletProfile> displayedWallets,
+    List<Wallet> displayedWallets,
     int oldIndex,
     int newIndex,
   ) async {
-    // Flutter 原生 onReorder 向下拖动时 newIndex 仍按移除前列表计算。
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
@@ -565,33 +523,39 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final reorderedDisplayedWallets = List<WalletProfile>.of(displayedWallets);
-    final movedWallet = reorderedDisplayedWallets.removeAt(oldIndex);
-    reorderedDisplayedWallets.insert(newIndex, movedWallet);
+    final reorderedDisplayed = List<Wallet>.of(displayedWallets);
+    final moved = reorderedDisplayed.removeAt(oldIndex);
+    reorderedDisplayed.insert(newIndex, moved);
 
-    // 分组视图只重排当前显示的钱包槽位,不移动其它分组的钱包。
-    final displayedWalletIndexes =
-        displayedWallets.map((wallet) => wallet.walletIndex).toSet();
+    final displayedIndexes =
+        displayedWallets.map((w) => w.walletIndex).toSet();
     final displayedSlotCount = _wallets
-        .where((wallet) => displayedWalletIndexes.contains(wallet.walletIndex))
+        .where((w) => displayedIndexes.contains(w.walletIndex))
         .length;
-    if (displayedSlotCount != reorderedDisplayedWallets.length) return;
+    if (displayedSlotCount != reorderedDisplayed.length) return;
 
-    var displayedCursor = 0;
-    final reorderedWallets = _wallets.map((wallet) {
-      if (!displayedWalletIndexes.contains(wallet.walletIndex)) return wallet;
-      return reorderedDisplayedWallets[displayedCursor++];
+    // 乐观更新前先快照,写库失败可回滚,避免"UI 已排好、库没保存、冷启动跳回"的静默失败。
+    final previous = _wallets;
+    var cursor = 0;
+    final next = _wallets.map((w) {
+      if (!displayedIndexes.contains(w.walletIndex)) return w;
+      return reorderedDisplayed[cursor++];
     }).toList();
+    setState(() => _wallets = next);
 
-    _wallets = reorderedWallets;
-
-    setState(() {});
-
-    final indexes = _wallets.map((w) => w.walletIndex).toList();
-    await _walletManager.reorderWallets(indexes);
+    try {
+      await _walletManager
+          .reorderWallets(next.map((w) => w.walletIndex).toList());
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _wallets = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存排序失败：$e')),
+      );
+    }
   }
 
-  Widget _buildWalletCard(WalletProfile wallet, bool isActive, {Key? key}) {
+  Widget _buildWalletCard(Wallet wallet, {Key? key}) {
     return Padding(
       key: key,
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -599,103 +563,33 @@ class _HomePageState extends State<HomePage> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          onTap: () => _setActive(wallet.walletIndex),
+          onTap: () => _openWalletDetail(wallet),
           child: Container(
             padding: const EdgeInsets.all(16),
-            decoration: AppTheme.cardDecoration(selected: isActive),
+            decoration: AppTheme.cardDecoration(),
             child: Row(
               children: [
-                // 头像
                 Container(
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    gradient: isActive ? AppTheme.primaryGradient : null,
-                    color: isActive ? null : AppTheme.surfaceElevated,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                  ),
-                  child: Icon(
-                    Icons.account_balance_wallet_rounded,
-                    color: isActive ? Colors.white : AppTheme.textTertiary,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                // 钱包名称 + SS58 展示地址。
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              wallet.walletName,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (isActive) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary.withAlpha(30),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                '当前',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: AppTheme.primaryLight,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _truncateSs58Address(wallet.ss58Address),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                          fontFamily: 'monospace',
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // 扫码按钮
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
                     color: AppTheme.surfaceElevated,
                     borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                   ),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    icon: SvgPicture.asset(
-                      'assets/icons/scan-line.svg',
-                      width: 20,
-                      height: 20,
-                      colorFilter: const ColorFilter.mode(
-                          AppTheme.primaryLight, BlendMode.srcIn),
-                    ),
-                    tooltip: '扫码签名',
-                    onPressed: () => _openScan(wallet),
+                  child: const Icon(Icons.account_balance_wallet_rounded,
+                      color: AppTheme.textTertiary, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    wallet.walletName,
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 4),
-                // 更多菜单
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert,
                       color: AppTheme.textTertiary, size: 20),
@@ -712,37 +606,30 @@ class _HomePageState extends State<HomePage> {
                   itemBuilder: (context) => [
                     const PopupMenuItem(
                       value: 'rename',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit_outlined,
-                              size: 18, color: AppTheme.textSecondary),
-                          SizedBox(width: 10),
-                          Text('重命名'),
-                        ],
-                      ),
+                      child: Row(children: [
+                        Icon(Icons.edit_outlined,
+                            size: 18, color: AppTheme.textSecondary),
+                        SizedBox(width: 10),
+                        Text('重命名'),
+                      ]),
                     ),
                     const PopupMenuItem(
                       value: 'detail',
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 18, color: AppTheme.textSecondary),
-                          SizedBox(width: 10),
-                          Text('钱包详情'),
-                        ],
-                      ),
+                      child: Row(children: [
+                        Icon(Icons.info_outline,
+                            size: 18, color: AppTheme.textSecondary),
+                        SizedBox(width: 10),
+                        Text('钱包详情'),
+                      ]),
                     ),
                     const PopupMenuItem(
                       value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline,
-                              size: 18, color: AppTheme.danger),
-                          SizedBox(width: 10),
-                          Text('删除钱包',
-                              style: TextStyle(color: AppTheme.danger)),
-                        ],
-                      ),
+                      child: Row(children: [
+                        Icon(Icons.delete_outline,
+                            size: 18, color: AppTheme.danger),
+                        SizedBox(width: 10),
+                        Text('删除钱包', style: TextStyle(color: AppTheme.danger)),
+                      ]),
                     ),
                   ],
                 ),

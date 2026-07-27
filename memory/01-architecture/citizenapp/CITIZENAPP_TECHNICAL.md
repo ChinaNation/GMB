@@ -532,13 +532,26 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - R2 路径中的 `account_id_hex` 固定为规范 `account_id` 去掉 `0x` 后的 64 位小写十六进制，入口严格校验完整 AccountId，不执行清洗、大小写归一或 SS58 转换。广场 manifest 的 R2 object key 固定使用 `square/{account_id_hex}/posts/{post_id}/manifest.json`；头像、背景和 manifest 只通过同域 Worker 上传。图片不生成 R2 主媒体 key，由 Worker 写 Images；视频只拿 Stream TUS 地址。不存在 R2 PUT 预签名、Images 客户端直传或本地开发代理分支。
 - Worker D1 使用 `chain_clock`、`square_memberships`、`square_creator_tiers`、`square_creator_subscriptions` 和 `chain_transaction_confirmations` 保存可重建 finalized 镜像与最小交易证明，并使用 `resource_reservations`、`resource_usage`、`resource_totals` 强制资源额度；`square_media_assets.resource_key` 指向统一限制表。KV session、session index 和身份缓存写入前同样校验实际 JSON 字节。Cloudflare API token、Stream webhook secret、R2 冷归档只读签名密钥和链 RPC 地址只放部署环境。
 - Worker 本地验证命令固定为 `npm --prefix citizenapp/cloudflare run typecheck`、`npm --prefix citizenapp/cloudflare test`、`npm --prefix citizenapp/cloudflare run db:local`、`npm --prefix citizenapp/cloudflare run dev:local -- --port 8787`。
-- Worker 远端命令固定为 `npm --prefix citizenapp/cloudflare run db:staging`、`npm --prefix citizenapp/cloudflare run deploy:staging`、`npm --prefix citizenapp/cloudflare run db:production`、`npm --prefix citizenapp/cloudflare run deploy:production`；`wrangler.toml` 已登记 staging/production 的实际 D1、KV、R2 和公共媒体交付地址，密钥只通过 Wrangler Secret 配置。
+- Worker 远端命令只保留 `npm --prefix citizenapp/cloudflare run db:production` 和
+  `npm --prefix citizenapp/cloudflare run deploy:production`；`wrangler.toml` 只登记
+  production D1、KV、R2、Queue、Route 和公共媒体交付地址，密钥只通过
+  CitizenConsole 同步到 Wrangler Secret。
 - `GET /v1/chain/bootstrap` 属于 Cloudflare 边缘启动清单接口，返回 `citizenapp.chain.bootstrap.v2`：`chain`、`light_client`、`p2p`、`services`、`security`、`degradation`。该接口只治理链身份、公开 bootnodes 和服务发现，不返回 checkpoint、轻同步资产 URL/摘要或 RPC URL，不代理 JSON-RPC，不接触私钥；`signed_extrinsic_relay.enabled` 仅在 Worker 显式配置 `RELAY_ENABLED=1` 且服务节点 RPC 已配置时为 `true`，path 固定 `/v1/chain/extrinsics/relay`。
 - `POST /v1/chain/extrinsics/relay` 是已签名交易受控广播兜底接口，只接受 `signed_extrinsic_hex`，只调用服务节点 `author_submitExtrinsic`，拒绝私钥/助记词/seed/keystore 等密钥字段，并用 D1 表 `chain_extrinsic_relays` 记录 `extrinsic_sha256`、`tx_hash`、`request_ip_hash`、状态和错误码用于审计、限流和去重；该表不保存原始 extrinsic body 或 RPC URL。
 - App 端接入文件为 `citizenapp/lib/rpc/chain_bootstrap_api.dart`、`citizenapp/lib/rpc/smoldot_client.dart`、`citizenapp/lib/rpc/signed_extrinsic_relay_api.dart` 和 `citizenapp/lib/rpc/chain_rpc.dart`。`ChainBootstrapApi` 只接受 HTTPS 或本地调试 HTTP，拒绝 `api_is_truth=true`、`rpc_proxy=true`、任何 RPC URL 字段，并且只接受固定 signed extrinsic relay path；`SmoldotClientManager` 只把清单中的 bootnodes 当作 P2P 启动加速信息；`ChainRpc.submitExtrinsic` 仅在轻节点提交失败且错误像链路故障时走 relay 兜底，交易本身已显示 invalid/bad proof/stale/future/payment 类错误时不兜底。
-- Cloudflare staging API 唯一入口为 `https://www.crcfrcn.com/api-staging`，由 `CitizenApp API Staging` Access 应用保护。2026-07-26 第8.3B步已按唯一 0001 基线再次重建 D1，并清空 KV、两个 R2 桶和通知队列；匿名健康请求继续由 Access 以 302 拦截。25 张业务表和 KV 当前全部为零。
-- Cloudflare 链上游统一为 `chain.crcfrcn.com` 的 Access 保护路径，经 `nrcgch-rpc` Tunnel 到达国储会服务器 `127.0.0.1:18080` 网关，再由网关按固定 JSON-RPC 方法转发本机节点。staging/production Worker 使用同一个 `CitizenChain` Service Auth 凭据组，Secret 值只保存在 Cloudflare。2026-07-26 国储会部署完成后，该固定 RPC 已返回正式创世 `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`；随后正式链 finalized 到 block #4，同区块 `Timestamp.Now=1785090070105`，双环境 Cron 均从同一正式链写入 block #3 链时钟。节点重建没有改变 Tunnel、Access、域名或网关地址，旧链 block #9 没有复现。
-- Cloudflare production API 唯一入口为 `https://www.crcfrcn.com/api`。2026-07-26 第8.3B步已按唯一 0001 基线再次重建 25 张 D1 业务表，清空 KV、两个 R2 桶和通知队列，删除 Stripe Secret，保存并同步 production `TOPUP_INTENT_SECRET`，发布冻结正式链锚点；真实 `/health` 返回 200，`/v1/chain/bootstrap` 返回正式创世和状态根且交易 relay 关闭。第8.3B清理完成瞬间的 25 张业务表和 KV 均为零，随后只由正式钱包注册设备子密钥和建立会话。会员没有外部支付 webhook；Stream 账户 webhook 固定为 `/api/v1/square/uploads/stream/webhook`。Images/Stream 只签发短期私有交付地址，Feed 不保存长期播放 URL。
+- Cloudflare 链上游统一为 `chain.crcfrcn.com` 的 Access 保护路径，经 `nrcgch-rpc`
+  Tunnel 到达国储会服务器 `127.0.0.1:18080` 网关，再由网关按固定 JSON-RPC 方法转发
+  本机节点。唯一 production Worker 使用 `CitizenChain` Service Auth 凭据组，Secret
+  由 CitizenConsole 管理并同步到 Cloudflare。固定 RPC 已返回正式创世
+  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`；
+  节点重建不改变 Tunnel、Access、域名或网关地址。
+- Cloudflare 唯一 API 入口为 `https://www.crcfrcn.com/api`。2026-07-26 已把配置收敛为
+  单一 production Worker，远端只保留 production D1、KV、两个 R2 桶、通知队列和 16 项
+  Worker Secret；staging Worker、路由、Access 应用、D1、KV、两个 R2 桶和队列已彻底
+  删除。真实 `/health` 返回 200，`/v1/chain/bootstrap` 返回正式创世和状态根且交易
+  relay 关闭。会员没有外部支付 webhook；Stream 账户 webhook 固定为
+  `/api/v1/square/uploads/stream/webhook`。Images/Stream 只签发短期私有交付地址，
+  Feed 不保存长期播放 URL。
 - 2026-07-26 第8.3C无真实资金验收：当前正式钱包 `Rhett` 的 `account_id` 为
   `0xb805efd2399e6e6b08fc5527c07a963bb7fdee0181a348ce68b2d2dbaf235753`，
   SS58 为 `w5Fk5zp3WrLxDET9wUY6WJKtfmBuWTFfuQohmwzrp1efKPmid`，正式链余额
@@ -547,18 +560,33 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   27 项、`square-post` 23 项、runtime SquarePost 集成 4 项，共 292 项测试全部通过；
   前后余额、nonce 和生产业务表计数不变。用户明确不执行真实购买，本轮没有唤起外部钱包、
   账户签名、USDC/USDT 支出、发币或订阅交易。当前钱包禁止被后续清理动作删除或覆盖。
-- Cloudflare DNS 严格保留 8 条：`www`、`chain`、`nrcgch`、`prchbs`、`prches`、`prcsds`、`prcsxs`、`prczss`。production 与 staging API 都复用 `www` 的路径路由，不创建额外 API DNS。
-- production 每日 UTC 03:00 扫描退订满 90 天的视频，`ARCHIVE_ENABLED=1` 时按“Stream 导出到 R2 Infrequent Access、确认落成后删除 Stream”的顺序冷归档；重新订阅后从 R2 回灌 Stream。staging 与本地保持关闭。2026-07-11 已用 production 远端绑定触发空扫描，返回 200 且无错误。
+- Cloudflare DNS 严格保留 8 条：`www`、`chain`、`nrcgch`、`prchbs`、`prches`、
+  `prcsds`、`prcsxs`、`prczss`。唯一 API 复用 `www` 的 `/api/*` 路由，不创建额外
+  API DNS。
+- production 每日 UTC 03:00 扫描退订满 90 天的视频，`ARCHIVE_ENABLED=1` 时按
+  “Stream 导出到 R2 Infrequent Access、确认落成后删除 Stream”的顺序冷归档；重新
+  订阅后从 R2 回灌 Stream。本地开发保持关闭。
 - App 端广场/聊天 API 默认即线上 production `SquareApiConfig.prodBaseUrl = https://www.crcfrcn.com/api`（Chat 瞬时转发与广场共用同一 Worker）；`SQUARE_API_URL` 编译期 define 仅作显式本地联调覆盖。官网同源使用 `/api`，原生 App 无 Origin 时使用 P-256 设备请求证明。
-- Cloudflare WAF 与 Worker 双层限流继续保护 `/api/*` 与 `/api-staging/*`；Stream webhook 按独立签名入口处理，Worker 再按认证接口、上传、Chat、读取、写入分别使用 IP 哈希或 `account_id` 做精确限流。具体远端规则在部署步骤只读复核后才能作为当前事实记录。
-- Chat 的 staging/production 使用独立 Google FCM 服务账号密钥；附件 WebRTC 只配置公开 Cloudflare STUN 发现直连候选，不配置中继服务、接口、密钥或 D1 表。两套 Worker 的旧中继 Secret 和 Cloudflare 控制台中两个 Realtime 应用均已永久删除。APNs 凭证暂不配置，仅影响 iOS 后台推送，不阻塞 Android FCM、前台 Chat、广场或会员。
+- Cloudflare WAF 与 Worker 双层限流只保护 `/api/*`；Stream webhook 按独立签名入口
+  处理，Worker 再按认证接口、上传、Chat、读取、写入分别使用 IP 哈希或 `account_id`
+  做精确限流。具体远端规则在部署步骤只读复核后才能作为当前事实记录。
+- Chat 的 production Worker 使用唯一 Google FCM 服务账号密钥；附件 WebRTC 只配置
+  公开 Cloudflare STUN 发现直连候选，不配置中继服务、接口、密钥或 D1 表。APNs 凭证
+  暂不配置，仅影响 iOS 后台推送，不阻塞 Android FCM、前台 Chat、广场或会员。
 - 广场媒体盈利保护由 Worker 强制执行（三档，ADR-036）：自由会员每月 300 图/30 分钟视频/1 个活动上传，民主会员每月 1500 图/180 分钟/2 个活动上传，薪火会员每月 5000 图/1800 分钟/3 个活动上传。媒体估算成本达到有效订阅毛收入预算的 85% 时暂停新视频，达到 100% 时暂停全部新媒体；文字浏览、账户和 Chat 不受媒体熔断影响。
 - 广场链上确认本地 E2E 不使用冻结 `--dev` chainspec；冻结 dev spec 可能仍带旧 WASM，metadata 中没有 `SquarePost`。需要先用当前源码 WASM 构建节点，再基于 `citizenchain-fresh` 生成临时 chainspec 并给测试钱包补余额。
 - 广场本地 E2E 链节点必须至少两个节点通过 WSS peer 互连。当前节点挖矿逻辑在 `sync_service.is_offline()` 时不会出块，单节点即使有 pending extrinsic 也不会打包；第二节点 bootnode 地址必须使用 `/wss/p2p/{peer_id}`，两端 `system_health.peers > 0` 后才能验证 `publish_square_post` 入块。
 - 本地真实 E2E 必须使用与生产相同的 Worker 上传接口和 D1 目标基线；禁止恢复仅本地存在的上传代理。Images/Stream provider 调用使用测试 Token 或 mock，HTTP 路由、签名、有界读取、R2 与 D1 必须真实运行。
 - `citizenapp/cloudflare/.gitignore` 必须忽略 `.dev.vars`、`.wrangler/`、`node_modules/`、`coverage/` 和 `dist/`；Cloudflare token、R2 access key、R2 secret key 不得写入仓库。
-- CitizenApp 聊天、广场、会员和媒体共用同一套 Worker 源码，但 Cloudflare 远端严格分为 staging 与 production 两套 Worker、D1、KV、R2、路由和 Secret。唯一人工发布与运行态测试入口是根 `citizenconsole/` 本地控制台；该目录属于本机私有运维工具，整目录由 Git 忽略，不得提交或推送 GitHub。生产部署逐次通过 Touch ID，Secret 只保存在 macOS Keychain 或 GitHub Secrets。会员部署验收必须使用真实 signed extrinsic、finalized 链状态、真实 Worker/D1/HTTP 和门禁结果，不再包含外部支付 Sandbox、支付 webhook 或链下订阅授权。
-- `citizenapp/cloudflare/migrations/0001_square_core.sql` 是清空数据库后的唯一重建基线，不是可重复执行的增量迁移；通讯录与充值结构已合并进 0001，当前不存在后续 migration 文件。旧 Stripe、订阅、创作者、通讯录和充值增量迁移均不允许恢复。双环境部署脚本禁止自动重放基线或未审核迁移；检测到未来新增 migration 文件时必须停止发布并单独审查。
+- CitizenApp 聊天、广场、会员和媒体共用唯一 production Worker、D1、KV、R2、Queue、
+  Route 和 Secret。唯一人工发布与运行态测试入口是根 `citizenconsole/` 本地控制台；
+  该目录属于本机私有运维工具，整目录由 Git 忽略，不得提交或推送 GitHub。生产部署逐次
+  通过 Touch ID，Secret 只保存在 macOS Data Protection Keychain、Cloudflare Worker
+  Secret 或 GitHub Secrets。
+- `citizenapp/cloudflare/migrations/0001_square_core.sql` 是清空数据库后的唯一重建
+  基线，不是可重复执行的增量迁移；通讯录与充值结构已合并进 0001，当前不存在后续
+  migration 文件。生产部署脚本禁止自动重放基线或未审核迁移；检测到未来新增 migration
+  文件时必须停止发布并单独审查。
 - CitizenConsole 使用 Xcode 签名的 `com.gmb.citizenconsole.security` 原生安全代理，
   仅接受 Touch ID，禁止 Mac 密码回退。所有本机 Secret 使用 Data Protection Keychain、
   `biometryCurrentSet`、`WhenUnlockedThisDeviceOnly` 与独立 access group；缺少有效签名、
@@ -566,7 +594,9 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   `CF_DEPLOY_TOKEN`、`CF_DATA_TOKEN`、`CF_ZT_TOKEN`，旧 Wrangler OAuth 已退出并
   删除。充值发币是唯一可在一次 Touch ID 后随页面连接持续持有内存 Secret 的模块；
   无超时，点击锁定、离页、断连或进程退出立即清除。
-- staging 与 production 的 `citizenapp-chat-relay*` 桶都启用全前缀 `delete-relay-ciphertext-after-1-day` lifecycle，未领取的聊天中转密文最迟按 Cloudflare 生命周期规则过期；默认 7 天终止未完成 multipart upload 规则继续保留。
+- production `citizenapp-chat-relay` 桶启用全前缀
+  `delete-relay-ciphertext-after-1-day` lifecycle，未领取的聊天中转密文最迟按
+  Cloudflare 生命周期规则过期；默认 7 天终止未完成 multipart upload 规则继续保留。
 - App 本地 Isar 只缓存草稿、上传任务、feed 快照、浏览状态和推荐信号同步状态；本地缓存不得作为发布权限、认证状态或链上发布成功的最终真相。
 - 发布流程当前状态：App 校验 finalized 余额 → 钱包签名登录 Worker → Worker 校验会员和内容并原子预留额度、生成 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划 → App 提交链上发布并等待入块 → manifest 与图片以原始字节签名上传 Worker，视频上传 Stream TUS → Worker 按真实文件和 provider 结果核销额度 → complete/confirm 交叉校验链上事件、R2 manifest 与媒体索引后写正式 feed。任一步失败都不得绕过资源限制或回退旧上传路径。
 - 链上未入块、余额不足或后台发布流程失败时，App 用 `AppKvEntity` 保存当前钱包的广场发布草稿；草稿只用于用户继续编辑或再次发起发布，不是链上发布成功或 feed 可见的真源。
@@ -663,14 +693,13 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   配置，包括发币私钥；历史“已写入”记录不再构成当前配置事实。页面因此保持未配置、
   未解锁并失败关闭。`TOPUP_INTENT_SECRET` 可以通过控制台重新生成；发币私钥不能从公开
   发币地址反推，必须由用户提供正式密钥后逐项 Touch ID 重配，AI 不得伪造、替换或从
-  其它钱包借用。两套 Worker 远端废弃的 `STRIPE_API_KEY` 与 `STRIPE_HOOK_SECRET`
-  已删除并复核不存在，不得恢复任何 Stripe 接口、表或兼容分支。
+  其它钱包借用。旧外部支付接口、表、Secret 和兼容分支已彻底删除，不得恢复。
 - Worker TypeScript 绑定由 `wrangler types --env-interface CloudflareBindings` 从
   `wrangler.toml` 生成到 `worker-configuration.d.ts`。修改绑定或 vars 后必须重新生成并运行
   `npm run types:check`；不得恢复 `@cloudflare/workers-types` 手写全局绑定。Secret 不会由
   Wrangler 配置生成，只在 `src/types.ts` 声明名称契约。
-- staging 验收使用独立 D1/Worker 业务态但可配置 Base 主网真实币轨；生产 Worker/D1
-  不承载试单。真实付款前必须同时满足：当前节点代码能通过冻结创世启动自检、能导入
+- 远端不再提供 staging/test Worker 或试单数据库。真实付款前必须同时满足：当前节点
+  代码能通过冻结创世启动自检、能导入
   正式链最新区块、best 与 finalized 均持续推进、发币账户余额可读。任一条件失败时，
   CitizenApp 不得进入外部钱包付款确认，CitizenConsole 也不得尝试绕过节点守卫发币。
 - 2026-07-25 运行态证据：更新后的 debug/release 节点均在正式创世
@@ -679,7 +708,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   省储行质押账户和机构存储与冻结创世不一致。因此两币真实付款必须等正式创世重新冻结、
   节点数据切换并通过上述门禁后再执行，禁止先收稳定币后补救。
 - 2026-07-26 正式链前置门禁已通过：固定国储会 RPC finalized 到 block #4，Cloudflare
-  双环境链时钟已从同一正式链恢复；CitizenConsole 发币账户
+  production 链时钟已从正式链恢复；CitizenConsole 发币账户
   `0x36d00d0a9701b6e860c51476ce2d7ac5f3b35b6ff067b81d958afa1b0551c303`
   可用余额为 `100000000` 分，reserved/frozen 均为 0。本次只读校验没有支付或发币。
   Pixel 8a 主用户和私密空间旧 `org.citizenapp` 数据当时已精确清除；随后用户已重新创建

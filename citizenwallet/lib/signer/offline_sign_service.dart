@@ -6,9 +6,8 @@ import 'payload_decoder.dart';
 import 'qr_signer.dart';
 
 enum OfflineSignErrorCode {
-  walletNotFound,
-  coldWalletUnsupported,
-  walletMismatch,
+  accountNotFound,
+  accountMismatch,
   invalidPayload,
   contentMismatch,
   expired,
@@ -157,15 +156,17 @@ class OfflineSignService {
   }
 
   Future<SignResponseEnvelope> signRequestRaw({
-    required int walletIndex,
+    required String accountId,
     required String raw,
   }) async {
     final request = parseRequest(raw);
-    return signParsedRequest(walletIndex: walletIndex, request: request);
+    return signParsedRequest(accountId: accountId, request: request);
   }
 
+  /// 按账户签名。签名主体是账户（accountId），QR 请求里的
+  /// `signerPublicKeyHex` 即指定该由哪个账户签，故此处只需按账户定位并逐字比对。
   Future<SignResponseEnvelope> signParsedRequest({
-    required int walletIndex,
+    required String accountId,
     required SignRequestEnvelope request,
   }) async {
     final body = request.body;
@@ -178,26 +179,20 @@ class OfflineSignService {
       );
     }
 
-    final wallet = await _walletManager.getWalletByIndex(walletIndex);
-    if (wallet == null) {
+    final account = await _walletManager.getAccountByAccountId(accountId);
+    if (account == null) {
       throw const OfflineSignException(
-        OfflineSignErrorCode.walletNotFound,
-        '未找到指定钱包',
-      );
-    }
-    if (wallet.isColdWallet) {
-      throw const OfflineSignException(
-        OfflineSignErrorCode.coldWalletUnsupported,
-        '当前钱包为冷钱包,无法作为离线签名设备',
+        OfflineSignErrorCode.accountNotFound,
+        '未找到指定账户',
       );
     }
 
     // 当前 sr25519 的 AccountId32 与 signer public key 字节相同；请求 getter
     // 已输出规范 AccountId 文本，因此这里只允许完全相等，不做兼容归一化。
-    if (wallet.accountId != body.signerPublicKeyHex) {
+    if (account.accountId != body.signerPublicKeyHex) {
       throw const OfflineSignException(
-        OfflineSignErrorCode.walletMismatch,
-        '签名请求中的公钥与当前钱包不一致',
+        OfflineSignErrorCode.accountMismatch,
+        '签名请求中的公钥与所选账户不一致',
       );
     }
 
@@ -221,8 +216,8 @@ class OfflineSignService {
       );
     }
 
-    final signature = await _walletManager.signWithWallet(
-      wallet.walletIndex,
+    final signature = await _walletManager.signForAccount(
+      account.accountId,
       payloadBytes,
     );
 

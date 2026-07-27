@@ -54,12 +54,12 @@ void main() {
   group('OfflineSignService', () {
     late _FakeWalletManager walletManager;
     late OfflineSignService service;
-    late WalletProfile hotWallet;
+    late Account signingAccount;
 
     setUp(() async {
       walletManager = _FakeWalletManager();
       service = OfflineSignService(walletManager: walletManager);
-      hotWallet = (await walletManager.getWalletByIndex(1))!;
+      signingAccount = await walletManager.ensureAccount();
     });
 
     test('signParsedRequest should sign normal internal_vote (统一入口)', () async {
@@ -68,7 +68,7 @@ void main() {
       final payloadHex = _withSigningTailHex('0x140001000000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         payloadHex: payloadHex,
         action: QrActions.internalVote,
       );
@@ -76,7 +76,7 @@ void main() {
       final payloadBytes = _hexToBytes(payloadHex);
 
       final response = await service.signParsedRequest(
-        walletIndex: hotWallet.walletIndex,
+        accountId: signingAccount.accountId,
         request: request,
       );
 
@@ -84,7 +84,7 @@ void main() {
       expect(response.id, request.id);
       expect(
         response.body.signerPublicKeyHex,
-        hotWallet.accountId,
+        signingAccount.accountId,
       );
       expect(
         _verifySr25519(
@@ -101,14 +101,14 @@ void main() {
       final payloadHex = _withSigningTailHex('0x1400070000000000000001');
       final request = _buildTestRequest(
         requestId: 'offline-req-test-action-mismatch',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         payloadHex: payloadHex,
         action: QrActions.jointVote,
       );
 
       expect(
         () => service.signParsedRequest(
-          walletIndex: hotWallet.walletIndex,
+          accountId: signingAccount.accountId,
           request: request,
         ),
         throwsA(
@@ -127,7 +127,7 @@ void main() {
       // beneficiary 32B, amount u128_le, remark 空 Vec。
       final request = _buildTestRequest(
         requestId: 'offline-req-test-known',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         // call_data: [04][00][dest 32B][u128_le(1)][Vec(0)] → 0.01 GMB
         payloadHex: _withSigningTailHex(
             '0x0400aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0100000000000000000000000000000000'),
@@ -160,7 +160,7 @@ void main() {
           ])}';
       final request = _buildTestRequest(
         requestId: 'offline-platform-price',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         payloadHex: payloadHex,
         action: QrActions.proposeSetPlatformPrice,
       );
@@ -180,7 +180,7 @@ void main() {
       final price = List<int>.filled(16, 0)..[0] = 100;
       final request = _buildTestRequest(
         requestId: 'offline-platform-price-mismatch',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         payloadHex: '0x${_toHex([
               34,
               5,
@@ -202,7 +202,7 @@ void main() {
     test('verifyPayload 拒绝普通链交易 32 字节 hash-only payload', () {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-hash-only-reject',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         payloadHex:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         action: QrActions.privateInstitutionGovernance,
@@ -219,7 +219,7 @@ void main() {
     test('verifyPayload 拒绝未登记 action', () {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-unknown-action',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         payloadHex: _withSigningTailHex('0x1400010000000000000001'),
         action: 0x7fff,
       );
@@ -234,7 +234,7 @@ void main() {
     test('verifyPayload 识别广场动作中文名但钱包端拒绝签名', () {
       final request = _buildTestRequest(
         requestId: 'offline-req-test-square-action',
-        signerPublicKey: hotWallet.accountId,
+        signerPublicKey: signingAccount.accountId,
         payloadHex: '0x01020304',
         action: QrActions.squareAccountAction,
       );
@@ -258,14 +258,38 @@ void main() {
 
       expect(
         () => service.signParsedRequest(
-          walletIndex: hotWallet.walletIndex,
+          accountId: signingAccount.accountId,
           request: request,
         ),
         throwsA(
           isA<OfflineSignException>().having(
             (e) => e.code,
             'code',
-            OfflineSignErrorCode.walletMismatch,
+            OfflineSignErrorCode.accountMismatch,
+          ),
+        ),
+      );
+    });
+
+    test('signParsedRequest should reject unknown account', () async {
+      final request = _buildTestRequest(
+        requestId: 'offline-req-test-unknown-account',
+        signerPublicKey: signingAccount.accountId,
+        payloadHex: _withSigningTailHex('0x140001000000000000000001'),
+        action: QrActions.internalVote,
+      );
+
+      expect(
+        () => service.signParsedRequest(
+          accountId:
+              '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0',
+          request: request,
+        ),
+        throwsA(
+          isA<OfflineSignException>().having(
+            (e) => e.code,
+            'code',
+            OfflineSignErrorCode.accountNotFound,
           ),
         ),
       );
@@ -315,74 +339,55 @@ String _toHex(List<int> bytes) {
   return buf.toString();
 }
 
+/// 假 WalletManager:按账户提供签名（不触存储/生物识别）。
 class _FakeWalletManager extends WalletManager {
   static const int _ss58 = 2027;
   static const String _mnemonic =
       'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
 
-  _WalletFixture? _hotFixture;
+  Account? _account;
+  String? _seedHex;
   int signCallCount = 0;
 
-  Future<_WalletFixture> _ensureHotFixture() async {
-    final existing = _hotFixture;
+  Future<Account> ensureAccount() async {
+    final existing = _account;
     if (existing != null) {
       return existing;
     }
-
     final entropy =
-        bip39m.Mnemonic.fromSentence(_mnemonic, bip39m.Language.english)
-            .entropy;
+        bip39m.Mnemonic.fromSentence(_mnemonic, bip39m.Language.english).entropy;
     final miniSecret = await CryptoScheme.miniSecretFromEntropy(entropy);
     final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(miniSecret));
     pair.ss58Format = _ss58;
     final accountId = '0x${_toHex(pair.bytes().toList(growable: false))}';
-
-    _hotFixture = _WalletFixture(
-      profile: WalletProfile(
-        walletIndex: 1,
-        walletName: '离线测试热钱包',
-        accountId: accountId,
-        ss58Address: pair.address,
-        alg: 'sr25519',
-        ss58Prefix: _ss58,
-        createdAtMillis: DateTime.now().millisecondsSinceEpoch,
-        source: 'test',
-        signMode: 'local',
-      ),
-      seedHex: _toHex(miniSecret),
+    _seedHex = _toHex(miniSecret);
+    _account = Account(
+      masterId: accountId,
+      accountIndex: 0,
+      accountId: accountId,
+      ss58Address: pair.address,
+      accountName: '账户0',
+      createdAtMillis: 0,
     );
-    return _hotFixture!;
+    return _account!;
   }
 
   @override
-  Future<WalletProfile?> getWalletByIndex(int walletIndex) async {
-    final hot = await _ensureHotFixture();
-    if (walletIndex == hot.profile.walletIndex) {
-      return hot.profile;
-    }
-    return null;
+  Future<Account?> getAccountByAccountId(String accountId) async {
+    final account = await ensureAccount();
+    return account.accountId == accountId ? account : null;
   }
 
   @override
-  Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
+  Future<Uint8List> signForAccount(String accountId, Uint8List payload) async {
     signCallCount += 1;
-    final hot = await _ensureHotFixture();
-    if (walletIndex != hot.profile.walletIndex) {
-      throw const WalletAuthException('未找到指定钱包');
+    final account = await ensureAccount();
+    if (accountId != account.accountId) {
+      throw const WalletAuthException('未找到指定账户');
     }
-    final seedBytes = _hexToBytes(hot.seedHex);
-    final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seedBytes));
+    final pair =
+        Keyring.sr25519.fromSeed(Uint8List.fromList(_hexToBytes(_seedHex!)));
     pair.ss58Format = _ss58;
     return Uint8List.fromList(pair.sign(payload));
   }
-}
-
-class _WalletFixture {
-  const _WalletFixture({
-    required this.profile,
-    required this.seedHex,
-  });
-
-  final WalletProfile profile;
-  final String seedHex;
 }

@@ -9,8 +9,9 @@ part 'wallet_isar.g.dart';
 /// 虚拟分组"全部"哨兵：不按分组过滤(不落库到 groupNames)。单源。
 const String allGroup = '全部';
 
+/// 钱包（master）：一套助记词 = 一个种子 = 一个 master。其下派生多个账户。
 @collection
-class WalletProfileEntity {
+class WalletEntity {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, replace: true)
@@ -18,26 +19,47 @@ class WalletProfileEntity {
 
   late String walletName;
 
+  /// 主种子指纹 = 账户0（根派生）的 accountId，唯一标识一套助记词。
+  /// 同时用作 SecureStorage 里 master seed / 助记词的键（见 WalletSecureKeys）。
   @Index(unique: true, replace: true)
-  late String accountId;
+  late String masterId;
 
-  @Index(unique: true, replace: true)
-  late String ss58Address;
-
-  late String alg;
-  late int ss58Prefix;
   late int createdAtMillis;
   late String source;
 
-  /// 签名模式：固定 `local`（citizenwallet 为冷签设备，签名恒在本机完成）。
-  late String signMode;
-
-  /// 所属分组名称，逗号分隔，如 '分组一,分组二'。
-  /// '全部' 是虚拟分组，不存储在此字段中。
+  /// 所属分组名称，逗号分隔，如 '分组一,分组二'。'全部' 是虚拟分组，不入此字段。
+  /// 分组作用于钱包（Lv1 列表），不作用于账户。
   String groupNames = '';
 
   /// 排列顺序（越小越靠前）。
   int sortOrder = 0;
+}
+
+/// 账户：钱包（master）下按派生序号展开的一对公私钥。
+/// accountIndex 0 = 根派生(bare，逐字节等于历史直出)；N≥1 = `//N` 硬派生。
+@collection
+class AccountEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 所属钱包（master）指纹。按此过滤取某钱包下全部账户。
+  @Index()
+  late String masterId;
+
+  /// 派生序号：0=根派生，N≥1=//N。
+  late int accountIndex;
+
+  /// Substrate 账户唯一标识，小写 `0x` 加 64 位十六进制（= 派生公钥原字节）。
+  @Index(unique: true, replace: true)
+  late String accountId;
+
+  /// SS58（前缀 2027），仅展示 / 二维码用，不作授权主键。
+  @Index(unique: true, replace: true)
+  late String ss58Address;
+
+  /// 账户显示名，默认「账户$accountIndex」。
+  late String accountName;
+
+  late int createdAtMillis;
 }
 
 @collection
@@ -54,13 +76,6 @@ class WalletGroupEntity {
   bool isDefault = false;
 }
 
-@collection
-class WalletSettingsEntity {
-  Id id = 0;
-
-  int? activeWalletIndex;
-  int updatedAtMillis = 0;
-}
 
 @collection
 class AppKvEntity {
@@ -110,14 +125,13 @@ class WalletIsar {
     await ensureTestCoreInitialized();
     final dir = await _resolveDirectory();
     final schemas = [
-      WalletProfileEntitySchema,
-      WalletSettingsEntitySchema,
+      WalletEntitySchema,
+      AccountEntitySchema,
       AppKvEntitySchema,
       WalletGroupEntitySchema,
     ];
     final isar =
         await Isar.open(schemas, name: 'citizenwallet', directory: dir);
-    await _ensureSettingsRow(isar);
     await _ensureDefaultGroups(isar);
     return isar;
   }
@@ -239,20 +253,6 @@ class WalletIsar {
             ..isDefault = true,
         );
       }
-    });
-  }
-
-  static Future<void> _ensureSettingsRow(Isar isar) async {
-    final settings = await isar.walletSettingsEntitys.get(0);
-    if (settings != null) {
-      return;
-    }
-    await isar.writeTxn(() async {
-      await isar.walletSettingsEntitys.put(
-        WalletSettingsEntity()
-          ..id = 0
-          ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch,
-      );
     });
   }
 }

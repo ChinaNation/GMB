@@ -42,11 +42,16 @@
 
 ## 阶段拆分
 
-### Phase 0 —— 门禁 / 设计(**不改生产钱包代码**)
-- [ ] **钉派生金标向量**:同一助记词 `//0 //1 //2` 的 seed/公钥/accountId/ss58,**citizenapp Dart + citizenchain Rust + citizenwallet 三处逐字节一致**。
-- [ ] **base 语义核验**:`fromUri` 内部走 `CryptoScheme.seedFromEntropy` 而现直出走 `miniSecretFromEntropy`——确认二者关系,明确「账户 0」定义(`//0` vs bare),避免 index 起点歧义(memory `verify-calculations`:动手前先核派生向量)。
-- [ ] **创世冻结地址复核**:确认无创世冻结的**个人 sr25519 钱包**地址依赖旧 `fromSeed` 直出(已初判创世实体走机构 blake2b/admin 公开账户,非用户钱包 → 复核确认)。
-- [ ] **ADR-022 修订落档**:sr25519 anchor 改 `<助记词>//<index>`;ML-DSA-65 改为**每账户**从「该账户派生后 seed」HKDF 派生(不再从 master `AccountSeedV1`);金标含 ξ 每账户;在 PQC card3(`20260618-pqc-card3-wallet-derivation-signing.md`)「必须遵守」处加**取代指针**,不重写该卡。
+### Phase 0 —— 门禁 / 设计(**不改生产钱包代码**)✅ 完成 2026-07-26
+- [x] **派生金标向量**(citizenwallet `test/wallet/derivation_golden_test.dart`,固定 dev 助记词,ss58=2027):
+  - 账户0(根/bare):`0x46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a` / `w5DBnqoUytARopdnyWhmBq7ZPr74cJJewugoafJJynKLrirdE`
+  - 账户1(//1):`0xb606fc73f57f03cdb4c932d475ab426043e429cecc2ffff0d2672b0df8398c48` / `w5FhUDLW4BxsE1QXK4sNjPZ8rqSnK2QeVpUfXzqczpWdxChxV`
+  - 账户2(//2):`0x46f136b564e1fad55031404dd84e5cd3fa76bfe7cc7599b39d38fd06663bbc0a` / `w5DBpRvbgkersZohanGQiXa4qQLS1n7VQaSFwBaq4irJmgDn5`
+- [x] **junction 标准正确**:`//Alice` 公钥 == 权威 Alice `0xd435…a27d`。
+- [x] **base 一致**:`fromSeed(miniSecret)` == `fromUri(bare)` → `seedFromEntropy==miniSecretFromEntropy`,账户0=bare 逐字节等于现状,//N base 不漂。**「账户0」定义 = bare(不走 //0)。**
+- [x] **seed-only 等价**:`0x<miniSecret>//N == <助记词>//N` → 冷签派生 N 只需 master mini-secret,不解密助记词。
+- [x] **创世护栏**:账户0 派生不变已证 → 任何历史 bare 地址(含 `9c3e…1068`)结构性保留;无需(也无法,缺其助记词)反推 `9c3e` 来源。
+- [x] **ADR-022 §2 修订块** + **PQC card3 取代指针**已落档(ML-DSA 改每账户 `AccountSeedV1_N`→HKDF)。
 
 ### Phase 1 —— citizenapp 热钱包
 - [ ] 派生核心:`_deriveSr25519FromSeed`→按 index junction 派生;签名 `_keyPairFromSeedHex:727`、自愈 `_selfHealSeedFromMnemonic:707`、设备子钥 `_registerDeviceSubkey:769` 全按 index 派生。
@@ -113,6 +118,26 @@
 ### 已定(2026-07-26 用户确认)
 - **D1 = 保留多助记词**:一钱包=一套助记词;设备持多个独立钱包。
 - **D2 = 三级导航**(见上「数据模型」)。
+
+### Step 1 进度
+- ✅ **S1.1 派生+存储核心**(2026-07-26):`wallet_isar.dart` 拆 `WalletEntity`+`AccountEntity`(g.dart 重生成);`wallet_secure_keys.dart` 按 masterId;`wallet_manager.dart` 两级模型 + `deriveAccount`(0=fromSeed,N≥1=`fromUri('0x<seed>//N')` seed-only)+ 按 accountId 签名 + addAccount/deleteWallet/deleteAccount + 生物识别测试注入口 `debugAuthGate`;`WalletProfile/signWithWallet` 退役。测试:`wallet_manager_test`(建/加/签/删/查重)+ `wallet_model_test` + `wallet_secure_keys_test` 更新;全 wallet 测试 29 passed;新代码 `dart analyze` 零问题。**未迁移调用方 36 报错(offline_sign/login/UI)= 预期,归 S1.2/S1.3**;全项目 build 绿在 S1.3 收尾恢复。
+- ✅ **S1.2 签名服务层按账户**(2026-07-26):`offline_sign_service` 入参 walletIndex→accountId、删 cold 分支、`getAccountByAccountId`+`signForAccount`;错误码 walletNotFound/walletMismatch→accountNotFound/accountMismatch(删 coldWalletUnsupported)。单测重写(fake 覆写 getAccountByAccountId/signForAccount)10 passed;`login_qr_handler` 无需改(已按 accountId)。
+- ✅ **S1.3 UI 三级 + 全局扫码**(2026-07-26):Lv1 `home_page`(只列钱包名,顶部全局扫码入口)→ Lv2 `wallet_detail_page`(助记词备份+账户列表+添加账户+分组)→ Lv3 `account_detail_page`(**新建**:私钥[种子URI]/公钥/ss58/路径/收款QR/删账户)。**全局扫码**:`scan_page` 去 wallet 参数,按 QR `signerPublicKey` 在全设备账户定位(`getAccountByAccountId`),无此账户则拒;`offline_sign_page`/`login_sign_page` 改收 `Account`+walletName;`create/import/group` 迁移新模型。补 `getAccountSecretUri`(账户0=`0x<seed>`,N=`0x<seed>//N`)。
+- ✅ **S1.4 收尾**(2026-07-26):删死代码(getWallet/getWalletByIndex/getActiveWalletIndex/setActiveWallet/getMasterSeedHex + 整个 active-wallet/`WalletSettingsEntity` 概念——全局扫码后无消费者);旧符号残留零(WalletProfile/signWithWallet/walletProfileEntitys/…);**全项目 `dart analyze` 0 + `flutter test` 201 passed**。
+
+- ✅ **S1 复查 + S1-FIX**(2026-07-26,两独立评审 security+flutter,逐条回码核验):
+  - **C-1(CRITICAL,已修)**:账户级"私钥"曾返回 `0x<masterSeed>//N` 泄露整钱包 → **账户详情页删除私钥区**(只留公钥/ss58/路径+收款QR),删 `getAccountSecretUri`;备份统一回 Lv2 助记词(用户拍板 Option A)。
+  - **H-1/M-1(已修)**:`deleteWallet`/`deleteAccount`/`createWallet`/`importWallet` 全加 `_authGate`(app-lock 默认关,门禁是唯一兜底)。
+  - **H-2(已消解)**:随 C-1 私钥展示路径移除。
+  - **删除正确性(已修)**:`deleteWallet` 反转顺序(先删 Isar 行再清密钥,消僵尸钱包);`deleteAccount` 加 account0 锚点守卫 + 删除计数并入同一 writeTxn(消竞态)。
+  - **拖拽重排(已修)**:`_onReorderWallet` 加 try/catch + 快照回滚 + SnackBar。
+  - **残留清理(已修)**:删 `AccountEntity.sortOrder` 死字段;scan_page 单次解析(去第二次 jsonDecode);删 offline_sign_page 内置扫码死路径(改 raw 必填 + 解析失败/返回);wallet_detail 加"重导只恢复账户0"提示。
+  - **M-4(不可行,已注)**:库 `KeyPair.lock()` 该版本 `fromEd25519Bytes(空)` 抛错,不可用清私钥,注释说明。
+  - **测试补齐**:deleteAccount(非末位/级联/account0守卫)、getAccountByAccountId/getWalletByMasterId、删中间账户后 addAccount=max+1、rename/reorder、account_detail widget 钉死"不展私钥"。
+  - **未纳入(既有基线,非 HD 引入)**:分组名逗号污染、`_deleteGroup` 死码、onDetect 判空、seed_hex 明文 vs 助记词 AES-GCM、`AndroidOptions(encryptedSharedPreferences)`、offline_sign 绿banner矛盾、walletIndex/masterId 寻址混用。
+  - **终验**:`dart analyze` 0 + `flutter test` **209 passed**;S1-FIX 残留复扫全 0。
+
+**Step 1(citizenwallet)完成并通过复查。** 派生金标 = 冷热共享单源(`test/wallet/derivation_golden_test.dart`),Step 2 citizenapp 逐字节复用。
 
 ### Step 1 → Step 2 交接
 派生金标向量是**冷热共享单源**:Step 1 产出的 根/`//N` 向量,Step 2 citizenapp 必须逐字节复用(同助记词冷热同址)。派生规格写成两端共享注释/文档,Step 2 镜像实现。

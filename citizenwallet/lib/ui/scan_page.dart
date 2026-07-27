@@ -2,22 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import 'dart:convert';
-
-import 'offline_sign_page.dart';
 import '../qr/qr_protocols.dart';
+import '../qr/envelope.dart';
+import '../qr/bodies/sign_request_body.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
-import 'scan_overlay.dart';
 import 'login_sign_page.dart';
+import 'offline_sign_page.dart';
+import 'scan_overlay.dart';
 
-/// 扫码页面（对准框 + 相册 + 手电筒）。
+/// 全局扫码页面（对准框 + 相册 + 手电筒）。
 ///
-/// 扫到签名请求后跳转 [OfflineSignPage]。
+/// 签名主体是账户：扫到签名请求后，按 QR 的 signerPublicKey 在**全设备账户**中
+/// 自动定位目标账户，找到则跳转对应签名页，本设备无此账户则拒绝并提示。
 class ScanPage extends StatefulWidget {
-  const ScanPage({super.key, required this.wallet});
-
-  final WalletProfile wallet;
+  const ScanPage({super.key});
 
   @override
   State<ScanPage> createState() => _ScanPageState();
@@ -25,6 +24,7 @@ class ScanPage extends StatefulWidget {
 
 class _ScanPageState extends State<ScanPage> {
   late final MobileScannerController _controller;
+  final WalletManager _walletManager = WalletManager();
   bool _handled = false;
   bool _torchOn = false;
 
@@ -46,9 +46,7 @@ class _ScanPageState extends State<ScanPage> {
 
   Future<void> _toggleTorch() async {
     await _controller.toggleTorch();
-    setState(() {
-      _torchOn = !_torchOn;
-    });
+    setState(() => _torchOn = !_torchOn);
   }
 
   Future<void> _scanFromGallery() async {
@@ -69,45 +67,75 @@ class _ScanPageState extends State<ScanPage> {
     }
   }
 
+  /// 单次解析签名请求信封;非签名请求返回 null。
+  SignRequestBody? _parseSignRequest(String raw) {
+    try {
+      final env = QrEnvelope.parse(raw);
+      final body = env.body;
+      if (env.kind == QrKind.signRequest && body is SignRequestBody) {
+        return body;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _handleCode(String raw) async {
     if (_handled) return;
     _handled = true;
     await _controller.stop();
-
     if (!mounted) return;
 
-    // 判断协议类型：登录 QR 走 LoginSignPage，其余走 OfflineSignPage。
-    final isLogin = _isLoginProtocol(raw);
+    // 只解析一次:signerPublicKey(目标账户)与 action(登录/普通)同源取自 body,
+    // 避免两套解析逻辑漂移。
+    final body = _parseSignRequest(raw);
+    if (body == null) {
+      await _showErrorAndResume('无法识别签名请求二维码');
+      return;
+    }
+
+    final account =
+        await _walletManager.getAccountByAccountId(body.signerPublicKeyHex);
+    if (!mounted) return;
+    if (account == null) {
+      await _showErrorAndResume('本设备没有该签名请求指定的账户，无法签名');
+      return;
+    }
+
+    final wallet = await _walletManager.getWalletByMasterId(account.masterId);
+    if (!mounted) return;
+    final walletName = wallet?.walletName ?? '钱包';
+
+    final isLogin = body.action == QrActions.login;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => isLogin
-            ? LoginSignPage(
-                wallet: widget.wallet,
-                raw: raw,
-              )
+            ? LoginSignPage(account: account, walletName: walletName, raw: raw)
             : OfflineSignPage(
-                wallet: widget.wallet,
-                raw: raw,
-              ),
+                account: account, walletName: walletName, raw: raw),
       ),
     );
 
-    // 返回后关闭扫码页
     if (!mounted) return;
     Navigator.of(context).pop();
   }
 
-  bool _isLoginProtocol(String raw) {
-    try {
-      final data = jsonDecode(raw) as Map<String, dynamic>;
-      final body = data['b'];
-      return data['p'] == QrProtocols.v1 &&
-          data['k'] == QrKind.signRequest.code &&
-          body is Map<String, dynamic> &&
-          body['a'] == QrActions.login;
-    } catch (_) {
-      return false;
-    }
+  Future<void> _showErrorAndResume(String message) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('无法签名'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('继续扫描'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    _handled = false;
+    await _controller.start();
   }
 
   @override
@@ -122,7 +150,6 @@ class _ScanPageState extends State<ScanPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 摄像头画面
           MobileScanner(
             controller: _controller,
             onDetect: (capture) async {
@@ -131,46 +158,32 @@ class _ScanPageState extends State<ScanPage> {
               await _handleCode(code);
             },
           ),
-
-          // 扫描框 + 半透明遮罩
           CustomPaint(
             painter: ScanOverlayPainter(
-              scanBoxSize: scanBoxSize,
-              offsetY: scanBoxOffsetY,
-            ),
+                scanBoxSize: scanBoxSize, offsetY: scanBoxOffsetY),
             child: const SizedBox.expand(),
           ),
-
-          // 扫描框四角装饰
           Center(
             child: Transform.translate(
               offset: const Offset(0, scanBoxOffsetY),
               child: SizedBox(
                 width: scanBoxSize,
                 height: scanBoxSize,
-                child: CustomPaint(
-                  painter: ScanCornerPainter(),
-                ),
+                child: CustomPaint(painter: ScanCornerPainter()),
               ),
             ),
           ),
-
-          // 提示文字
           Center(
             child: Transform.translate(
               offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 28),
               child: const Text(
-                '将二维码放入框内即可自动扫描',
+                '扫描签名请求二维码\n设备将自动匹配对应账户',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 14,
-                  letterSpacing: 0.5,
-                ),
+                    color: Colors.white60, fontSize: 14, letterSpacing: 0.3),
               ),
             ),
           ),
-
-          // 底部工具栏：相册 + 手电筒
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -190,11 +203,7 @@ class _ScanPageState extends State<ScanPage> {
                     onTap: _scanFromGallery,
                     active: false,
                   ),
-                  Container(
-                    width: 1,
-                    height: 32,
-                    color: AppTheme.border,
-                  ),
+                  Container(width: 1, height: 32, color: AppTheme.border),
                   _buildToolButton(
                     icon: _torchOn
                         ? Icons.flashlight_on_rounded
@@ -223,19 +232,12 @@ class _ScanPageState extends State<ScanPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 26,
-            color: active ? AppTheme.gold : Colors.white,
-          ),
+          Icon(icon, size: 26, color: active ? AppTheme.gold : Colors.white),
           const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: active ? AppTheme.gold : Colors.white70,
-              fontSize: 12,
-            ),
-          ),
+          Text(label,
+              style: TextStyle(
+                  color: active ? AppTheme.gold : Colors.white70,
+                  fontSize: 12)),
         ],
       ),
     );

@@ -108,7 +108,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
       group.name = name;
       await isar.walletGroupEntitys.put(group);
 
-      final wallets = await isar.walletProfileEntitys
+      final wallets = await isar.walletEntitys
           .filter()
           .groupNamesContains(oldName)
           .findAll();
@@ -118,7 +118,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
             .map((n) => n == oldName ? name : n)
             .join(',');
         w.groupNames = names;
-        await isar.walletProfileEntitys.put(w);
+        await isar.walletEntitys.put(w);
       }
     });
     await _load();
@@ -149,7 +149,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
 
     final isar = await WalletIsar.instance.db();
     await isar.writeTxn(() async {
-      final wallets = await isar.walletProfileEntitys
+      final wallets = await isar.walletEntitys
           .filter()
           .groupNamesContains(group.name)
           .findAll();
@@ -157,7 +157,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
         final names =
             w.groupNames.split(',').where((n) => n != group.name).join(',');
         w.groupNames = names;
-        await isar.walletProfileEntitys.put(w);
+        await isar.walletEntitys.put(w);
       }
       await isar.walletGroupEntitys.delete(group.id);
     });
@@ -281,7 +281,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                     if (confirmed != true) return false;
                     final isar = await WalletIsar.instance.db();
                     await isar.writeTxn(() async {
-                      final wallets = await isar.walletProfileEntitys
+                      final wallets = await isar.walletEntitys
                           .filter()
                           .groupNamesContains(group.name)
                           .findAll();
@@ -291,7 +291,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                             .where((n) => n != group.name)
                             .join(',');
                         w.groupNames = names;
-                        await isar.walletProfileEntitys.put(w);
+                        await isar.walletEntitys.put(w);
                       }
                       await isar.walletGroupEntitys.delete(group.id);
                     });

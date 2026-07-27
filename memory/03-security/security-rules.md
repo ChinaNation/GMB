@@ -58,14 +58,20 @@
 - Cloudflare 本机管理权限必须拆分为 `CF_DEPLOY_TOKEN`、`CF_DATA_TOKEN`、
   `CF_ZT_TOKEN`：分别限定部署、数据和 Zero Trust/DNS 资源；三者只保存在
   CitizenConsole 生物识别 Keychain。Worker 运行时 `CF_API_TOKEN` 保持独立，
-  不得借用管理令牌。
+  不得借用管理令牌。`CF_ZT_TOKEN` 必须包含 Access 应用/策略、Service Token、
+  Tunnel 与限定 DNS 的管理权限，禁止使用 Global API Key。
+- CitizenConsole 是生产 Secret 和部署配置的唯一控制面。Cloudflare 只保留一个
+  production Worker 及其 production D1、KV、R2、Queue、Route 和 Secret；禁止创建或
+  恢复 staging/test Worker、远端测试数据资源、测试路由或测试 Access 应用。GitHub
+  Actions 只保留当前正式 workflow 实际引用的 Secret。
 - 测试部署和 CI 无需密码；production、Release 和服务器部署在启动目标命令前必须逐次通过 Touch ID 生物识别，不允许设备密码降级。
 - CitizenChain 的44个权威节点必须使用逐节点隔离的 Keychain 项保存服务器 IP、节点身份私钥和 GRANDPA 验证私钥；这些共识身份私钥永远不得共享。需要部署控制台管理的服务器统一使用 `deploy` SSH 身份，私钥只允许写入已配置节点的 Keychain 项和 GitHub Secret，不得留在 `.ssh`、仓库、明文清单或 workflow 普通输入中；本机只允许保留非机密的 `deploy.pub`。明确不使用该身份的节点不得强行写入。
 - 节点密钥只允许覆盖写入，不允许网页读取旧值；写入前必须验证私钥推导的 PeerId/GRANDPA 公钥与权威节点公开目录一致。修改节点 IP、覆盖任何节点密钥和部署节点均必须先完成 Touch ID。
 
 ## 5. CitizenApp API 与媒体安全
 
-- CitizenApp production API 唯一入口为 `https://www.crcfrcn.com/api/*`；staging 唯一入口为受 Cloudflare Access 保护的 `https://www.crcfrcn.com/api-staging/*`，禁止恢复 `workers.dev`、Preview URL 或独立 API 子域名。
+- CitizenApp 唯一 API 入口为 `https://www.crcfrcn.com/api/*`；禁止恢复 staging/test
+  API、`workers.dev`、Preview URL 或独立 API 子域名。
 - 官网浏览器请求只允许精确 Origin `https://www.crcfrcn.com`；原生 App 无 Origin 时必须使用钱包 Session、P-256 设备逐请求签名、时间窗和一次性 nonce，不能仅凭 User-Agent、IP 或客户端声明授权。
 - Cloudflare 钱包 Session 只验证已登记 P-256 设备子钥及其钱包归属，不得以 `System.Account` 是否存在、钱包余额或存在性存款作为登录门禁；需要链上身份、余额或业务资格的动作必须在各自业务入口独立校验。
 - 登录挑战必须用 D1 条件更新原子 claim：账户、挑战编号、未消费状态和有效期同时命中
@@ -73,9 +79,12 @@
   并清除可能写入的孤立 Session，客户端只能重新申请挑战。
 - 设备子密钥登记的 `issued_at` 必须是五分钟窗口内的安全整数，并用 D1 条件 UPSERT
   保证同一 `account_id` 严格单调递增；相同或更旧绑定一律拒绝，禁止设备换钥回滚。
-- 首次设备绑定、设备换钥和风险升级必须通过 Turnstile；Stripe 与 Stream webhook 分别使用提供商签名，不叠加设备签名。
-- Worker 必须在解析 JSON 前限制请求体，并按 IP 哈希、钱包账户、接口类别分层限流；staging 还必须由 Cloudflare Access 限定维护账户。
-- Cloudflare WAF 规则 `citizenapp-api-edge-limit` 对 production/staging API 按 IP 执行 60 次/10 秒的边缘阻断，阻断持续 10 秒；Stripe 与 Stream 签名 webhook 必须排除，避免提供商回调被普通客户端限流误伤。
+- 首次设备绑定、设备换钥和风险升级必须通过 Turnstile；Stream webhook 使用提供商签名，
+  不叠加设备签名。
+- Worker 必须在解析 JSON 前限制请求体，并按 IP 哈希、钱包账户、接口类别分层限流。
+- Cloudflare WAF 规则 `citizenapp-api-edge-limit` 对 production API 按 IP 执行
+  60 次/10 秒的边缘阻断，阻断持续 10 秒；Stream 签名 webhook 必须排除，避免提供商
+  回调被普通客户端限流误伤。
 - Cloudflare Images 必须启用签名交付，Cloudflare Stream 必须启用 signed URL；D1、R2 manifest 和 Feed 禁止保存长期公开媒体 URL。
 - 媒体上传必须在服务端同时校验单帖权益、月度图片/视频额度、活动上传数和全局媒体成本熔断；Chat 不进入媒体用量预算，也不得把消息或附件保存到 Cloudflare。
 - `citizenapp/cloudflare/src/limits/catalog.ts` 是 Cloudflare 资源硬上限唯一真源；环境变量只能收紧，不能放宽。所有外部路由必须在 D1 前完成路由白名单和 `Content-Length` 检查，并在读取阶段继续按实际字节截断。

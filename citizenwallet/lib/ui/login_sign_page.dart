@@ -11,11 +11,14 @@ import 'app_theme.dart';
 class LoginSignPage extends StatefulWidget {
   const LoginSignPage({
     super.key,
-    required this.wallet,
+    required this.account,
+    required this.walletName,
     required this.raw,
   });
 
-  final WalletProfile wallet;
+  /// 签名主体账户（由 ScanPage 按 QR 的 signerPublicKey 定位后传入）。
+  final Account account;
+  final String walletName;
   final String raw;
 
   @override
@@ -49,8 +52,8 @@ class _LoginSignPageState extends State<LoginSignPage> {
         setState(() => _error = '登录二维码已过期');
         return;
       }
-      if (!loginRequestTargetsAccountId(request, widget.wallet.accountId)) {
-        setState(() => _error = '登录二维码指定的钱包与当前钱包不一致');
+      if (!loginRequestTargetsAccountId(request, widget.account.accountId)) {
+        setState(() => _error = '登录二维码指定的账户与当前账户不一致');
         return;
       }
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -84,9 +87,9 @@ class _LoginSignPageState extends State<LoginSignPage> {
   Future<void> _confirmAndSign() async {
     final request = _request;
     if (request == null || _signing) return;
-    // 私钥调用前再次校验目标账户，避免页面状态变化后误用其他钱包签名。
-    if (!loginRequestTargetsAccountId(request, widget.wallet.accountId)) {
-      setState(() => _error = '登录二维码指定的钱包与当前钱包不一致');
+    // 私钥调用前再次校验目标账户，避免页面状态变化后误用其他账户签名。
+    if (!loginRequestTargetsAccountId(request, widget.account.accountId)) {
+      setState(() => _error = '登录二维码指定的账户与当前账户不一致');
       return;
     }
 
@@ -95,9 +98,9 @@ class _LoginSignPageState extends State<LoginSignPage> {
     try {
       final walletManager = WalletManager();
       // 当前 sr25519 的 AccountId32 与 signer public key 字节相同。
-      final signMessage = buildSignMessage(request, widget.wallet.accountId);
-      final result = await walletManager.signUtf8WithWallet(
-        widget.wallet.walletIndex,
+      final signMessage = buildSignMessage(request, widget.account.accountId);
+      final result = await walletManager.signUtf8ForAccount(
+        widget.account.accountId,
         signMessage,
       );
 
@@ -193,8 +196,12 @@ class _LoginSignPageState extends State<LoginSignPage> {
                   const SizedBox(height: 16),
                   _infoRow('系统', loginSystemDisplayName(c)),
                   _infoRow(
-                    '钱包',
-                    _shortenSs58Address(widget.wallet.ss58Address),
+                    '账户',
+                    '${widget.walletName} · ${widget.account.accountName}',
+                  ),
+                  _infoRow(
+                    '地址',
+                    _shortenSs58Address(widget.account.ss58Address),
                   ),
                   _infoRow(
                     '剩余时间',

@@ -3,6 +3,8 @@
 关联决策:`memory/04-decisions/ADR-022-unified-pqc-crypto.md`(§2/§7/§8)
 状态:open(依赖 card1 spike S2/S3 全绿)
 
+> 🔴 **地基被取代(2026-07-26,HD 改造)**:本卡"钱包派生 sr25519 直接 fromSeed / 单一 `AccountSeedV1` / 地址逐字节不变"的前提,已被 `memory/08-tasks/open/20260726-citizenapp-citizenwallet-hd-wallet-derivation.md` + ADR-022 §2 修订块取代——钱包改 substrate HD 多账户(账户0=根派生逐字节不变,账户N≥1=`//N`)。本卡执行时:**sr25519 锚点按账户**(账户0=fromSeed,N≥1=`//N`),**ML-DSA-65 按账户派生**(每账户各自 `AccountSeedV1_N`→HKDF→ξ),golden 按账户逐一钉。其余(FFI/离线 metadata/QR 分片/两色不盲签)口径不变。
+
 任务需求(冷热钱包在位升级 PQC 签名,地址逐字节不变):
 1. **同源派生(只两支,sr25519 不套 HKDF)**:`AccountSeedV1`=现有 miniSecretFromEntropy(`citizenapp wallet_manager.dart:544`/`citizenwallet:401`);sr25519 锚点沿用 `fromSeed` 直接派生;ML-DSA-65 = `HKDF-SHA512(AccountSeedV1,"GMB/account/ml-dsa-65/seed32/v1")`→ξ→keygen。**账户不派生 ML-KEM(决策3)**。冷热逐字一致,钉 golden vector(含 ξ)。
 2. 🔴 **(B9)冷钱包 citizenwallet 新建 Rust FFI 子工程**(现纯 Dart 无 rust/):对标 citizenapp/rust 的 cdylib/staticlib + Android/iOS target + cbindgen,把 gmb-pqc 编进冷热两端;FFI 暴露 `ml_dsa65_public_from_seed`/`ml_dsa65_sign`。

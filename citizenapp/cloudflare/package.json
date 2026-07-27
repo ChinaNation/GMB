@@ -11,10 +11,8 @@
     "typecheck": "npm run generate:types && tsc --noEmit",
     "test": "vitest run",
     "db:local": "wrangler d1 execute citizenapp-square-db --local --file migrations/0001_square_core.sql",
-    "db:staging": "wrangler d1 execute citizenapp-square-db-staging --env staging --remote --file migrations/0001_square_core.sql",
-    "db:production": "wrangler d1 execute citizenapp-square-db-production --env production --remote --file migrations/0001_square_core.sql",
-    "deploy:staging": "wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production"
+    "db:production": "wrangler d1 execute citizenapp-square-db-production --remote --file migrations/0001_square_core.sql",
+    "deploy:production": "wrangler deploy"
   },
   "dependencies": {
     "@polkadot/util-crypto": "^14.0.3",

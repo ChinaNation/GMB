@@ -15,7 +15,7 @@ import {
 } from '../src/topup/settlement';
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-const USDC_TESTNET = '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
+const USDC_FIXTURE = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
 const RECV = `0x${'ab'.repeat(20)}`;
 const PAYER = `0x${'cd'.repeat(20)}`;
 const ACCOUNT_ID = `0x${'77'.repeat(32)}`;
@@ -35,7 +35,7 @@ describe('topup 稳定币充值后端', () => {
     );
     const body = await response.json<{ rails: { token: string; chain_id: number }[]; packages: unknown[] }>();
     expect(body.rails.map((rail) => rail.token)).toEqual(['USDC', 'USDT']);
-    expect(body.rails[0].chain_id).toBe(84532);
+    expect(body.rails[0].chain_id).toBe(8453);
     expect(body.packages).toHaveLength(2);
   });
 
@@ -245,7 +245,7 @@ function confirmedReceipt(): unknown {
     status: '0x1',
     blockNumber: '0x10',
     logs: [{
-      address: USDC_TESTNET,
+      address: USDC_FIXTURE,
       topics: [TRANSFER_TOPIC, addrTopic(PAYER), addrTopic(RECV)],
       data: `0x${15000000n.toString(16).padStart(64, '0')}`,
     }],
@@ -316,9 +316,9 @@ function makeEnv(db: FakeDb): Env {
         } satisfies SessionState;
       },
     },
-    TOPUP_NETWORK: 'testnet',
+    TOPUP_NETWORK: 'mainnet',
     TOPUP_RECV_ADDRESS: RECV,
-    TOPUP_BASE_RPC_URL: 'https://base-sepolia.test',
+    TOPUP_BASE_RPC_URL: 'https://base-mainnet.example',
     TOPUP_SETTLE_TOKEN: 'settle-secret',
     TOPUP_INTENT_SECRET: 'intent-secret-that-is-longer-than-thirty-two-bytes',
     TOPUP_DISBURSE_ACCOUNT_ID: DISBURSE_ACCOUNT_ID,
