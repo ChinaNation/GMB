@@ -4,6 +4,8 @@
 状态:open(需求分析 + 用户拍板已完成 2026-07-26;待 Phase 0 门禁通过后进 Phase 1 代码)
 所属模块:Mobile(citizenapp 热钱包 + citizenwallet 冷钱包)
 
+> ⚠️ **2026-07-27 被 model B 推翻**:本卡「账户0 = bare 逐字节不变 / 护创世 9c3e / HD 纯增量 / ADR-022 三不变量」的硬约束已**作废**。新决策 = 全 `//index` **无 bare 根**(账户0 = `//0`)+ citizenwallet **无根存储**(只存每账户 child mini-secret,不存种子/助记词),账户地址全变 → **需重新创世**(Step 3 换全部创世机构管理员 + 程伟公钥)。见 `20260727-citizenwallet-modelb-index-derivation.md`。下文 Phase 0 / 创世护栏内容仅存档,**勿据以实现**。
+
 ## 背景 / 现状(核验锚点)
 
 当前「我的-钱包-我的钱包」是**扁平 1:1:1**:一套助记词 = 一个种子(miniSecret 32B) = **一个** sr25519 私钥(`fromSeed`,无 junction) = 一个公钥 = 一个 2027 号 SS58。多地址靠**多套独立助记词**,不是同种子分叉。

@@ -28,3 +28,5 @@
 终验:`dart analyze` **0** + `flutter test` **209 passed**;`account_detail_page.dart` grep `派生路径`/`derivationPath` = 0。
 
 需求 3(SS58 下方加私钥)本轮未做。概念已澄清:账户 N≥1 私钥独立、单向不可逆,可只暴露单账户;账户 0=钱包根,暴露=整钱包。待用户定表示形式(原始私钥 hex / 密钥URI)+ 核实 polkadart_keyring 能否取原始 secret 后再落地。
+
+**更新(2026-07-27)**:已授权 model B(全 `//index`,账户0 改 `//0` 无 bare 根)——账户0 也成叶子,每账户私钥独立隔离,展示单账户私钥安全。req3 移交 `20260727-citizenwallet-modelb-index-derivation.md` **Step 1.2** 落地(展示该账户 child mini-secret `0x<64hex>`)。

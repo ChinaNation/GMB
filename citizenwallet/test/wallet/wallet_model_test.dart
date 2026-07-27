@@ -13,8 +13,8 @@ void main() {
       );
 
   group('Account.derivationPath', () {
-    test('账户0 = 根', () {
-      expect(account(0).derivationPath, '根');
+    test('账户0 = //0（无 bare 根）', () {
+      expect(account(0).derivationPath, '//0');
     });
 
     test('账户N = //N', () {

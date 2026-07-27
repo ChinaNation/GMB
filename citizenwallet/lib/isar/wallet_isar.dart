@@ -16,8 +16,9 @@ class WalletEntity {
 
   late String walletName;
 
-  /// 主种子指纹 = 账户0（根派生）的 accountId，唯一标识一套助记词。
-  /// 同时用作 SecureStorage 里 master seed / 助记词的键（见 WalletSecureKeys）。
+  /// 主指纹 = 账户0（`//0`）的 accountId，唯一标识一套助记词。
+  /// model B 无根:设备不存 master 种子/助记词,密钥按 accountId 分账户存
+  /// （见 WalletSecureKeys）。
   @Index(unique: true, replace: true)
   late String masterId;
 
@@ -29,7 +30,7 @@ class WalletEntity {
 }
 
 /// 账户：钱包（master）下按派生序号展开的一对公私钥。
-/// accountIndex 0 = 根派生(bare，逐字节等于历史直出)；N≥1 = `//N` 硬派生。
+/// 全部 `//index` 硬派生（含账户0 = `//0`，无 bare 根）；每账户密钥独立、单向。
 @collection
 class AccountEntity {
   Id id = Isar.autoIncrement;
@@ -38,7 +39,7 @@ class AccountEntity {
   @Index()
   late String masterId;
 
-  /// 派生序号：0=根派生，N≥1=//N。
+  /// 派生序号：N → `//N`（含账户0 = `//0`）。
   late int accountIndex;
 
   /// Substrate 账户唯一标识，小写 `0x` 加 64 位十六进制（= 派生公钥原字节）。

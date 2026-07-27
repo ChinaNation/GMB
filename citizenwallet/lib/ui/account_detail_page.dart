@@ -5,13 +5,14 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../qr/qr_protocols.dart';
 import '../qr/envelope.dart';
 import '../qr/bodies/user_contact_body.dart';
+import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
 
-/// Lv3 账户详情：某钱包(master)下单个账户的公钥、ss58（账户名可点击改名）。
+/// Lv3 账户详情：某钱包(master)下单个账户的公钥、ss58、私钥（账户名可点击改名）。
 ///
-/// **不展示私钥**：junction 派生下各账户共享 master 种子,导出任一账户密钥材料即
-/// 等于泄露整钱包,故私钥/备份统一走 Lv2 钱包详情的助记词。本页只显公开信息。
+/// model B 全 `//index`：每账户私钥（child mini-secret）独立、单向,导出单账户只
+/// 暴露该账户,不牵连根/兄弟。私钥展示前需生物识别 + 防截屏 + 纯文本不可复制。
 class AccountDetailPage extends StatefulWidget {
   const AccountDetailPage({
     super.key,
@@ -31,10 +32,87 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
 
   late String _accountName;
 
+  String? _privateKey;
+  bool _privateKeyVisible = false;
+  bool _screenshotGuardActive = false;
+
   @override
   void initState() {
     super.initState();
     _accountName = widget.account.accountName;
+  }
+
+  @override
+  void dispose() {
+    if (_screenshotGuardActive) {
+      ScreenshotGuard.onSecurityEvent = null;
+      ScreenshotGuard.disable();
+    }
+    super.dispose();
+  }
+
+  void _enableScreenshotGuard() {
+    if (!_screenshotGuardActive) {
+      _screenshotGuardActive = true;
+      ScreenshotGuard.onSecurityEvent = _onSecurityEvent;
+      ScreenshotGuard.enable();
+    }
+  }
+
+  void _onSecurityEvent(String event) {
+    if (!mounted) return;
+    if (event == 'screenshot_taken' || event == 'screen_recording_started') {
+      setState(() {
+        _privateKeyVisible = false;
+        _privateKey = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(event == 'screenshot_taken'
+              ? '检测到截屏，私钥已隐藏。请勿截屏保存私钥。'
+              : '检测到屏幕录制，私钥已隐藏'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Future<void> _revealPrivateKey() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('查看私钥'),
+        content: const Text(
+            '私钥泄露将导致该账户资产被盗（仅该账户，不影响本钱包其他账户）。\n\n确认要查看吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+            child: const Text('查看'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final key =
+          await _walletManager.getAccountPrivateKey(widget.account.accountId);
+      if (!mounted) return;
+      _enableScreenshotGuard();
+      setState(() {
+        _privateKey = key;
+        _privateKeyVisible = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('验证失败：$e')),
+      );
+    }
   }
 
   Future<void> _renameAccount() async {
@@ -255,7 +333,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
             ),
           ),
           const SizedBox(height: 20),
-          // 公开信息
+          // 公开信息 + 私钥（默认隐藏，验证后显示该账户 child mini-secret）
           Container(
             decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
             child: Column(
@@ -263,25 +341,8 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 _infoTile('公钥（账户 ID）', account.accountId),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _infoTile('SS58 地址', account.ss58Address),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          // 备份提示:私钥不在账户级展示,统一回钱包助记词。
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: AppTheme.bannerDecoration(AppTheme.primary),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, size: 18, color: AppTheme.primaryLight),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '本钱包所有账户由同一套助记词派生,备份请在「钱包详情」查看并抄录助记词。',
-                    style:
-                        TextStyle(fontSize: 12, color: AppTheme.primaryLight),
-                  ),
-                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                _buildPrivateKeyTile(),
               ],
             ),
           ),
@@ -296,6 +357,92 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
               icon: const Icon(Icons.delete_outline, size: 18),
               label: const Text('删除该账户'),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrivateKeyTile() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('私钥',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          if (!_privateKeyVisible)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _revealPrivateKey,
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.visibility_off_rounded,
+                          color: AppTheme.textTertiary, size: 18),
+                      SizedBox(width: 8),
+                      Text('点击查看私钥',
+                          style: TextStyle(
+                              color: AppTheme.textTertiary, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.danger.withAlpha(15),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                border: Border.all(color: AppTheme.danger.withAlpha(40)),
+              ),
+              // 纯 Text（非 SelectableText）→ 不可复制。
+              child: Text(
+                _privateKey ?? '无数据',
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    color: AppTheme.textPrimary,
+                    height: 1.6),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('请手抄备份，不支持复制；导出即等于该账户控制权',
+                      style: TextStyle(
+                          color: AppTheme.danger,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500)),
+                ),
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    _privateKeyVisible = false;
+                    _privateKey = null;
+                  }),
+                  icon: const Icon(Icons.visibility_off_rounded, size: 16),
+                  label: const Text('隐藏'),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

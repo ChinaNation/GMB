@@ -1,4 +1,5 @@
-// Lv3 账户详情 widget 测试:钉死 C-1 修复(账户页不展示私钥)+ 公开信息展示。
+// Lv3 账户详情 widget 测试:公开信息 + 账户名可改 + 私钥区默认隐藏。
+// model B 后 C-1 反转:每账户私钥独立隔离,展示单账户私钥安全(默认隐藏,验证后显示)。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenwallet/ui/account_detail_page.dart';
@@ -7,7 +8,7 @@ import 'package:citizenwallet/wallet/wallet_manager.dart';
 void main() {
   const account = Account(
     masterId:
-        '0x46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a',
+        '0x2afba9278e30ccf6a6ceb3a8b6e336b70068f045c666f2e7f4f9cc5f47db8972',
     accountIndex: 1,
     accountId:
         '0xb606fc73f57f03cdb4c932d475ab426043e429cecc2ffff0d2672b0df8398c48',
@@ -34,10 +35,10 @@ void main() {
     expect(find.text('账户1'), findsOneWidget);
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
 
-    // C-1:绝不出现任何私钥入口/展示(需求3本轮未做)。
-    expect(find.textContaining('私钥'), findsNothing);
-    expect(find.textContaining('查看私钥'), findsNothing);
-    // 也不得把 master 种子 URI 泄露到界面。
+    // 需求3(model B):私钥区在场,但**默认隐藏**——只显示入口,不显示明文私钥。
+    expect(find.text('私钥'), findsOneWidget);
+    expect(find.text('点击查看私钥'), findsOneWidget);
+    // 默认态:不得把任何私钥/公钥指纹明文泄露到界面(未点查看)。
     expect(find.textContaining(account.masterId.substring(2)), findsNothing);
   });
 }

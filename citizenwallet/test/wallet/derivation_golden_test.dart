@@ -1,24 +1,21 @@
-// HD 派生金标（冷热共享单源，Step 2 citizenapp 必须逐字节复用）。
+// HD 派生金标（model B，冷热共享单源，Step 2 citizenapp 必须逐字节复用）。
 //
-// 契约（ADR-022 修订后地基）：一套助记词 → 一个 mini-secret 种子 →
-//   · 账户 0 = 根派生(bare) = Keyring.sr25519.fromSeed(miniSecret)，逐字节等于历史直出，
-//     护住已上链的 bare 地址（如创世 9c3e…1068）；
-//   · 账户 N≥1 = <助记词>//N 硬 junction 派生，等价于 seed-only 的 0x<miniSecret>//N；
-//   · 每账户一对公私钥、一个 ss58(2027) 地址。
+// 契约：一套助记词 → 一个 mini-secret 种子 → 全部 `//index` 硬派生（含账户0 = `//0`，
+//   无 bare 根）→ 每账户一对公私钥、一个 ss58(2027)、一把自己的 child mini-secret（32B）。
 //
-// 三条不变量由本测试钉死：
+// 不变量（本测试钉死）：
 //   1) junction 硬派生标准正确 —— //Alice 对齐 substrate 权威 Alice AccountId；
-//   2) base 一致 —— fromSeed(miniSecretFromEntropy) == fromUri(bare)，
-//      即 seedFromEntropy == miniSecretFromEntropy，//N base 不漂；
-//   3) seed-only 等价 —— 0x<miniSecret>//N == <助记词>//N（冷签不必解密助记词）。
+//   2) model B 核心 —— fromSeed(childMiniSecret) 逐字节 == <助记词>//index；
+//   3) //0 //1 //2 的 accountId / ss58 / childMiniSecret 逐字节钉死。
 //
-// 向量基于固定 dev 助记词生成（2026-07-26 Phase 0 落定）。
+// 向量基于固定 dev 助记词（2026-07-27 model B 落定）。
 import 'dart:typed_data';
 
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:substrate_bip39/crypto_scheme.dart';
+import 'package:sr25519/sr25519.dart' as sr;
+import 'package:substrate_bip39/substrate_bip39.dart';
 
 /// 固定测试助记词（substrate dev 助记词，全网公开，仅测试用）。
 const String kDevPhrase =
@@ -31,19 +28,23 @@ const int kSs58 = 2027;
 const String kAlicePub =
     'd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
 
-/// 金标：dev 助记词下 账户0(根)/账户1(//1)/账户2(//2) 的 (accountId, ss58)。
-const List<(String, String)> kGoldenAccounts = [
+/// 金标：dev 助记词下 //0 //1 //2 的 (accountId, ss58, childMiniSecret)。
+/// //1 //2 的 accountId/ss58 与旧 bare 模型一致（`//N` 不变），账户0 改 `//0` 换新值。
+const List<(String, String, String)> kGoldenAccounts = [
   (
-    '0x46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a',
-    'w5DBnqoUytARopdnyWhmBq7ZPr74cJJewugoafJJynKLrirdE',
+    '0x2afba9278e30ccf6a6ceb3a8b6e336b70068f045c666f2e7f4f9cc5f47db8972',
+    'w5CZACAABUbK4jspzPB5be9trhtSgRCRZFafGe7kvFPvxq8M2',
+    '0x914dded06277afbe5b0e8a30bce539ec8a9552a784d08e530dc7c2915c478393',
   ),
   (
     '0xb606fc73f57f03cdb4c932d475ab426043e429cecc2ffff0d2672b0df8398c48',
     'w5FhUDLW4BxsE1QXK4sNjPZ8rqSnK2QeVpUfXzqczpWdxChxV',
+    '0x4433c3ada0cf37c3050d5435321872f4f84ef53d8b5f1f1560689d500b882245',
   ),
   (
     '0x46f136b564e1fad55031404dd84e5cd3fa76bfe7cc7599b39d38fd06663bbc0a',
     'w5DBpRvbgkersZohanGQiXa4qQLS1n7VQaSFwBaq4irJmgDn5',
+    '0x5418179cea7224f2d9d2ab437773c2fdb266e52ef7fa52c0d9c15c6ca6068748',
   ),
 ];
 
@@ -56,12 +57,18 @@ Future<Uint8List> _miniSecret(String mnemonic) async {
   return Uint8List.fromList(await CryptoScheme.miniSecretFromEntropy(entropy));
 }
 
-Future<KeyPair> _account(int index, Uint8List miniSecret) async {
-  final KeyPair kp = index == 0
-      ? Keyring.sr25519.fromSeed(miniSecret)
-      : await Keyring.sr25519.fromUri('$kDevPhrase//$index');
-  kp.ss58Format = kSs58;
-  return kp;
+/// 复现 WalletManager 的 child mini-secret 提取（金标据此校验）。
+List<int> _childMiniSecret(List<int> seed, int index) {
+  final junctions = SecretUri.fromStr('//$index').junctions;
+  var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
+  late List<int> child;
+  for (final j in junctions) {
+    final cc = j.junctionId.sublist(0, 32);
+    final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
+    child = derived.$1.encode();
+    rootSk = derived.$1.expandEd25519();
+  }
+  return child;
 }
 
 void main() {
@@ -71,42 +78,38 @@ void main() {
     expect(_hex(alice.bytes().toList(growable: false)), kAlicePub);
   });
 
-  test('账户0 base 一致：fromSeed(miniSecret) == fromUri(bare)', () async {
+  test('model B 核心：fromSeed(childMiniSecret) == <助记词>//index', () async {
     final ms = await _miniSecret(kDevPhrase);
-    final fromSeed = Keyring.sr25519.fromSeed(ms)..ss58Format = kSs58;
-    final fromUriBare = await Keyring.sr25519.fromUri(kDevPhrase);
-    fromUriBare.ss58Format = kSs58;
-    expect(
-      _hex(fromSeed.bytes().toList(growable: false)),
-      _hex(fromUriBare.bytes().toList(growable: false)),
-    );
-  });
-
-  test('seed-only 等价：0x<miniSecret>//N == <助记词>//N', () async {
-    final ms = await _miniSecret(kDevPhrase);
-    final msHex = _hex(ms);
-    for (final n in [1, 2]) {
-      final viaMnemonic = await Keyring.sr25519.fromUri('$kDevPhrase//$n');
-      final viaSeed = await Keyring.sr25519.fromUri('0x$msHex//$n');
+    for (var index = 0; index < 3; index++) {
+      final child = _childMiniSecret(ms, index);
+      final recon = Keyring.sr25519.fromSeed(Uint8List.fromList(child))
+        ..ss58Format = kSs58;
+      final ref = await Keyring.sr25519.fromUri('$kDevPhrase//$index');
+      ref.ss58Format = kSs58;
       expect(
-        _hex(viaSeed.bytes().toList(growable: false)),
-        _hex(viaMnemonic.bytes().toList(growable: false)),
-        reason: '//$n seed-only 派生不一致',
+        _hex(recon.bytes().toList(growable: false)),
+        _hex(ref.bytes().toList(growable: false)),
+        reason: '//$index 公钥不一致',
       );
+      expect(recon.address, ref.address, reason: '//$index ss58 不一致');
     }
   });
 
-  test('账户 0/1/2 金标向量逐字节钉死', () async {
+  test('//0 //1 //2 金标逐字节钉死（accountId / ss58 / childMiniSecret）', () async {
     final ms = await _miniSecret(kDevPhrase);
     for (var index = 0; index < kGoldenAccounts.length; index++) {
-      final kp = await _account(index, ms);
-      final (expectedAccountId, expectedSs58) = kGoldenAccounts[index];
+      final child = _childMiniSecret(ms, index);
+      final kp = Keyring.sr25519.fromSeed(Uint8List.fromList(child))
+        ..ss58Format = kSs58;
+      final (expectedId, expectedSs58, expectedChild) = kGoldenAccounts[index];
       expect(
         '0x${_hex(kp.bytes().toList(growable: false))}',
-        expectedAccountId,
-        reason: '账户$index accountId 漂移',
+        expectedId,
+        reason: '//$index accountId 漂移',
       );
-      expect(kp.address, expectedSs58, reason: '账户$index ss58 漂移');
+      expect(kp.address, expectedSs58, reason: '//$index ss58 漂移');
+      expect('0x${_hex(child)}', expectedChild,
+          reason: '//$index childMiniSecret 漂移');
     }
   });
 }
