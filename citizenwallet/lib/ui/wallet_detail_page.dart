@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:isar/isar.dart';
 
-import '../isar/wallet_isar.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'account_detail_page.dart';
 import 'app_theme.dart';
 
-/// Lv2 钱包详情：钱包(master)名 + 助记词备份 + 账户列表 + 添加账户 + 分组。
+/// Lv2 钱包详情：钱包(master)名 + 助记词备份 + 账户列表 + 添加账户。
 ///
 /// 助记词属钱包级（一句恢复该钱包全部账户）；账户按 //index 派生，点账户进 Lv3。
 class WalletDetailPage extends StatefulWidget {
@@ -23,9 +21,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   final WalletManager _walletManager = WalletManager();
 
   List<Account> _accounts = [];
-  List<WalletGroupEntity> _groups = [];
-  late Set<String> _selectedGroups;
-  bool _groupsExpanded = false;
   bool _loading = true;
   bool _addingAccount = false;
 
@@ -36,7 +31,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   @override
   void initState() {
     super.initState();
-    _selectedGroups = widget.wallet.groupNames.toSet();
     _load();
   }
 
@@ -51,13 +45,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _load() async {
     final accounts = await _walletManager.getAccounts(widget.wallet.masterId);
-    final isar = await WalletIsar.instance.db();
-    final groups =
-        await isar.walletGroupEntitys.where().sortBySortOrder().findAll();
     if (!mounted) return;
     setState(() {
       _accounts = accounts;
-      _groups = groups;
       _loading = false;
     });
   }
@@ -153,27 +143,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     await _load();
   }
 
-  Future<void> _toggleGroup(String groupName, bool selected) async {
-    final updated = Set<String>.from(_selectedGroups);
-    if (selected) {
-      updated.add(groupName);
-    } else {
-      updated.remove(groupName);
-    }
-    final isar = await WalletIsar.instance.db();
-    final entity = await isar.walletEntitys
-        .filter()
-        .masterIdEqualTo(widget.wallet.masterId)
-        .findFirst();
-    if (entity == null) return;
-    await isar.writeTxn(() async {
-      entity.groupNames = updated.join(',');
-      await isar.walletEntitys.put(entity);
-    });
-    if (!mounted) return;
-    setState(() => _selectedGroups = updated);
-  }
-
   String _shortAddress(String address) {
     if (address.length <= 16) return address;
     return '${address.substring(0, 8)}...${address.substring(address.length - 6)}';
@@ -188,56 +157,42 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _buildHeader(),
+                _buildIdentityCard(),
                 const SizedBox(height: 20),
                 _buildAccountsSection(),
-                const SizedBox(height: 16),
-                _buildMnemonicSection(),
-                if (_groups.where((g) => g.name != allGroup).isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _buildGroupSection(),
-                ],
               ],
             ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildIdentityCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: AppTheme.primaryGradient,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-      ),
-      child: Row(
+      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(30),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.account_balance_wallet_rounded,
-                color: Colors.white, size: 24),
+          // 上排：钱包图标（去外框、缩小、与名称对齐）+ 名称，贴卡片上边缘。
+          Row(
+            children: [
+              const Icon(Icons.account_balance_wallet_rounded,
+                  size: 22, color: AppTheme.primaryLight),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.wallet.walletName,
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.wallet.walletName,
-                    style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white)),
-                const SizedBox(height: 4),
-                Text('${_accounts.length} 个账户',
-                    style: TextStyle(
-                        fontSize: 13, color: Colors.white.withAlpha(200))),
-              ],
-            ),
-          ),
+          const SizedBox(height: 16),
+          // 下方：助记词区（原样，点击查看→确认→就地展开→隐藏）。
+          _buildMnemonicArea(),
         ],
       ),
     );
@@ -335,148 +290,88 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     );
   }
 
-  Widget _buildMnemonicSection() {
-    return Container(
-      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildMnemonicArea() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
           children: [
-            const Row(
-              children: [
-                Icon(Icons.key_rounded, size: 16, color: AppTheme.textSecondary),
-                SizedBox(width: 8),
-                Text('助记词（钱包备份，一句恢复全部账户）',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w500)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (!_mnemonicVisible)
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _revealMnemonic,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 18, horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceElevated,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                      border: Border.all(color: AppTheme.border),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.visibility_off_rounded,
-                            color: AppTheme.textTertiary, size: 18),
-                        SizedBox(width: 8),
-                        Text('点击查看助记词',
-                            style: TextStyle(
-                                color: AppTheme.textTertiary, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            else ...[
-              Container(
+            Icon(Icons.key_rounded, size: 16, color: AppTheme.textSecondary),
+            SizedBox(width: 8),
+            Text('助记词（钱包备份，一句恢复全部账户）',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (!_mnemonicVisible)
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _revealMnemonic,
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(14),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
                 decoration: BoxDecoration(
-                  color: AppTheme.danger.withAlpha(15),
+                  color: AppTheme.surfaceElevated,
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                  border: Border.all(color: AppTheme.danger.withAlpha(40)),
+                  border: Border.all(color: AppTheme.border),
                 ),
-                child: SelectableText(
-                  _mnemonic ?? '无数据',
-                  style: const TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'monospace',
-                      color: AppTheme.textPrimary,
-                      height: 1.6),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('请手抄备份，不支持复制',
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.visibility_off_rounded,
+                        color: AppTheme.textTertiary, size: 18),
+                    SizedBox(width: 8),
+                    Text('点击查看助记词',
                         style: TextStyle(
-                            color: AppTheme.danger,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500)),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => setState(() => _mnemonicVisible = false),
-                    icon: const Icon(Icons.visibility_off_rounded, size: 16),
-                    label: const Text('隐藏'),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGroupSection() {
-    final selectableGroups = _groups.where((g) => g.name != allGroup).toList();
-    return Container(
-      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: () => setState(() => _groupsExpanded = !_groupsExpanded),
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                children: [
-                  const Icon(Icons.folder_outlined,
-                      size: 16, color: AppTheme.textSecondary),
-                  const SizedBox(width: 8),
-                  const Text('分组',
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w500)),
-                  const Spacer(),
-                  Icon(
-                    _groupsExpanded
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_right,
-                    size: 20,
-                    color: AppTheme.textTertiary,
-                  ),
-                ],
+                            color: AppTheme.textTertiary, fontSize: 13)),
+                  ],
+                ),
               ),
             ),
-            if (_groupsExpanded) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: selectableGroups.map((g) {
-                  final checked = _selectedGroups.contains(g.name);
-                  return FilterChip(
-                    label: Text(g.name),
-                    selected: checked,
-                    onSelected: (val) => _toggleGroup(g.name, val),
-                  );
-                }).toList(),
+          )
+        else ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.danger.withAlpha(15),
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              border: Border.all(color: AppTheme.danger.withAlpha(40)),
+            ),
+            child: SelectableText(
+              _mnemonic ?? '无数据',
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontFamily: 'monospace',
+                  color: AppTheme.textPrimary,
+                  height: 1.6),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('请手抄备份，不支持复制',
+                    style: TextStyle(
+                        color: AppTheme.danger,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+              ),
+              TextButton.icon(
+                onPressed: () => setState(() => _mnemonicVisible = false),
+                icon: const Icon(Icons.visibility_off_rounded, size: 16),
+                label: const Text('隐藏'),
               ),
             ],
-          ],
-        ),
-      ),
+          ),
+        ],
+      ],
     );
   }
 }

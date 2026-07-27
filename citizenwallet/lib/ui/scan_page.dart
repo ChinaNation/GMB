@@ -153,6 +153,8 @@ class _ScanPageState extends State<ScanPage> {
           MobileScanner(
             controller: _controller,
             onDetect: (capture) async {
+              // 实时流可能回空 barcodes,.first 会抛 StateError;与相册路径一致先判空。
+              if (capture.barcodes.isEmpty) return;
               final code = capture.barcodes.first.rawValue;
               if (code == null || code.isEmpty) return;
               await _handleCode(code);

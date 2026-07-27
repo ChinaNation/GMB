@@ -2,18 +2,19 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../isar/wallet_isar.dart';
-import '../wallet/mnemonic_cipher.dart';
+import '../wallet/secret_cipher.dart';
+import 'secure_storage.dart';
 
 /// 应用锁（6 位 PIN）服务。
 ///
 /// PIN 以 SHA-256(pin + salt) 形式存储在 SecureStorage 中。
 /// 连续 5 次验证错误锁定 24 小时，累计 3 次锁定则清空全部应用数据。
 class AppLockService {
-  static const FlutterSecureStorage _secure = FlutterSecureStorage();
+  // 单源加固实例(选项集中在 secure_storage.dart)。
+  static const _secure = appSecureStorage;
   static const String _keyPinHash = 'pin_hash';
   static const String _keyPinSalt = 'pin_salt';
   static const String _keyFailCount = 'pin_fail_count';
@@ -103,7 +104,7 @@ class AppLockService {
   // 数据清空
   static Future<void> wipeAllData() async {
     // 先清除内存中的加密密钥缓存
-    MnemonicCipher.clearCache();
+    SecretCipher.clearCache();
 
     try {
       final isar = await WalletIsar.instance.db();

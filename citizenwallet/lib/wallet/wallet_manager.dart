@@ -5,14 +5,14 @@ import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show PlatformException;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar/isar.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:citizenwallet/chain/chain_constants.dart';
 import 'package:citizenwallet/isar/wallet_isar.dart';
-import 'package:citizenwallet/wallet/mnemonic_cipher.dart';
+import 'package:citizenwallet/security/secure_storage.dart';
+import 'package:citizenwallet/wallet/secret_cipher.dart';
 import 'package:citizenwallet/wallet/wallet_secure_keys.dart';
 
 /// 钱包（master）：一套助记词 = 一个种子 = 一个 master，其下派生多个账户。
@@ -23,7 +23,6 @@ class Wallet {
     required this.masterId,
     required this.createdAtMillis,
     required this.source,
-    this.groupNames = const [],
     this.sortOrder = 0,
   });
 
@@ -35,13 +34,7 @@ class Wallet {
   final int createdAtMillis;
   final String source;
 
-  /// 所属分组（不含"全部"）。
-  final List<String> groupNames;
   final int sortOrder;
-
-  /// 是否属于指定分组（"全部"始终 true）。
-  bool inGroup(String group) =>
-      group == allGroup || groupNames.contains(group);
 }
 
 /// 账户：钱包下按派生序号展开的一对公私钥。
@@ -117,7 +110,8 @@ class WalletAuthException implements Exception {
 class WalletManager {
   static const int _ss58Prefix = ChainConstants.ss58Prefix;
   static final RegExp _accountIdPattern = RegExp(r'^0x[0-9a-f]{64}$');
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  // 单源加固实例(选项集中在 security/secure_storage.dart)。
+  static const _secureStorage = appSecureStorage;
   static final LocalAuthentication _localAuth = LocalAuthentication();
 
   /// 生物识别门禁（读密钥 / 签名前调用）。测试可经 [debugAuthGate] 注入。
@@ -323,7 +317,10 @@ class WalletManager {
   // ── 更新 ──
   static const int maxWalletNameLength = 5;
 
-  Future<void> renameWallet(int walletIndex, String walletName) async {
+  // 寻址单源用 masterId(稳定主键;walletIndex 是可复用槽位,删钱包后会被
+  // 新钱包重占,拿它定位有指向另一只钱包的窗口)。删除/查账户/签名已按 masterId,
+  // 改名/重排同口径。
+  Future<void> renameWallet(String masterId, String walletName) async {
     final nextName = walletName.trim();
     if (nextName.isEmpty) {
       throw Exception('钱包名称不能为空');
@@ -334,7 +331,7 @@ class WalletManager {
     final isar = await WalletIsar.instance.db();
     final row = await isar.walletEntitys
         .filter()
-        .walletIndexEqualTo(walletIndex)
+        .masterIdEqualTo(masterId)
         .findFirst();
     if (row == null) {
       throw Exception('未找到钱包');
@@ -345,14 +342,39 @@ class WalletManager {
     });
   }
 
-  /// 批量更新钱包排序。[walletIndexes] 顺序即新 sortOrder。
-  Future<void> reorderWallets(List<int> walletIndexes) async {
+  static const int maxAccountNameLength = 5;
+
+  /// 重命名账户(仅改显示名,不动任何密钥)。按 accountId 定位。
+  Future<void> renameAccount(String accountId, String accountName) async {
+    final nextName = accountName.trim();
+    if (nextName.isEmpty) {
+      throw Exception('账户名称不能为空');
+    }
+    if (nextName.runes.length > maxAccountNameLength) {
+      throw Exception('账户名称最多$maxAccountNameLength个字');
+    }
+    final isar = await WalletIsar.instance.db();
+    final row = await isar.accountEntitys
+        .filter()
+        .accountIdEqualTo(accountId)
+        .findFirst();
+    if (row == null) {
+      throw Exception('未找到账户');
+    }
+    await isar.writeTxn(() async {
+      row.accountName = nextName;
+      await isar.accountEntitys.put(row);
+    });
+  }
+
+  /// 批量更新钱包排序。[masterIds] 顺序即新 sortOrder。
+  Future<void> reorderWallets(List<String> masterIds) async {
     final isar = await WalletIsar.instance.db();
     await isar.writeTxn(() async {
-      for (var i = 0; i < walletIndexes.length; i++) {
+      for (var i = 0; i < masterIds.length; i++) {
         final row = await isar.walletEntitys
             .filter()
-            .walletIndexEqualTo(walletIndexes[i])
+            .masterIdEqualTo(masterIds[i])
             .findFirst();
         if (row != null) {
           row.sortOrder = i;
@@ -460,16 +482,27 @@ class WalletManager {
   }
 
   // ── Secure Storage（按 master 存一份）──
-  Future<void> _writeMasterSeed(String masterId, String seedHex) =>
-      _secureStorage.write(
-          key: WalletSecureKeys.masterSeedHexV1(masterId), value: seedHex);
+  // 种子与助记词同威胁模型:master seed 也过 SecretCipher AES-256-GCM(同 AEK),
+  // 不再明文落库。存的是密文,键名沿用 masterSeedHexV1(“Hex”指解密后的明文格式)。
+  Future<void> _writeMasterSeed(String masterId, String seedHex) async {
+    final encrypted = await SecretCipher.encrypt(seedHex);
+    await _secureStorage.write(
+        key: WalletSecureKeys.masterSeedHexV1(masterId), value: encrypted);
+  }
 
   static final RegExp _seedHexPattern = RegExp(r'^[0-9a-fA-F]{64}$');
 
   Future<String?> _readMasterSeedRaw(String masterId) async {
-    final seedHex =
+    final stored =
         await _secureStorage.read(key: WalletSecureKeys.masterSeedHexV1(masterId));
-    if (seedHex == null) return null;
+    if (stored == null) return null;
+    final String seedHex;
+    try {
+      seedHex = await SecretCipher.decrypt(stored);
+    } on FormatException {
+      // 密文损坏或 AEK 丢失(不可解):与格式非法同口径,提示重导(助记词仍可恢复)。
+      throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
+    }
     if (!_seedHexPattern.hasMatch(seedHex)) {
       throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
     }
@@ -480,7 +513,7 @@ class WalletManager {
       _secureStorage.delete(key: WalletSecureKeys.masterSeedHexV1(masterId));
 
   Future<void> _writeMasterMnemonic(String masterId, String mnemonic) async {
-    final encrypted = await MnemonicCipher.encrypt(mnemonic);
+    final encrypted = await SecretCipher.encrypt(mnemonic);
     await _secureStorage.write(
         key: WalletSecureKeys.masterMnemonicV1(masterId), value: encrypted);
   }
@@ -489,7 +522,7 @@ class WalletManager {
     final stored =
         await _secureStorage.read(key: WalletSecureKeys.masterMnemonicV1(masterId));
     if (stored == null) return null;
-    return MnemonicCipher.decrypt(stored);
+    return SecretCipher.decrypt(stored);
   }
 
   Future<void> _deleteMasterMnemonic(String masterId) =>
@@ -562,7 +595,6 @@ class WalletManager {
         ..masterId = masterId
         ..createdAtMillis = now
         ..source = source
-        ..groupNames = ''
         ..sortOrder = sortOrder;
       await isar.walletEntitys.put(wallet);
 
@@ -583,7 +615,6 @@ class WalletManager {
         masterId: masterId,
         createdAtMillis: now,
         source: source,
-        groupNames: const [],
         sortOrder: sortOrder,
       ),
       Account(
@@ -650,8 +681,6 @@ class WalletManager {
         masterId: row.masterId,
         createdAtMillis: row.createdAtMillis,
         source: row.source,
-        groupNames:
-            row.groupNames.isEmpty ? const [] : row.groupNames.split(','),
         sortOrder: row.sortOrder,
       );
 

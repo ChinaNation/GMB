@@ -2,33 +2,33 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pointycastle/export.dart';
 
-/// 助记词 AES-256-GCM 加密/解密。
-///
-/// 使用应用级随机加密密钥（AEK）对助记词进行 AES-256-GCM 加密。
-/// AEK 在首次使用时自动生成并存储在 SecureStorage 的独立键下，
-/// 与助记词条目分离存储，防止部分 SecureStorage 泄露导致助记词暴露。
-///
-/// 存储格式：Base64(iv[12] + ciphertext[...] + tag[16])
-class MnemonicCipher {
-  const MnemonicCipher._();
+import '../security/secure_storage.dart';
 
-  static const FlutterSecureStorage _secure = FlutterSecureStorage();
+/// 机密(助记词 / 主种子)AES-256-GCM 加密/解密。
+///
+/// 用应用级随机加密密钥(AEK)对机密做 AES-256-GCM 加密。AEK 在首次使用时
+/// 自动生成并存进 SecureStorage 的独立键下,与被加密条目分离存放,防止部分
+/// SecureStorage 泄露导致机密暴露。助记词与主种子共用同一 AEK/算法(同威胁模型)。
+///
+/// 存储格式:Base64(iv[12] + ciphertext[...] + tag[16])
+class SecretCipher {
+  const SecretCipher._();
+
   static const String _aekKey = 'wallet.internal.aek.v1';
   static const int _ivLen = 12;
   static const int _tagLen = 16;
   static const int _keyLen = 32;
 
-  /// 缓存的 AEK，避免每次读写都访问 SecureStorage。
+  /// 缓存的 AEK,避免每次读写都访问 SecureStorage。
   static Uint8List? _cachedAek;
 
-  /// 用 AEK 加密助记词，返回 Base64 密文。
-  static Future<String> encrypt(String mnemonic) async {
+  /// 用 AEK 加密明文机密,返回 Base64 密文。
+  static Future<String> encrypt(String plaintextSecret) async {
     final key = await _ensureAek();
     final iv = _randomBytes(_ivLen);
-    final plaintext = Uint8List.fromList(utf8.encode(mnemonic));
+    final plaintext = Uint8List.fromList(utf8.encode(plaintextSecret));
 
     try {
       final cipher = GCMBlockCipher(AESEngine())
@@ -47,7 +47,7 @@ class MnemonicCipher {
           cipher.processBytes(plaintext, 0, plaintext.length, output, 0);
       final totalLen = len + cipher.doFinal(output, len);
 
-      // 拼接：iv + 实际输出（ciphertext + tag）
+      // 拼接:iv + 实际输出(ciphertext + tag)
       final result = Uint8List(_ivLen + totalLen);
       result.setRange(0, _ivLen, iv);
       result.setRange(_ivLen, result.length, output.sublist(0, totalLen));
@@ -58,11 +58,11 @@ class MnemonicCipher {
     }
   }
 
-  /// 用 AEK 解密助记词。数据损坏或 AEK 不匹配时抛出异常。
+  /// 用 AEK 解密机密。数据损坏或 AEK 不匹配时抛出 [FormatException]。
   static Future<String> decrypt(String cipherBase64) async {
     final data = base64Decode(cipherBase64);
     if (data.length < _ivLen + _tagLen + 1) {
-      throw const FormatException('助记词密文数据损坏');
+      throw const FormatException('机密密文数据损坏');
     }
 
     final key = await _ensureAek();
@@ -93,43 +93,43 @@ class MnemonicCipher {
 
       return utf8.decode(output.sublist(0, totalLen));
     } on InvalidCipherTextException {
-      throw const FormatException('助记词密文已损坏或密钥不匹配');
+      throw const FormatException('机密密文已损坏或密钥不匹配');
     }
   }
 
   /// 获取或生成 AEK。
   ///
-  /// 优先从内存缓存读取；未命中则从 SecureStorage 读取；
+  /// 优先从内存缓存读取;未命中则从 SecureStorage 读取;
   /// 首次使用时生成随机 AEK 并尝试持久化。
-  /// 若 SecureStorage 写入失败，仍使用内存中的 AEK 保证当前会话可用，
-  /// 下次启动会重新生成（当前密文不可解密，但不会导致崩溃）。
+  /// 若 SecureStorage 写入失败,仍使用内存中的 AEK 保证当前会话可用,
+  /// 下次启动会重新生成(旧密文不可解密,但不会导致崩溃)。
   static Future<Uint8List> _ensureAek() async {
     final cached = _cachedAek;
     if (cached != null) return cached;
 
     try {
-      final stored = await _secure.read(key: _aekKey);
+      final stored = await appSecureStorage.read(key: _aekKey);
       if (stored != null && stored.length == _keyLen * 2) {
         final key = _hexToBytes(stored);
         _cachedAek = key;
         return key;
       }
     } catch (_) {
-      // SecureStorage 读取失败，继续生成新 AEK
+      // SecureStorage 读取失败,继续生成新 AEK
     }
 
-    // 首次使用或读取失败，生成随机 AEK
+    // 首次使用或读取失败,生成随机 AEK
     final newKey = _randomBytes(_keyLen);
     try {
-      await _secure.write(key: _aekKey, value: _toHex(newKey));
+      await appSecureStorage.write(key: _aekKey, value: _toHex(newKey));
     } catch (_) {
-      // 持久化失败，AEK 仅在当前会话有效
+      // 持久化失败,AEK 仅在当前会话有效
     }
     _cachedAek = newKey;
     return newKey;
   }
 
-  /// 清除缓存（仅用于数据清空场景）。
+  /// 清除缓存(仅用于数据清空场景)。
   static void clearCache() {
     final cached = _cachedAek;
     if (cached != null) {

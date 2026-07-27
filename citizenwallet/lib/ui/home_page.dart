@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:isar/isar.dart';
 
-import '../isar/wallet_isar.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
 import 'create_wallet_page.dart';
-import 'group_management_page.dart';
 import 'import_wallet_page.dart';
 import 'scan_page.dart';
 import 'settings_page.dart';
 import 'wallet_detail_page.dart';
 
-/// Lv1 钱包列表首页：只显示钱包名（+分组）。点钱包进 Lv2 详情；顶部全局扫码。
+/// Lv1 钱包列表首页：只显示钱包名。点钱包进 Lv2 详情；顶部全局扫码。
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -24,8 +21,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final WalletManager _walletManager = WalletManager();
   List<Wallet> _wallets = [];
-  List<WalletGroupEntity> _groups = [];
-  String _selectedGroup = allGroup;
   bool _loading = true;
   bool _isRooted = false;
 
@@ -46,13 +41,9 @@ class _HomePageState extends State<HomePage> {
     if (showLoading) setState(() => _loading = true);
     try {
       final wallets = await _walletManager.getWallets();
-      final isar = await WalletIsar.instance.db();
-      final groups =
-          await isar.walletGroupEntitys.where().sortBySortOrder().findAll();
       if (!mounted) return;
       setState(() {
         _wallets = wallets;
-        _groups = groups;
         _loading = false;
       });
     } catch (e) {
@@ -65,11 +56,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadWallets() => _loadAll();
-
-  List<Wallet> get _filteredWallets {
-    if (_selectedGroup == allGroup) return _wallets;
-    return _wallets.where((w) => w.inGroup(_selectedGroup)).toList();
-  }
 
   Future<void> _openCreateWallet() async {
     final created = await Navigator.of(context).push<bool>(
@@ -257,7 +243,7 @@ class _HomePageState extends State<HomePage> {
     );
     if (newName == null || newName.trim().isEmpty) return;
     try {
-      await _walletManager.renameWallet(wallet.walletIndex, newName);
+      await _walletManager.renameWallet(wallet.masterId, newName);
       await _loadWallets();
     } catch (e) {
       if (!mounted) return;
@@ -416,94 +402,30 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openGroupManagement() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const GroupManagementPage()),
-    );
-    await _loadAll();
-  }
-
-  Widget _buildGroupRow() {
-    final otherGroups = _groups.where((g) => g.name != allGroup).toList();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: const Text(allGroup),
-              selected: _selectedGroup == allGroup,
-              onSelected: (_) => setState(() => _selectedGroup = allGroup),
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: otherGroups.map((g) {
-                  final selected = g.name == _selectedGroup;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(g.name),
-                      selected: selected,
-                      onSelected: (_) =>
-                          setState(() => _selectedGroup = g.name),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.tune_rounded,
-                size: 20, color: AppTheme.textSecondary),
-            tooltip: '分组管理',
-            onPressed: _openGroupManagement,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildWalletList() {
-    final wallets = _filteredWallets;
-    return Column(
-      children: [
-        _buildGroupRow(),
-        Expanded(
-          child: wallets.isEmpty
-              ? const Center(
-                  child: Text('该分组下没有钱包',
-                      style: TextStyle(color: AppTheme.textTertiary)),
-                )
-              : ReorderableListView.builder(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: wallets.length,
-                  onReorder: (oldIndex, newIndex) =>
-                      _onReorderWallet(wallets, oldIndex, newIndex),
-                  proxyDecorator: (child, index, animation) => AnimatedBuilder(
-                    animation: animation,
-                    builder: (context, child) => Material(
-                      elevation: 0,
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      child: child,
-                    ),
-                    child: child,
-                  ),
-                  itemBuilder: (context, index) {
-                    final wallet = wallets[index];
-                    return _buildWalletCard(
-                      wallet,
-                      key: ValueKey(wallet.walletIndex),
-                    );
-                  },
-                ),
+    final wallets = _wallets;
+    return ReorderableListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: wallets.length,
+      onReorder: (oldIndex, newIndex) =>
+          _onReorderWallet(wallets, oldIndex, newIndex),
+      proxyDecorator: (child, index, animation) => AnimatedBuilder(
+        animation: animation,
+        builder: (context, child) => Material(
+          elevation: 0,
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          child: child,
         ),
-      ],
+        child: child,
+      ),
+      itemBuilder: (context, index) {
+        final wallet = wallets[index];
+        return _buildWalletCard(
+          wallet,
+          key: ValueKey(wallet.walletIndex),
+        );
+      },
     );
   }
 
@@ -545,7 +467,7 @@ class _HomePageState extends State<HomePage> {
 
     try {
       await _walletManager
-          .reorderWallets(next.map((w) => w.walletIndex).toList());
+          .reorderWallets(next.map((w) => w.masterId).toList());
     } catch (e) {
       if (!mounted) return;
       setState(() => _wallets = previous);

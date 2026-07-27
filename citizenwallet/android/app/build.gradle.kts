@@ -29,7 +29,8 @@ android {
 
     defaultConfig {
         applicationId = "org.citizenwallet"
-        minSdk = flutter.minSdkVersion
+        // EncryptedSharedPreferences(flutter_secure_storage aOptions)需 API ≥ 23。
+        minSdk = maxOf(23, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

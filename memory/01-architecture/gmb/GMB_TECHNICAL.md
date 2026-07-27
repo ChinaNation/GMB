@@ -198,6 +198,18 @@ GMB/
 
 测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，`.ssh`、仓库及根目录不得保留部署私钥明文。GitHub `workflow_dispatch` 使用显式 `mode=ci/release` 隔离构建与发布；服务器部署由本地控制台独立执行，目标服务器直接下载 GitHub 最新成功 CI 产物，CI 模式不得创建 Release 或部署服务器。
 
+CitizenConsole 的生产进程模型固定为：Apple `Developer ID Application` 签名并完成公证的
+原生应用作为根进程，创建不可重新连接的匿名 `AF_UNIX socketpair`，再启动签名包内的
+Node、网页、动作脚本、充值代码和依赖。Node 只能通过私有父子通道请求 Swift 固定操作目录，
+不能传入任意 Keychain 项或任意 Touch ID 文案；Apple Development、`get-task-allow=true`、
+未公证、资源被修改或缺少私有通道时均失败关闭。生产应用不在每次启动时重新编译或自动签名。
+
+充值发币页面仍保持一次 Touch ID 后持续解锁且不设置计时器，但发币私钥只驻原生根进程，
+普通 UI Node 只持有非私密配置和原生会话状态。每笔发币由原生根进程通过匿名管道调用签名包
+内的一次性隔离工作进程；点击锁定、离页、断连或根进程退出时原地清零私钥。控制台 HTTP
+继续只监听回环地址，并同时执行 Host、会话 Cookie、Origin、Fetch Metadata、CSP 和安全
+响应头校验；生产动作子进程使用环境白名单，不继承控制台完整进程环境。
+
 CitizenWeb 只保留“测试部署”和“生产部署”两个按钮卡片：“测试部署”在启动前自动停止旧本地测试进程，再在本机构建并启动 `http://127.0.0.1:41732`，不创建测试 Pages 项目；生产部署只更新已经存在的 `citizenweb` Pages 项目，并继续使用 `https://www.crcfrcn.com` 做真实健康检查。官网部署固定使用 `citizenweb/package-lock.json` 锁定的 Wrangler 版本；生产项目存在性门禁只解析 `wrangler pages project list --json`，不得再 grep 表格输出。
 
 - Runtime 升级：修改 `citizenchain/runtime/**` 或被 runtime 直接依赖且影响链上行为的 primitives。

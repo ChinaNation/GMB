@@ -24,7 +24,8 @@ void main() {
     for (final label in ['帖子', '竞选', '照片', '视频', '文章']) {
       expect(find.text(label), findsOneWidget);
     }
-    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    // 当前资料页统一使用细体左箭头返回，测试与已确认的正式 UI 保持一致。
+    expect(find.byIcon(Icons.chevron_left), findsOneWidget);
     expect(find.byIcon(Icons.more_vert), findsOneWidget);
     expect(find.text('还没有帖子'), findsOneWidget);
   });

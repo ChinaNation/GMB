@@ -160,6 +160,9 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       SignRequestEnvelope request, OfflineSignVerification verification) {
     final decoded = verification.decoded;
     final rejected = verification.status == SignDecisionStatus.reject;
+    // normal 但无逐字段解码 = runtime 升级哈希签(verifyPayload 唯一产生该组合的路径):
+    // 合法可签,只是内容是 32B 摘要而非可逐字段展开的交易。
+    final hashOnly = !rejected && decoded == null;
 
     final Widget statusBanner;
     switch (verification.status) {
@@ -167,7 +170,9 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         statusBanner = _buildBanner(
           color: AppTheme.success,
           icon: Icons.verified_rounded,
-          text: '签名状态正常，内容已完整中文解释，可以签名',
+          text: hashOnly
+              ? '签名状态正常，升级摘要哈希已核对，可以签名'
+              : '签名状态正常，内容已完整中文解释，可以签名',
         );
       case SignDecisionStatus.reject:
         statusBanner = _buildBanner(
@@ -179,8 +184,16 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
 
     final actionLabel = verification.actionLabel ?? '未登记签名动作';
 
+    // 三分支,消除“绿 banner 可以签名 + 明细却写拒绝签名”的自相矛盾:
+    // 拒绝态 → 拒绝行;正常且有解码 → 逐字段;正常且哈希签 → 摘要说明。
     final List<Widget> detailRows;
-    if (!rejected && decoded != null) {
+    if (rejected) {
+      detailRows = [
+        _detailRow('交易类型', actionLabel),
+        _detailRow('状态', '拒绝签名'),
+        _detailRow('原因', verification.rejectReason ?? '签名请求已拒绝'),
+      ];
+    } else if (decoded != null) {
       detailRows = [
         _detailRow('交易类型', actionLabel),
         ...decoded.reviewFields.entries.map((e) {
@@ -192,10 +205,11 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
         }),
       ];
     } else {
+      // hash-only:runtime 升级仅对 32B 摘要签名,原始 WASM 留在发起端 session。
       detailRows = [
         _detailRow('交易类型', actionLabel),
-        _detailRow('状态', '拒绝签名'),
-        _detailRow('原因', verification.rejectReason ?? '签名请求已拒绝'),
+        _detailRow('签名内容', '32 字节升级摘要（哈希）'),
+        _detailRow('说明', 'Runtime 升级仅对 32 字节摘要签名，原始升级内容留在发起端'),
       ];
     }
 

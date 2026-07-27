@@ -134,7 +134,7 @@
   - **残留清理(已修)**:删 `AccountEntity.sortOrder` 死字段;scan_page 单次解析(去第二次 jsonDecode);删 offline_sign_page 内置扫码死路径(改 raw 必填 + 解析失败/返回);wallet_detail 加"重导只恢复账户0"提示。
   - **M-4(不可行,已注)**:库 `KeyPair.lock()` 该版本 `fromEd25519Bytes(空)` 抛错,不可用清私钥,注释说明。
   - **测试补齐**:deleteAccount(非末位/级联/account0守卫)、getAccountByAccountId/getWalletByMasterId、删中间账户后 addAccount=max+1、rename/reorder、account_detail widget 钉死"不展私钥"。
-  - **未纳入(既有基线,非 HD 引入)**:分组名逗号污染、`_deleteGroup` 死码、onDetect 判空、seed_hex 明文 vs 助记词 AES-GCM、`AndroidOptions(encryptedSharedPreferences)`、offline_sign 绿banner矛盾、walletIndex/masterId 寻址混用。
+  - **未纳入(既有基线,非 HD 引入)**:分组名逗号污染、`_deleteGroup` 死码、onDetect 判空、seed_hex 明文 vs 助记词 AES-GCM、`AndroidOptions(encryptedSharedPreferences)`、offline_sign 绿banner矛盾、walletIndex/masterId 寻址混用。**→ 七项已于 2026-07-26 由独立任务卡 `20260726-citizenwallet-baseline-fixes.md`(done)全部修复;`dart analyze` 0 + `flutter test` 215 passed。**
   - **终验**:`dart analyze` 0 + `flutter test` **209 passed**;S1-FIX 残留复扫全 0。
 
 **Step 1(citizenwallet)完成并通过复查。** 派生金标 = 冷热共享单源(`test/wallet/derivation_golden_test.dart`),Step 2 citizenapp 逐字节复用。

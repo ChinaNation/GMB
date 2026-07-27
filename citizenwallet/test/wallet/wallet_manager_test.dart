@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:citizenwallet/isar/wallet_isar.dart';
 import 'package:citizenwallet/wallet/wallet_manager.dart';
+import 'package:citizenwallet/wallet/wallet_secure_keys.dart';
 
 const String kDevPhrase =
     'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
@@ -172,13 +173,26 @@ void main() {
         'legal winner thank year wave sausage worth useful legal winner thank yellow';
     final w2 = await manager.importWallet(otherPhrase);
 
-    await manager.renameWallet(w1.wallet.walletIndex, '主号');
+    await manager.renameWallet(w1.wallet.masterId, '主号');
     final renamed = await manager.getWalletByMasterId(w1.wallet.masterId);
     expect(renamed?.walletName, '主号');
 
     await manager
-        .reorderWallets([w2.wallet.walletIndex, w1.wallet.walletIndex]);
+        .reorderWallets([w2.wallet.masterId, w1.wallet.masterId]);
     final ordered = await manager.getWallets();
     expect(ordered.first.masterId, w2.wallet.masterId);
+  });
+
+  test('master seed 落库为密文,非明文 hex(加固:与助记词同 AES-GCM)', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    const storage = FlutterSecureStorage();
+    final stored = await storage
+        .read(key: WalletSecureKeys.masterSeedHexV1(created.wallet.masterId));
+    expect(stored, isNotNull);
+    // 明文种子是 64 位 hex;加密后是 Base64 密文,绝不匹配裸 hex。
+    expect(RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(stored!), isFalse);
+    // 且能正常解密派生(证明可用):加账户对齐金标。
+    final a1 = await manager.addAccount(created.wallet.masterId);
+    expect(a1.accountId, kAccount1Id);
   });
 }

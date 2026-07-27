@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../security/app_lock_service.dart';
 import '../security/pin_input_page.dart';
+import '../security/secure_storage.dart';
 import 'app_theme.dart';
 
 /// 冷钱包设置页。
@@ -16,7 +16,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   static const String _deviceLockKey = 'device_lock_enabled';
-  static const FlutterSecureStorage _secure = FlutterSecureStorage();
+  // 单源加固实例(选项集中在 security/secure_storage.dart)。
+  static const _secure = appSecureStorage;
   final LocalAuthentication _localAuth = LocalAuthentication();
   bool _deviceLockEnabled = false;
   bool _pinLockEnabled = false;

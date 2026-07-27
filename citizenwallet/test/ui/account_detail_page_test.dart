@@ -25,10 +25,16 @@ void main() {
     // 公开信息在。
     expect(find.text('公钥（账户 ID）'), findsOneWidget);
     expect(find.text('SS58 地址'), findsOneWidget);
-    expect(find.text('派生路径'), findsOneWidget);
-    expect(find.text('//1'), findsWidgets);
 
-    // C-1:绝不出现任何私钥入口/展示。
+    // 需求1:账户详情不再显示派生路径。
+    expect(find.text('派生路径'), findsNothing);
+    expect(find.text('//1'), findsNothing);
+
+    // 需求2:账户名展示且可点击改名(编辑图标在场)。
+    expect(find.text('账户1'), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+
+    // C-1:绝不出现任何私钥入口/展示(需求3本轮未做)。
     expect(find.textContaining('私钥'), findsNothing);
     expect(find.textContaining('查看私钥'), findsNothing);
     // 也不得把 master 种子 URI 泄露到界面。

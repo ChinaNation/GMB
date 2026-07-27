@@ -8,7 +8,7 @@ import '../qr/bodies/user_contact_body.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
 
-/// Lv3 账户详情：某钱包(master)下单个账户的公钥、ss58、派生路径。
+/// Lv3 账户详情：某钱包(master)下单个账户的公钥、ss58（账户名可点击改名）。
 ///
 /// **不展示私钥**：junction 派生下各账户共享 master 种子,导出任一账户密钥材料即
 /// 等于泄露整钱包,故私钥/备份统一走 Lv2 钱包详情的助记词。本页只显公开信息。
@@ -29,13 +29,59 @@ class AccountDetailPage extends StatefulWidget {
 class _AccountDetailPageState extends State<AccountDetailPage> {
   final WalletManager _walletManager = WalletManager();
 
+  late String _accountName;
+
+  @override
+  void initState() {
+    super.initState();
+    _accountName = widget.account.accountName;
+  }
+
+  Future<void> _renameAccount() async {
+    final controller = TextEditingController(text: _accountName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重命名账户'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: WalletManager.maxAccountNameLength,
+          decoration:
+              const InputDecoration(hintText: '请输入新名称', counterText: ''),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (newName == null || newName.trim().isEmpty) return;
+    try {
+      await _walletManager.renameAccount(widget.account.accountId, newName);
+      if (!mounted) return;
+      setState(() => _accountName = newName.trim());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('重命名失败：$e')),
+      );
+    }
+  }
+
   Future<void> _confirmDeleteAccount() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除账户'),
-        content: Text('确定删除「${widget.account.accountName}」？\n'
-            '该账户可用钱包助记词按路径 ${widget.account.derivationPath} 重新派生找回。'),
+        content: Text('确定删除「$_accountName」？\n'
+            '该账户可用钱包助记词重新派生找回。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -77,7 +123,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       expiresAt: null,
       body: UserContactBody(
         ss58Address: widget.account.ss58Address,
-        contactName: '${widget.walletName} · ${widget.account.accountName}',
+        contactName: '${widget.walletName} · $_accountName',
       ),
     ).toRawJson();
     showDialog(
@@ -91,7 +137,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(widget.account.accountName,
+              Text(_accountName,
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w600)),
               const SizedBox(height: 16),
@@ -161,16 +207,31 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        account.accountName,
-                        style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white),
+                      // 账户名可点击改名（编辑图标示意）。
+                      GestureDetector(
+                        onTap: _renameAccount,
+                        behavior: HitTestBehavior.opaque,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _accountName,
+                                style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.edit_outlined,
+                                size: 15, color: Colors.white70),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${widget.walletName} · 派生路径 ${account.derivationPath}',
+                        widget.walletName,
                         style: TextStyle(
                             fontSize: 12, color: Colors.white.withAlpha(200)),
                       ),
@@ -202,8 +263,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 _infoTile('公钥（账户 ID）', account.accountId),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _infoTile('SS58 地址', account.ss58Address),
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                _infoTile('派生路径', account.derivationPath),
               ],
             ),
           ),

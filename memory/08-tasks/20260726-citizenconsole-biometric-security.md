@@ -1,6 +1,7 @@
 # CitizenConsole 生物识别与 Cloudflare 最小权限改造
 
-> 状态：安全改造完成；充值发币正式配置恢复与解锁验收待用户提供原配置
+> 状态：原任务范围完成；生产签名与进程隔离由
+> `20260726-citizenconsole-production-hardening.md` 接续整改
 >
 > 用户已确认本任务新增本任务卡，以及本机私有测试文件
 > `citizenconsole/test/biometric-security.test.mjs`。CitizenConsole 整目录继续由 Git 忽略。
@@ -73,5 +74,6 @@
   Workers 被拒。旧 Wrangler OAuth 已执行 `wrangler logout` 并确认配置文件不存在。
 - 残留：旧无签名 `security-broker`、`touchid-auth` 和临时 Swift 模块已移出运行目录；
   旧令牌长名、普通 Keychain CLI 读取、OAuth 回退和迁移入口扫描均无正式实现残留。
-- 阻塞：充值发币页面真实显示全部配置未配置；旧、新 Keychain 均无历史发币私钥或参数。
-  私钥不可由公开地址恢复，故未伪造配置、未执行真实付款或发币。
+- 后续复查：本任务当时使用的 Apple Development 自动签名仍带有调试授权，且通用原生
+  命令行和可修改 Node/脚本不满足最终生产边界；后续任务已禁止把该验收记录作为正式签名
+  完成依据。充值发币正式配置后来已在生产密钥统一治理任务中补齐，本段旧阻塞不再有效。

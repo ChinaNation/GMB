@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
 import 'security/app_lock_service.dart';
 import 'security/pin_input_page.dart';
+import 'security/secure_storage.dart';
 import 'ui/app_theme.dart';
 import 'ui/home_page.dart';
-import 'wallet/mnemonic_cipher.dart';
+import 'wallet/secret_cipher.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,7 +72,7 @@ class _AppLockGateState extends State<_AppLockGate>
     if (state == AppLifecycleState.paused) {
       _pausedAt = DateTime.now();
       // 进入后台时清除内存中的加密密钥缓存，防止内存转储攻击
-      MnemonicCipher.clearCache();
+      SecretCipher.clearCache();
     } else if (state == AppLifecycleState.resumed && _authenticated) {
       final paused = _pausedAt;
       if (paused != null &&
@@ -99,8 +99,7 @@ class _AppLockGateState extends State<_AppLockGate>
     }
 
     // 2. 检查设备锁（存储在 SecureStorage，防 root 篡改）
-    const secure = FlutterSecureStorage();
-    final deviceLockStr = await secure.read(key: 'device_lock_enabled');
+    final deviceLockStr = await appSecureStorage.read(key: 'device_lock_enabled');
     final deviceLockEnabled = deviceLockStr == 'true';
     if (deviceLockEnabled) {
       if (!mounted) return;

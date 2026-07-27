@@ -49,12 +49,27 @@
   Data Protection Keychain，并使用 `kSecUseDataProtectionKeychain`、
   `biometryCurrentSet`、`WhenUnlockedThisDeviceOnly` 和独立 Keychain access group；
   签名、Provisioning Profile 或 entitlements 任一缺失时必须失败关闭。
+- CitizenConsole 生产原生应用只能使用 `Developer ID Application`、Hardened Runtime
+  和 Apple notarization；`get-task-allow` 必须不存在或为 `false`。原生程序内部和
+  启动脚本都必须复验 Team ID、Bundle ID、Developer ID 证书 OID、签名资源完整性、
+  嵌套 Node 签名、公证状态和调试授权，任何一项不符都拒绝启动；Apple Development、
+  ad-hoc、未公证或启动时现场自动重签的构建不得管理生产 Secret。
+- 原生程序必须作为 CitizenConsole 根进程，通过匿名 `AF_UNIX socketpair` 启动并连接
+  已密封的 Node 子进程；禁止恢复可从终端任意调用的 Secret `get/put/delete` CLI、
+  公共 Unix Socket、任意 Keychain 名称或任意 Touch ID 提示文案。Node、网页、动作脚本、
+  充值代码和 Node 运行时必须封入同一个签名资源边界，代码被修改后必须无法启动。
 - 本机部署 Secret 只允许保存在上述受生物识别保护的 macOS Keychain，远端流水线
   Secret 只允许保存在 GitHub Secrets；禁止明文 Secret 文件、浏览器回传、前端存储、
   日志输出、普通 `security` 命令读取、整服务枚举或 Wrangler OAuth 回退。
 - `CitizenConsole · 充值发币` 是唯一允许一次 Touch ID 后在页面连接生命周期内持续持有
   内存 Secret 的模块；不设置时间超时，点击“锁定”、离开页面、连接断开或进程退出必须
-  清除内存 Secret。其他敏感动作仍逐次 Touch ID，不得复用充值发币解锁状态。
+  清除内存 Secret。发币私钥必须由原生根进程持有，只能经匿名管道交给已密封的一次性
+  发币工作进程，普通 UI Node 不得读取、返回或持有该私钥。其他敏感动作仍逐次 Touch ID，
+  不得复用充值发币解锁状态。
+- CitizenConsole 所有修改类 HTTP 请求必须同时校验精确 `Origin` 和 Fetch Metadata；
+  缺失来源或跨站请求一律拒绝。所有响应必须禁止缓存并设置 CSP、`frame-ancestors`、
+  `nosniff`、Referrer Policy、Permissions Policy、COOP 与 CORP；部署子进程只能继承
+  明确环境白名单和本动作需要的 Secret，不得展开继承控制台完整环境。
 - Cloudflare 本机管理权限必须拆分为 `CF_DEPLOY_TOKEN`、`CF_DATA_TOKEN`、
   `CF_ZT_TOKEN`：分别限定部署、数据和 Zero Trust/DNS 资源；三者只保存在
   CitizenConsole 生物识别 Keychain。Worker 运行时 `CF_API_TOKEN` 保持独立，

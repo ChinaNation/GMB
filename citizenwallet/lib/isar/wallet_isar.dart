@@ -6,9 +6,6 @@ import 'package:path_provider/path_provider.dart';
 
 part 'wallet_isar.g.dart';
 
-/// 虚拟分组"全部"哨兵：不按分组过滤(不落库到 groupNames)。单源。
-const String allGroup = '全部';
-
 /// 钱包（master）：一套助记词 = 一个种子 = 一个 master。其下派生多个账户。
 @collection
 class WalletEntity {
@@ -26,10 +23,6 @@ class WalletEntity {
 
   late int createdAtMillis;
   late String source;
-
-  /// 所属分组名称，逗号分隔，如 '分组一,分组二'。'全部' 是虚拟分组，不入此字段。
-  /// 分组作用于钱包（Lv1 列表），不作用于账户。
-  String groupNames = '';
 
   /// 排列顺序（越小越靠前）。
   int sortOrder = 0;
@@ -61,21 +54,6 @@ class AccountEntity {
 
   late int createdAtMillis;
 }
-
-@collection
-class WalletGroupEntity {
-  Id id = Isar.autoIncrement;
-
-  @Index(unique: true, replace: true)
-  late String name;
-
-  /// 排列顺序（越小越靠前）。
-  int sortOrder = 0;
-
-  /// 是否为默认分组（全部/分组一/分组二），不可删除。
-  bool isDefault = false;
-}
-
 
 @collection
 class AppKvEntity {
@@ -128,11 +106,9 @@ class WalletIsar {
       WalletEntitySchema,
       AccountEntitySchema,
       AppKvEntitySchema,
-      WalletGroupEntitySchema,
     ];
     final isar =
         await Isar.open(schemas, name: 'citizenwallet', directory: dir);
-    await _ensureDefaultGroups(isar);
     return isar;
   }
 
@@ -239,20 +215,4 @@ class WalletIsar {
     return null;
   }
 
-  static const List<String> _defaultGroupNames = ['全部', '分组一', '分组二'];
-
-  static Future<void> _ensureDefaultGroups(Isar isar) async {
-    final count = await isar.walletGroupEntitys.count();
-    if (count > 0) return;
-    await isar.writeTxn(() async {
-      for (var i = 0; i < _defaultGroupNames.length; i++) {
-        await isar.walletGroupEntitys.put(
-          WalletGroupEntity()
-            ..name = _defaultGroupNames[i]
-            ..sortOrder = i
-            ..isDefault = true,
-        );
-      }
-    });
-  }
 }

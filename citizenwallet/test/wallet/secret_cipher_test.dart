@@ -1,92 +1,102 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:convert';
-import 'package:citizenwallet/wallet/mnemonic_cipher.dart';
+import 'package:citizenwallet/wallet/secret_cipher.dart';
 
 void main() {
   // flutter_secure_storage 在测试环境下无法真正读写，
-  // 但 MnemonicCipher 内部会在首次调用 _ensureAek() 时生成 AEK
+  // 但 SecretCipher 内部会在首次调用 _ensureAek() 时生成 AEK
   // 并尝试写入 SecureStorage。为绕过此限制，先通过一次
   // encrypt 调用让 AEK 生成到内存缓存中（SecureStorage 写入会
   // 在测试环境中失败，但缓存有效即可）。
   //
   // 注意：此测试仅覆盖加密/解密逻辑正确性，不覆盖持久化。
 
-  group('MnemonicCipher', () {
+  group('SecretCipher', () {
     // 手动触发 AEK 生成到缓存
     setUpAll(() async {
       FlutterSecureStorage.setMockInitialValues({});
       // 首次 encrypt 会在内存中缓存 AEK
-      await MnemonicCipher.encrypt('init');
+      await SecretCipher.encrypt('init');
     });
 
     tearDownAll(() {
-      MnemonicCipher.clearCache();
+      SecretCipher.clearCache();
     });
 
     test('加密后解密得到原文', () async {
       const mnemonic =
           'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
-      final encrypted = await MnemonicCipher.encrypt(mnemonic);
-      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      final encrypted = await SecretCipher.encrypt(mnemonic);
+      final decrypted = await SecretCipher.decrypt(encrypted);
       expect(decrypted, mnemonic);
+    });
+
+    test('主种子 hex 也能加密解密（与助记词同威胁模型）', () async {
+      const seedHex =
+          '46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a';
+      final encrypted = await SecretCipher.encrypt(seedHex);
+      // 密文不得是明文种子。
+      expect(encrypted, isNot(equals(seedHex)));
+      final decrypted = await SecretCipher.decrypt(encrypted);
+      expect(decrypted, seedHex);
     });
 
     test('每次加密产生不同密文（IV 不同）', () async {
       const mnemonic = 'abandon abandon abandon abandon abandon about';
-      final e1 = await MnemonicCipher.encrypt(mnemonic);
-      final e2 = await MnemonicCipher.encrypt(mnemonic);
+      final e1 = await SecretCipher.encrypt(mnemonic);
+      final e2 = await SecretCipher.encrypt(mnemonic);
       expect(e1, isNot(equals(e2)));
 
       // 两个不同密文解密后都得到相同明文
-      final d1 = await MnemonicCipher.decrypt(e1);
-      final d2 = await MnemonicCipher.decrypt(e2);
+      final d1 = await SecretCipher.decrypt(e1);
+      final d2 = await SecretCipher.decrypt(e2);
       expect(d1, mnemonic);
       expect(d2, mnemonic);
     });
 
     test('解密被篡改的密文抛出异常', () async {
       const mnemonic = 'test mnemonic words here only for testing';
-      final encrypted = await MnemonicCipher.encrypt(mnemonic);
+      final encrypted = await SecretCipher.encrypt(mnemonic);
 
       // 先解码再翻转认证标签最后一个字节，确保每次都真实篡改。
       final bytes = base64Decode(encrypted);
       bytes[bytes.length - 1] ^= 0x01;
       final tampered = base64Encode(bytes);
       expect(
-        () => MnemonicCipher.decrypt(tampered),
+        () => SecretCipher.decrypt(tampered),
         throwsA(isA<FormatException>()),
       );
     });
 
     test('解密过短的数据抛出异常', () {
       expect(
-        () => MnemonicCipher.decrypt('AAAA'),
+        () => SecretCipher.decrypt('AAAA'),
         throwsA(isA<FormatException>()),
       );
     });
 
     test('clearCache 后重新加密仍可解密', () async {
       const mnemonic = 'abandon abandon abandon abandon about';
-      final encrypted = await MnemonicCipher.encrypt(mnemonic);
-      MnemonicCipher.clearCache();
+      final encrypted = await SecretCipher.encrypt(mnemonic);
+      SecretCipher.clearCache();
 
       // clearCache 清掉了内存中的 AEK，重新 encrypt 会从 SecureStorage 重读
       // 测试环境下 SecureStorage 有 mock，AEK 应该已被写入 mock
-      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      final decrypted = await SecretCipher.decrypt(encrypted);
       expect(decrypted, mnemonic);
     });
 
     test('加密单字符', () async {
-      final encrypted = await MnemonicCipher.encrypt('a');
-      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      final encrypted = await SecretCipher.encrypt('a');
+      final decrypted = await SecretCipher.decrypt(encrypted);
       expect(decrypted, 'a');
     });
 
     test('加密超长字符串（模拟异常输入）', () async {
       final longText = 'word ' * 500; // 2500 字符
-      final encrypted = await MnemonicCipher.encrypt(longText);
-      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      final encrypted = await SecretCipher.encrypt(longText);
+      final decrypted = await SecretCipher.decrypt(encrypted);
       expect(decrypted, longText);
     });
 
@@ -94,19 +104,19 @@ void main() {
       const m1 = 'first mnemonic words here';
       const m2 = 'second mnemonic words here';
       final futures = await Future.wait([
-        MnemonicCipher.encrypt(m1),
-        MnemonicCipher.encrypt(m2),
+        SecretCipher.encrypt(m1),
+        SecretCipher.encrypt(m2),
       ]);
-      final d1 = await MnemonicCipher.decrypt(futures[0]);
-      final d2 = await MnemonicCipher.decrypt(futures[1]);
+      final d1 = await SecretCipher.decrypt(futures[0]);
+      final d2 = await SecretCipher.decrypt(futures[1]);
       expect(d1, m1);
       expect(d2, m2);
     });
 
     test('支持中文和特殊字符', () async {
       const text = '测试助记词 with émojis 🔐';
-      final encrypted = await MnemonicCipher.encrypt(text);
-      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      final encrypted = await SecretCipher.encrypt(text);
+      final decrypted = await SecretCipher.decrypt(encrypted);
       expect(decrypted, text);
     });
 
@@ -115,8 +125,8 @@ void main() {
           'abandon abandon abandon abandon abandon abandon abandon abandon '
           'abandon abandon abandon abandon abandon abandon abandon abandon '
           'abandon abandon abandon abandon abandon abandon abandon art';
-      final encrypted = await MnemonicCipher.encrypt(mnemonic);
-      final decrypted = await MnemonicCipher.decrypt(encrypted);
+      final encrypted = await SecretCipher.encrypt(mnemonic);
+      final decrypted = await SecretCipher.decrypt(encrypted);
       expect(decrypted, mnemonic);
     });
   });
