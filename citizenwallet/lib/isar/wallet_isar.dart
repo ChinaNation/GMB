@@ -17,8 +17,8 @@ class WalletEntity {
   late String walletName;
 
   /// 主指纹 = 账户0（`//0`）的 accountId，唯一标识一套助记词。
-  /// model B 无根:设备不存 master 种子/助记词,密钥按 accountId 分账户存
-  /// （见 WalletSecureKeys）。
+  /// 冷钱包按 master(此指纹)加密存 master 种子 + 助记词（见 WalletSecureKeys）;
+  /// 账户不单独持久化密钥,签名/私钥导出时从种子按 accountIndex 现场派生。
   @Index(unique: true, replace: true)
   late String masterId;
 

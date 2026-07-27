@@ -134,6 +134,11 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: textPrimary),
       ),
+      // 全局返回键：统一为左向 chevron（对齐 citizenapp），一处覆盖所有 AppBar
+      // 自动生成的返回键；禁用带横杆的默认 arrow_back。
+      actionIconTheme: ActionIconThemeData(
+        backButtonIconBuilder: (context) => const Icon(Icons.chevron_left),
+      ),
       // Card
       cardTheme: CardThemeData(
         color: surfaceCard,

@@ -1,8 +1,8 @@
-// WalletManager 单测（model B：无根 + 全 //index）。
+// WalletManager 单测（冷钱包存种子+助记词 + model B //index 派生）。
 //
-// 覆盖：建钱包(master)+账户0(//0)、加账户(需助记词, //N)、按账户签名一致性、
-// 导入对齐金标、删钱包/账户连带清各账户密钥、重复导入拒绝、助记词不符拒绝、
-// 每账户密钥密文落库(无 master 种子/助记词)、私钥单账户隔离。
+// 覆盖：建钱包(master)+账户0(//0)、加账户(读存储种子, //N)、按账户签名一致性、
+// 导入对齐金标、删钱包/账户连带清 seed/助记词、重复导入拒绝、种子/助记词密文落库、
+// getMasterMnemonic 取回、getAccountPrivateKey 单账户隔离。
 // 生物识别经 WalletManager.debugAuthGate 注入为放行；SecureStorage 用 mock。
 import 'dart:typed_data';
 
@@ -63,10 +63,10 @@ void main() {
     expect(result.wallet.masterId, kAccount0Id);
   });
 
-  test('addAccount 派生 //1 //2，对齐金标且序号递增（需助记词）', () async {
+  test('addAccount 派生 //1 //2，对齐金标且序号递增（读存储种子）', () async {
     final created = await manager.importWallet(kDevPhrase);
-    final a1 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
-    final a2 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
+    final a1 = await manager.addAccount(created.wallet.masterId);
+    final a2 = await manager.addAccount(created.wallet.masterId);
 
     expect(a1.accountIndex, 1);
     expect(a1.accountId, kAccount1Id);
@@ -77,17 +77,9 @@ void main() {
     expect(accounts.map((e) => e.accountIndex).toList(), [0, 1, 2]);
   });
 
-  test('addAccount 助记词与钱包不符被拒', () async {
-    final created = await manager.importWallet(kDevPhrase);
-    expect(
-      () => manager.addAccount(created.wallet.masterId, kOtherPhrase),
-      throwsA(isA<WalletAuthException>()),
-    );
-  });
-
   test('signForAccount 产出可被该账户公钥验证的签名', () async {
     final created = await manager.importWallet(kDevPhrase);
-    final a1 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
+    final a1 = await manager.addAccount(created.wallet.masterId);
 
     final payload = Uint8List.fromList(List<int>.generate(48, (i) => i));
     final sig = await manager.signForAccount(a1.accountId, payload);
@@ -100,23 +92,20 @@ void main() {
     expect(wrong.verify(payload, sig), isFalse);
   });
 
-  test('deleteWallet 连带清账户与各账户密钥', () async {
+  test('deleteWallet 连带清账户与 seed/助记词密钥', () async {
     final created = await manager.importWallet(kDevPhrase);
-    await manager.addAccount(created.wallet.masterId, kDevPhrase);
+    await manager.addAccount(created.wallet.masterId);
     await manager.deleteWallet(created.wallet.masterId);
 
     expect(await manager.getWallets(), isEmpty);
     expect(await manager.getAccounts(created.wallet.masterId), isEmpty);
-    // 账户密钥已清。
     const storage = FlutterSecureStorage();
     expect(
-      await storage
-          .read(key: WalletSecureKeys.accountMiniSecretV1(kAccount0Id)),
+      await storage.read(key: WalletSecureKeys.masterSeedHexV1(kAccount0Id)),
       isNull,
     );
     expect(
-      await storage
-          .read(key: WalletSecureKeys.accountMiniSecretV1(kAccount1Id)),
+      await storage.read(key: WalletSecureKeys.masterMnemonicV1(kAccount0Id)),
       isNull,
     );
   });
@@ -129,9 +118,9 @@ void main() {
     );
   });
 
-  test('getAccountByAccountId 精确命中/未知返回 null(全局扫码定位边界)', () async {
+  test('getAccountByAccountId 精确命中/未知返回 null(扫码定位边界)', () async {
     final created = await manager.importWallet(kDevPhrase);
-    final a1 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
+    final a1 = await manager.addAccount(created.wallet.masterId);
 
     expect((await manager.getAccountByAccountId(kAccount0Id))?.accountIndex, 0);
     expect((await manager.getAccountByAccountId(a1.accountId))?.accountIndex, 1);
@@ -153,8 +142,8 @@ void main() {
 
   test('deleteAccount 删非末位账户,账户0与钱包保留', () async {
     final created = await manager.importWallet(kDevPhrase);
-    final a1 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
-    await manager.addAccount(created.wallet.masterId, kDevPhrase); // //2
+    final a1 = await manager.addAccount(created.wallet.masterId);
+    await manager.addAccount(created.wallet.masterId); // //2
 
     await manager.deleteAccount(a1.accountId);
 
@@ -165,36 +154,33 @@ void main() {
 
   test('deleteAccount 拒绝删账户0(尚有兄弟账户)', () async {
     final created = await manager.importWallet(kDevPhrase);
-    await manager.addAccount(created.wallet.masterId, kDevPhrase);
+    await manager.addAccount(created.wallet.masterId);
     expect(
       () => manager.deleteAccount(kAccount0Id),
       throwsA(isA<Exception>()),
     );
-    // 账户0 仍在。
     expect(await manager.getAccountByAccountId(kAccount0Id), isNotNull);
   });
 
   test('deleteAccount 删光账户级联删钱包与密钥', () async {
     final created = await manager.importWallet(kDevPhrase);
-    // 仅账户0,删它即删整钱包。
     await manager.deleteAccount(kAccount0Id);
     expect(await manager.getWallets(), isEmpty);
     expect(await manager.getAccounts(created.wallet.masterId), isEmpty);
     const storage = FlutterSecureStorage();
     expect(
-      await storage
-          .read(key: WalletSecureKeys.accountMiniSecretV1(kAccount0Id)),
+      await storage.read(key: WalletSecureKeys.masterSeedHexV1(kAccount0Id)),
       isNull,
     );
   });
 
   test('删中间账户后 addAccount 仍为 max+1(不回填空档,行为钉死)', () async {
     final created = await manager.importWallet(kDevPhrase);
-    final a1 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
-    await manager.addAccount(created.wallet.masterId, kDevPhrase); // //2
+    final a1 = await manager.addAccount(created.wallet.masterId);
+    await manager.addAccount(created.wallet.masterId); // //2
     await manager.deleteAccount(a1.accountId); // 删 //1,留 0,2
 
-    final a3 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
+    final a3 = await manager.addAccount(created.wallet.masterId);
     expect(a3.accountIndex, 3); // max(2)+1,不回填 1
   });
 
@@ -211,22 +197,26 @@ void main() {
     expect(ordered.first.masterId, w2.wallet.masterId);
   });
 
-  test('每账户 child mini-secret 密文落库,无 master 种子/助记词', () async {
+  test('master 种子 + 助记词 密文落库,getMasterMnemonic 取回', () async {
     final created = await manager.importWallet(kDevPhrase);
     const storage = FlutterSecureStorage();
-    final stored = await storage
-        .read(key: WalletSecureKeys.accountMiniSecretV1(kAccount0Id));
-    expect(stored, isNotNull);
-    // 明文 mini-secret 是 64 位 hex;加密后是 Base64 密文,绝不匹配裸 hex。
-    expect(RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(stored!), isFalse);
-    // 无根:不存在 master 级键（仅账户级)。签名照常验证加账户可用。
-    final a1 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
-    expect(a1.accountId, kAccount1Id);
+    final seedStored = await storage
+        .read(key: WalletSecureKeys.masterSeedHexV1(created.wallet.masterId));
+    final mnStored = await storage
+        .read(key: WalletSecureKeys.masterMnemonicV1(created.wallet.masterId));
+    expect(seedStored, isNotNull);
+    expect(mnStored, isNotNull);
+    // 明文种子是 64 位 hex;加密后是 Base64 密文,绝不匹配裸 hex。
+    expect(RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(seedStored!), isFalse);
+    // 助记词密文里不得含明文助记词。
+    expect(mnStored!.contains(kDevPhrase), isFalse);
+    // getMasterMnemonic 解密取回原文。
+    expect(await manager.getMasterMnemonic(created.wallet.masterId), kDevPhrase);
   });
 
-  test('getAccountPrivateKey 返回该账户 child mini-secret,单账户隔离', () async {
+  test('getAccountPrivateKey 从种子派生该账户 child mini-secret,单账户隔离', () async {
     final created = await manager.importWallet(kDevPhrase);
-    final a1 = await manager.addAccount(created.wallet.masterId, kDevPhrase);
+    final a1 = await manager.addAccount(created.wallet.masterId);
 
     final key0 = await manager.getAccountPrivateKey(kAccount0Id);
     final key1 = await manager.getAccountPrivateKey(a1.accountId);

@@ -44,6 +44,9 @@ class QrSigner {
   static const int _opSignCitizenIdentity = 0x10;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
+  /// 请求 ID 合法性(共享单源:登录/离线签名同一规则,防两处漂移)。
+  static bool isValidRequestId(String id) => _idPattern.hasMatch(id);
+
   static String generateRequestId({String prefix = ''}) {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));

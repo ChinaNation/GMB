@@ -77,6 +77,10 @@ class _AppLockGateState extends State<_AppLockGate>
       final paused = _pausedAt;
       if (paused != null &&
           DateTime.now().difference(paused) > _sessionTimeout) {
+        // 重锁前先清空导航栈到根路由:_AppLockGate 是根路由,只重建它无法遮住
+        // 已 push 的深层敏感页(私钥/助记词);设备锁模式又不像 PIN 那样 push 遮罩,
+        // 不清栈则取消生物识别即可绕过重验证看到底层页。popUntil 确保深层页被移除。
+        Navigator.of(context).popUntil((route) => route.isFirst);
         setState(() {
           _authenticated = false;
           _checking = true;

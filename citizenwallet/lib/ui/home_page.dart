@@ -10,7 +10,7 @@ import 'scan_page.dart';
 import 'settings_page.dart';
 import 'wallet_detail_page.dart';
 
-/// Lv1 钱包列表首页：只显示钱包名。点钱包进 Lv2 详情；顶部全局扫码。
+/// Lv1 钱包列表首页：只显示钱包名。点钱包进 Lv2 详情；扫码入口在每张钱包卡片(只扫本钱包)。
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -75,10 +75,10 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  /// 全局扫码签名：扫完由设备按 QR 的 signerPublicKey 自动匹配账户。
-  Future<void> _openScan() async {
+  /// 本钱包扫码签名：只匹配该钱包名下账户,跨钱包签名请求拒绝。
+  Future<void> _openWalletScan(Wallet wallet) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ScanPage()),
+      MaterialPageRoute(builder: (_) => ScanPage(wallet: wallet)),
     );
     await _loadWallets();
   }
@@ -284,18 +284,7 @@ class _HomePageState extends State<HomePage> {
         ),
         centerTitle: true,
         actions: [
-          if (hasWallets) ...[
-            IconButton(
-              icon: SvgPicture.asset(
-                'assets/icons/scan-line.svg',
-                width: 22,
-                height: 22,
-                colorFilter: const ColorFilter.mode(
-                    AppTheme.primaryLight, BlendMode.srcIn),
-              ),
-              tooltip: '扫码签名',
-              onPressed: _openScan,
-            ),
+          if (hasWallets)
             IconButton(
               icon: Container(
                 width: 32,
@@ -310,7 +299,6 @@ class _HomePageState extends State<HomePage> {
               tooltip: '添加钱包',
               onPressed: _showAddWalletMenu,
             ),
-          ],
         ],
       ),
       body: _loading
@@ -511,6 +499,18 @@ class _HomePageState extends State<HomePage> {
                         color: AppTheme.textPrimary),
                     overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                // 本钱包扫码签名(只扫本钱包账户)。
+                IconButton(
+                  icon: SvgPicture.asset(
+                    'assets/icons/scan-line.svg',
+                    width: 20,
+                    height: 20,
+                    colorFilter: const ColorFilter.mode(
+                        AppTheme.primaryLight, BlendMode.srcIn),
+                  ),
+                  tooltip: '扫码签名',
+                  onPressed: () => _openWalletScan(wallet),
                 ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert,

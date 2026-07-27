@@ -45,8 +45,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   @override
   void dispose() {
     if (_screenshotGuardActive) {
-      ScreenshotGuard.onSecurityEvent = null;
-      ScreenshotGuard.disable();
+      ScreenshotGuard.disable(_onSecurityEvent);
     }
     super.dispose();
   }
@@ -54,8 +53,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   void _enableScreenshotGuard() {
     if (!_screenshotGuardActive) {
       _screenshotGuardActive = true;
-      ScreenshotGuard.onSecurityEvent = _onSecurityEvent;
-      ScreenshotGuard.enable();
+      ScreenshotGuard.enable(_onSecurityEvent);
     }
   }
 

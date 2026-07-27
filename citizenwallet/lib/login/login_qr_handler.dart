@@ -8,6 +8,7 @@ import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/signature_message.dart';
 import 'package:citizenwallet/qr/bodies/sign_request_body.dart';
 import 'package:citizenwallet/qr/bodies/sign_response_body.dart';
+import 'package:citizenwallet/signer/qr_signer.dart';
 
 typedef LoginSignRequestEnvelope = QrEnvelope<SignRequestBody>;
 typedef LoginSignResponseEnvelope = QrEnvelope<SignResponseBody>;
@@ -57,6 +58,12 @@ LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
   final body = env.body as SignRequestBody;
   if (body.action != QrActions.login) {
     throw const LoginQrException('二维码不是登录签名请求');
+  }
+  // 与离线签名同源校验请求 ID(字符集/长度):id 后续会裸拼进待签消息(以 `|`
+  // 分隔),不校验则可被注入分隔符污染字段解析。
+  final id = env.id;
+  if (id == null || !QrSigner.isValidRequestId(id)) {
+    throw const LoginQrException('登录二维码请求 ID 非法');
   }
 
   final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;

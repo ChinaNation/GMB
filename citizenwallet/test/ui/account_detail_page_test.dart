@@ -1,4 +1,4 @@
-// Lv3 账户详情 widget 测试:公开信息 + 账户名可改 + 私钥区默认隐藏。
+// Lv3 账户详情 widget 测试:公开信息 + 账户名可改 + 私钥区默认隐藏 + 查看确认流。
 // model B 后 C-1 反转:每账户私钥独立隔离,展示单账户私钥安全(默认隐藏,验证后显示)。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,7 +17,7 @@ void main() {
     createdAtMillis: 0,
   );
 
-  testWidgets('账户详情展示公开信息,不展示私钥(C-1)', (tester) async {
+  testWidgets('账户详情展示公开信息,私钥默认隐藏', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: AccountDetailPage(account: account, walletName: '钱包1'),
     ));
@@ -40,5 +40,23 @@ void main() {
     expect(find.text('点击查看私钥'), findsOneWidget);
     // 默认态:不得把任何私钥/公钥指纹明文泄露到界面(未点查看)。
     expect(find.textContaining(account.masterId.substring(2)), findsNothing);
+  });
+
+  testWidgets('点击查看私钥→确认弹窗→取消→仍隐藏(不触发导出)', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: AccountDetailPage(account: account, walletName: '钱包1'),
+    ));
+    await tester.pump();
+
+    await tester.tap(find.text('点击查看私钥'));
+    await tester.pumpAndSettle();
+    // 确认弹窗出现(标题独一份「查看私钥」)。
+    expect(find.text('查看私钥'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    // 取消后弹窗消失,私钥仍隐藏(未展开、未触发 getAccountPrivateKey)。
+    expect(find.text('查看私钥'), findsNothing);
+    expect(find.text('点击查看私钥'), findsOneWidget);
   });
 }

@@ -75,7 +75,7 @@ class WalletCreationResult {
   /// 账户0（`//0`），创建/导入后即存在。
   final Account primaryAccount;
 
-  /// 助记词仅在创建时一次性展示，**绝不持久化**（无根设备的唯一备份凭证）。
+  /// 助记词（创建时一次性展示；同时按钱包加密存储，供钱包详情备份查看）。
   final String mnemonic;
 }
 
@@ -103,18 +103,17 @@ class WalletAuthException implements Exception {
 
 /// 钱包管理（HD model B：一套助记词 → 多账户，全 `//index` 硬派生，无 bare 根）。
 ///
-/// **无根存储**：设备只存每账户自己的 child mini-secret（32B，`SecretCipher`
-/// AES-256-GCM 密文，按 accountId 键入 SecureStorage），**不存 master 种子、不存
-/// 助记词**。签名 = 读该账户 child mini-secret → `fromSeed` 重建 → 签，不碰根；
-/// child mini-secret 单向派生，泄漏单账户只伤自己。加账户需临时用该钱包助记词重建
-/// 种子、派生新 `//N` 后即弃。备份唯一凭证 = 用户创建时自行抄录的助记词。
+/// **冷钱包存种子**：本设备是冷签保管方，按钱包(master)加密存 master 种子 +
+/// 助记词（`SecretCipher` AES-256-GCM），做冷签与备份。账户不单独持久化密钥：
+/// 签名 / 私钥导出时按 accountIndex 从种子**现场派生**、用后即弃。每账户 child
+/// mini-secret 单向硬派生，导出单账户私钥只暴露该账户；助记词是钱包级根备份。
 ///
 /// 派生金标（冷热共享单源）：`test/wallet/derivation_golden_test.dart`，钉死
 /// `fromSeed(childMiniSecret) == <助记词>//index` 逐字节相等。
 class WalletManager {
   static const int _ss58Prefix = ChainConstants.ss58Prefix;
   static final RegExp _accountIdPattern = RegExp(r'^0x[0-9a-f]{64}$');
-  static final RegExp _miniSecretHexPattern = RegExp(r'^[0-9a-fA-F]{64}$');
+  static final RegExp _seedHexPattern = RegExp(r'^[0-9a-fA-F]{64}$');
   // 单源加固实例(选项集中在 security/secure_storage.dart)。
   static const _secureStorage = appSecureStorage;
   static final LocalAuthentication _localAuth = LocalAuthentication();
@@ -162,9 +161,9 @@ class WalletManager {
   }
 
   // ── 创建 / 导入 / 加账户 ──
-  /// 新建钱包：生成助记词 → 派生账户0（`//0`）→ 存该账户密钥 → 销毁种子/助记词。
+  /// 新建钱包：生成助记词 → 派生账户0（`//0`）→ 存 master 种子 + 助记词。
   ///
-  /// [wordCount] 助记词个数，12（默认）或 24。助记词仅经返回值一次性展示。
+  /// [wordCount] 助记词个数，12（默认）或 24。助记词同时一次性返回展示。
   Future<WalletCreationResult> createWallet({int wordCount = 12}) async {
     assert(wordCount == 12 || wordCount == 24);
     final strength = wordCount == 24 ? 256 : 128;
@@ -172,7 +171,7 @@ class WalletManager {
     return _establishWallet(mnemonic, 'created');
   }
 
-  /// 导入钱包：校验助记词 → 派生账户0（`//0`）→ 存该账户密钥 → 销毁种子/助记词。
+  /// 导入钱包：校验助记词 → 派生账户0（`//0`）→ 存 master 种子 + 助记词。
   Future<WalletCreationResult> importWallet(String mnemonic) async {
     final trimmed = mnemonic.trim();
     if (!bip39.validateMnemonic(trimmed)) {
@@ -187,19 +186,30 @@ class WalletManager {
   ) async {
     // 冷签设备:创建/导入钱包(落密钥)前强制设备认证;无锁则 fail-closed。
     await _authGate();
-    final seed = await _mnemonicToMiniSecret(mnemonic);
+    final seed = await _mnemonicToSeed(mnemonic);
+    final seedHex = _toHex(seed);
     try {
       // 账户0 = //0（无 bare 根）。其 accountId 即 master 指纹。
-      final derived0 = _deriveAccount(seed, 0);
-      final masterId = derived0.accountId;
+      final acct0 = _deriveAccount(seed, 0);
+      final masterId = acct0.accountId;
       await _checkDuplicateMaster(masterId);
 
       final result = await _appendWalletAtomic(
         masterId: masterId,
         source: source,
-        primary: derived0,
+        primary: acct0,
       );
-      await _writeAccountKey(derived0.accountId, derived0.childMiniSecretHex);
+      try {
+        await _writeMasterSeed(masterId, seedHex);
+        await _writeMasterMnemonic(masterId, mnemonic);
+      } catch (_) {
+        // 种子/助记词任一写失败即回滚已提交的 Isar 行 + 已写入的种子,避免留下
+        // "能签名但助记词备份永久丢失"的半成品钱包。回滚尽力而为,不掩盖原异常。
+        try {
+          await _deleteWalletInternal(masterId);
+        } catch (_) {}
+        rethrow;
+      }
       return WalletCreationResult(
         wallet: result.$1,
         primaryAccount: result.$2,
@@ -210,29 +220,21 @@ class WalletManager {
     }
   }
 
-  /// 在指定钱包下新增账户：派生下一个 `//index`。
-  ///
-  /// 无根设备不存种子,故需传入**本钱包助记词**临时重建;校验其 `//0` accountId
-  /// 等于 masterId(证明助记词属于本钱包),派生后即弃。
-  Future<Account> addAccount(String masterId, String mnemonic) async {
+  /// 在指定钱包下新增账户：读存储种子，派生下一个 `//index`（不产生新助记词）。
+  Future<Account> addAccount(String masterId) async {
     await _authGate();
-    final trimmed = mnemonic.trim();
-    if (!bip39.validateMnemonic(trimmed)) {
-      throw const WalletAuthException('助记词无效，请检查拼写和空格');
-    }
     final isar = await WalletIsar.instance.db();
     final wallet =
         await isar.walletEntitys.filter().masterIdEqualTo(masterId).findFirst();
     if (wallet == null) {
       throw const WalletAuthException('未找到钱包');
     }
-    final seed = await _mnemonicToMiniSecret(trimmed);
+    final seedHex = await _readMasterSeedRaw(masterId);
+    if (seedHex == null) {
+      throw const WalletAuthException('密钥不可用，请重新导入钱包');
+    }
+    final seed = _hexToBytes(seedHex);
     try {
-      // 助记词归属校验:其 //0 必须 == 本钱包 masterId。
-      final check0 = _deriveAccount(seed, 0);
-      if (check0.accountId != masterId) {
-        throw const WalletAuthException('助记词与该钱包不符');
-      }
       final accounts = await isar.accountEntitys
           .filter()
           .masterIdEqualTo(masterId)
@@ -254,7 +256,6 @@ class WalletManager {
       await isar.writeTxn(() async {
         await isar.accountEntitys.put(entity);
       });
-      await _writeAccountKey(derived.accountId, derived.childMiniSecretHex);
       return _toAccount(entity);
     } finally {
       _zeroList(seed);
@@ -262,7 +263,7 @@ class WalletManager {
   }
 
   // ── 删除 ──
-  /// 删除整只钱包：连带其全部账户 + 各账户密钥。删密钥前强制认证。
+  /// 删除整只钱包：连带其全部账户 + master 种子/助记词。删密钥前强制认证。
   Future<void> deleteWallet(String masterId) async {
     await _authGate();
     await _deleteWalletInternal(masterId);
@@ -270,16 +271,10 @@ class WalletManager {
 
   /// 无认证的删钱包实现（供 deleteWallet 与 deleteAccount 级联复用，避免二次弹窗）。
   ///
-  /// 先删 Isar 行(钱包存在性的事实来源),提交成功后再清各账户 SecureStorage 密钥,
+  /// 先删 Isar 行(钱包存在性的事实来源),提交成功后再清 SecureStorage,
   /// 避免"密钥已清、钱包行还在"的僵尸钱包。
   Future<void> _deleteWalletInternal(String masterId) async {
     final isar = await WalletIsar.instance.db();
-    final accountIds = (await isar.accountEntitys
-            .filter()
-            .masterIdEqualTo(masterId)
-            .findAll())
-        .map((e) => e.accountId)
-        .toList();
     await isar.writeTxn(() async {
       await isar.accountEntitys
           .filter()
@@ -293,12 +288,17 @@ class WalletManager {
         await isar.walletEntitys.delete(wallet.id);
       }
     });
-    for (final id in accountIds) {
-      await _deleteAccountKey(id);
-    }
+    // 尽力而为:Isar 行(钱包存在性事实来源)已删,SecureStorage 清理不应因单点
+    // 失败让整体判为"删除失败"(那样 UI 会误导用户重试一个已不存在的钱包)。
+    try {
+      await _deleteMasterSeed(masterId);
+    } catch (_) {}
+    try {
+      await _deleteMasterMnemonic(masterId);
+    } catch (_) {}
   }
 
-  /// 删除单个账户；若删空该钱包全部账户则连带删钱包。删前强制认证。
+  /// 删除单个账户；若删空该钱包全部账户则连带删钱包与密钥。删前强制认证。
   ///
   /// 账户0 是 master 锚点:尚有兄弟账户时禁止单独删账户0(否则 masterId 悬空、
   /// addAccount 只 max+1 无法重建、重导入又被查重挡住),须改删整只钱包。
@@ -331,7 +331,6 @@ class WalletManager {
           .masterIdEqualTo(masterId)
           .count();
     });
-    await _deleteAccountKey(accountId);
     if (remaining == 0) {
       await _deleteWalletInternal(masterId);
     }
@@ -407,7 +406,7 @@ class WalletManager {
     });
   }
 
-  // ── 签名（按账户；读该账户密钥现场重建，用后即弃）──
+  // ── 签名（按账户；读种子现场派生，用后即弃）──
   // 注:polkadart_keyring 0.7.0 的 KeyPair.lock() 内部用 fromEd25519Bytes(空)
   // 会抛 ArgumentError,该版本不可用于清私钥;派生密钥对随作用域结束由 GC 回收。
   Future<Uint8List> signForAccount(
@@ -432,61 +431,103 @@ class WalletManager {
     );
   }
 
-  /// 读该账户 child mini-secret（触发生物识别）→ `fromSeed` 重建 → 校验公钥。
+  /// 定位账户 → 读 master 种子（触发生物识别）→ 按 accountIndex 派生 → 校验公钥。
   Future<KeyPair> _loadAccountKeyPair(String accountId) async {
     await _authGate();
-    final childHex = await _readAccountKey(accountId);
-    if (childHex == null) {
+    final isar = await WalletIsar.instance.db();
+    final acct = await isar.accountEntitys
+        .filter()
+        .accountIdEqualTo(accountId)
+        .findFirst();
+    if (acct == null) {
+      throw const WalletAuthException('未找到指定账户');
+    }
+    final seedHex = await _readMasterSeedRaw(acct.masterId);
+    if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
     }
-    final childBytes = Uint8List.fromList(_hexToBytes(childHex));
+    final seed = _hexToBytes(seedHex);
     try {
-      final pair = Keyring.sr25519.fromSeed(childBytes);
-      pair.ss58Format = _ss58Prefix;
-      final localAccountId =
-          _accountIdFromBytes(pair.bytes().toList(growable: false));
-      if (localAccountId != accountId) {
-        throw const WalletAuthException('本地签名密钥与账户不一致，请重新导入钱包');
+      final child = _childMiniSecret(seed, acct.accountIndex);
+      final childBytes = Uint8List.fromList(child);
+      try {
+        final pair = Keyring.sr25519.fromSeed(childBytes);
+        pair.ss58Format = _ss58Prefix;
+        final localAccountId =
+            _accountIdFromBytes(pair.bytes().toList(growable: false));
+        if (localAccountId != acct.accountId) {
+          throw const WalletAuthException('本地签名密钥与账户不一致，请重新导入钱包');
+        }
+        return pair;
+      } finally {
+        childBytes.fillRange(0, childBytes.length, 0);
       }
-      return pair;
     } finally {
-      childBytes.fillRange(0, childBytes.length, 0);
+      _zeroList(seed);
     }
+  }
+
+  /// 查看钱包助记词（钱包级根备份；触发生物识别）。找不到即抛(与私钥导出同口径,
+  /// 不让 UI 把 null 当"无数据"正常渲染)。
+  Future<String> getMasterMnemonic(String masterId) async {
+    await _authGate();
+    final mnemonic = await _readMasterMnemonic(masterId);
+    if (mnemonic == null || mnemonic.isEmpty) {
+      throw const WalletAuthException('未找到该钱包的助记词备份，请重新导入钱包');
+    }
+    return mnemonic;
   }
 
   /// 导出该账户私钥（child mini-secret，`0x`+64hex；触发生物识别）。
   ///
-  /// model B 下每账户密钥单向隔离:导出单账户只暴露该账户,推不出根/兄弟。
+  /// 从存储的 master 种子按 accountIndex 现场派生。child mini-secret 单向隔离:
+  /// 导出单账户只暴露该账户,推不出根/兄弟(根级备份走助记词)。
   Future<String> getAccountPrivateKey(String accountId) async {
     await _authGate();
-    final childHex = await _readAccountKey(accountId);
-    if (childHex == null) {
+    final isar = await WalletIsar.instance.db();
+    final acct = await isar.accountEntitys
+        .filter()
+        .accountIdEqualTo(accountId)
+        .findFirst();
+    if (acct == null) {
+      throw const WalletAuthException('未找到指定账户');
+    }
+    final seedHex = await _readMasterSeedRaw(acct.masterId);
+    if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
     }
-    return '0x$childHex';
+    final seed = _hexToBytes(seedHex);
+    try {
+      return '0x${_toHex(_childMiniSecret(seed, acct.accountIndex))}';
+    } finally {
+      _zeroList(seed);
+    }
   }
 
   // ── 派生 ──
-  Future<List<int>> _mnemonicToMiniSecret(String mnemonic) async {
+  Future<List<int>> _mnemonicToSeed(String mnemonic) async {
     final entropy =
         bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english).entropy;
     return CryptoScheme.miniSecretFromEntropy(entropy);
   }
 
-  /// 从 master mini-secret 派生账户 [index]（全部 `//index` 硬派生，无 bare 根）。
-  /// 取该账户自己的 child mini-secret（32B，隔离、单向）+ 公钥/ss58。
+  /// 从 master mini-secret 派生账户 [index]（全部 `//index` 硬派生，无 bare 根）,
+  /// 返回该账户公钥 accountId + ss58。
   _DerivedAccount _deriveAccount(List<int> seed, int index) {
     if (index < 0) {
       throw ArgumentError.value(index, 'index', '不能为负');
     }
-    final childBytes = _childMiniSecret(seed, index);
-    final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(childBytes));
-    pair.ss58Format = _ss58Prefix;
-    return _DerivedAccount(
-      accountId: _accountIdFromBytes(pair.bytes().toList(growable: false)),
-      ss58Address: pair.address,
-      childMiniSecretHex: _toHex(childBytes),
-    );
+    final childBytes = Uint8List.fromList(_childMiniSecret(seed, index));
+    try {
+      final pair = Keyring.sr25519.fromSeed(childBytes);
+      pair.ss58Format = _ss58Prefix;
+      return _DerivedAccount(
+        accountId: _accountIdFromBytes(pair.bytes().toList(growable: false)),
+        ss58Address: pair.address,
+      );
+    } finally {
+      childBytes.fillRange(0, childBytes.length, 0);
+    }
   }
 
   /// 提取账户 `//index` 的 child mini-secret（32B）。
@@ -513,35 +554,52 @@ class WalletManager {
     return childBytes;
   }
 
-  // ── Secure Storage（每账户存一份 child mini-secret 密文）──
-  Future<void> _writeAccountKey(
-    String accountId,
-    String childMiniSecretHex,
-  ) async {
-    final encrypted = await SecretCipher.encrypt(childMiniSecretHex);
+  // ── Secure Storage（按 master 存种子 + 助记词，均 AES-256-GCM 密文）──
+  Future<void> _writeMasterSeed(String masterId, String seedHex) async {
+    final encrypted = await SecretCipher.encrypt(seedHex);
     await _secureStorage.write(
-        key: WalletSecureKeys.accountMiniSecretV1(accountId), value: encrypted);
+        key: WalletSecureKeys.masterSeedHexV1(masterId), value: encrypted);
   }
 
-  Future<String?> _readAccountKey(String accountId) async {
+  Future<String?> _readMasterSeedRaw(String masterId) async {
     final stored = await _secureStorage.read(
-        key: WalletSecureKeys.accountMiniSecretV1(accountId));
+        key: WalletSecureKeys.masterSeedHexV1(masterId));
     if (stored == null) return null;
-    final String childHex;
+    final String seedHex;
     try {
-      childHex = await SecretCipher.decrypt(stored);
+      seedHex = await SecretCipher.decrypt(stored);
     } on FormatException {
       // 密文损坏或 AEK 丢失(不可解):与格式非法同口径,提示重导(助记词仍可恢复)。
       throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
     }
-    if (!_miniSecretHexPattern.hasMatch(childHex)) {
+    if (!_seedHexPattern.hasMatch(seedHex)) {
       throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
     }
-    return childHex;
+    return seedHex;
   }
 
-  Future<void> _deleteAccountKey(String accountId) => _secureStorage.delete(
-      key: WalletSecureKeys.accountMiniSecretV1(accountId));
+  Future<void> _deleteMasterSeed(String masterId) => _secureStorage.delete(
+      key: WalletSecureKeys.masterSeedHexV1(masterId));
+
+  Future<void> _writeMasterMnemonic(String masterId, String mnemonic) async {
+    final encrypted = await SecretCipher.encrypt(mnemonic);
+    await _secureStorage.write(
+        key: WalletSecureKeys.masterMnemonicV1(masterId), value: encrypted);
+  }
+
+  Future<String?> _readMasterMnemonic(String masterId) async {
+    final stored = await _secureStorage.read(
+        key: WalletSecureKeys.masterMnemonicV1(masterId));
+    if (stored == null) return null;
+    try {
+      return await SecretCipher.decrypt(stored);
+    } on FormatException {
+      throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
+    }
+  }
+
+  Future<void> _deleteMasterMnemonic(String masterId) =>
+      _secureStorage.delete(key: WalletSecureKeys.masterMnemonicV1(masterId));
 
   // ── 生物识别 ──
   /// 优先生物识别，回退设备密码/图案；无锁屏或认证异常一律拒绝访问。
@@ -710,12 +768,7 @@ class WalletManager {
 }
 
 class _DerivedAccount {
-  const _DerivedAccount({
-    required this.accountId,
-    required this.ss58Address,
-    required this.childMiniSecretHex,
-  });
+  const _DerivedAccount({required this.accountId, required this.ss58Address});
   final String accountId;
   final String ss58Address;
-  final String childMiniSecretHex;
 }

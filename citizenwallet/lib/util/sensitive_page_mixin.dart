@@ -23,14 +23,12 @@ mixin SensitivePageMixin<T extends StatefulWidget> on State<T> {
   @override
   void initState() {
     super.initState();
-    ScreenshotGuard.enable();
-    ScreenshotGuard.onSecurityEvent = _onSecurityEvent;
+    ScreenshotGuard.enable(_onSecurityEvent);
   }
 
   @override
   void dispose() {
-    ScreenshotGuard.onSecurityEvent = null;
-    ScreenshotGuard.disable();
+    ScreenshotGuard.disable(_onSecurityEvent);
     super.dispose();
   }
 

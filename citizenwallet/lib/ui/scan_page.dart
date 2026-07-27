@@ -11,12 +11,20 @@ import 'login_sign_page.dart';
 import 'offline_sign_page.dart';
 import 'scan_overlay.dart';
 
-/// 全局扫码页面（对准框 + 相册 + 手电筒）。
+/// 本钱包扫码签名页面（对准框 + 相册 + 手电筒）。
 ///
-/// 签名主体是账户：扫到签名请求后，按 QR 的 signerPublicKey 在**全设备账户**中
-/// 自动定位目标账户，找到则跳转对应签名页，本设备无此账户则拒绝并提示。
+/// 只扫本钱包（widget.wallet）账户的签名请求：按 QR 的 signerPublicKey 定位账户，
+/// 账户不属于本钱包（masterId 不符）或本设备无此账户，一律拒绝并提示。
+
+/// 扫码作用域谓词(纯函数,可单测):账户 masterId 与本钱包 masterId 一致才允许签名。
+bool accountBelongsToWallet(String accountMasterId, String walletMasterId) =>
+    accountMasterId == walletMasterId;
+
 class ScanPage extends StatefulWidget {
-  const ScanPage({super.key});
+  const ScanPage({super.key, required this.wallet});
+
+  /// 只扫本钱包账户的签名请求;跨钱包(账户不属于本钱包)一律拒绝。
+  final Wallet wallet;
 
   @override
   State<ScanPage> createState() => _ScanPageState();
@@ -100,10 +108,13 @@ class _ScanPageState extends State<ScanPage> {
       await _showErrorAndResume('本设备没有该签名请求指定的账户，无法签名');
       return;
     }
+    if (!accountBelongsToWallet(account.masterId, widget.wallet.masterId)) {
+      await _showErrorAndResume(
+          '该签名请求的账户不属于「${widget.wallet.walletName}」，无法在此钱包签名');
+      return;
+    }
 
-    final wallet = await _walletManager.getWalletByMasterId(account.masterId);
-    if (!mounted) return;
-    final walletName = wallet?.walletName ?? '钱包';
+    final walletName = widget.wallet.walletName;
 
     final isLogin = body.action == QrActions.login;
     await Navigator.of(context).push(
@@ -178,10 +189,10 @@ class _ScanPageState extends State<ScanPage> {
           Center(
             child: Transform.translate(
               offset: const Offset(0, scanBoxOffsetY + scanBoxSize / 2 + 28),
-              child: const Text(
-                '扫描签名请求二维码\n设备将自动匹配对应账户',
+              child: Text(
+                '扫描「${widget.wallet.walletName}」的签名请求',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                     color: Colors.white60, fontSize: 14, letterSpacing: 0.3),
               ),
             ),

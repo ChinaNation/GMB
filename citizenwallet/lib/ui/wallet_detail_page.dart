@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'account_detail_page.dart';
 import 'app_theme.dart';
 
-/// Lv2 钱包详情：钱包(master)名 + 账户列表 + 添加账户。
+/// Lv2 钱包详情：钱包(master)名 + 助记词备份 + 账户列表 + 添加账户。
 ///
-/// 无根设备**不存助记词/种子**;助记词只在创建时一次性展示。账户按 `//index`
-/// 派生,点账户进 Lv3;「添加账户」需输入本钱包助记词临时派生下一个账户。
+/// 冷钱包按钱包存种子/助记词;助记词是钱包级根备份,在身份卡内展示(隐藏→确认→
+/// 生物识别→显示,防截屏、不可复制)。账户按 `//index` 派生,点账户进 Lv3。
 class WalletDetailPage extends StatefulWidget {
   const WalletDetailPage({super.key, required this.wallet});
 
@@ -24,10 +25,22 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   bool _loading = true;
   bool _addingAccount = false;
 
+  String? _mnemonic;
+  bool _mnemonicVisible = false;
+  bool _screenshotGuardActive = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    if (_screenshotGuardActive) {
+      ScreenshotGuard.disable(_onSecurityEvent);
+    }
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -39,14 +52,73 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     });
   }
 
+  void _enableScreenshotGuard() {
+    if (!_screenshotGuardActive) {
+      _screenshotGuardActive = true;
+      ScreenshotGuard.enable(_onSecurityEvent);
+    }
+  }
+
+  void _onSecurityEvent(String event) {
+    if (!mounted) return;
+    if (event == 'screenshot_taken' || event == 'screen_recording_started') {
+      setState(() {
+        _mnemonicVisible = false;
+        _mnemonic = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(event == 'screenshot_taken'
+              ? '检测到截屏，助记词已隐藏。请勿截屏保存助记词。'
+              : '检测到屏幕录制，助记词已隐藏'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Future<void> _revealMnemonic() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('查看助记词'),
+        content: const Text('助记词可恢复本钱包全部账户，泄露将导致资产被盗。\n\n确认要查看吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+            child: const Text('查看'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final mnemonic =
+          await _walletManager.getMasterMnemonic(widget.wallet.masterId);
+      if (!mounted) return;
+      _enableScreenshotGuard();
+      setState(() {
+        _mnemonic = mnemonic;
+        _mnemonicVisible = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('验证失败：$e')),
+      );
+    }
+  }
+
   Future<void> _addAccount() async {
     if (_addingAccount) return;
-    // 无根设备不存种子,派生新 //N 需临时用本钱包助记词重建种子。
-    final mnemonic = await _promptMnemonic();
-    if (mnemonic == null || mnemonic.trim().isEmpty) return;
     setState(() => _addingAccount = true);
     try {
-      await _walletManager.addAccount(widget.wallet.masterId, mnemonic);
+      await _walletManager.addAccount(widget.wallet.masterId);
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -56,47 +128,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     } finally {
       if (mounted) setState(() => _addingAccount = false);
     }
-  }
-
-  Future<String?> _promptMnemonic() async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('添加账户'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '本设备不保存助记词。添加新账户需输入本钱包助记词以派生下一个账户。',
-              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              minLines: 2,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: '输入助记词，单词以空格分隔',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('派生账户'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _openAccount(Account account) async {
@@ -137,23 +168,115 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     return Container(
       decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
       padding: const EdgeInsets.all(16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.account_balance_wallet_rounded,
-              size: 22, color: AppTheme.primaryLight),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              widget.wallet.walletName,
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary),
-              overflow: TextOverflow.ellipsis,
-            ),
+          // 上排：钱包图标 + 名称。
+          Row(
+            children: [
+              const Icon(Icons.account_balance_wallet_rounded,
+                  size: 22, color: AppTheme.primaryLight),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.wallet.walletName,
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
+          // 下方：助记词区（隐藏→确认→生物识别→显示，样式同账户私钥区）。
+          _buildMnemonicArea(),
         ],
       ),
+    );
+  }
+
+  Widget _buildMnemonicArea() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('助记词（钱包备份，一句恢复全部账户）',
+            style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        if (!_mnemonicVisible)
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _revealMnemonic,
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceElevated,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.visibility_off_rounded,
+                        color: AppTheme.textTertiary, size: 18),
+                    SizedBox(width: 8),
+                    Text('点击查看助记词',
+                        style: TextStyle(
+                            color: AppTheme.textTertiary, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.danger.withAlpha(15),
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              border: Border.all(color: AppTheme.danger.withAlpha(40)),
+            ),
+            // 纯 Text（非 SelectableText）→ 不可复制。
+            child: Text(
+              _mnemonic ?? '无数据',
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontFamily: 'monospace',
+                  color: AppTheme.textPrimary,
+                  height: 1.6),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('请手抄备份，不支持复制；泄露即等于整钱包控制权',
+                    style: TextStyle(
+                        color: AppTheme.danger,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+              ),
+              TextButton.icon(
+                onPressed: () => setState(() {
+                  _mnemonicVisible = false;
+                  _mnemonic = null;
+                }),
+                icon: const Icon(Icons.visibility_off_rounded, size: 16),
+                label: const Text('隐藏'),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
@@ -163,7 +286,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
+            padding: const EdgeInsets.fromLTRB(16, 5, 8, 6),
             child: Row(
               children: [
                 const Text('账户',
@@ -189,7 +312,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 4, 16, 14),
             child: Text(
-              '提示:重装或换设备后,重导助记词只自动恢复账户0,其余账户需在此凭助记词按顺序手动重新添加(离线设备无法链上探活)。',
+              '提示:重装或换设备后,重导助记词只自动恢复账户0,其余账户需在此按顺序重新添加(离线设备无法链上探活)。',
               style: TextStyle(fontSize: 11, color: AppTheme.textTertiary),
             ),
           ),
