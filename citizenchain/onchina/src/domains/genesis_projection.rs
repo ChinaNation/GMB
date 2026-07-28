@@ -2,8 +2,9 @@
 //!
 //! 设计见 memory/01-architecture/citizenchain/onchina-citizen-private-projection-design.md §2.5。
 //! 现阶段两个创世实体:
-//! - 创世公民程伟(`GZ000-CTZN6`,基金会法定代表人,无 citizen-identity)→ **直接播种进联邦注册局本地库**,
-//!   置于 贵州省(GZ)/绥阳市(与基金会同市)。联邦贵州组管理员进绥阳市即可见/可按 CID 搜到;
+//! - 创世公民程伟(人主体 CN 号,基金会法定代表人,无 citizen-identity)→ **直接播种进联邦注册局本地库**,
+//!   置于 贵州省(GZ)/绥阳市(与基金会同市)。人主体 CID 去地域化,省市取自基金会机构 CID,
+//!   非从程伟号段推。联邦贵州组管理员进绥阳市即可见/可按 CID 搜到;
 //!   不加省级特殊视图,不用 PENDING/待补档。
 //! - 创世私权机构公民链技术发展基金会(`GZ018-SFGYR`)→ 绥阳市注册局回填(私权,后续 Step 实现)。
 //!
@@ -23,20 +24,18 @@ use primitives::cid::china::citizenchain::{
     CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS, LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
     LEGAL_REPRESENTATIVE_FAMILY_NAME, LEGAL_REPRESENTATIVE_GIVEN_NAME,
 };
-use primitives::cid::number::parse_cid_number_parts;
+use primitives::cid::number::{cid_scope_codes, parse_cid_number_parts};
 
-/// 取 CID 号 r5 段(省2位 + 市3位),返回 (province_code, city_code)。
+/// 从机构 CID 唯一解析 (province_code, city_code)。复用 primitives 权威单源
+/// `cid_scope_codes`:机构 CID 的 R5 = 省2 + 市3;人主体 CID 去地域化、R5 不载省市,
+/// 传入即 fail-closed 返回 Err(杜绝把号段误读成区划码,不自建第二真源)。
 fn split_province_city(cid_number: &str) -> Result<(String, String), String> {
-    let r5 = cid_number
-        .split('-')
-        .next()
-        .ok_or_else(|| format!("genesis cid_number {cid_number} missing r5 segment"))?;
-    if r5.len() < 5 {
-        return Err(format!(
-            "genesis cid_number {cid_number} r5 segment too short"
-        ));
-    }
-    Ok((r5[..2].to_string(), r5[2..5].to_string()))
+    let (province, city) = cid_scope_codes(cid_number.as_bytes())
+        .map_err(|e| format!("genesis cid {cid_number} scope invalid: {e}"))?;
+    Ok((
+        String::from_utf8_lossy(&province).into_owned(),
+        String::from_utf8_lossy(&city).into_owned(),
+    ))
 }
 
 /// 由 CID 号派生一个稳定正整数作为本地 `id`(仅用于列表游标,非业务主键)。
@@ -84,10 +83,9 @@ pub(crate) fn seed_genesis_citizen_blocking(db: &Db) -> Result<bool, String> {
     }
 
     let cid_number = LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER.to_string();
-    // 省码取程伟 CID(GZ);市码取基金会 CID 的市码(绥阳 018),让程伟落在联邦库的"贵州/绥阳市"下。
-    let (province_code, _self_city) = split_province_city(cid_number.as_str())?;
-    let (_foundation_province, city_code) =
-        split_province_city(CITIZENCHAIN_FOUNDATION.cid_number)?;
+    // 程伟为人主体 CN 号,去地域化、R5 不载省市;其居住地按创世设定 = 基金会同省市
+    // (贵州 GZ / 绥阳 018),故省市均取自基金会机构 CID,让程伟落在联邦库的"贵州/绥阳市"下。
+    let (province_code, city_code) = split_province_city(CITIZENCHAIN_FOUNDATION.cid_number)?;
 
     if citizen_exists(db, province_code.as_str(), cid_number.as_str())? {
         return Ok(false);
@@ -219,4 +217,25 @@ pub(crate) fn backfill_genesis_private_blocking(db: &Db) -> Result<bool, String>
     };
     db.upsert_institution_row(&inst)?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_province_city_reads_foundation_scope() {
+        // 基金会机构 CID → 贵州(GZ)/绥阳(018);创世公民程伟居住地即取此。
+        assert_eq!(
+            split_province_city(CITIZENCHAIN_FOUNDATION.cid_number).expect("foundation scope"),
+            ("GZ".to_string(), "018".to_string())
+        );
+    }
+
+    #[test]
+    fn split_province_city_rejects_person_cid() {
+        // 程伟为人主体 CN 号,去地域化、R5 不载省市 → fail-closed。
+        // 播种须改取基金会省市,绝不对程伟号调用本函数(否则误把号段读成区划)。
+        assert!(split_province_city(LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER).is_err());
+    }
 }

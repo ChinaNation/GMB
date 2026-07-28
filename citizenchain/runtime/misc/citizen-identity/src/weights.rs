@@ -288,8 +288,8 @@ pub trait WeightInfo {
 	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
 	fn occupy_cid() -> Weight;
 	fn self_occupy_cid() -> Weight;
-	fn self_rebind_cid_account() -> Weight;
-	fn admin_rebind_cid_account() -> Weight;
+	fn self_rebind_cid_account_id() -> Weight;
+	fn admin_rebind_cid_account_id() -> Weight;
 	/// Storage: `CitizenIdentity::CidRegistry` (r:1 w:1)
 	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
 	/// Storage: `PublicManage::Institutions` (r:1 w:0)
@@ -706,7 +706,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	}
 	/// 自助换绑(手工权重,dev):读 AccountIdByCid/VotingIdentityByCid/CidByAccountId(3)、
 	/// 写双向绑定(3);待 benchmark 精化。
-	fn self_rebind_cid_account() -> Weight {
+	fn self_rebind_cid_account_id() -> Weight {
 		Weight::from_parts(50_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 8000))
 			.saturating_add(T::DbWeight::get().reads(3))
@@ -714,7 +714,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	}
 	/// 注册局代换绑(手工权重,dev):同自助换绑 + 注册局岗位授权读(6)、写双向绑定(3);
 	/// 待 benchmark 精化。
-	fn admin_rebind_cid_account() -> Weight {
+	fn admin_rebind_cid_account_id() -> Weight {
 		Weight::from_parts(60_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 12000))
 			.saturating_add(T::DbWeight::get().reads(6))
@@ -1176,13 +1176,13 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(3))
 			.saturating_add(RocksDbWeight::get().writes(3))
 	}
-	fn self_rebind_cid_account() -> Weight {
+	fn self_rebind_cid_account_id() -> Weight {
 		Weight::from_parts(50_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 8000))
 			.saturating_add(RocksDbWeight::get().reads(3))
 			.saturating_add(RocksDbWeight::get().writes(3))
 	}
-	fn admin_rebind_cid_account() -> Weight {
+	fn admin_rebind_cid_account_id() -> Weight {
 		Weight::from_parts(60_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 12000))
 			.saturating_add(RocksDbWeight::get().reads(6))

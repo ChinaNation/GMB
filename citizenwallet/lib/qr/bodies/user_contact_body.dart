@@ -16,6 +16,11 @@ class UserContactBody implements QrBody {
       };
 
   static UserContactBody fromJson(Map<String, dynamic> data) {
+    requireExactKeys(
+      data,
+      const {'ss58_address', 'contact_name'},
+      'user_contact.b',
+    );
     final ss58Address = data['ss58_address'];
     final contactName = data['contact_name'];
     if (ss58Address is! String || ss58Address.isEmpty) {

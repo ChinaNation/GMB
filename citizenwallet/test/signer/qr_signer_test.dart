@@ -109,9 +109,53 @@ void main() {
       );
     });
 
+    test('拒绝 envelope 与 body 未知字段', () {
+      final envelopeUnknown = validEnvelope()..['extra'] = true;
+      expect(
+        () => signer.parseRequest(jsonEncode(envelopeUnknown)),
+        throwsA(isA<QrSignException>()),
+      );
+
+      final bodyUnknown = validEnvelope();
+      (bodyUnknown['b'] as Map<String, dynamic>)['extra'] = true;
+      expect(
+        () => signer.parseRequest(jsonEncode(bodyUnknown)),
+        throwsA(isA<QrSignException>()),
+      );
+    });
+
+    test('拒绝字符串 kind 与带填充 base64url', () {
+      final stringKind = validEnvelope()..['k'] = '1';
+      expect(
+        () => signer.parseRequest(jsonEncode(stringKind)),
+        throwsA(isA<QrSignException>()),
+      );
+
+      final padded = validEnvelope();
+      final body = padded['b'] as Map<String, dynamic>;
+      body['u'] = '${body['u']}=';
+      expect(
+        () => signer.parseRequest(jsonEncode(padded)),
+        throwsA(isA<QrSignException>()),
+      );
+    });
+
     test('拒绝已过期请求', () {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final json = validEnvelope()..['e'] = now - 100;
+      expect(
+        () => signer.parseRequest(jsonEncode(json)),
+        throwsA(isA<QrSignException>().having(
+          (e) => e.code,
+          'code',
+          QrSignErrorCode.expired,
+        )),
+      );
+    });
+
+    test('到期秒等于当前秒也拒绝', () {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final json = validEnvelope()..['e'] = now;
       expect(
         () => signer.parseRequest(jsonEncode(json)),
         throwsA(isA<QrSignException>().having(
@@ -157,7 +201,6 @@ void main() {
       final request = QrEnvelope<SignRequestBody>(
         kind: QrKind.signRequest,
         id: 'resp-test-req-id-0001',
-        issuedAt: null,
         expiresAt: now + 90,
         body: SignRequestBody.fromHex(
           action: QrActions.login,
@@ -190,7 +233,6 @@ void main() {
       final request = QrEnvelope<SignRequestBody>(
         kind: QrKind.signRequest,
         id: 'targeted-login-request',
-        issuedAt: null,
         expiresAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90,
         body: SignRequestBody.fromHex(
           action: QrActions.login,

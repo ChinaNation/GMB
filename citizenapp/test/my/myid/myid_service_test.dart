@@ -3,12 +3,15 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/citizen/cid/cid_generator.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
+import 'package:citizenapp/my/myid/identity_rebind_pending_store.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
+import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -20,6 +23,13 @@ const _validAccountId =
     '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    // 换绑续跑意图存 SharedPreferences;每个用例从空白起,互不串扰。
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   MyIdService buildService({
     WalletProfile? wallet = const _AliceWallet(),
     Uint8List? voting,
@@ -225,15 +235,18 @@ void main() {
       accountName: '账户5',
     );
     final fakeRpc = _FakeIdentityRpc();
+    final fakeWallet =
+        _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]);
+    final fakeContact = _FakeContactService();
     final service = MyIdService(
-      walletManager:
-          _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]),
+      walletManager: fakeWallet,
       chainRpc: _FakeChainRpc(),
       divisionStore: _FakeDivisionStore(),
       badgeSnapshotStore: _FakeBadgeStore(),
       identityRpc: fakeRpc,
       identityResolver:
           _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+      contactService: fakeContact,
     );
 
     await service.rebindCidTo(
@@ -241,9 +254,63 @@ void main() {
       newAccountId: newAccount.accountId,
     );
 
+    // 链上换绑参数传对。
     expect(fakeRpc.reboundCid, 'GD-CTZN1-8F3A2B');
     expect(fakeRpc.reboundOld, _validAccountId);
     expect(fakeRpc.reboundNew, newAccount.accountId);
+    // Finalized 后本地重建三步:设备子钥重绑 + 通讯录迁移都指向新账户。
+    expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
+    expect(fakeContact.migrations.single.oldAccountId, _validAccountId);
+    expect(fakeContact.migrations.single.newAccountId, newAccount.accountId);
+    // 全部成功 → 续跑意图已清除。
+    expect(await IdentityRebindPendingStore().read(), isNull);
+  });
+
+  test('换绑本地重建中断:意图留存,续跑自动补齐(死契约)', () async {
+    final newAccount = Account(
+      masterId: _validAccountId,
+      accountIndex: 5,
+      accountId: '0x${'11' * 32}',
+      ss58Address: 'new-ss58',
+      accountName: '账户5',
+    );
+    final fakeWallet = _FakeWalletManager(
+      const _AliceWallet(),
+      accounts: [newAccount],
+      failFirstSubkeyRebind: true,
+    );
+    final fakeContact = _FakeContactService();
+    final service = MyIdService(
+      walletManager: fakeWallet,
+      chainRpc: _FakeChainRpc(),
+      divisionStore: _FakeDivisionStore(),
+      badgeSnapshotStore: _FakeBadgeStore(),
+      identityRpc: _FakeIdentityRpc(),
+      identityResolver:
+          _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+      contactService: fakeContact,
+    );
+
+    // 换绑链上成功,但设备子钥重绑首次失败 → 编排中断上抛。
+    await expectLater(
+      service.rebindCidTo(
+        cidNumber: 'GD-CTZN1-8F3A2B',
+        newAccountId: newAccount.accountId,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    // 通讯录尚未迁移;续跑意图已持久留存,等待补齐。
+    expect(fakeContact.migrations, isEmpty);
+    final pending = await IdentityRebindPendingStore().read();
+    expect(pending, isNotNull);
+    expect(pending!.oldAccountId, _validAccountId);
+    expect(pending.newAccountId, newAccount.accountId);
+
+    // 续跑:设备子钥第二次成功 → 通讯录迁移补齐 → 意图清除。
+    await service.resumePendingIdentityRebind();
+    expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
+    expect(fakeContact.migrations.single.newAccountId, newAccount.accountId);
+    expect(await IdentityRebindPendingStore().read(), isNull);
   });
 
   test('换绑目标 == 当前身份账户时拒', () async {
@@ -443,9 +510,20 @@ class _AliceWallet implements WalletProfile {
 }
 
 class _FakeWalletManager extends WalletManager {
-  _FakeWalletManager(this._wallet, {this.accounts = const <Account>[]});
+  _FakeWalletManager(
+    this._wallet, {
+    this.accounts = const <Account>[],
+    this.failFirstSubkeyRebind = false,
+  });
   final WalletProfile? _wallet;
   final List<Account> accounts;
+
+  /// true 时 [rebindDeviceSubkeyToAccountId] 首次抛错、之后成功,用于验证换绑本地
+  /// 重建中断后意图留存 + 续跑补齐(死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
+  final bool failFirstSubkeyRebind;
+  int subkeyRebindCalls = 0;
+  final List<String> subkeyRebindTargets = <String>[];
+
   @override
   Future<WalletProfile?> getDefaultWallet() async => _wallet;
   @override
@@ -456,6 +534,30 @@ class _FakeWalletManager extends WalletManager {
       if (account.accountId == accountId) return account;
     }
     return null;
+  }
+
+  @override
+  Future<void> rebindDeviceSubkeyToAccountId(String identityAccountId) async {
+    subkeyRebindCalls++;
+    if (failFirstSubkeyRebind && subkeyRebindCalls == 1) {
+      throw StateError('设备子钥重绑首次失败(模拟网络抖动)');
+    }
+    subkeyRebindTargets.add(identityAccountId);
+  }
+}
+
+/// 记录换绑通讯录迁移调用的假通讯录服务(不触碰 Isar / secure storage / 网络)。
+class _FakeContactService extends UserContactService {
+  _FakeContactService() : super(autoSync: false);
+  final List<({String oldAccountId, String newAccountId})> migrations =
+      <({String oldAccountId, String newAccountId})>[];
+
+  @override
+  Future<void> migrateContactsToNewIdentity(
+    String oldAccountId,
+    String newAccountId,
+  ) async {
+    migrations.add((oldAccountId: oldAccountId, newAccountId: newAccountId));
   }
 }
 

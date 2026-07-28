@@ -30,7 +30,7 @@
 ## onchina 范围(S6)
 - `src/domains/citizens/`:「新增公民」弹窗(`CitizenCreateModal`)改必填类型+账户+签名、档案选填;`occupy.rs` `prepare_citizen_occupy`/`encode_occupy_cid_call` 适配新 `occupy_cid` 签名(加 account + 用户签名);`admin_entry.rs` CID 生成同 CN(母卡 S1 已改 primitive,onchina wrapper 对齐)。
 - 换绑入口:注册局管理员「换绑钱包」(匿名 CID)→ `admin_rebind_cid_account`。
-- **R5-split 适配**(母卡记):`genesis_projection.rs::split_province_city`、`projection.rs::r5_province_city`、`docs/handler.rs::scope_codes_from_cid` —— 公民 CN CID 不再从 R5 推省;省份取自 `citizens` 表居住字段。
+- **R5-split 适配**(母卡记)—— **④c 完成 ✅**:三处(`genesis_projection.rs::split_province_city`、`projection.rs::r5_province_city`、`main.rs::Db::scope_codes_from_cid`)全收敛到 primitives 权威单源 `cid_scope_codes`(自带人主体 fail-closed);程伟 live 误播种(CN 号 R5 读成省"CN")一并修正,省市改取基金会机构 CID。实际调用点是 `main.rs::Db::scope_codes_from_cid`(非母卡预估的 `docs/handler.rs`),喂机构文档 CID。详见④c段。
 - 用户签名:注册局收集用户对占号/换绑的签名(扫码或输入),op_tag 复用/新增按链端定。
 
 ## 决策锁定(2026-07-27 用户拍板 A/B/C/D)
@@ -92,10 +92,27 @@
 - **编辑流 `admin_update_citizen` 完全未动**(必填完整、不可改项锁定、护照一次性签发保留)。
 - 门禁:`cargo check -p onchina` 0 warning + `cargo test -p onchina` 145 绿。全工作区门禁跑中。
 
+### ④b —— **完成 ✅(2026-07-27,onchina 146 tests 0 failed + rebind byte-golden)**
+onchina admin_rebind 三段式入口(与 occupy 同构,全 `account_id`):
+- `encode_admin_rebind_cid_account_id_call`(pallet 10/call 7,布局同 occupy)+ `verify_admin_rebind_signature`(域 `OP_SIGN_CID_ADMIN_REBIND`)+ `ADMIN_REBIND_CID_CALL_INDEX=7` + 两 purpose 常量。
+- `prepare_citizen_rebind`(`{actor_role_code, cid_number}`,`find_citizen_by_cid` 校验本局有此记录→404,存 pending)→ `submit_citizen_rebind`(验新账户签名+建 call+promote)→ `submit_chain_sign`(新 arm `PURPOSE_CITIZEN_ADMIN_REBIND` → `confirm_citizen_identity_onchain` 把本地绑定改到新 account_id)。
+- 路由 `/api/v1/admin/citizens/rebind/{prepare,submit}`;byte-golden `0a07…`。
+- **限本局换绑**(`find_citizen_by_cid` 要求本地已有记录);跨注册局换绑=后期。
+
+### ④c —— **完成 ✅(2026-07-27,onchina 150 tests 0 failed + workspace 81 批次 0 failed)**
+R5-split 三处收敛到 primitives 权威单源 + 修程伟 live 误播种:
+- **发现**:primitives 已有 `cid::number::cid_scope_codes`(number.rs:84,文档明写「所有需按机构 CID 推作用域的模块**必须复用,不得自建第二真源**;人主体 CID 去地域化 → fail-closed 返回 Err」)。onchina 三处本地 R5 字符串切割正是它禁止的第二真源。
+- **改**:`genesis_projection.rs::split_province_city`、`projection.rs::r5_province_city`、`main.rs::Db::scope_codes_from_cid` 全删自建切割、改调 `cid_scope_codes`(bytes→String 适配)。三者自动获人主体 CID fail-closed。
+- **修 live bug**:程伟常量**已是 CN 号** `CN220-CTZN2-198805200-2026`(非 S5 才变;头注释 `GZ000-CTZN6` 是过期陈述,已订正)。旧 `split_province_city("CN220-…")` 把 R5 读成省"CN"/市"220" → 程伟被误播种到不存在的省"CN"。改 `seed_genesis_citizen_blocking`:程伟省市**均取自基金会机构 CID**(`GZ018-SFGYR`→GZ/018,创世同址「贵州/绥阳」),不再对程伟号调 split。
+- **决策 K 复核**:机构 cid 路径零行为变化(R5 仍省2+市3);人主体号一律 fail-closed,不把号段误读成区划。
+- 测试 +4:`split_province_city`/`r5_province_city` 各「基金会解析=GZ/018」+「人主体 CN 号 → Err」;`cid_scope_codes` 人主体拒绝已有 primitives 测试(number.rs:272-288)覆盖源头。
+- 门禁:`cargo test -p onchina` 150 绿 / `cargo test --workspace` **81 批次 0 failed**。
+- **第 4 处审计分区 —— 完成 ✅(用户 2026-07-28 拍板「在哪个注册局办理就归属哪个注册局,禁止兜底/退化/兼容」)**:`onchina/src/core/runtime_ops.rs::append_audit_log` 原按 `target_cid` R5 切省市 + "ZS" 兜底 → 人主体目标(CN 号)会算出省"CN",无 `audit_cn` 分区(分区按真实省预建)→ **INSERT 失败被 warn 吞掉 = 审计行静默丢失(live bug)**。改为**按办理该动作的本节点作用域**(`resolve_node_scope` 单源,与审计读侧 `admin_list_audit_logs` 的管理员 scope 同源)写 `province_code`/`city_code`,`target_cid` 仅存关联列;节点未绑定机构=非法调用,warn 丢弃不写(**不落错分区、无兜底**)。省/市编码与读侧过滤一致(已核 GZ/018)。
+- **一处理论边角(记录,现无实际缺口)**:`delete_orphan_institutions_by_province`(main.rs:1292)按 `(province, target_cid)` 删孤儿机构审计;审计改办理局分区后,仅「联邦节点管辖跨省机构」场景审计会落联邦省而非机构省 → 该省清理漏删。但现创世联邦(NRC)与其管辖机构(基金会等)均在 GZ 同省,城市级机构办理局=同省,**无实际缺口**;真出现跨省联邦管辖时再硬化(去 province 限定,跨分区按 target_cid 删)。
+
 ### 剩余
-- ④b:admin_rebind 入口(三段同构,`OP_SIGN_CID_ADMIN_REBIND`,call 7,新 purpose)。
-- ④c:R5-split genesis 人(随 S5 重生)+ 守卫;机构不动。
-- **跨注册局完善(后期)**:在非创建局完善档案 = 该局从链上取 CID+账户 → 在本局 PG 建/完善本地记录(现有编辑要求本地已有记录,需新流程)。
+- **小步⑤ onchina 前端**:`CitizenCreateModal`(占号三段 UI)+ 详情页「换绑钱包」入口 + 首页公民/居民列表(CTZN+NATP)。
+- **跨注册局完善/换绑(后期)**:在非创建局操作 = 该局从链上取 CID+账户 → 在本局 PG 建/完善本地记录(现有 prepare 要求本地已有记录,需新流程)。
 
 ## 钱包账户命名统一 account_id(2026-07-27,用户强制死规则 [[wallet-account-naming-account-id]])—— **完成 ✅**
 > 用户拍板 A:onchina + 前端把「当账户用」的 `public_key` 命名全部 → `account_id`/`accountId`(对齐 Substrate `AccountId`);**节点加密签名层的 `sr25519::Public` 真公钥保留**(Substrate 标准 + [[desktop-is-miner]] 节点绝不动)。语义边界:账户身份=account_id,加密验签公钥=public_key。
@@ -104,7 +121,8 @@
 - 前后端 DTO 同步(login complete / action commit / chain submit 三对 body 字段 + notice 错误码映射)。
 - 保留:`sr25519::Public`/`parse_sr25519_public_key*`/`public_key_hex_to_b64`/WebAuthn `publicKey`;QR 线格式紧凑键 `u/s/b.u` 不变;primitives `GenerateCidNumberInput.public_key` 字段(值已是 account_id,字段名归 primitives 所有不改)。
 - 门禁:`cargo check -p onchina` 0 warning + 前端 `tsc -b` 0 error;全工作区门禁复核中。
-- **未动**:node/runtime/crates/citizenapp/citizenwallet。
+- **未动**:node/crates/citizenapp/citizenwallet。
+- **链侧 extrinsic/事件命名补正(2026-07-27,用户揪出)**:我 S3/小步③ 创的换绑 extrinsic 沿用了旧 `_account` 后缀,违规。已改:`self_rebind_cid_account`→`self_rebind_cid_account_id`、`admin_rebind_cid_account`→`admin_rebind_cid_account_id`(call 7)、事件 `CidAccountRebound`→`CidAccountIdRebound`;波及 lib/weights/benchmarks/tests/configs 五文件全同步。**④b onchina 编码器随之命名 `encode_admin_rebind_cid_account_id_call`**。教训:新增链上 extrinsic/事件/字段命名必须 `account_id`/`AccountId`,禁 `_account` 后缀([[wallet-account-naming-account-id]])。
 
 ## 小步⑤(onchina 前端)
 `CitizenCreateModal` 必填类型+account_id+签名、档案选填 + 「换绑钱包」入口;公民 tab/列表改「公民/居民」覆盖 CTZN+NATP,后端列表查询放开 NATP。

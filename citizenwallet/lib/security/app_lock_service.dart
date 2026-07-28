@@ -10,7 +10,7 @@ import 'secure_storage.dart';
 
 /// 应用锁（6 位 PIN）服务。
 ///
-/// PIN 以 SHA-256(pin + salt) 形式存储在 SecureStorage 中。
+/// PIN 以 PBKDF2-HMAC-SHA256(pin, salt, 100 万次)存储在 SecureStorage 中。
 /// 连续 5 次验证错误锁定 24 小时，累计 3 次锁定则清空全部应用数据。
 class AppLockService {
   // 单源加固实例(选项集中在 secure_storage.dart)。

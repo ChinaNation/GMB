@@ -10,8 +10,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:citizenwallet/isar/wallet_isar.dart';
+import 'package:citizenwallet/qr/qr_protocols.dart';
+import 'package:citizenwallet/qr/signature_message.dart';
 import 'package:citizenwallet/wallet/wallet_manager.dart';
 import 'package:citizenwallet/wallet/wallet_secure_keys.dart';
+import 'package:citizenwallet/wallet/secret_cipher.dart';
 
 const String kDevPhrase =
     'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
@@ -21,7 +24,8 @@ const String kOtherPhrase =
 // 金标（对齐 derivation_golden_test.dart，全 //index）。
 const String kAccount0Id =
     '0x2afba9278e30ccf6a6ceb3a8b6e336b70068f045c666f2e7f4f9cc5f47db8972';
-const String kAccount0Ss58 = 'w5CZACAABUbK4jspzPB5be9trhtSgRCRZFafGe7kvFPvxq8M2';
+const String kAccount0Ss58 =
+    'w5CZACAABUbK4jspzPB5be9trhtSgRCRZFafGe7kvFPvxq8M2';
 const String kAccount1Id =
     '0xb606fc73f57f03cdb4c932d475ab426043e429cecc2ffff0d2672b0df8398c48';
 const String kAccount2Id =
@@ -31,17 +35,33 @@ const String kAccount0Child =
 const String kAccount1Child =
     '0x4433c3ada0cf37c3050d5435321872f4f84ef53d8b5f1f1560689d500b882245';
 
+String _loginMessage({
+  required String requestId,
+  required String accountId,
+  required int expiresAt,
+}) {
+  return buildSignatureMessage(
+    kind: QrKind.signResponse,
+    id: requestId,
+    system: 'onchina',
+    expiresAt: expiresAt,
+    principal: accountId,
+  );
+}
+
 void main() {
   final manager = WalletManager();
 
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
+    SecretCipher.clearCache();
     WalletManager.debugAuthGate = () async {};
     await WalletIsar.instance.resetForTest();
   });
 
   tearDown(() async {
     WalletManager.debugAuthGate = null;
+    SecretCipher.clearCache();
     await WalletIsar.instance.resetForTest();
   });
 
@@ -92,6 +112,84 @@ void main() {
     expect(wrong.verify(payload, sig), isFalse);
   });
 
+  test('登录签名请求过期时在生物识别和私钥调用前拒绝', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    var authCalls = 0;
+    WalletManager.debugAuthGate = () async {
+      authCalls++;
+    };
+    final message = _loginMessage(
+      requestId: 'login-expired-test-0001',
+      accountId: created.primaryAccount.accountId,
+      expiresAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 1,
+    );
+
+    await expectLater(
+      manager.signUtf8ForAccount(created.primaryAccount.accountId, message),
+      throwsA(
+        isA<WalletAuthException>().having(
+          (error) => error.message,
+          'message',
+          contains('已过期'),
+        ),
+      ),
+    );
+    expect(authCalls, 0);
+  });
+
+  test('登录签名请求 ID 成功签名后持久化拒绝重复调用', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    var authCalls = 0;
+    WalletManager.debugAuthGate = () async {
+      authCalls++;
+    };
+    final message = _loginMessage(
+      requestId: 'login-replay-test-0001',
+      accountId: created.primaryAccount.accountId,
+      expiresAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90,
+    );
+
+    await manager.signUtf8ForAccount(created.primaryAccount.accountId, message);
+    await expectLater(
+      manager.signUtf8ForAccount(created.primaryAccount.accountId, message),
+      throwsA(
+        isA<WalletAuthException>().having(
+          (error) => error.message,
+          'message',
+          contains('已处理'),
+        ),
+      ),
+    );
+    expect(authCalls, 1);
+  });
+
+  test('登录签名认证失败会释放请求占位，允许用户再次确认', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    var authCalls = 0;
+    WalletManager.debugAuthGate = () async {
+      authCalls++;
+      if (authCalls == 1) {
+        throw const WalletAuthException('用户取消认证');
+      }
+    };
+    final message = _loginMessage(
+      requestId: 'login-retry-test-00001',
+      accountId: created.primaryAccount.accountId,
+      expiresAt: DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90,
+    );
+
+    await expectLater(
+      manager.signUtf8ForAccount(created.primaryAccount.accountId, message),
+      throwsA(isA<WalletAuthException>()),
+    );
+    final result = await manager.signUtf8ForAccount(
+      created.primaryAccount.accountId,
+      message,
+    );
+    expect(result.signerPublicKey, created.primaryAccount.accountId);
+    expect(authCalls, 2);
+  });
+
   test('deleteWallet 连带清账户与 seed/助记词密钥', () async {
     final created = await manager.importWallet(kDevPhrase);
     await manager.addAccount(created.wallet.masterId);
@@ -108,6 +206,7 @@ void main() {
       await storage.read(key: WalletSecureKeys.masterMnemonicV1(kAccount0Id)),
       isNull,
     );
+    expect(await storage.read(key: 'wallet.internal.aek.v1'), isNull);
   });
 
   test('重复导入同一助记词被拒绝', () async {
@@ -118,12 +217,33 @@ void main() {
     );
   });
 
+  test('并发重复导入只允许一个钱包原子落库', () async {
+    final results = await Future.wait(
+      [
+        manager.importWallet(kDevPhrase),
+        manager.importWallet(kDevPhrase),
+      ].map((future) async {
+        try {
+          await future;
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }),
+    );
+
+    expect(results.where((ok) => ok), hasLength(1));
+    expect(await manager.getWallets(), hasLength(1));
+    expect(await manager.getAccounts(kAccount0Id), hasLength(1));
+  });
+
   test('getAccountByAccountId 精确命中/未知返回 null(扫码定位边界)', () async {
     final created = await manager.importWallet(kDevPhrase);
     final a1 = await manager.addAccount(created.wallet.masterId);
 
     expect((await manager.getAccountByAccountId(kAccount0Id))?.accountIndex, 0);
-    expect((await manager.getAccountByAccountId(a1.accountId))?.accountIndex, 1);
+    expect(
+        (await manager.getAccountByAccountId(a1.accountId))?.accountIndex, 1);
     expect(
       await manager.getAccountByAccountId(
           '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd0'),
@@ -200,10 +320,10 @@ void main() {
   test('master 种子 + 助记词 密文落库,getMasterMnemonic 取回', () async {
     final created = await manager.importWallet(kDevPhrase);
     const storage = FlutterSecureStorage();
-    final seedStored = await storage
-        .read(key: WalletSecureKeys.masterSeedHexV1(created.wallet.masterId));
-    final mnStored = await storage
-        .read(key: WalletSecureKeys.masterMnemonicV1(created.wallet.masterId));
+    final seedStored = await storage.read(
+        key: WalletSecureKeys.masterSeedHexV1(created.wallet.masterId));
+    final mnStored = await storage.read(
+        key: WalletSecureKeys.masterMnemonicV1(created.wallet.masterId));
     expect(seedStored, isNotNull);
     expect(mnStored, isNotNull);
     // 明文种子是 64 位 hex;加密后是 Base64 密文,绝不匹配裸 hex。
@@ -211,7 +331,42 @@ void main() {
     // 助记词密文里不得含明文助记词。
     expect(mnStored!.contains(kDevPhrase), isFalse);
     // getMasterMnemonic 解密取回原文。
-    expect(await manager.getMasterMnemonic(created.wallet.masterId), kDevPhrase);
+    expect(
+        await manager.getMasterMnemonic(created.wallet.masterId), kDevPhrase);
+  });
+
+  test('交换不同钱包种子密文会因 masterId 归属校验被拒绝', () async {
+    final first = await manager.importWallet(kDevPhrase);
+    final second = await manager.importWallet(kOtherPhrase);
+    const storage = FlutterSecureStorage();
+    final firstKey = WalletSecureKeys.masterSeedHexV1(first.wallet.masterId);
+    final secondKey = WalletSecureKeys.masterSeedHexV1(second.wallet.masterId);
+    final firstCipher = await storage.read(key: firstKey);
+    final secondCipher = await storage.read(key: secondKey);
+    await storage.write(key: firstKey, value: secondCipher);
+    await storage.write(key: secondKey, value: firstCipher);
+
+    expect(
+      () => manager.addAccount(first.wallet.masterId),
+      throwsA(isA<WalletAuthException>()),
+    );
+  });
+
+  test('交换不同钱包助记词密文会因 masterId 归属校验被拒绝', () async {
+    final first = await manager.importWallet(kDevPhrase);
+    final second = await manager.importWallet(kOtherPhrase);
+    const storage = FlutterSecureStorage();
+    final firstKey = WalletSecureKeys.masterMnemonicV1(first.wallet.masterId);
+    final secondKey = WalletSecureKeys.masterMnemonicV1(second.wallet.masterId);
+    final firstCipher = await storage.read(key: firstKey);
+    final secondCipher = await storage.read(key: secondKey);
+    await storage.write(key: firstKey, value: secondCipher);
+    await storage.write(key: secondKey, value: firstCipher);
+
+    expect(
+      () => manager.getMasterMnemonic(first.wallet.masterId),
+      throwsA(isA<WalletAuthException>()),
+    );
   });
 
   test('getAccountPrivateKey 从种子派生该账户 child mini-secret,单账户隔离', () async {
@@ -267,5 +422,17 @@ void main() {
     final top = await manager.addAccount(created.wallet.masterId,
         index: WalletManager.maxAccountIndex);
     expect(top.accountIndex, WalletManager.maxAccountIndex);
+  });
+
+  test('并发添加下一个账户在事务内分配不重复序号', () async {
+    final created = await manager.importWallet(kDevPhrase);
+    final accounts = await Future.wait([
+      manager.addAccount(created.wallet.masterId),
+      manager.addAccount(created.wallet.masterId),
+    ]);
+    expect(
+      accounts.map((account) => account.accountIndex).toSet(),
+      {1, 2},
+    );
   });
 }

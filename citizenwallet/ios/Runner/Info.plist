@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>用于扫描公民钱包签名请求二维码。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用于验证本人身份后访问钱包根机密和执行签名。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于从相册选择并识别二维码图片。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

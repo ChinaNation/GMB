@@ -28,6 +28,18 @@ class UserTransferBody implements QrBody {
       };
 
   static UserTransferBody fromJson(Map<String, dynamic> data) {
+    requireExactKeys(
+      data,
+      const {
+        'ss58_address',
+        'recipient_name',
+        'amount',
+        'symbol',
+        'memo',
+        'bank',
+      },
+      'user_transfer.b',
+    );
     final ss58Address = data['ss58_address'];
     final recipientName = data['recipient_name'];
     final amount = data['amount'];

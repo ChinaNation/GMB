@@ -80,8 +80,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('查看私钥'),
-        content: const Text(
-            '私钥泄露将导致该账户资产被盗（仅该账户，不影响本钱包其他账户）。\n\n确认要查看吗？'),
+        content: const Text('私钥泄露将导致该账户资产被盗（仅该账户，不影响本钱包其他账户）。\n\n确认要查看吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -187,7 +186,8 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   void _copy(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label已复制'), duration: const Duration(seconds: 1)),
+      SnackBar(
+          content: Text('$label已复制'), duration: const Duration(seconds: 1)),
     );
   }
 
@@ -195,7 +195,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     final qrData = QrEnvelope<UserContactBody>(
       kind: QrKind.userContact,
       id: null,
-      issuedAt: null,
       expiresAt: null,
       body: UserContactBody(
         ss58Address: widget.account.ss58Address,
@@ -284,25 +283,37 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 账户名可点击改名（编辑图标示意）。
-                      GestureDetector(
+                      Semantics(
+                        button: true,
+                        label: '重命名账户',
                         onTap: _renameAccount,
-                        behavior: HitTestBehavior.opaque,
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _accountName,
-                                style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white),
-                                overflow: TextOverflow.ellipsis,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _renameAccount,
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusSm),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 48),
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      _accountName,
+                                      style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Icon(Icons.edit_outlined,
+                                      size: 15, color: Colors.white70),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.edit_outlined,
-                                size: 15, color: Colors.white70),
-                          ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -314,17 +325,25 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                     ],
                   ),
                 ),
-                GestureDetector(
-                  onTap: _showReceiveQr,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(30),
-                      borderRadius: BorderRadius.circular(8),
+                Semantics(
+                  button: true,
+                  label: '显示收款二维码',
+                  child: IconButton(
+                    tooltip: '显示收款二维码',
+                    onPressed: _showReceiveQr,
+                    icon: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(30),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
-                    child: const Icon(Icons.qr_code_rounded,
-                        color: Colors.white, size: 20),
                   ),
                 ),
               ],

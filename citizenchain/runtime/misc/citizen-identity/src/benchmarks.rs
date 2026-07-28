@@ -334,7 +334,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn self_rebind_cid_account() {
+    fn self_rebind_cid_account_id() {
         // 先自助占号建匿名 CID(旧账户绑定),再换绑到新账户。
         let old_account_id: T::AccountId = account("rebind_old", 0, 0);
         let new_account_id: T::AccountId = whitelisted_caller();
@@ -357,7 +357,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn admin_rebind_cid_account() {
+    fn admin_rebind_cid_account_id() {
         // 先自助占号建匿名 CID(旧账户绑定),再由注册局代换绑到新账户。
         let authority = authority::<T>();
         let old_account_id: T::AccountId = account("admin_rebind_old", 0, 0);

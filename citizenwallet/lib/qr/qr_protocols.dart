@@ -33,7 +33,10 @@ enum QrKind {
   bool get fixed => !temporary;
 
   static QrKind fromWire(Object? wire) {
-    final code = wire is int ? wire : int.tryParse(wire?.toString() ?? '');
+    if (wire is! int) {
+      throw FormatException('k 必须为整数,实际: $wire');
+    }
+    final code = wire;
     for (final k in QrKind.values) {
       if (k.code == code) return k;
     }
@@ -45,97 +48,118 @@ enum QrKind {
 class QrActions {
   QrActions._();
 
-  static const int login = 1;
-  static const int citizenIdentity = 2;
-  static const int onchinaAdmin = 3;
-  static const int activateAdmin = 5;
-  static const int decryptAdmin = 6;
-  static const int runtimeUpgradeHash = 7;
+  static int _code(String key) =>
+      GeneratedQrActionRegistry.actionCodeForKey(key)!;
+
+  static int get login => _code('login');
+  static int get citizenIdentity => _code('citizen_identity');
+  static int get onchinaAdmin => _code('onchina_admin_action');
+  static int get activateAdmin => _code('activate_admin_account');
+  static int get decryptAdmin => _code('decrypt_admin');
+  static int get runtimeUpgradeHash => _code('runtime_upgrade_hash');
 
   /// 广场账户动作由 CitizenApp 热钱包签名；CitizenWallet 扫到时只能识别后拒绝，
   /// 不能退回成未知数字或盲签。
-  static const int squareAccountAction = 9;
+  static int get squareAccountAction => _code('square_account_action');
 
-  static const int transferWithRemark = 0x0400;
-  static const int personalCreate = 0x0700;
-  static const int personalClose = 0x0701;
-  static const int personalAdminSetChange = 0x1d00;
-  static const int resolutionIssuance = 0x0800;
-  static const int finalizeProposal = 0x0903;
-  static const int retryPassedProposal = 0x0904;
-  static const int cancelPassedProposal = 0x0905;
-  static const int registerVotingIdentity = 0x0a00;
-  static const int upgradeToCandidateIdentity = 0x0a01;
-  static const int updateVotingIdentity = 0x0a02;
-  static const int updateCandidateIdentity = 0x0a03;
-  static const int revokeIdentity = 0x0a04;
-  static const int occupyCid = 0x0a06;
-  static const int occupyCidsBatch = 0x0a07;
-  static const int revokeCid = 0x0a08;
-  static const int proposeRuntimeUpgrade = 0x0c00;
-  static const int developerDirectUpgrade = 0x0c02;
-  static const int resolutionDestroy = 0x0d00;
-  static const int grandpaKeyChange = 0x0f00;
-  static const int publicInstitutionClose = 0x1e01;
-  static const int publicInstitutionUpdateInfo = 0x1e06;
-  static const int publicInstitutionAddAccount = 0x1e07;
-  static const int publicInstitutionGovernance = 0x1e08;
-  static const int publicInstitutionRegisterAdmins = 0x1e09;
-  static const int privateInstitutionClose = 0x1f01;
-  static const int privateInstitutionUpdateInfo = 0x1f06;
-  static const int privateInstitutionAddAccount = 0x1f07;
-  static const int privateInstitutionGovernance = 0x1f08;
-  static const int privateInstitutionRegisterAdmins = 0x1f09;
-  static const int multisigTransfer = 0x1100;
-  static const int safetyFundTransfer = 0x1101;
-  static const int sweepToMain = 0x1102;
-  static const int bindClearingBank = 0x131e;
-  static const int depositClearingBank = 0x131f;
-  static const int withdrawClearingBank = 0x1320;
-  static const int switchClearingBank = 0x1321;
-  static const int proposeL2FeeRate = 0x1328;
-  static const int registerClearingBank = 0x1332;
-  static const int updateClearingBankEndpoint = 0x1333;
-  static const int unregisterClearingBank = 0x1334;
-  static const int internalVote = 0x1400;
-  static const int jointVote = 0x1500;
-  static const int castReferendum = 0x1501;
-  static const int castPopularVote = 0x1602;
-  static const int castMutualVote = 0x1603;
+  static int get transferWithRemark => _code('transfer');
+  static int get personalCreate => _code('propose_create_personal');
+  static int get personalClose => _code('propose_close_personal');
+  static int get personalAdminSetChange =>
+      _code('propose_personal_admin_set_change');
+  static int get resolutionIssuance => _code('propose_issuance');
+  static int get finalizeProposal => _code('finalize_proposal');
+  static int get retryPassedProposal => _code('retry_passed_proposal');
+  static int get cancelPassedProposal => _code('cancel_passed_proposal');
+  static int get registerVotingIdentity => _code('register_voting_identity');
+  static int get upgradeToCandidateIdentity =>
+      _code('upgrade_to_candidate_identity');
+  static int get updateVotingIdentity => _code('update_voting_identity');
+  static int get updateCandidateIdentity => _code('update_candidate_identity');
+  static int get revokeIdentity => _code('revoke_identity');
+  static int get occupyCid => _code('occupy_cid');
+  static int get occupyCidsBatch => _code('occupy_cids_batch');
+  static int get revokeCid => _code('revoke_cid');
+  static int get proposeRuntimeUpgrade => _code('propose_runtime_upgrade');
+  static int get developerDirectUpgrade => _code('developer_direct_upgrade');
+  static int get resolutionDestroy => _code('propose_destroy');
+  static int get grandpaKeyChange =>
+      _code('propose_emergency_grandpa_key_recovery');
+  static int get publicInstitutionClose =>
+      _code('propose_close_public_institution');
+  static int get publicInstitutionUpdateInfo =>
+      _code('update_public_institution_info');
+  static int get publicInstitutionAddAccount =>
+      _code('add_public_institution_account');
+  static int get publicInstitutionGovernance =>
+      _code('propose_public_institution_governance');
+  static int get publicInstitutionRegisterAdmins =>
+      _code('register_public_institution_admins');
+  static int get privateInstitutionClose =>
+      _code('propose_close_private_institution');
+  static int get privateInstitutionUpdateInfo =>
+      _code('update_private_institution_info');
+  static int get privateInstitutionAddAccount =>
+      _code('add_private_institution_account');
+  static int get privateInstitutionGovernance =>
+      _code('propose_private_institution_governance');
+  static int get privateInstitutionRegisterAdmins =>
+      _code('register_private_institution_admins');
+  static int get multisigTransfer => _code('propose_transfer');
+  static int get safetyFundTransfer => _code('propose_safety_fund_transfer');
+  static int get sweepToMain => _code('propose_sweep_to_main');
+  static int get bindClearingBank => _code('bind_clearing_bank');
+  static int get depositClearingBank => _code('deposit_clearing_bank');
+  static int get withdrawClearingBank => _code('withdraw_clearing_bank');
+  static int get switchClearingBank => _code('switch_clearing_bank');
+  static int get proposeL2FeeRate => _code('propose_l2_fee_rate');
+  static int get registerClearingBank => _code('register_clearing_bank');
+  static int get updateClearingBankEndpoint =>
+      _code('update_clearing_bank_endpoint');
+  static int get unregisterClearingBank => _code('unregister_clearing_bank');
+  static int get internalVote => _code('internal_vote');
+  static int get jointVote => _code('joint_vote');
+  static int get castReferendum => _code('cast_referendum');
+  static int get castPopularVote => _code('cast_popular_vote');
+  static int get castMutualVote => _code('cast_mutual_vote');
 
   // 链上资产 OnchainIssuance(23 = 0x17)。动作码与 runtime call_index 一一对应。
-  static const int proposeAssetIssue = 0x1700;
-  static const int proposeAssetMint = 0x1701;
-  static const int proposeAssetBurn = 0x1702;
-  static const int proposeAssetClose = 0x1703;
-  static const int proposeAssetTransfer = 0x1704;
-  static const int proposeMonitorFreeze = 0x170a;
-  static const int proposeMonitorUnfreeze = 0x170b;
-  static const int proposeMonitorConfiscate = 0x170c;
-  static const int proposeMonitorForceTransfer = 0x170d;
-  static const int proposeMonitorForceClose = 0x170e;
+  static int get proposeAssetIssue => _code('propose_asset_issue');
+  static int get proposeAssetMint => _code('propose_asset_mint');
+  static int get proposeAssetBurn => _code('propose_asset_burn');
+  static int get proposeAssetClose => _code('propose_asset_close');
+  static int get proposeAssetTransfer => _code('propose_asset_transfer');
+  static int get proposeMonitorFreeze => _code('propose_monitor_freeze');
+  static int get proposeMonitorUnfreeze => _code('propose_monitor_unfreeze');
+  static int get proposeMonitorConfiscate =>
+      _code('propose_monitor_confiscate');
+  static int get proposeMonitorForceTransfer =>
+      _code('propose_monitor_force_transfer');
+  static int get proposeMonitorForceClose =>
+      _code('propose_monitor_force_close');
 
   // 注册局地址目录 AddressRegistry(33 = 0x21)
-  static const int setAddressCatalogVersion = 0x2100;
-  static const int setAddressName = 0x2101;
-  static const int removeAddressName = 0x2102;
-  static const int setAddress = 0x2103;
-  static const int removeAddress = 0x2104;
+  static int get setAddressCatalogVersion =>
+      _code('set_address_catalog_version');
+  static int get setAddressName => _code('set_address_name');
+  static int get removeAddressName => _code('remove_address_name');
+  static int get setAddress => _code('set_address');
+  static int get removeAddress => _code('remove_address');
 
   // 公民链基金会平台调价提案 SquarePost(34 = 0x22)
-  static const int proposeSetPlatformPrice = 0x2205;
+  static int get proposeSetPlatformPrice => _code('propose_set_platform_price');
 
   // 立法院 LegislationYuan(25 = 0x19)
-  static const int proposeEnactLaw = 0x1900;
-  static const int proposeAmendLaw = 0x1901;
-  static const int proposeRepealLaw = 0x1902;
+  static int get proposeEnactLaw => _code('propose_enact_law');
+  static int get proposeAmendLaw => _code('propose_amend_law');
+  static int get proposeRepealLaw => _code('propose_repeal_law');
 
   // 立法投票 LegislationVote(26 = 0x1a)
-  static const int castRepresentativeVote = 0x1a01;
-  static const int castLegislationReferendum = 0x1a02;
-  static const int executiveSign = 0x1a03;
-  static const int overrideSign = 0x1a04;
-  static const int guardVote = 0x1a05;
+  static int get castRepresentativeVote => _code('cast_representative_vote');
+  static int get castLegislationReferendum => _code('cast_referendum_vote');
+  static int get executiveSign => _code('executive_sign');
+  static int get overrideSign => _code('override_sign');
+  static int get guardVote => _code('guard_vote');
 
   /// 链交易动作统一按 `(pallet_index << 8) | call_index` 生成。
   static int chain(int palletIndex, int callIndex) =>

@@ -9,6 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../8964/services/square_api_client.dart';
+import '../my/myid/identity_account_cache.dart';
 import '../wallet/core/device_subkey.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/chat_device_binding.dart';
@@ -152,8 +153,10 @@ class ChatRuntime {
     ChatCloudTransportFactory? cloudTransportFactory,
     ChatPushService? pushService,
     ChatPushTokenProvider? pushTokenProvider,
+    IdentityAccountCache? identityAccountCache,
   })  : _store = store ?? ChatStore(),
         _walletManager = walletManager ?? WalletManager(),
+        _identityAccountCache = identityAccountCache,
         _preferences = preferences,
         _squareApiClient = squareApiClient ?? SquareApiClient(),
         _loginSigner = loginSigner,
@@ -177,6 +180,12 @@ class ChatRuntime {
 
   final ChatStore _store;
   final WalletManager _walletManager;
+  final IdentityAccountCache? _identityAccountCache;
+
+  /// 身份账户单源(CID 绑定账户);chat 自身 accountId 一律取此,walletIndex 保持钱包级。
+  IdentityAccountCache get _identityCache =>
+      _identityAccountCache ?? IdentityAccountCache.instance;
+
   final SharedPreferences? _preferences;
   final SquareApiClient _squareApiClient;
   final ChatLoginSigner? _loginSigner;
@@ -224,8 +233,7 @@ class ChatRuntime {
   }
 
   Future<String?> readAccountId() async {
-    final wallet = await _walletManager.getDefaultWallet();
-    return wallet?.accountId;
+    return _identityCache.accountId();
   }
 
   /// 点击「广场发帖」推送时发信号（转发自设备推送服务），供 AppShell 切到广场 tab。
@@ -1192,20 +1200,22 @@ class ChatRuntime {
   }
 
   Future<_ChatAccount> _readAccount({String? expectedAccountId}) async {
-    // 身份统一取默认用户钱包（钱包列表中最靠前的热钱包）。
+    // 身份主键 = CID 绑定的身份账户;walletIndex/walletName 保持钱包级(设备子钥、
+    // 登录/绑定签名按 walletIndex,与 accountId 解耦)。
     final wallet = await _walletManager.getDefaultWallet();
     if (wallet == null) {
-      throw StateError('请先在「我的 → 我的钱包」创建热钱包，第一个热钱包即默认用户');
+      throw StateError('请先在「我的 → 我的钱包」创建热钱包');
     }
     if (!wallet.isHotWallet) {
-      throw StateError('默认用户必须是热钱包');
+      throw StateError('身份账户必须是热钱包');
     }
-    if (expectedAccountId != null && wallet.accountId != expectedAccountId) {
-      throw StateError('默认用户已切换，请重新进入聊天');
+    final accountId = await _identityCache.accountId() ?? wallet.accountId;
+    if (expectedAccountId != null && accountId != expectedAccountId) {
+      throw StateError('身份账户已切换，请重新进入聊天');
     }
     return _ChatAccount(
       walletIndex: wallet.walletIndex,
-      accountId: wallet.accountId,
+      accountId: accountId,
       walletName: wallet.walletName,
     );
   }

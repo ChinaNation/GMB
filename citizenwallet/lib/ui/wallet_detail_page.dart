@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'account_detail_page.dart';
 import 'app_theme.dart';
+import 'scan_page.dart';
 
 /// Lv2 钱包详情：钱包(master)名 + 助记词备份 + 账户列表 + 添加账户。
 ///
@@ -115,7 +117,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   }
 
   int get _nextIndex =>
-      _accounts.map((e) => e.accountIndex).fold<int>(-1, (m, e) => e > m ? e : m) +
+      _accounts
+          .map((e) => e.accountIndex)
+          .fold<int>(-1, (m, e) => e > m ? e : m) +
       1;
 
   /// 混合式添加:默认"下一个" + 高级"指定序号"(恢复非连续账户 / 特定注资账户)。
@@ -286,10 +290,34 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     return '${address.substring(0, 8)}...${address.substring(address.length - 6)}';
   }
 
+  Future<void> _openWalletScan() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => ScanPage(wallet: widget.wallet)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('钱包详情'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('钱包详情'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: '扫码签名',
+            onPressed: _openWalletScan,
+            icon: SvgPicture.asset(
+              'assets/icons/scan-line.svg',
+              width: 20,
+              height: 20,
+              colorFilter: const ColorFilter.mode(
+                AppTheme.primaryLight,
+                BlendMode.srcIn,
+              ),
+            ),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(

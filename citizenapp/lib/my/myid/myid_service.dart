@@ -10,9 +10,11 @@ import 'package:citizenapp/citizen/cid/cid_generator.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/my/user/contact_service.dart';
 
 import 'identity_account_resolver.dart';
 import 'identity_badge_snapshot_store.dart';
+import 'identity_rebind_pending_store.dart';
 
 /// 身份页身份档。
 ///
@@ -107,12 +109,18 @@ class MyIdService {
     IdentityBadgeSnapshotStore? badgeSnapshotStore,
     IdentityAccountResolver? identityResolver,
     CitizenIdentityRpc? identityRpc,
+    UserContactService? contactService,
+    IdentityRebindPendingStore? rebindPendingStore,
     DateTime Function()? nowProvider,
     int Function()? cidYearProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
         _divisionStore = divisionStore ?? IsarAdminDivisionStore(),
         _badgeSnapshotStore =
             badgeSnapshotStore ?? IdentityBadgeSnapshotStore(),
+        _contactService =
+            contactService ?? UserContactService(walletManager: walletManager),
+        _rebindPendingStore =
+            rebindPendingStore ?? IdentityRebindPendingStore(),
         _identityResolver = identityResolver ??
             IdentityAccountResolver(
               walletManager: walletManager,
@@ -131,6 +139,8 @@ class MyIdService {
   final IdentityBadgeSnapshotStore _badgeSnapshotStore;
   final IdentityAccountResolver _identityResolver;
   final CitizenIdentityRpc _identityRpc;
+  final UserContactService _contactService;
+  final IdentityRebindPendingStore _rebindPendingStore;
   final DateTime Function() _nowProvider;
   final int Function() _cidYearProvider;
 
@@ -148,6 +158,8 @@ class MyIdService {
   /// (优先账户0,未命中查子账户,全未命中回退账户0=未注册),再取其链上 finalized
   /// 身份闭环:CID Active、CID↔账户双向绑定、`VotingIdentityByCid`(+`Candidate` 才竞选)。
   Future<MyIdState> getState() async {
+    // 进身份页先续跑未完成的换绑本地重建(死契约:换绑后凭证必自动更换到新账户)。
+    await resumePendingIdentityRebind();
     ResolvedIdentity? resolved;
     try {
       resolved = await _identityResolver.resolve();
@@ -307,7 +319,47 @@ class MyIdService {
       oldAccountId: oldAccountId,
       newFromSs58Address: newAccount.ss58Address,
     );
+    // 链上换绑已 Finalized:先落续跑意图,再把设备子钥/会话/通讯录**自动更换到新账户**
+    // (死契约 [[cid-rebind-subkeys-must-auto-migrate]])。全部成功才清意图;中途失败则
+    // 意图留存,下次进身份页 [getState] 自动续跑,直到成功——「不允许不更换或失败」。
+    await _rebindPendingStore.write(
+      oldAccountId: oldAccountId,
+      newAccountId: newAccount.accountId,
+    );
+    await _runRebindMigration(oldAccountId, newAccount.accountId);
+  }
+
+  /// 执行换绑后的本地重建(全步幂等,重复调用安全):
+  /// 1. 设备子钥归属切新账户(新账户云会话登录的**硬前置**,须最先且必成功);
+  /// 2. 失效身份缓存,`resolve` / `ensureSession` 转指新账户;
+  /// 3. 通讯录迁到新账户并用新账户 child 密钥重加密上云(上云失败落待办,不阻断)。
+  ///
+  /// 全部成功后清除续跑意图。任一步抛出则意图留存,交 [resumePendingIdentityRebind] 续跑。
+  Future<void> _runRebindMigration(
+    String oldAccountId,
+    String newAccountId,
+  ) async {
+    await _walletManager.rebindDeviceSubkeyToAccountId(newAccountId);
     WalletManager.notifyIdentityBindingChanged();
+    await _contactService.migrateContactsToNewIdentity(
+      oldAccountId,
+      newAccountId,
+    );
+    await _rebindPendingStore.clear();
+  }
+
+  /// 续跑上次未完成的 CID 换绑本地重建(死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
+  ///
+  /// 换绑链上已 Finalized 但本地重建曾中断(网络抖动等)时,进身份页即自动补齐。全步幂等,
+  /// 无进行中换绑则立即返回;仍失败则保留意图下次再续,绝不阻断身份页展示。
+  Future<void> resumePendingIdentityRebind() async {
+    final pending = await _rebindPendingStore.read();
+    if (pending == null) return;
+    try {
+      await _runRebindMigration(pending.oldAccountId, pending.newAccountId);
+    } catch (e) {
+      AppLog.d('identity rebind resume deferred: $e');
+    }
   }
 
   /// 列出可作换绑目标的本地账户(当前身份账户以外的全部账户)。

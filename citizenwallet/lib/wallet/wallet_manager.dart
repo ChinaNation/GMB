@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter/foundation.dart' show kReleaseMode, visibleForTesting;
-import 'package:flutter/services.dart' show PlatformException;
 import 'package:isar/isar.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
@@ -12,7 +10,9 @@ import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenwallet/chain/chain_constants.dart';
 import 'package:citizenwallet/isar/wallet_isar.dart';
+import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/security/secure_storage.dart';
+import 'package:citizenwallet/signer/qr_signer.dart';
 import 'package:citizenwallet/wallet/secret_cipher.dart';
 import 'package:citizenwallet/wallet/wallet_secure_keys.dart';
 
@@ -81,16 +81,28 @@ class WalletCreationResult {
 
 class WalletSignResult {
   const WalletSignResult({
-    required this.accountId,
     required this.signerPublicKey,
     required this.alg,
     required this.signatureHex,
   });
 
-  final String accountId;
   final String signerPublicKey;
   final String alg;
   final String signatureHex;
+}
+
+/// 登录 QR 签名原文中的一次性请求边界。
+///
+/// 登录页面保持任务前 UI 不变；一次性占位与墙钟校验下沉到唯一的 UTF-8
+/// 签名入口，确保生物识别和私钥调用前已经拒绝过期或重复请求。
+class _LoginSignatureClaim {
+  const _LoginSignatureClaim({
+    required this.requestId,
+    required this.expiresAt,
+  });
+
+  final String requestId;
+  final int expiresAt;
 }
 
 class WalletAuthException implements Exception {
@@ -132,8 +144,7 @@ class WalletManager {
   // ── 查询 ──
   Future<List<Wallet>> getWallets() async {
     final isar = await WalletIsar.instance.db();
-    final rows =
-        await isar.walletEntitys.where().sortBySortOrder().findAll();
+    final rows = await isar.walletEntitys.where().sortBySortOrder().findAll();
     return rows.map(_toWallet).toList();
   }
 
@@ -170,15 +181,19 @@ class WalletManager {
   /// [wordCount] 助记词个数，12（默认）或 24。助记词同时一次性返回展示。
   Future<WalletCreationResult> createWallet({int wordCount = 12}) async {
     assert(wordCount == 12 || wordCount == 24);
-    final strength = wordCount == 24 ? 256 : 128;
-    final mnemonic = bip39.generateMnemonic(strength: strength);
+    final mnemonic = bip39m.Mnemonic.generate(
+      bip39m.Language.english,
+      length: wordCount == 24
+          ? bip39m.MnemonicLength.words24
+          : bip39m.MnemonicLength.words12,
+    ).sentence;
     return _establishWallet(mnemonic, 'created');
   }
 
   /// 导入钱包：校验助记词 → 派生账户0（`//0`）→ 存 master 种子 + 助记词。
   Future<WalletCreationResult> importWallet(String mnemonic) async {
     final trimmed = mnemonic.trim();
-    if (!bip39.validateMnemonic(trimmed)) {
+    if (!_isValidMnemonic(trimmed)) {
       throw Exception('助记词无效，请检查拼写和空格');
     }
     return _establishWallet(trimmed, 'imported');
@@ -196,7 +211,6 @@ class WalletManager {
       // 账户0 = //0（无 bare 根）。其 accountId 即 master 指纹。
       final acct0 = _deriveAccount(seed, 0);
       final masterId = acct0.accountId;
-      await _checkDuplicateMaster(masterId);
 
       final result = await _appendWalletAtomic(
         masterId: masterId,
@@ -239,46 +253,44 @@ class WalletManager {
     if (wallet == null) {
       throw const WalletAuthException('未找到钱包');
     }
-    final accounts = await isar.accountEntitys
-        .filter()
-        .masterIdEqualTo(masterId)
-        .findAll();
-    final existing = accounts.map((e) => e.accountIndex).toSet();
-
-    final int targetIndex;
-    if (index == null) {
-      final maxIndex = existing.fold<int>(-1, (m, i) => i > m ? i : m);
-      targetIndex = maxIndex + 1;
-      if (targetIndex > maxAccountIndex) {
-        throw const WalletAuthException('已达账户序号上限 $maxAccountIndex');
-      }
-    } else {
-      // 账户0 是创建时主账户(masterId 锚点),指定序号仅允许 1..maxAccountIndex。
-      if (index < 1 || index > maxAccountIndex) {
-        throw const WalletAuthException('账户序号需在 1–$maxAccountIndex');
-      }
-      if (existing.contains(index)) {
-        throw WalletAuthException('账户$index 已存在');
-      }
-      targetIndex = index;
-    }
-
     final seedHex = await _readMasterSeedRaw(masterId);
     if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
     }
     final seed = _hexToBytes(seedHex);
     try {
-      final derived = _deriveAccount(seed, targetIndex);
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final entity = AccountEntity()
-        ..masterId = masterId
-        ..accountIndex = targetIndex
-        ..accountId = derived.accountId
-        ..ss58Address = derived.ss58Address
-        ..accountName = '账户$targetIndex'
-        ..createdAtMillis = now;
+      late AccountEntity entity;
       await isar.writeTxn(() async {
+        final accounts = await isar.accountEntitys
+            .filter()
+            .masterIdEqualTo(masterId)
+            .findAll();
+        final existing = accounts.map((e) => e.accountIndex).toSet();
+        final int targetIndex;
+        if (index == null) {
+          final maxIndex = existing.fold<int>(-1, (m, i) => i > m ? i : m);
+          targetIndex = maxIndex + 1;
+          if (targetIndex > maxAccountIndex) {
+            throw const WalletAuthException('已达账户序号上限 $maxAccountIndex');
+          }
+        } else {
+          if (index < 1 || index > maxAccountIndex) {
+            throw const WalletAuthException('账户序号需在 1–$maxAccountIndex');
+          }
+          if (existing.contains(index)) {
+            throw WalletAuthException('账户$index 已存在');
+          }
+          targetIndex = index;
+        }
+
+        final derived = _deriveAccount(seed, targetIndex);
+        entity = AccountEntity()
+          ..masterId = masterId
+          ..accountIndex = targetIndex
+          ..accountId = derived.accountId
+          ..ss58Address = derived.ss58Address
+          ..accountName = '账户$targetIndex'
+          ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
         await isar.accountEntitys.put(entity);
       });
       return _toAccount(entity);
@@ -296,15 +308,24 @@ class WalletManager {
 
   /// 无认证的删钱包实现（供 deleteWallet 与 deleteAccount 级联复用，避免二次弹窗）。
   ///
-  /// 先删 Isar 行(钱包存在性的事实来源),提交成功后再清 SecureStorage,
-  /// 避免"密钥已清、钱包行还在"的僵尸钱包。
+  /// 先删除并回读确认根机密，再删事实行；任何 SecureStorage 异常都显式失败。
   Future<void> _deleteWalletInternal(String masterId) async {
+    await _deleteMasterSeed(masterId);
+    await _deleteMasterMnemonic(masterId);
+    if (await _secureStorage.read(
+              key: WalletSecureKeys.masterSeedHexV1(masterId),
+            ) !=
+            null ||
+        await _secureStorage.read(
+              key: WalletSecureKeys.masterMnemonicV1(masterId),
+            ) !=
+            null) {
+      throw const WalletAuthException('钱包机密未能彻底删除，请重试');
+    }
+
     final isar = await WalletIsar.instance.db();
     await isar.writeTxn(() async {
-      await isar.accountEntitys
-          .filter()
-          .masterIdEqualTo(masterId)
-          .deleteAll();
+      await isar.accountEntitys.filter().masterIdEqualTo(masterId).deleteAll();
       final wallet = await isar.walletEntitys
           .filter()
           .masterIdEqualTo(masterId)
@@ -313,14 +334,10 @@ class WalletManager {
         await isar.walletEntitys.delete(wallet.id);
       }
     });
-    // 尽力而为:Isar 行(钱包存在性事实来源)已删,SecureStorage 清理不应因单点
-    // 失败让整体判为"删除失败"(那样 UI 会误导用户重试一个已不存在的钱包)。
-    try {
-      await _deleteMasterSeed(masterId);
-    } catch (_) {}
-    try {
-      await _deleteMasterMnemonic(masterId);
-    } catch (_) {}
+    final walletCount = await isar.walletEntitys.count();
+    if (walletCount == 0) {
+      await SecretCipher.deleteAekIfNoWalletSecrets();
+    }
   }
 
   /// 删除单个账户；若删空该钱包全部账户则连带删钱包与密钥。删前强制认证。
@@ -330,33 +347,29 @@ class WalletManager {
   Future<void> deleteAccount(String accountId) async {
     await _authGate();
     final isar = await WalletIsar.instance.db();
-    final acct = await isar.accountEntitys
-        .filter()
-        .accountIdEqualTo(accountId)
-        .findFirst();
-    if (acct == null) {
-      throw Exception('未找到账户');
-    }
-    final masterId = acct.masterId;
-    if (acct.accountIndex == 0) {
-      final siblings = await isar.accountEntitys
+    late String masterId;
+    var deleteWallet = false;
+    await isar.writeTxn(() async {
+      // 查找、计数和删除必须处于同一事务，避免并发删账户时留下无账户钱包。
+      final acct = await isar.accountEntitys
           .filter()
-          .masterIdEqualTo(masterId)
-          .count();
-      if (siblings > 1) {
+          .accountIdEqualTo(accountId)
+          .findFirst();
+      if (acct == null) {
+        throw Exception('未找到账户');
+      }
+      masterId = acct.masterId;
+      final accountCount =
+          await isar.accountEntitys.filter().masterIdEqualTo(masterId).count();
+      if (acct.accountIndex == 0 && accountCount > 1) {
         throw Exception('账户0是钱包锚点,请删除整个钱包');
       }
-    }
-    // 删除 + 剩余计数并入同一写事务,消除计数误读的竞态窗口。
-    late int remaining;
-    await isar.writeTxn(() async {
-      await isar.accountEntitys.delete(acct.id);
-      remaining = await isar.accountEntitys
-          .filter()
-          .masterIdEqualTo(masterId)
-          .count();
+      deleteWallet = accountCount == 1;
+      if (!deleteWallet) {
+        await isar.accountEntitys.delete(acct.id);
+      }
     });
-    if (remaining == 0) {
+    if (deleteWallet) {
       await _deleteWalletInternal(masterId);
     }
   }
@@ -376,10 +389,8 @@ class WalletManager {
       throw Exception('钱包名称最多$maxWalletNameLength个字');
     }
     final isar = await WalletIsar.instance.db();
-    final row = await isar.walletEntitys
-        .filter()
-        .masterIdEqualTo(masterId)
-        .findFirst();
+    final row =
+        await isar.walletEntitys.filter().masterIdEqualTo(masterId).findFirst();
     if (row == null) {
       throw Exception('未找到钱包');
     }
@@ -431,34 +442,65 @@ class WalletManager {
     });
   }
 
-  // ── 签名（按账户；读种子现场派生，用后即弃）──
-  // 注:polkadart_keyring 0.7.0 的 KeyPair.lock() 内部用 fromEd25519Bytes(空)
-  // 会抛 ArgumentError,该版本不可用于清私钥;派生密钥对随作用域结束由 GC 回收。
+  // ── 签名（按账户；读种子现场派生，签名完成立即清零可控密钥缓冲）──
   Future<Uint8List> signForAccount(
     String accountId,
     Uint8List payload,
-  ) async {
-    final pair = await _loadAccountKeyPair(accountId);
-    return Uint8List.fromList(pair.sign(payload));
-  }
+  ) =>
+      _signWithAccount(accountId, payload);
 
   Future<WalletSignResult> signUtf8ForAccount(
     String accountId,
     String message,
   ) async {
-    final pair = await _loadAccountKeyPair(accountId);
-    final signature = pair.sign(Uint8List.fromList(utf8.encode(message)));
-    return WalletSignResult(
+    final loginClaim = _parseLoginSignatureClaim(
       accountId: accountId,
-      signerPublicKey: accountId,
-      alg: 'sr25519',
-      signatureHex: '0x${_toHex(signature.toList(growable: false))}',
+      message: message,
     );
+    if (loginClaim != null) {
+      final claimed = await SignedQrRequestStore.claim(
+        requestId: loginClaim.requestId,
+        expiresAt: loginClaim.expiresAt,
+      );
+      if (!claimed) {
+        throw const WalletAuthException('该登录请求已处理或已过期，请重新扫描');
+      }
+    }
+
+    final messageBytes = Uint8List.fromList(utf8.encode(message));
+    try {
+      final signature = await _signWithAccount(
+        accountId,
+        messageBytes,
+        expiresAt: loginClaim?.expiresAt,
+      );
+      return WalletSignResult(
+        signerPublicKey: accountId,
+        alg: 'sr25519',
+        signatureHex: '0x${_toHex(signature.toList(growable: false))}',
+      );
+    } catch (_) {
+      if (loginClaim != null) {
+        await SignedQrRequestStore.release(loginClaim.requestId);
+      }
+      rethrow;
+    } finally {
+      messageBytes.fillRange(0, messageBytes.length, 0);
+    }
   }
 
-  /// 定位账户 → 读 master 种子（触发生物识别）→ 按 accountIndex 派生 → 校验公钥。
-  Future<KeyPair> _loadAccountKeyPair(String accountId) async {
+  /// 定位账户 → 读种子 → 派生 → 校验公钥 → 签名；所有可控私钥缓冲在本方法内清零。
+  Future<Uint8List> _signWithAccount(
+    String accountId,
+    Uint8List payload, {
+    int? expiresAt,
+  }) async {
     await _authGate();
+    // 生物识别可能跨越到期边界；在读取根机密前按当前墙钟再次校验。
+    if (expiresAt != null &&
+        expiresAt <= DateTime.now().millisecondsSinceEpoch ~/ 1000) {
+      throw const WalletAuthException('登录请求已过期，请重新扫描');
+    }
     final isar = await WalletIsar.instance.db();
     final acct = await isar.accountEntitys
         .filter()
@@ -475,21 +517,58 @@ class WalletManager {
     try {
       final child = _childMiniSecret(seed, acct.accountIndex);
       final childBytes = Uint8List.fromList(child);
+      final miniSecret = sr.MiniSecretKey.fromRawKey(childBytes);
+      final secretKey = miniSecret.expandEd25519();
       try {
-        final pair = Keyring.sr25519.fromSeed(childBytes);
-        pair.ss58Format = _ss58Prefix;
-        final localAccountId =
-            _accountIdFromBytes(pair.bytes().toList(growable: false));
+        final localAccountId = _accountIdFromBytes(secretKey.public().encode());
         if (localAccountId != acct.accountId) {
           throw const WalletAuthException('本地签名密钥与账户不一致，请重新导入钱包');
         }
-        return pair;
+        return sr.Sr25519.sign(secretKey, payload).encode();
       } finally {
         childBytes.fillRange(0, childBytes.length, 0);
+        _zeroList(miniSecret.key);
+        _zeroSecretKey(secretKey);
       }
     } finally {
       _zeroList(seed);
     }
+  }
+
+  /// 识别登录 QR 的规范签名原文；普通非 QR 文本签名保持原有行为。
+  ///
+  /// 格式由 `buildSignatureMessage` 唯一生成：
+  /// `QR_V1|2|<request_id>|onchina|<expires_at>|<account_id_without_0x>`。
+  _LoginSignatureClaim? _parseLoginSignatureClaim({
+    required String accountId,
+    required String message,
+  }) {
+    if (!message.startsWith('${QrProtocols.v1}|')) {
+      return null;
+    }
+    if (!_accountIdPattern.hasMatch(accountId)) {
+      throw const WalletAuthException('登录签名账户格式无效');
+    }
+    final parts = message.split('|');
+    final expiresAt = parts.length == 6 ? int.tryParse(parts[4]) : null;
+    final valid = parts.length == 6 &&
+        parts[0] == QrProtocols.v1 &&
+        parts[1] == QrKind.signResponse.code.toString() &&
+        QrSigner.isValidRequestId(parts[2]) &&
+        parts[3] == 'onchina' &&
+        expiresAt != null &&
+        parts[5] == accountId.substring(2);
+    if (!valid) {
+      throw const WalletAuthException('登录签名请求格式无效');
+    }
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (expiresAt <= now) {
+      throw const WalletAuthException('登录请求已过期，请重新扫描');
+    }
+    return _LoginSignatureClaim(
+      requestId: parts[2],
+      expiresAt: expiresAt,
+    );
   }
 
   /// 查看钱包助记词（钱包级根备份；触发生物识别）。找不到即抛(与私钥导出同口径,
@@ -567,32 +646,48 @@ class WalletManager {
     }
     var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
     late List<int> childBytes;
-    for (final j in junctions) {
-      if (!j.isHard) {
-        throw StateError('仅支持硬派生 //index');
+    try {
+      for (final j in junctions) {
+        if (!j.isHard) {
+          throw StateError('仅支持硬派生 //index');
+        }
+        final cc = j.junctionId.sublist(0, 32);
+        final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
+        childBytes = derived.$1.encode();
+        _zeroSecretKey(rootSk);
+        rootSk = derived.$1.expandEd25519();
+        _zeroList(derived.$1.key);
+        _zeroList(cc);
       }
-      final cc = j.junctionId.sublist(0, 32);
-      final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
-      childBytes = derived.$1.encode();
-      rootSk = derived.$1.expandEd25519();
+      return childBytes;
+    } finally {
+      _zeroSecretKey(rootSk);
     }
-    return childBytes;
   }
 
   // ── Secure Storage（按 master 存种子 + 助记词，均 AES-256-GCM 密文）──
   Future<void> _writeMasterSeed(String masterId, String seedHex) async {
-    final encrypted = await SecretCipher.encrypt(seedHex);
+    final storageKey = WalletSecureKeys.masterSeedHexV1(masterId);
+    final encrypted = await SecretCipher.encrypt(
+      seedHex,
+      associatedData: storageKey,
+    );
     await _secureStorage.write(
-        key: WalletSecureKeys.masterSeedHexV1(masterId), value: encrypted);
+      key: storageKey,
+      value: encrypted,
+    );
   }
 
   Future<String?> _readMasterSeedRaw(String masterId) async {
-    final stored = await _secureStorage.read(
-        key: WalletSecureKeys.masterSeedHexV1(masterId));
+    final storageKey = WalletSecureKeys.masterSeedHexV1(masterId);
+    final stored = await _secureStorage.read(key: storageKey);
     if (stored == null) return null;
     final String seedHex;
     try {
-      seedHex = await SecretCipher.decrypt(stored);
+      seedHex = await SecretCipher.decrypt(
+        stored,
+        associatedData: storageKey,
+      );
     } on FormatException {
       // 密文损坏或 AEK 丢失(不可解):与格式非法同口径,提示重导(助记词仍可恢复)。
       throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
@@ -600,24 +695,53 @@ class WalletManager {
     if (!_seedHexPattern.hasMatch(seedHex)) {
       throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
     }
+    final seed = _hexToBytes(seedHex);
+    try {
+      if (_deriveAccount(seed, 0).accountId != masterId) {
+        throw const WalletAuthException('钱包密钥归属异常，请重新导入钱包');
+      }
+    } finally {
+      _zeroList(seed);
+    }
     return seedHex;
   }
 
-  Future<void> _deleteMasterSeed(String masterId) => _secureStorage.delete(
-      key: WalletSecureKeys.masterSeedHexV1(masterId));
+  Future<void> _deleteMasterSeed(String masterId) =>
+      _secureStorage.delete(key: WalletSecureKeys.masterSeedHexV1(masterId));
 
   Future<void> _writeMasterMnemonic(String masterId, String mnemonic) async {
-    final encrypted = await SecretCipher.encrypt(mnemonic);
+    final storageKey = WalletSecureKeys.masterMnemonicV1(masterId);
+    final encrypted = await SecretCipher.encrypt(
+      mnemonic,
+      associatedData: storageKey,
+    );
     await _secureStorage.write(
-        key: WalletSecureKeys.masterMnemonicV1(masterId), value: encrypted);
+      key: storageKey,
+      value: encrypted,
+    );
   }
 
   Future<String?> _readMasterMnemonic(String masterId) async {
-    final stored = await _secureStorage.read(
-        key: WalletSecureKeys.masterMnemonicV1(masterId));
+    final storageKey = WalletSecureKeys.masterMnemonicV1(masterId);
+    final stored = await _secureStorage.read(key: storageKey);
     if (stored == null) return null;
     try {
-      return await SecretCipher.decrypt(stored);
+      final mnemonic = await SecretCipher.decrypt(
+        stored,
+        associatedData: storageKey,
+      );
+      if (!_isValidMnemonic(mnemonic)) {
+        throw const WalletAuthException('钱包助记词数据异常，请重新导入钱包');
+      }
+      final seed = await _mnemonicToSeed(mnemonic);
+      try {
+        if (_deriveAccount(seed, 0).accountId != masterId) {
+          throw const WalletAuthException('钱包助记词归属异常，请重新导入钱包');
+        }
+      } finally {
+        _zeroList(seed);
+      }
+      return mnemonic;
     } on FormatException {
       throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
     }
@@ -633,8 +757,10 @@ class WalletManager {
     final List<Object?> available;
     try {
       available = await _localAuth.getAvailableBiometrics();
-    } on PlatformException catch (e) {
-      throw WalletAuthException('认证服务异常：${e.message}，无法访问钱包');
+    } on LocalAuthException catch (e) {
+      throw WalletAuthException(
+        '认证服务异常：${e.description ?? e.code.name}，无法访问钱包',
+      );
     }
     if (available.isEmpty) {
       throw const WalletAuthException(
@@ -644,21 +770,22 @@ class WalletManager {
     try {
       final ok = await _localAuth.authenticate(
         localizedReason: '请用生物识别验证身份以访问钱包密钥',
-        options: const AuthenticationOptions(
-          biometricOnly: true,
-          stickyAuth: true,
-          useErrorDialogs: true,
-        ),
+        biometricOnly: true,
+        persistAcrossBackgrounding: true,
+        sensitiveTransaction: true,
       );
       if (!ok) {
         throw const WalletAuthException('未通过生物识别验证');
       }
-    } on PlatformException catch (e) {
-      final code = e.code;
-      if (code == 'NotAvailable' || code == 'NotEnrolled') {
+    } on LocalAuthException catch (e) {
+      if (e.code == LocalAuthExceptionCode.noBiometricHardware ||
+          e.code == LocalAuthExceptionCode.noBiometricsEnrolled ||
+          e.code == LocalAuthExceptionCode.noCredentialsSet) {
         throw const WalletAuthException('设备未录入生物识别，无法使用冷钱包');
       }
-      throw WalletAuthException('认证服务异常：${e.message}，请稍后重试');
+      throw WalletAuthException(
+        '认证服务异常：${e.description ?? e.code.name}，请稍后重试',
+      );
     }
   }
 
@@ -674,6 +801,13 @@ class WalletManager {
     late int walletIndex;
     late int sortOrder;
     await isar.writeTxn(() async {
+      final duplicate = await isar.walletEntitys
+          .filter()
+          .masterIdEqualTo(masterId)
+          .findFirst();
+      if (duplicate != null) {
+        throw Exception('该钱包已存在（${duplicate.walletName}），无需重复导入');
+      }
       final wallets =
           await isar.walletEntitys.where().sortByWalletIndex().findAll();
       final used = wallets.map((e) => e.walletIndex).toSet();
@@ -725,18 +859,23 @@ class WalletManager {
     );
   }
 
-  Future<void> _checkDuplicateMaster(String masterId) async {
-    final isar = await WalletIsar.instance.db();
-    final exists =
-        await isar.walletEntitys.filter().masterIdEqualTo(masterId).findFirst();
-    if (exists != null) {
-      throw Exception('该钱包已存在（${exists.walletName}），无需重复导入');
-    }
-  }
-
   static void _zeroList(List<int> bytes) {
     for (var i = 0; i < bytes.length; i++) {
       bytes[i] = 0;
+    }
+  }
+
+  static void _zeroSecretKey(sr.SecretKey secretKey) {
+    _zeroList(secretKey.key);
+    _zeroList(secretKey.nonce);
+  }
+
+  static bool _isValidMnemonic(String mnemonic) {
+    try {
+      bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -753,7 +892,8 @@ class WalletManager {
 
   String _accountIdFromBytes(List<int> bytes) {
     if (bytes.length != 32) {
-      throw ArgumentError.value(bytes.length, 'bytes.length', '账户 ID 必须是 32 字节');
+      throw ArgumentError.value(
+          bytes.length, 'bytes.length', '账户 ID 必须是 32 字节');
     }
     final text = '0x${_toHex(bytes)}';
     if (!_accountIdPattern.hasMatch(text)) {

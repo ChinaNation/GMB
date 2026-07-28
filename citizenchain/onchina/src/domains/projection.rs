@@ -21,7 +21,7 @@ use crate::institution::subjects::model::LegalRepresentative;
 use crate::institution::subjects::Institution;
 
 use primitives::cid::code::is_private_legal_code;
-use primitives::cid::number::parse_cid_number_parts;
+use primitives::cid::number::{cid_scope_codes, parse_cid_number_parts};
 
 /// 本节点作用域(省码 + 市码)。公民按链上 residence 归属市;机构按 CID 市码归属市。
 #[derive(Debug, Clone)]
@@ -259,20 +259,16 @@ pub(crate) fn merge_institution_record(
 
 // ───────────────────────── 链读映射 + writer(接线层) ─────────────────────────
 
+/// 从机构 CID 唯一解析 (province_code, city_code)。复用 primitives 权威单源
+/// `cid_scope_codes`;人主体 CID(去地域化、R5 不载省市)传入即 fail-closed 返回 Err。
+/// 本函数仅应收机构 CID(节点自身机构 / 公私权机构投影)。
 fn r5_province_city(cid_number: &str) -> Result<(String, String), String> {
-    let parts =
-        parse_cid_number_parts(cid_number).map_err(|e| format!("cid {cid_number} invalid: {e}"))?;
-    let province = parts
-        .r5
-        .get(0..2)
-        .ok_or_else(|| format!("cid {cid_number} missing province code"))?
-        .to_string();
-    let city = parts
-        .r5
-        .get(2..5)
-        .ok_or_else(|| format!("cid {cid_number} missing city code"))?
-        .to_string();
-    Ok((province, city))
+    let (province, city) = cid_scope_codes(cid_number.as_bytes())
+        .map_err(|e| format!("cid {cid_number} scope invalid: {e}"))?;
+    Ok((
+        String::from_utf8_lossy(&province).into_owned(),
+        String::from_utf8_lossy(&city).into_owned(),
+    ))
 }
 
 /// 解析本节点作用域:`Ok(None)` = 未绑定机构;`Ok(Some((is_federal, scope)))`。
@@ -561,6 +557,21 @@ mod tests {
         let mut chain = chain_voting_citizen();
         chain.province_code = "LN".to_string();
         assert!(merge_citizen_record(&chain, None, &scope(), now()).is_none());
+    }
+
+    #[test]
+    fn r5_province_city_reads_institution_scope() {
+        // 机构 CID:R5 = 省2 + 市3。
+        assert_eq!(
+            r5_province_city("GZ018-SFGYR-201206100-2026").expect("institution scope"),
+            ("GZ".to_string(), "018".to_string())
+        );
+    }
+
+    #[test]
+    fn r5_province_city_rejects_person_cid() {
+        // 人主体 CN 号去地域化、R5 不载省市 → fail-closed,不把号段误读成区划码。
+        assert!(r5_province_city("CN220-CTZN2-198805200-2026").is_err());
     }
 
     #[test]

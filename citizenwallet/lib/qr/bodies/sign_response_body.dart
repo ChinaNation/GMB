@@ -30,6 +30,7 @@ class SignResponseBody implements QrBody {
       };
 
   static SignResponseBody fromJson(Map<String, dynamic> data) {
+    requireExactKeys(data, const {'u', 's'}, 'sign_response.b');
     final signerPublicKey = data['u'];
     final signature = data['s'];
     if (signerPublicKey is! String ||
@@ -72,12 +73,21 @@ String _b64NoPad(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
 Uint8List _b64ToBytes(String input, String field) {
+  if (input.isEmpty ||
+      input.contains('=') ||
+      !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(input)) {
+    throw FormatException('签名响应 $field 必须为无填充 base64url');
+  }
   final normalized =
       input.padRight(input.length + ((4 - input.length % 4) % 4), '=');
   try {
-    return Uint8List.fromList(base64Url.decode(normalized));
+    final bytes = Uint8List.fromList(base64Url.decode(normalized));
+    if (_b64NoPad(bytes) != input) {
+      throw const FormatException();
+    }
+    return bytes;
   } catch (_) {
-    throw FormatException('签名响应 $field 必须为 base64url');
+    throw FormatException('签名响应 $field 必须为无填充 base64url');
   }
 }
 

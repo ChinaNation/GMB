@@ -23,12 +23,20 @@ class SecretCipher {
 
   /// 缓存的 AEK,避免每次读写都访问 SecureStorage。
   static Uint8List? _cachedAek;
+  static Future<Uint8List>? _aekInitialization;
+  static final RegExp _aekHexPattern = RegExp(r'^[0-9a-f]{64}$');
+  static final RegExp _walletSecretKeyPattern =
+      RegExp(r'^wallet\.master\.0x[0-9a-f]{64}\.(seed_hex|mnemonic)\.v1$');
 
   /// 用 AEK 加密明文机密,返回 Base64 密文。
-  static Future<String> encrypt(String plaintextSecret) async {
-    final key = await _ensureAek();
+  static Future<String> encrypt(
+    String plaintextSecret, {
+    required String associatedData,
+  }) async {
+    final key = await _loadAek(allowCreate: true);
     final iv = _randomBytes(_ivLen);
     final plaintext = Uint8List.fromList(utf8.encode(plaintextSecret));
+    final aad = Uint8List.fromList(utf8.encode(associatedData));
 
     try {
       final cipher = GCMBlockCipher(AESEngine())
@@ -38,7 +46,7 @@ class SecretCipher {
             KeyParameter(key),
             _tagLen * 8,
             iv,
-            Uint8List(0),
+            aad,
           ),
         );
 
@@ -59,15 +67,21 @@ class SecretCipher {
   }
 
   /// 用 AEK 解密机密。数据损坏或 AEK 不匹配时抛出 [FormatException]。
-  static Future<String> decrypt(String cipherBase64) async {
+  static Future<String> decrypt(
+    String cipherBase64, {
+    required String associatedData,
+  }) async {
     final data = base64Decode(cipherBase64);
     if (data.length < _ivLen + _tagLen + 1) {
       throw const FormatException('机密密文数据损坏');
     }
 
-    final key = await _ensureAek();
+    // 解密路径绝不创建 AEK。AEK 缺失时必须显式失败，不能生成新密钥掩盖损坏。
+    final key = await _loadAek(allowCreate: false);
     final iv = Uint8List.sublistView(data, 0, _ivLen);
     final ciphertextAndTag = Uint8List.sublistView(data, _ivLen);
+    final aad = Uint8List.fromList(utf8.encode(associatedData));
+    Uint8List? output;
 
     try {
       final cipher = GCMBlockCipher(AESEngine())
@@ -77,11 +91,11 @@ class SecretCipher {
             KeyParameter(key),
             _tagLen * 8,
             iv,
-            Uint8List(0),
+            aad,
           ),
         );
 
-      final output = Uint8List(cipher.getOutputSize(ciphertextAndTag.length));
+      output = Uint8List(cipher.getOutputSize(ciphertextAndTag.length));
       final len = cipher.processBytes(
         ciphertextAndTag,
         0,
@@ -94,39 +108,82 @@ class SecretCipher {
       return utf8.decode(output.sublist(0, totalLen));
     } on InvalidCipherTextException {
       throw const FormatException('机密密文已损坏或密钥不匹配');
+    } finally {
+      output?.fillRange(0, output.length, 0);
     }
   }
 
-  /// 获取或生成 AEK。
-  ///
-  /// 优先从内存缓存读取;未命中则从 SecureStorage 读取;
-  /// 首次使用时生成随机 AEK 并尝试持久化。
-  /// 若 SecureStorage 写入失败,仍使用内存中的 AEK 保证当前会话可用,
-  /// 下次启动会重新生成(旧密文不可解密,但不会导致崩溃)。
-  static Future<Uint8List> _ensureAek() async {
+  /// 串行读取 AEK；仅加密路径允许在“存储明确无 AEK 且无钱包机密”时创建。
+  static Future<Uint8List> _loadAek({required bool allowCreate}) async {
     final cached = _cachedAek;
     if (cached != null) return cached;
 
-    try {
-      final stored = await appSecureStorage.read(key: _aekKey);
-      if (stored != null && stored.length == _keyLen * 2) {
-        final key = _hexToBytes(stored);
-        _cachedAek = key;
-        return key;
-      }
-    } catch (_) {
-      // SecureStorage 读取失败,继续生成新 AEK
+    final inflight = _aekInitialization;
+    if (inflight != null) {
+      return inflight;
     }
 
-    // 首次使用或读取失败,生成随机 AEK
+    final task = _loadAekAtomic(allowCreate: allowCreate);
+    _aekInitialization = task;
+    try {
+      return await task;
+    } finally {
+      if (identical(_aekInitialization, task)) {
+        _aekInitialization = null;
+      }
+    }
+  }
+
+  static Future<Uint8List> _loadAekAtomic({
+    required bool allowCreate,
+  }) async {
+    final stored = await appSecureStorage.read(key: _aekKey);
+    if (stored != null) {
+      if (!_aekHexPattern.hasMatch(stored)) {
+        throw const FormatException('应用加密密钥格式异常');
+      }
+      final key = _hexToBytes(stored);
+      _cachedAek = key;
+      return key;
+    }
+
+    if (!allowCreate) {
+      throw const FormatException('应用加密密钥不存在');
+    }
+
+    // 二次读取全部键，确认没有任何既有钱包密文；否则 AEK 丢失，禁止覆盖事故现场。
+    final all = await appSecureStorage.readAll();
+    if (all.keys.any(_walletSecretKeyPattern.hasMatch)) {
+      throw const FormatException('检测到钱包密文但应用加密密钥不存在');
+    }
+
     final newKey = _randomBytes(_keyLen);
     try {
       await appSecureStorage.write(key: _aekKey, value: _toHex(newKey));
+      final persisted = await appSecureStorage.read(key: _aekKey);
+      if (persisted != _toHex(newKey)) {
+        throw const FormatException('应用加密密钥持久化校验失败');
+      }
+      _cachedAek = newKey;
+      return newKey;
     } catch (_) {
-      // 持久化失败,AEK 仅在当前会话有效
+      newKey.fillRange(0, newKey.length, 0);
+      rethrow;
     }
-    _cachedAek = newKey;
-    return newKey;
+  }
+
+  /// 最后一只钱包删除后移除 AEK。只有确认不存在任何钱包密文时才允许删除。
+  static Future<void> deleteAekIfNoWalletSecrets() async {
+    final all = await appSecureStorage.readAll();
+    if (all.keys.any(_walletSecretKeyPattern.hasMatch)) {
+      throw StateError('仍存在钱包机密，不能删除应用加密密钥');
+    }
+    await appSecureStorage.delete(key: _aekKey);
+    final persisted = await appSecureStorage.read(key: _aekKey);
+    if (persisted != null) {
+      throw StateError('应用加密密钥删除校验失败');
+    }
+    clearCache();
   }
 
   /// 清除缓存(仅用于数据清空场景)。

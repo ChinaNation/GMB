@@ -1,17 +1,38 @@
-# citizenwallet
+# 公民钱包
 
-A new Flutter project.
+`CitizenWallet` 是公民体系的离线冷钱包。应用不声明网络权限，使用二维码接收
+`QR_V1` 请求并离线签名；SS58 地址仅用于展示和边界输入输出，签名与授权使用
+`AccountId`。
 
-## Getting Started
+## 安全边界
 
-This project is a starting point for a Flutter application.
+- 助记词和 32 字节主种子使用 AES-256-GCM 加密后保存到系统安全存储。
+- 应用级加密密钥 AEK 只有在确认 AEK 与任何钱包密文都不存在时才允许原子创建；
+  解密、读取或持久化异常一律失败关闭。
+- 每份密文使用对应的“钱包主键 + 机密类型”存储键作为 GCM 关联数据，禁止跨钱包、
+  跨类型替换。
+- 创建、导入、查看根机密、删除和签名前强制使用指纹或面容认证，不回退设备密码。
+- 最后一只钱包删除时，账户行、钱包行、助记词、主种子与 AEK 都必须删除并回读确认。
+- 普通扫码签名与登录扫码签名的请求 id 均在本地持久化原子占位；重复或已过期请求
+  在生物识别和私钥调用前拒绝，认证或签名失败会释放占位供用户重试。
 
-A few resources to get you started if this is your first Flutter project:
+## 密钥关系
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+`助记词 → 32B 主种子 → //index 硬派生 → 账户私钥 → sr25519 公钥 / AccountId
+→ SS58 展示地址`
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+应用内“设置 → 产品手册”提供对应的图形化说明。
+
+## 本地验证
+
+```bash
+flutter analyze
+flutter test
+flutter build apk --debug
+```
+
+QR registry 与仓库守卫在 `citizenchain` 工作区验证：
+
+```bash
+cargo test -p qr-protocol
+```

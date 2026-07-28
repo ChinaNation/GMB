@@ -363,7 +363,7 @@ fn self_occupy_cid_binds_account_and_stays_anonymous() {
 }
 
 #[test]
-fn self_occupy_cid_is_idempotent_for_same_account() {
+fn self_occupy_cid_is_idempotent_for_same_account_id() {
     new_test_ext().execute_with(|| {
         let cid_bytes = citizen_cid_number("self2");
         assert_ok!(CitizenIdentity::self_occupy_cid(
@@ -380,7 +380,7 @@ fn self_occupy_cid_is_idempotent_for_same_account() {
 }
 
 #[test]
-fn self_occupy_cid_rejects_second_cid_for_same_account() {
+fn self_occupy_cid_rejects_second_cid_for_same_account_id() {
     new_test_ext().execute_with(|| {
         assert_ok!(CitizenIdentity::self_occupy_cid(
             RuntimeOrigin::signed(1),
@@ -398,7 +398,7 @@ fn self_occupy_cid_rejects_second_cid_for_same_account() {
 }
 
 #[test]
-fn self_occupy_cid_rejects_cid_taken_by_another_account() {
+fn self_occupy_cid_rejects_cid_taken_by_another_account_id() {
     new_test_ext().execute_with(|| {
         let cid_bytes = citizen_cid_number("self4");
         assert_ok!(CitizenIdentity::self_occupy_cid(
@@ -481,7 +481,7 @@ fn self_occupy_cid_rejects_smtp_type() {
 }
 
 #[test]
-fn self_rebind_cid_account_moves_binding_to_new_account() {
+fn self_rebind_cid_account_id_moves_binding_to_new_account_id() {
     new_test_ext().execute_with(|| {
         let cid_bytes = citizen_cid_number("rebind1");
         assert_ok!(CitizenIdentity::self_occupy_cid(
@@ -489,7 +489,7 @@ fn self_rebind_cid_account_moves_binding_to_new_account() {
             cid(&cid_bytes),
         ));
         // 新账户 2 作 origin(证新账户受控),旧账户 1 授权签名。
-        assert_ok!(CitizenIdentity::self_rebind_cid_account(
+        assert_ok!(CitizenIdentity::self_rebind_cid_account_id(
             RuntimeOrigin::signed(2),
             cid(&cid_bytes),
             valid_signature(),
@@ -502,10 +502,10 @@ fn self_rebind_cid_account_moves_binding_to_new_account() {
 }
 
 #[test]
-fn self_rebind_cid_account_rejects_unoccupied_cid() {
+fn self_rebind_cid_account_id_rejects_unoccupied_cid() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            CitizenIdentity::self_rebind_cid_account(
+            CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&citizen_cid_number("rebind_none")),
                 valid_signature(),
@@ -516,7 +516,7 @@ fn self_rebind_cid_account_rejects_unoccupied_cid() {
 }
 
 #[test]
-fn self_rebind_cid_account_rejects_invalid_old_signature() {
+fn self_rebind_cid_account_id_rejects_invalid_old_signature() {
     new_test_ext().execute_with(|| {
         let cid_bytes = citizen_cid_number("rebind2");
         assert_ok!(CitizenIdentity::self_occupy_cid(
@@ -526,7 +526,7 @@ fn self_rebind_cid_account_rejects_invalid_old_signature() {
         let bad_sig: pallet::SignatureOf<Test> =
             b"nope".to_vec().try_into().expect("sig fits");
         assert_noop!(
-            CitizenIdentity::self_rebind_cid_account(
+            CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&cid_bytes),
                 bad_sig,
@@ -537,7 +537,7 @@ fn self_rebind_cid_account_rejects_invalid_old_signature() {
 }
 
 #[test]
-fn self_rebind_cid_account_rejects_new_account_bound_to_another_cid() {
+fn self_rebind_cid_account_id_rejects_new_account_bound_to_another_cid() {
     new_test_ext().execute_with(|| {
         // 账户 1 占 cidA;账户 2 占 cidB;把 cidA 换绑到已绑 cidB 的账户 2 → 拒。
         let cid_a = citizen_cid_number("rebind3a");
@@ -551,7 +551,7 @@ fn self_rebind_cid_account_rejects_new_account_bound_to_another_cid() {
             cid(&cid_b),
         ));
         assert_noop!(
-            CitizenIdentity::self_rebind_cid_account(
+            CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&cid_a),
                 valid_signature(),
@@ -562,7 +562,7 @@ fn self_rebind_cid_account_rejects_new_account_bound_to_another_cid() {
 }
 
 #[test]
-fn self_rebind_cid_account_rejects_civic_cid() {
+fn self_rebind_cid_account_id_rejects_civic_cid() {
     new_test_ext().execute_with(|| {
         // civic:占号 + 注册投票身份 → 有 VotingIdentity → 自助换绑拒(q1,走注册局)。
         occupy_tag("0001");
@@ -574,7 +574,7 @@ fn self_rebind_cid_account_rejects_civic_cid() {
             valid_signature(),
         ));
         assert_noop!(
-            CitizenIdentity::self_rebind_cid_account(
+            CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&citizen_cid_number("0001")),
                 valid_signature(),
@@ -585,11 +585,11 @@ fn self_rebind_cid_account_rejects_civic_cid() {
 }
 
 #[test]
-fn admin_rebind_cid_account_moves_binding_to_new_account() {
+fn admin_rebind_cid_account_id_moves_binding_to_new_account_id() {
     new_test_ext().execute_with(|| {
         // 注册局占号绑账户 1(匿名),用户丢钥后由注册局代换绑到账户 2。
         occupy_tag_as("adm1", 1);
-        assert_ok!(CitizenIdentity::admin_rebind_cid_account(
+        assert_ok!(CitizenIdentity::admin_rebind_cid_account_id(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
@@ -610,10 +610,10 @@ fn admin_rebind_cid_account_moves_binding_to_new_account() {
 }
 
 #[test]
-fn admin_rebind_cid_account_rejects_unoccupied_cid() {
+fn admin_rebind_cid_account_id_rejects_unoccupied_cid() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            CitizenIdentity::admin_rebind_cid_account(
+            CitizenIdentity::admin_rebind_cid_account_id(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
@@ -627,7 +627,7 @@ fn admin_rebind_cid_account_rejects_unoccupied_cid() {
 }
 
 #[test]
-fn admin_rebind_cid_account_rejects_civic_cid() {
+fn admin_rebind_cid_account_id_rejects_civic_cid() {
     new_test_ext().execute_with(|| {
         // civic(有投票身份)换绑只能经对应注册局的 civic 流程(留后期),此入口拒。
         occupy_tag("0001");
@@ -639,7 +639,7 @@ fn admin_rebind_cid_account_rejects_civic_cid() {
             valid_signature(),
         ));
         assert_noop!(
-            CitizenIdentity::admin_rebind_cid_account(
+            CitizenIdentity::admin_rebind_cid_account_id(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
@@ -653,11 +653,11 @@ fn admin_rebind_cid_account_rejects_civic_cid() {
 }
 
 #[test]
-fn admin_rebind_cid_account_rejects_unauthorized_registrar() {
+fn admin_rebind_cid_account_id_rejects_unauthorized_registrar() {
     new_test_ext().execute_with(|| {
         occupy_tag_as("adm3", 1);
         assert_noop!(
-            CitizenIdentity::admin_rebind_cid_account(
+            CitizenIdentity::admin_rebind_cid_account_id(
                 RuntimeOrigin::signed(999),
                 registrar_cid_number(),
                 registrar_role_code(),
@@ -671,12 +671,12 @@ fn admin_rebind_cid_account_rejects_unauthorized_registrar() {
 }
 
 #[test]
-fn admin_rebind_cid_account_rejects_invalid_new_signature() {
+fn admin_rebind_cid_account_id_rejects_invalid_new_signature() {
     new_test_ext().execute_with(|| {
         occupy_tag_as("adm2", 1);
         let bad_sig: pallet::SignatureOf<Test> = b"nope".to_vec().try_into().expect("sig fits");
         assert_noop!(
-            CitizenIdentity::admin_rebind_cid_account(
+            CitizenIdentity::admin_rebind_cid_account_id(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
@@ -690,13 +690,13 @@ fn admin_rebind_cid_account_rejects_invalid_new_signature() {
 }
 
 #[test]
-fn admin_rebind_cid_account_rejects_new_account_bound_to_another_cid() {
+fn admin_rebind_cid_account_id_rejects_new_account_bound_to_another_cid() {
     new_test_ext().execute_with(|| {
         // adm4a 绑账户 1、adm4b 绑账户 2;把 adm4a 换绑到已绑 adm4b 的账户 2 → 拒。
         occupy_tag_as("adm4a", 1);
         occupy_tag_as("adm4b", 2);
         assert_noop!(
-            CitizenIdentity::admin_rebind_cid_account(
+            CitizenIdentity::admin_rebind_cid_account_id(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
@@ -1526,7 +1526,7 @@ fn occupy_cid_accepts_resident_natp_type() {
 }
 
 #[test]
-fn occupy_cid_is_idempotent_for_same_registrar_and_account() {
+fn occupy_cid_is_idempotent_for_same_registrar_and_account_id() {
     new_test_ext().execute_with(|| {
         occupy_tag_as("OCC-1", 1);
         // 同注册局 + 同账户重复提交:commitment=blake2_256(账户) 同值,幂等放行。

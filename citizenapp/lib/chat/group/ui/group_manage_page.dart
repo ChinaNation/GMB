@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/chat/chat_runtime.dart';
 import 'package:citizenapp/chat/group/group_model.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 成员管理页:名册 + 加/删(仅 admin)+ 改群名(仅 admin)+ 退群(任何人)。
 class GroupManagePage extends StatefulWidget {
@@ -20,7 +20,7 @@ class GroupManagePage extends StatefulWidget {
   final ChatRuntime? runtime;
   final ChatStore? store;
 
-  /// 本机账户;测试可注入以设定"我是谁"验 admin 门控。生产为 null → 取默认钱包。
+  /// 本机账户;测试可注入以设定"我是谁"验 admin 门控。生产为 null → 取身份账户。
   final String? accountId;
 
   @override
@@ -46,7 +46,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
   Future<void> _load() async {
     try {
       final me = widget.accountId ??
-          (await WalletManager().getDefaultWallet())?.accountId ??
+          await IdentityAccountCache.instance.accountId() ??
           '';
       final group = await _store.readGroup(widget.groupId);
       if (!mounted) return;

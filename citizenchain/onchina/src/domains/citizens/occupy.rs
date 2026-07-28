@@ -36,6 +36,7 @@ use crate::*;
 
 const CITIZEN_IDENTITY_PALLET_INDEX: u8 = 10;
 const OCCUPY_CID_CALL_INDEX: u8 = 6;
+const ADMIN_REBIND_CID_CALL_INDEX: u8 = 7;
 const REVOKE_CID_CALL_INDEX: u8 = 8;
 /// 发号碰撞重试上限(对齐 n9 桶 1000 次重试死规则)。
 const CID_GENERATE_MAX_RETRY: u32 = 1000;
@@ -45,6 +46,10 @@ pub(crate) const SESSION_TTL_SECS: i64 = 600;
 pub(crate) const PURPOSE_CITIZEN_OCCUPY: &str = "CITIZEN_OCCUPY";
 /// 占号 pending:发号后、用户占号签名收集前的占位会话(call_data 尚未构建)。
 pub(crate) const PURPOSE_CITIZEN_OCCUPY_PENDING: &str = "CITIZEN_OCCUPY_PENDING";
+/// 注册局代匿名 CID 换绑钱包账户。
+pub(crate) const PURPOSE_CITIZEN_ADMIN_REBIND: &str = "CITIZEN_ADMIN_REBIND";
+/// 换绑 pending:发号无关(号已有),新账户签名收集前的占位会话。
+pub(crate) const PURPOSE_CITIZEN_ADMIN_REBIND_PENDING: &str = "CITIZEN_ADMIN_REBIND_PENDING";
 pub(crate) const PURPOSE_CITIZEN_REVOKE: &str = "CITIZEN_REVOKE";
 pub(crate) const PURPOSE_CITIZEN_IDENTITY_PUSH: &str = "CITIZEN_IDENTITY_PUSH";
 
@@ -55,7 +60,7 @@ pub(crate) const PURPOSE_CITIZEN_IDENTITY_PUSH: &str = "CITIZEN_IDENTITY_PUSH";
 pub(crate) struct ChainSignSession {
     pub(crate) request_id: String,
     pub(crate) purpose: String,
-    /// 发起管理员账户对应的当前签名公钥（签名者必须与之一致）。
+    /// 发起管理员的钱包账户 account_id（提交时签名者账户必须与之一致）。
     pub(crate) account_id: String,
     pub(crate) call_data: Vec<u8>,
     pub(crate) nonce: u32,
@@ -283,6 +288,47 @@ fn verify_occupy_signature(account_id: &str, cid_number: &str, signature_hex: &s
     sr25519::Pair::verify(&signature, message, &public)
 }
 
+/// admin_rebind_cid_account_id(actor_cid_number, actor_role_code, cid_number, new_account_id, rebind_signature)
+///
+/// 与 occupy_cid 同布局,仅 call_index=7:`new_account_id` = AccountId32 32 裸字节;
+/// `rebind_signature` = 新账户对 (cid_number, new_account_id) 的签名,BoundedVec。
+fn encode_admin_rebind_cid_account_id_call(
+    actor_cid_number: &str,
+    actor_role_code: &str,
+    cid_number: &str,
+    new_account_id: &[u8; 32],
+    rebind_signature: &[u8],
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.push(CITIZEN_IDENTITY_PALLET_INDEX);
+    out.push(ADMIN_REBIND_CID_CALL_INDEX);
+    append_bounded(&mut out, actor_cid_number.as_bytes());
+    append_bounded(&mut out, actor_role_code.as_bytes());
+    append_bounded(&mut out, cid_number.as_bytes());
+    out.extend_from_slice(new_account_id);
+    append_bounded(&mut out, rebind_signature);
+    out
+}
+
+/// 验新账户换绑签名:sr25519 over `signing_message(OP_SIGN_CID_ADMIN_REBIND, (cid_number, account_id))`。
+/// payload 字节与链端一致(Compact(len)+cid ++ AccountId32);与占号域分离防重放。
+fn verify_admin_rebind_signature(account_id: &str, cid_number: &str, signature_hex: &str) -> bool {
+    let Some(account_id_bytes) = parse_account_id_bytes(account_id) else {
+        return false;
+    };
+    let Some(signature) = parse_signature_bytes(signature_hex) else {
+        return false;
+    };
+    let mut payload = Vec::new();
+    append_bounded(&mut payload, cid_number.as_bytes());
+    payload.extend_from_slice(&account_id_bytes);
+    let message =
+        primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_ADMIN_REBIND, &payload);
+    let public = sr25519::Public::from_raw(account_id_bytes);
+    let signature = sr25519::Signature::from_raw(signature);
+    sr25519::Pair::verify(&signature, message, &public)
+}
+
 fn parse_signature_bytes(signature_hex: &str) -> Option<[u8; 64]> {
     let raw = hex::decode(signature_hex.trim_start_matches("0x")).ok()?;
     raw.try_into().ok()
@@ -325,6 +371,38 @@ pub(crate) struct SubmitCitizenOccupyInput {
 /// 提交用户占号签名返回:管理员冷签请求二维码(第三段冷签用)。
 #[derive(Serialize)]
 pub(crate) struct SubmitCitizenOccupyOutput {
+    pub(crate) request_id: String,
+    pub(crate) cid_number: String,
+    pub(crate) sign_request: String,
+    pub(crate) expires_at: i64,
+}
+
+/// 换绑第一段:注册局选定某匿名 CID 发起换绑钱包账户。
+#[derive(Deserialize)]
+pub(crate) struct PrepareCitizenRebindInput {
+    pub(crate) actor_role_code: String,
+    pub(crate) cid_number: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PrepareCitizenRebindOutput {
+    pub(crate) request_id: String,
+    pub(crate) cid_number: String,
+    pub(crate) expires_at: i64,
+}
+
+/// 换绑第二段:管理员回扫新钱包已签名的响应二维码后回传。
+#[derive(Deserialize)]
+pub(crate) struct SubmitCitizenRebindInput {
+    pub(crate) request_id: String,
+    /// 新钱包账户(0x 小写 hex),换绑后 CID 绑定的新 account_id。
+    pub(crate) account_id: String,
+    /// 新账户对 (cid_number, account_id) 的换绑授权签名(域 OP_SIGN_CID_ADMIN_REBIND)。
+    pub(crate) rebind_signature: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitCitizenRebindOutput {
     pub(crate) request_id: String,
     pub(crate) cid_number: String,
     pub(crate) sign_request: String,
@@ -612,6 +690,227 @@ pub(crate) async fn submit_citizen_occupy(
     .into_response()
 }
 
+/// 换绑 prepare(第一段):注册局选定某匿名 CID 发起换绑钱包账户;校验本局有此记录,
+/// 存 pending 会话。返回 cid_number 供前端向**新钱包**展示换绑签名请求二维码。
+/// 跨注册局换绑(非本局记录)属后期功能,本步限本局。
+pub(crate) async fn prepare_citizen_rebind(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<PrepareCitizenRebindInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Err(resp) = ensure_registry_admin(&ctx) {
+        return resp;
+    }
+    let actor_role_code = match validate_actor_role_code(input.actor_role_code.as_str()) {
+        Ok(value) => value,
+        Err(resp) => return resp,
+    };
+    let cid_number = input.cid_number.trim().to_string();
+    if cid_number.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number 不能为空");
+    }
+    match state.db.find_citizen_by_cid(cid_number.as_str()) {
+        Ok(Some(_)) => {}
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "本注册局无此 CID 记录"),
+        Err(err) => {
+            tracing::error!(error = %err, "query citizen by cid failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民档案查询失败");
+        }
+    }
+
+    let issued_at = Utc::now();
+    let expires_at = issued_at + Duration::seconds(SESSION_TTL_SECS);
+    let request_id = format!("citizen-rebind-{}", Uuid::new_v4());
+    let session = ChainSignSession {
+        request_id: request_id.clone(),
+        purpose: PURPOSE_CITIZEN_ADMIN_REBIND_PENDING.to_string(),
+        account_id: ctx.account_id.clone(),
+        call_data: Vec::new(),
+        nonce: 0,
+        signing_hash: String::new(),
+        context: serde_json::json!({
+            "cid_number": cid_number,
+            "actor_role_code": actor_role_code,
+        }),
+        expires_at,
+        consumed_at: None,
+    };
+    if let Err(err) = state.db.insert_chain_sign_session(&session) {
+        tracing::error!(error = %err, "insert rebind pending session failed");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话落库失败");
+    }
+    crate::core::runtime_ops::append_audit_log(
+        &state,
+        "CITIZEN_ADMIN_REBIND_PREPARE",
+        &ctx.account_id,
+        Some(cid_number.clone()),
+        serde_json::json!({
+            "cid_number": cid_number,
+            "request_id": request_id,
+            "actor_ip": actor_ip_from_headers(&headers),
+        }),
+    );
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: PrepareCitizenRebindOutput {
+            request_id,
+            cid_number,
+            expires_at: expires_at.timestamp(),
+        },
+    })
+    .into_response()
+}
+
+/// 换绑第二段:验新账户换绑签名 → 构造 admin_rebind_cid_account_id call → prepare_signing →
+/// 会话转正 → 返回管理员冷签请求二维码。
+pub(crate) async fn submit_citizen_rebind(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<SubmitCitizenRebindInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Err(resp) = ensure_registry_admin(&ctx) {
+        return resp;
+    }
+    let session = match state.db.find_chain_sign_session(input.request_id.as_str()) {
+        Ok(Some(v)) => v,
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "换绑会话不存在"),
+        Err(err) => {
+            tracing::error!(error = %err, "query rebind pending session failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话查询失败");
+        }
+    };
+    if session.purpose != PURPOSE_CITIZEN_ADMIN_REBIND_PENDING {
+        return api_error(StatusCode::CONFLICT, 1005, "换绑会话状态不正确");
+    }
+    if session.consumed_at.is_some() {
+        delete_session_best_effort(&state, session.request_id.as_str(), "consumed pending");
+        return api_error(StatusCode::CONFLICT, 1005, "换绑会话已被消费");
+    }
+    if session.expires_at < Utc::now() {
+        delete_session_best_effort(&state, session.request_id.as_str(), "pending expired");
+        return api_error(StatusCode::GONE, 1005, "换绑会话已过期,请重新发起");
+    }
+    if !same_account_id(session.account_id.as_str(), ctx.account_id.as_str()) {
+        return api_error(StatusCode::FORBIDDEN, 1003, "只有发起管理员可以提交本会话");
+    }
+
+    let cid_number = session
+        .context
+        .get("cid_number")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let actor_role_code = session
+        .context
+        .get("actor_role_code")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    if cid_number.is_empty() || actor_role_code.is_empty() {
+        delete_session_best_effort(&state, session.request_id.as_str(), "pending context invalid");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话数据损坏");
+    }
+
+    // 新钱包账户(0x 小写 hex,换绑后 CID 绑定的新 account_id)。
+    let Some(account_id_hex) = normalize_account_id(input.account_id.as_str()) else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "新钱包账户格式错误");
+    };
+    // 验新账户换绑签名:sr25519 over signing_message(OP_SIGN_CID_ADMIN_REBIND, (cid_number, account_id))。
+    if !verify_admin_rebind_signature(
+        account_id_hex.as_str(),
+        cid_number.as_str(),
+        input.rebind_signature.as_str(),
+    ) {
+        return api_error(StatusCode::BAD_REQUEST, 1003, "新账户换绑签名验证失败");
+    }
+    let Some(account_id_bytes) = parse_account_id_bytes(account_id_hex.as_str()) else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "新钱包账户格式错误");
+    };
+    let Some(rebind_signature_bytes) = parse_signature_bytes(input.rebind_signature.as_str()) else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "换绑签名格式错误");
+    };
+
+    let actor_cid_number = match active_registry_cid_number(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let call = encode_admin_rebind_cid_account_id_call(
+        &actor_cid_number,
+        actor_role_code.as_str(),
+        cid_number.as_str(),
+        &account_id_bytes,
+        &rebind_signature_bytes,
+    );
+    let prepared = match chain_submit::prepare_signing(&call, ctx.account_id.as_str()).await {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "prepare rebind signing failed");
+            return api_error(
+                StatusCode::BAD_GATEWAY,
+                1004,
+                "链签名载荷准备失败(链不可用)",
+            );
+        }
+    };
+
+    let issued_at = Utc::now();
+    let action = crate::core::institution_call::chain_action_code(
+        CITIZEN_IDENTITY_PALLET_INDEX,
+        ADMIN_REBIND_CID_CALL_INDEX,
+    );
+    let sign_request = match crate::core::qr::build_sign_request_bytes(
+        session.request_id.as_str(),
+        issued_at.timestamp(),
+        session.expires_at.timestamp(),
+        ctx.account_id.as_str(),
+        &prepared.payload,
+        action,
+    ) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
+    let mut context = session.context.clone();
+    if let Some(map) = context.as_object_mut() {
+        map.insert(
+            "new_account_id".to_string(),
+            serde_json::Value::String(account_id_hex.clone()),
+        );
+    }
+    if let Err(err) = state.db.promote_chain_sign_session(
+        session.request_id.as_str(),
+        PURPOSE_CITIZEN_ADMIN_REBIND,
+        &call,
+        prepared.nonce,
+        prepared.signing_hash_hex.as_str(),
+        &context,
+    ) {
+        tracing::error!(error = %err, "promote rebind session failed");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话转正失败");
+    }
+
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: SubmitCitizenRebindOutput {
+            request_id: session.request_id,
+            cid_number,
+            sign_request,
+            expires_at: session.expires_at.timestamp(),
+        },
+    })
+    .into_response()
+}
+
 /// 吊销 prepare:登记表墓碑(最严档 PasskeyColdSign grant,与身份上链同档)。
 pub(crate) async fn prepare_citizen_revoke(
     State(state): State<AppState>,
@@ -783,7 +1082,10 @@ pub(crate) async fn submit_chain_sign(
     }
     if matches!(
         session.purpose.as_str(),
-        PURPOSE_CITIZEN_OCCUPY | PURPOSE_CITIZEN_REVOKE | PURPOSE_CITIZEN_IDENTITY_PUSH
+        PURPOSE_CITIZEN_OCCUPY
+            | PURPOSE_CITIZEN_ADMIN_REBIND
+            | PURPOSE_CITIZEN_REVOKE
+            | PURPOSE_CITIZEN_IDENTITY_PUSH
     ) {
         if let Err(resp) = ensure_registry_admin(&ctx) {
             delete_session_best_effort(&state, session.request_id.as_str(), "registry auth failed");
@@ -996,6 +1298,33 @@ pub(crate) async fn submit_chain_sign(
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "上链状态回写失败");
             }
         }
+        PURPOSE_CITIZEN_ADMIN_REBIND => {
+            let new_account_id = session.context.get("new_account_id").and_then(|v| v.as_str());
+            let Some(new_account_id) = new_account_id else {
+                delete_session_best_effort(
+                    &state,
+                    session.request_id.as_str(),
+                    "rebind context invalid",
+                );
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话数据损坏");
+            };
+            // 链上换绑确认后，把本地档案的绑定账户改到新 account_id(复用统一回写)。
+            if let Err(err) = state.db.confirm_citizen_identity_onchain(
+                cid_number.as_str(),
+                new_account_id,
+                ctx.account_id.as_str(),
+                tx_hash.as_str(),
+                block_number,
+            ) {
+                tracing::error!(error = %err, "update citizen rebind onchain failed");
+                delete_session_best_effort(
+                    &state,
+                    session.request_id.as_str(),
+                    "update citizen rebind onchain failed",
+                );
+                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑状态回写失败");
+            }
+        }
         crate::institution::admins::PURPOSE_INSTITUTION_GOVERNANCE
         | crate::institution::admins::PURPOSE_INSTITUTION_REGISTER_ADMINS
         | crate::institution::accounts::handler::PURPOSE_INSTITUTION_ADD_ACCOUNT
@@ -1062,6 +1391,26 @@ mod tests {
         // 0a06 | 04 41 | 04 42 | 04 43 | 11*32 | 10 | 22*4
         let expected = concat!(
             "0a06",
+            "0441",
+            "0442",
+            "0443",
+            "1111111111111111111111111111111111111111111111111111111111111111",
+            "10",
+            "22222222",
+        );
+        assert_eq!(hex::encode(out), expected);
+    }
+
+    /// 换绑调用字节 golden:pallet 10 / call 7,布局同 occupy 仅 call_index=7。
+    #[test]
+    fn encode_admin_rebind_cid_account_id_call_byte_golden() {
+        let new_account_id = [0x11u8; 32];
+        let rebind_signature = [0x22u8; 4];
+        let out =
+            encode_admin_rebind_cid_account_id_call("A", "B", "C", &new_account_id, &rebind_signature);
+        // 0a07 | 04 41 | 04 42 | 04 43 | 11*32 | 10 | 22*4
+        let expected = concat!(
+            "0a07",
             "0441",
             "0442",
             "0443",

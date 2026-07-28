@@ -16,6 +16,7 @@ import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -199,13 +200,19 @@ class _SquareHomePageState extends State<SquareHomePage> {
   }
 
   Future<void> _refreshIdentityAfterChainOperational() async {
-    final manager = widget.identityService.walletManager ?? WalletManager();
-    final wallet = await manager.getDefaultWallet();
     if (!mounted ||
         _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
       return;
     }
-    final accountId = wallet?.accountId ?? '';
+    // 身份账户廉价读（命中缓存或乐观回退账户0，不启动 smoldot），与 _identityAddress
+    // （= loadCurrent 的身份账户）同口径做去重键。
+    final accountId =
+        await IdentityAccountCache.instance.accountId(allowChainRead: false) ??
+            '';
+    if (!mounted ||
+        _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
+      return;
+    }
     if (accountId.isEmpty || _operationalIdentityAccount == accountId) {
       return;
     }
@@ -248,8 +255,13 @@ class _SquareHomePageState extends State<SquareHomePage> {
     // 只跟踪最新 _identityFuture 保证。
     final manager = widget.identityService.walletManager ?? WalletManager();
     final wallet = await manager.getDefaultWallet();
+    // 身份账户廉价读（不启动 smoldot），与 _identityAddress 同口径比对；walletName
+    // 仍是钱包级比对（默认钱包改名也要重载身份卡）。
+    final identityAccountId =
+        await IdentityAccountCache.instance.accountId(allowChainRead: false) ??
+            '';
     if (!mounted) return;
-    if ((wallet?.accountId ?? '') == (_identityAddress ?? '') &&
+    if (identityAccountId == (_identityAddress ?? '') &&
         wallet?.walletName == _identityWalletName) {
       return;
     }

@@ -7,6 +7,9 @@ import 'package:citizenapp/8964/services/square_api_client.dart'
 import 'package:citizenapp/my/creator/creator_api.dart';
 import 'package:citizenapp/my/creator/models/creator_overview.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart'
+    show ResolvedIdentity;
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
 import 'package:citizenapp/wallet/core/secure_seed_store.dart'
@@ -106,23 +109,24 @@ class CreatorService {
     if (wallet == null || !wallet.isHotWallet) {
       throw const CreatorException('请先在「我的 → 我的钱包」创建热钱包');
     }
+    final identity = await _requireIdentity();
     final session = await _session.ensureSession();
     if (session == null) {
       throw const CreatorException('会话不可用，请稍后重试');
     }
-    if (session.accountId != wallet.accountId) {
+    if (session.accountId != identity.accountId) {
       throw const CreatorException('当前会话与默认热钱包不一致，请重新登录');
     }
     try {
       final membership = await _subscriptionRpc.fetchSubscriptionSnapshot(
-        subscriberAccountId: wallet.accountId,
+        subscriberAccountId: identity.accountId,
       );
       if (membership.state?.isEffectiveAt(membership.chainNowMs) != true) {
         throw const CreatorException('需要当前有效的平台会员才能设置创作者会员档');
       }
       final result = await _subscriptionRpc.setCreatorPlans(
-        fromSs58Address: wallet.ss58Address,
-        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        fromSs58Address: identity.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         tiers: tiers
             .map(
               (tier) => CreatorTierInput(
@@ -138,11 +142,11 @@ class CreatorService {
               ),
             )
             .toList(growable: false),
-        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
       );
       return _completeFinalizedSave(
         session: session,
-        accountId: wallet.accountId,
+        accountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -158,6 +162,17 @@ class CreatorService {
     } on Exception catch (e) {
       throw CreatorException('保存失败：$e');
     }
+  }
+
+  /// 身份账户（CID 绑定账户，单源 [IdentityAccountCache]）：`set_creator_plans` 链上
+  /// 交易的唯一签名者。与 [SquareSessionProvider.ensureSession] 同口径，故与
+  /// `session.accountId` 的一致性校验、平台会员快照读、finalized 落地键天然对齐。
+  Future<ResolvedIdentity> _requireIdentity() async {
+    final identity = await IdentityAccountCache.instance.resolve();
+    if (identity == null) {
+      throw const CreatorException('请先在「我的 → 我的钱包」创建热钱包');
+    }
+    return identity;
   }
 
   String _pendingMirrorKey(String accountId) =>

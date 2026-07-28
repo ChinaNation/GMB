@@ -1,4 +1,5 @@
 import '../qr/qr_protocols.dart';
+import '../isar/wallet_isar.dart';
 import '../wallet/wallet_manager.dart';
 import 'action_labels.dart';
 import 'field_labels.dart';
@@ -11,6 +12,7 @@ enum OfflineSignErrorCode {
   invalidPayload,
   contentMismatch,
   expired,
+  replayed,
 }
 
 class OfflineSignException implements Exception {
@@ -172,7 +174,7 @@ class OfflineSignService {
     final body = request.body;
     // 签名时再次校验过期
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    if ((request.expiresAt ?? 0) < now) {
+    if ((request.expiresAt ?? 0) <= now) {
       throw const OfflineSignException(
         OfflineSignErrorCode.expired,
         '签名请求已过期,请重新扫描',
@@ -216,10 +218,28 @@ class OfflineSignService {
       );
     }
 
-    final signature = await _walletManager.signForAccount(
-      account.accountId,
-      payloadBytes,
+    final requestId = request.id!;
+    final claimed = await SignedQrRequestStore.claim(
+      requestId: requestId,
+      expiresAt: request.expiresAt!,
     );
+    if (!claimed) {
+      throw const OfflineSignException(
+        OfflineSignErrorCode.replayed,
+        '该签名请求已处理或已过期，请生成新请求',
+      );
+    }
+
+    late final List<int> signature;
+    try {
+      signature = await _walletManager.signForAccount(
+        account.accountId,
+        payloadBytes,
+      );
+    } catch (_) {
+      await SignedQrRequestStore.release(requestId);
+      rethrow;
+    }
 
     return _signer.buildResponse(
       request: request,

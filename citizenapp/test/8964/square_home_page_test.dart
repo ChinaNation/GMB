@@ -6,9 +6,20 @@ import 'package:citizenapp/8964/pages/square_home_page.dart';
 import 'package:citizenapp/8964/profile/widgets/local_identity_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 身份账户缓存 fake:resolve 返回 null,让 loadCurrent 回退 wallet.accountId
+/// (身份=账户0 常态),行为与迁移前一致;避免 instance 触发真链读/真 Isar。
+class _NullIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async => null;
+  @override
+  Future<String?> accountId({bool allowChainRead = true}) async => null;
+}
 
 class _FakeWalletManager extends WalletManager {
   _FakeWalletManager(this.wallet);
@@ -128,7 +139,10 @@ Widget _wrap(Widget child) {
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    IdentityAccountCache.debugInstance = _NullIdentityCache();
   });
+
+  tearDown(IdentityAccountCache.resetDebugInstance);
 
   testWidgets('广场顶部删旧标题/空态字、显示坦克水印与左上头像并可切换分类', (tester) async {
     final identityService = SquareIdentityService(

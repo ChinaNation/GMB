@@ -5,6 +5,7 @@ import '../security/app_lock_service.dart';
 import '../security/pin_input_page.dart';
 import '../security/secure_storage.dart';
 import 'app_theme.dart';
+import 'product_manual_page.dart';
 
 /// 冷钱包设置页。
 class SettingsPage extends StatefulWidget {
@@ -55,10 +56,9 @@ class _SettingsPageState extends State<SettingsPage> {
       try {
         final authenticated = await _localAuth.authenticate(
           localizedReason: '用生物识别验证身份以开启设备锁',
-          options: const AuthenticationOptions(
-            stickyAuth: true,
-            biometricOnly: true,
-          ),
+          biometricOnly: true,
+          persistAcrossBackgrounding: true,
+          sensitiveTransaction: true,
         );
         if (!authenticated) return;
       } catch (e) {
@@ -143,7 +143,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         icon: Icons.fingerprint_rounded,
                         title: '设备锁',
                         subtitle:
-                            _pinLockEnabled ? '请先关闭应用锁' : '启动应用时需要生物识别或设备密码',
+                            _pinLockEnabled ? '请先关闭应用锁' : '启动应用时需要指纹或面容验证',
                         value: _deviceLockEnabled,
                         onChanged: _pinLockEnabled ? null : _toggleDeviceLock,
                       ),
@@ -160,7 +160,46 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.menu_book_outlined,
+                        size: 16,
+                        color: AppTheme.primaryLight,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        '产品手册',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryLight,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  decoration:
+                      AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                  child: ListTile(
+                    minTileHeight: 64,
+                    leading: const Icon(Icons.auto_stories_outlined),
+                    title: const Text('产品手册'),
+                    subtitle: const Text('助记词、账户与扫码签名指南'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => const ProductManualPage(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 // 关于区
                 const Padding(
                   padding: EdgeInsets.only(left: 4, bottom: 12),

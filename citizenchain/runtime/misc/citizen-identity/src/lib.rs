@@ -808,7 +808,7 @@ pub mod pallet {
             account_id: T::AccountId,
         },
         /// 匿名 CID 自助换绑:CID 从旧账户换绑到新账户(社交资产随 CID 不变)。
-        CidAccountRebound {
+        CidAccountIdRebound {
             cid_number: CidNumberBound,
             old_account_id: T::AccountId,
             new_account_id: T::AccountId,
@@ -1194,8 +1194,8 @@ pub mod pallet {
         /// 旧账户从 `AccountIdByCid[cid]` 反查、不用传;已升级投票/竞选公民的 CID 只能经注册局
         /// 换绑(q1)。CTZN 匿名 + NATP 均可自助换绑。新账户任意(能签即可),但不得已绑另一 CID。
         #[pallet::call_index(9)]
-        #[pallet::weight(<T as Config>::WeightInfo::self_rebind_cid_account())]
-        pub fn self_rebind_cid_account(
+        #[pallet::weight(<T as Config>::WeightInfo::self_rebind_cid_account_id())]
+        pub fn self_rebind_cid_account_id(
             origin: OriginFor<T>,
             cid_number: CidNumberBound,
             old_account_signature: SignatureOf<T>,
@@ -1221,7 +1221,7 @@ pub mod pallet {
             }
             // 换绑:删旧反向索引、写新双向绑定。
             Self::rebind_account_id(&cid_number, &old_account_id, &new_account_id);
-            Self::deposit_event(Event::<T>::CidAccountRebound {
+            Self::deposit_event(Event::<T>::CidAccountIdRebound {
                 cid_number,
                 old_account_id,
                 new_account_id,
@@ -1236,8 +1236,8 @@ pub mod pallet {
         /// 匿名限定:已升级投票/竞选公民只能经对应注册局换绑(留后期)。费=机构付费。
         /// 复用删批量占号释放出的 `call_index(7)`。
         #[pallet::call_index(7)]
-        #[pallet::weight(<T as Config>::WeightInfo::admin_rebind_cid_account())]
-        pub fn admin_rebind_cid_account(
+        #[pallet::weight(<T as Config>::WeightInfo::admin_rebind_cid_account_id())]
+        pub fn admin_rebind_cid_account_id(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,
             actor_role_code: RoleCodeBound,
@@ -1280,7 +1280,7 @@ pub mod pallet {
             }
             // 换绑:删旧反向索引、写新双向绑定(old==new 幂等 no-op)。
             Self::rebind_account_id(&cid_number, &old_account_id, &new_account_id);
-            Self::deposit_event(Event::<T>::CidAccountRebound {
+            Self::deposit_event(Event::<T>::CidAccountIdRebound {
                 cid_number,
                 old_account_id,
                 new_account_id,

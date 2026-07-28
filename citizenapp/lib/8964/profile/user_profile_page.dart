@@ -21,6 +21,7 @@ import 'package:citizenapp/8964/profile/widgets/profile_posts_list.dart';
 import 'package:citizenapp/8964/services/square_account_deletion_service.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show bytesToHex;
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
@@ -124,8 +125,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 本人视角（isSelf）按钮本就隐藏，无需判定；判定失败按非本人处理，不阻塞主页。
   Future<void> _resolveOwnAccount() async {
     if (widget.isSelf) return;
+    // 浏览者身份账户 = CID 绑定账户（单源 IdentityAccountCache），与本人身份展示同口径。
     final loadViewer = widget.viewerAccountLoader ??
-        () async => (await WalletManager().getDefaultWallet())?.accountId;
+        () async => IdentityAccountCache.instance.accountId();
     try {
       final viewer = (await loadViewer())?.trim() ?? '';
       if (!mounted) return;
@@ -294,9 +296,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
       await SquareAccountDeletionService().deleteAccount(
         accountId: widget.accountId,
         walletIndex: walletIndex,
-        // 动钱动权 → sr25519 主钥对 0x1D 摘要签名（读硬件金库，弹一次生物识别）。
+        // 动钱动权 → sr25519 **身份账户**主钥对 0x1D 摘要签名（widget.accountId 即身份账户，
+        // 按 accountId 精确取硬件金库 child，弹一次生物识别）。walletIndex 仅供门控与
+        // 删除本机设备子钥（设备子钥按 walletIndex 存，与身份账户解耦）。
         signAction: (message) async =>
-            '0x${bytesToHex(await walletManager.signWithWallet(walletIndex, message))}',
+            '0x${bytesToHex(await walletManager.signForAccountId(widget.accountId, message))}',
       );
     } on SquareApiException catch (e) {
       if (mounted) _snack('注销失败：${e.message}');

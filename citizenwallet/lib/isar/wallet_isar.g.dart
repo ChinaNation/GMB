@@ -58,7 +58,7 @@ const WalletEntitySchema = CollectionSchema(
       id: 3929031194099616871,
       name: r'walletIndex',
       unique: true,
-      replace: true,
+      replace: false,
       properties: [
         IndexPropertySchema(
           name: r'walletIndex',
@@ -71,7 +71,7 @@ const WalletEntitySchema = CollectionSchema(
       id: 8318582791188363777,
       name: r'masterId',
       unique: true,
-      replace: true,
+      replace: false,
       properties: [
         IndexPropertySchema(
           name: r'masterId',
@@ -1445,16 +1445,21 @@ const AccountEntitySchema = CollectionSchema(
   deserializeProp: _accountEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'masterId': IndexSchema(
-      id: 8318582791188363777,
-      name: r'masterId',
-      unique: false,
+    r'masterId_accountIndex': IndexSchema(
+      id: -4526954551786447048,
+      name: r'masterId_accountIndex',
+      unique: true,
       replace: false,
       properties: [
         IndexPropertySchema(
           name: r'masterId',
           type: IndexType.hash,
           caseSensitive: true,
+        ),
+        IndexPropertySchema(
+          name: r'accountIndex',
+          type: IndexType.value,
+          caseSensitive: false,
         )
       ],
     ),
@@ -1462,7 +1467,7 @@ const AccountEntitySchema = CollectionSchema(
       id: -1591555361937770434,
       name: r'accountId',
       unique: true,
-      replace: true,
+      replace: false,
       properties: [
         IndexPropertySchema(
           name: r'accountId',
@@ -1475,7 +1480,7 @@ const AccountEntitySchema = CollectionSchema(
       id: 5333651859904869202,
       name: r'ss58Address',
       unique: true,
-      replace: true,
+      replace: false,
       properties: [
         IndexPropertySchema(
           name: r'ss58Address',
@@ -1575,6 +1580,97 @@ void _accountEntityAttach(
 }
 
 extension AccountEntityByIndex on IsarCollection<AccountEntity> {
+  Future<AccountEntity?> getByMasterIdAccountIndex(
+      String masterId, int accountIndex) {
+    return getByIndex(r'masterId_accountIndex', [masterId, accountIndex]);
+  }
+
+  AccountEntity? getByMasterIdAccountIndexSync(
+      String masterId, int accountIndex) {
+    return getByIndexSync(r'masterId_accountIndex', [masterId, accountIndex]);
+  }
+
+  Future<bool> deleteByMasterIdAccountIndex(String masterId, int accountIndex) {
+    return deleteByIndex(r'masterId_accountIndex', [masterId, accountIndex]);
+  }
+
+  bool deleteByMasterIdAccountIndexSync(String masterId, int accountIndex) {
+    return deleteByIndexSync(
+        r'masterId_accountIndex', [masterId, accountIndex]);
+  }
+
+  Future<List<AccountEntity?>> getAllByMasterIdAccountIndex(
+      List<String> masterIdValues, List<int> accountIndexValues) {
+    final len = masterIdValues.length;
+    assert(accountIndexValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([masterIdValues[i], accountIndexValues[i]]);
+    }
+
+    return getAllByIndex(r'masterId_accountIndex', values);
+  }
+
+  List<AccountEntity?> getAllByMasterIdAccountIndexSync(
+      List<String> masterIdValues, List<int> accountIndexValues) {
+    final len = masterIdValues.length;
+    assert(accountIndexValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([masterIdValues[i], accountIndexValues[i]]);
+    }
+
+    return getAllByIndexSync(r'masterId_accountIndex', values);
+  }
+
+  Future<int> deleteAllByMasterIdAccountIndex(
+      List<String> masterIdValues, List<int> accountIndexValues) {
+    final len = masterIdValues.length;
+    assert(accountIndexValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([masterIdValues[i], accountIndexValues[i]]);
+    }
+
+    return deleteAllByIndex(r'masterId_accountIndex', values);
+  }
+
+  int deleteAllByMasterIdAccountIndexSync(
+      List<String> masterIdValues, List<int> accountIndexValues) {
+    final len = masterIdValues.length;
+    assert(accountIndexValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([masterIdValues[i], accountIndexValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'masterId_accountIndex', values);
+  }
+
+  Future<Id> putByMasterIdAccountIndex(AccountEntity object) {
+    return putByIndex(r'masterId_accountIndex', object);
+  }
+
+  Id putByMasterIdAccountIndexSync(AccountEntity object,
+      {bool saveLinks = true}) {
+    return putByIndexSync(r'masterId_accountIndex', object,
+        saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByMasterIdAccountIndex(List<AccountEntity> objects) {
+    return putAllByIndex(r'masterId_accountIndex', objects);
+  }
+
+  List<Id> putAllByMasterIdAccountIndexSync(List<AccountEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'masterId_accountIndex', objects,
+        saveLinks: saveLinks);
+  }
+
   Future<AccountEntity?> getByAccountId(String accountId) {
     return getByIndex(r'accountId', [accountId]);
   }
@@ -1763,29 +1859,29 @@ extension AccountEntityQueryWhere
     });
   }
 
-  QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause> masterIdEqualTo(
-      String masterId) {
+  QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause>
+      masterIdEqualToAnyAccountIndex(String masterId) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'masterId',
+        indexName: r'masterId_accountIndex',
         value: [masterId],
       ));
     });
   }
 
   QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause>
-      masterIdNotEqualTo(String masterId) {
+      masterIdNotEqualToAnyAccountIndex(String masterId) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'masterId',
+              indexName: r'masterId_accountIndex',
               lower: [],
               upper: [masterId],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'masterId',
+              indexName: r'masterId_accountIndex',
               lower: [masterId],
               includeLower: false,
               upper: [],
@@ -1793,18 +1889,114 @@ extension AccountEntityQueryWhere
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'masterId',
+              indexName: r'masterId_accountIndex',
               lower: [masterId],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'masterId',
+              indexName: r'masterId_accountIndex',
               lower: [],
               upper: [masterId],
               includeUpper: false,
             ));
       }
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause>
+      masterIdAccountIndexEqualTo(String masterId, int accountIndex) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'masterId_accountIndex',
+        value: [masterId, accountIndex],
+      ));
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause>
+      masterIdEqualToAccountIndexNotEqualTo(String masterId, int accountIndex) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'masterId_accountIndex',
+              lower: [masterId],
+              upper: [masterId, accountIndex],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'masterId_accountIndex',
+              lower: [masterId, accountIndex],
+              includeLower: false,
+              upper: [masterId],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'masterId_accountIndex',
+              lower: [masterId, accountIndex],
+              includeLower: false,
+              upper: [masterId],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'masterId_accountIndex',
+              lower: [masterId],
+              upper: [masterId, accountIndex],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause>
+      masterIdEqualToAccountIndexGreaterThan(
+    String masterId,
+    int accountIndex, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'masterId_accountIndex',
+        lower: [masterId, accountIndex],
+        includeLower: include,
+        upper: [masterId],
+      ));
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause>
+      masterIdEqualToAccountIndexLessThan(
+    String masterId,
+    int accountIndex, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'masterId_accountIndex',
+        lower: [masterId],
+        upper: [masterId, accountIndex],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<AccountEntity, AccountEntity, QAfterWhereClause>
+      masterIdEqualToAccountIndexBetween(
+    String masterId,
+    int lowerAccountIndex,
+    int upperAccountIndex, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'masterId_accountIndex',
+        lower: [masterId, lowerAccountIndex],
+        includeLower: includeLower,
+        upper: [masterId, upperAccountIndex],
+        includeUpper: includeUpper,
+      ));
     });
   }
 

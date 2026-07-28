@@ -36,9 +36,6 @@ typedef SignRequestEnvelope = QrEnvelope<SignRequestBody>;
 typedef SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 
 class QrSigner {
-  static const int defaultTtlSeconds = 90;
-  static const int maxTtlSeconds = 300;
-  static const int maxClockSkewSeconds = 30;
   static const int maxPayloadChars = 32768;
   static const List<int> _gmbPrefix = [0x47, 0x4D, 0x42];
   static const int _opSignCitizenIdentity = 0x10;
@@ -95,7 +92,6 @@ class QrSigner {
     return QrEnvelope<SignRequestBody>(
       kind: QrKind.signRequest,
       id: env.id,
-      issuedAt: env.issuedAt,
       expiresAt: env.expiresAt,
       body: body,
     );
@@ -112,7 +108,6 @@ class QrSigner {
     return QrEnvelope<SignResponseBody>(
       kind: QrKind.signResponse,
       id: request.id,
-      issuedAt: request.issuedAt,
       expiresAt: request.expiresAt,
       body: SignResponseBody.fromHex(
         signerPublicKeyHex: requestBody.signerPublicKeyHex,
@@ -205,7 +200,7 @@ class QrSigner {
     required int expiresAt,
   }) {
     final now = _now();
-    if (expiresAt < now) {
+    if (expiresAt <= now) {
       throw const QrSignException(QrSignErrorCode.expired, '交易签名请求已过期');
     }
   }

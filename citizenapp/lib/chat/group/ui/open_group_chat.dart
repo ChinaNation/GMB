@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/chat/chat_page.dart';
 import 'package:citizenapp/chat/chat_runtime.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 
 /// 打开某群的群聊详情。
 ///
@@ -13,7 +13,7 @@ Future<void> openGroupChat(
   required String groupId,
   required String title,
 }) async {
-  final accountId = (await WalletManager().getDefaultWallet())?.accountId ?? '';
+  final accountId = await IdentityAccountCache.instance.accountId() ?? '';
   if (accountId.isEmpty) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

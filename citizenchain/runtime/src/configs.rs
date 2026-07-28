@@ -559,7 +559,7 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
 
             RuntimeCall::CitizenIdentity(
                 citizen_identity::pallet::Call::self_occupy_cid { .. }
-                | citizen_identity::pallet::Call::self_rebind_cid_account { .. },
+                | citizen_identity::pallet::Call::self_rebind_cid_account_id { .. },
             ) => signer_onchain_route(who, 0),
 
             RuntimeCall::CitizenIdentity(
@@ -582,7 +582,7 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 | citizen_identity::pallet::Call::occupy_cid {
                     actor_cid_number, ..
                 }
-                | citizen_identity::pallet::Call::admin_rebind_cid_account {
+                | citizen_identity::pallet::Call::admin_rebind_cid_account_id {
                     actor_cid_number, ..
                 }
                 | citizen_identity::pallet::Call::revoke_cid {

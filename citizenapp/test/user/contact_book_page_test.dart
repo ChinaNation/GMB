@@ -8,6 +8,8 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -125,7 +127,22 @@ Widget _page({
       ),
     );
 
+/// 身份账户缓存 fake：resolve/accountId 返回 null，让点开他人主页时 _resolveOwnAccount
+/// 回退成「非本人」（行为与迁移前一致）；避免 instance 触发真链读/真 Isar。
+class _NullIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async => null;
+  @override
+  Future<String?> accountId({bool allowChainRead = true}) async => null;
+}
+
 void main() {
+  setUp(() {
+    IdentityAccountCache.debugInstance = _NullIdentityCache();
+  });
+
+  tearDown(IdentityAccountCache.resetDebugInstance);
+
   testWidgets('联系人卡展示私人名称、公开资料、身份头像和同步状态', (tester) async {
     await tester.pumpWidget(_page());
     await tester.pumpAndSettle();

@@ -10,7 +10,6 @@ String _loginRaw(String id) {
   return QrEnvelope<SignRequestBody>(
     kind: QrKind.signRequest,
     id: id,
-    issuedAt: now,
     expiresAt: now + 60,
     body: SignRequestBody.fromHex(
       action: QrActions.login,

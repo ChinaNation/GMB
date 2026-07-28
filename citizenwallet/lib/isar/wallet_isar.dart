@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,7 +12,7 @@ part 'wallet_isar.g.dart';
 class WalletEntity {
   Id id = Isar.autoIncrement;
 
-  @Index(unique: true, replace: true)
+  @Index(unique: true)
   late int walletIndex;
 
   late String walletName;
@@ -19,7 +20,7 @@ class WalletEntity {
   /// 主指纹 = 账户0（`//0`）的 accountId，唯一标识一套助记词。
   /// 冷钱包按 master(此指纹)加密存 master 种子 + 助记词（见 WalletSecureKeys）;
   /// 账户不单独持久化密钥,签名/私钥导出时从种子按 accountIndex 现场派生。
-  @Index(unique: true, replace: true)
+  @Index(unique: true)
   late String masterId;
 
   late int createdAtMillis;
@@ -36,18 +37,21 @@ class AccountEntity {
   Id id = Isar.autoIncrement;
 
   /// 所属钱包（master）指纹。按此过滤取某钱包下全部账户。
-  @Index()
+  @Index(
+    composite: [CompositeIndex('accountIndex')],
+    unique: true,
+  )
   late String masterId;
 
   /// 派生序号：N → `//N`（含账户0 = `//0`）。
   late int accountIndex;
 
   /// Substrate 账户唯一标识，小写 `0x` 加 64 位十六进制（= 派生公钥原字节）。
-  @Index(unique: true, replace: true)
+  @Index(unique: true)
   late String accountId;
 
   /// SS58（前缀 2027），仅展示 / 二维码用，不作授权主键。
-  @Index(unique: true, replace: true)
+  @Index(unique: true)
   late String ss58Address;
 
   /// 账户显示名，默认「账户$accountIndex」。
@@ -108,8 +112,10 @@ class WalletIsar {
       AccountEntitySchema,
       AppKvEntitySchema,
     ];
-    final isar =
-        await Isar.open(schemas, name: 'citizenwallet', directory: dir);
+    final name = _isFlutterTest()
+        ? 'citizenwallet_${Isolate.current.hashCode}'
+        : 'citizenwallet';
+    final isar = await Isar.open(schemas, name: name, directory: dir);
     return isar;
   }
 
@@ -215,5 +221,59 @@ class WalletIsar {
     }
     return null;
   }
+}
 
+/// 已签 QR 请求持久化防重放仓库。
+///
+/// 请求 id 在到期前只能被一个签名流程原子占用；到期记录在每次占用时清理。
+class SignedQrRequestStore {
+  const SignedQrRequestStore._();
+
+  static const String _keyPrefix = 'qr.signed_request.';
+
+  static Future<bool> claim({
+    required String requestId,
+    required int expiresAt,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (expiresAt <= now) return false;
+
+    final isar = await WalletIsar.instance.db();
+    late bool claimed;
+    await isar.writeTxn(() async {
+      final records =
+          await isar.appKvEntitys.filter().keyStartsWith(_keyPrefix).findAll();
+      for (final record in records) {
+        if ((record.intValue ?? 0) <= now) {
+          await isar.appKvEntitys.delete(record.id);
+        }
+      }
+
+      final key = '$_keyPrefix$requestId';
+      final existing =
+          await isar.appKvEntitys.filter().keyEqualTo(key).findFirst();
+      if (existing != null) {
+        claimed = false;
+        return;
+      }
+      await isar.appKvEntitys.put(
+        AppKvEntity()
+          ..key = key
+          ..intValue = expiresAt,
+      );
+      claimed = true;
+    });
+    return claimed;
+  }
+
+  /// 密钥调用前失败时释放占位；签名一旦成功则保留到请求到期。
+  static Future<void> release(String requestId) async {
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      await isar.appKvEntitys
+          .filter()
+          .keyEqualTo('$_keyPrefix$requestId')
+          .deleteFirst();
+    });
+  }
 }

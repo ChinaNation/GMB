@@ -1,3 +1,5 @@
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/my/user/user.dart';
@@ -7,6 +9,15 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 身份账户缓存 fake：resolve/accountId 返回 null，让调用方回退 wallet.accountId
+/// （身份=账户0 常态），行为与迁移前一致；避免 instance 触发真链读/真 Isar。
+class _NullIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async => null;
+  @override
+  Future<String?> accountId({bool allowChainRead = true}) async => null;
+}
 
 class _FakeWalletManager extends WalletManager {
   _FakeWalletManager(this.wallet);
@@ -31,6 +42,12 @@ class _CountingMyIdService extends MyIdService {
 }
 
 void main() {
+  setUp(() {
+    IdentityAccountCache.debugInstance = _NullIdentityCache();
+  });
+
+  tearDown(IdentityAccountCache.resetDebugInstance);
+
   testWidgets('我的页面只读徽章快照且不启动轻节点', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

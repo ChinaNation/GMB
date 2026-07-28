@@ -3,6 +3,9 @@ import 'dart:typed_data';
 
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/my/creator/creator_api.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart'
+    show ResolvedIdentity;
 import 'package:citizenapp/rpc/chain_rpc.dart' show TxPoolWatchCallback;
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
@@ -70,23 +73,24 @@ class CreatorSubscribeService {
     required int priceFen,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final wallet = await _requireHotWallet();
-    if (wallet.accountId == creatorAccountId) {
+    await _requireHotWallet();
+    final identity = await _requireIdentity();
+    if (identity.accountId == creatorAccountId) {
       throw const CreatorSubscribeException('不能订阅自己');
     }
     try {
       final result = await _rpc.subscribeCreator(
-        fromSs58Address: wallet.ss58Address,
-        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        fromSs58Address: identity.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         creatorAccountId: creatorAccountId,
         tierId: tierId,
         billingPeriod: period,
         expectedPriceFen: BigInt.from(priceFen),
-        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: wallet.accountId,
+        accountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -109,17 +113,18 @@ class CreatorSubscribeService {
     required String creatorAccountId,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final wallet = await _requireHotWallet();
+    await _requireHotWallet();
+    final identity = await _requireIdentity();
     try {
       final result = await _rpc.cancelCreator(
-        fromSs58Address: wallet.ss58Address,
-        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        fromSs58Address: identity.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         creatorAccountId: creatorAccountId,
-        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: wallet.accountId,
+        accountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -143,23 +148,24 @@ class CreatorSubscribeService {
     required int priceFen,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final wallet = await _requireHotWallet();
-    if (wallet.accountId == creatorAccountId) {
+    await _requireHotWallet();
+    final identity = await _requireIdentity();
+    if (identity.accountId == creatorAccountId) {
       throw const CreatorSubscribeException('不能订阅自己');
     }
     try {
       final result = await _rpc.changeCreatorPlan(
-        fromSs58Address: wallet.ss58Address,
-        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        fromSs58Address: identity.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         creatorAccountId: creatorAccountId,
         tierId: tierId,
         billingPeriod: period,
         expectedPriceFen: BigInt.from(priceFen),
-        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: wallet.accountId,
+        accountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -183,6 +189,17 @@ class CreatorSubscribeService {
       throw const CreatorSubscribeException('请先在「我的 → 我的钱包」创建热钱包');
     }
     return wallet;
+  }
+
+  /// 身份账户（CID 绑定账户，单源 [IdentityAccountCache]）：创作者订阅交易的唯一签名者。
+  /// 与 [SquareSessionProvider.ensureSession] 同口径，`_confirm` 的证明键与
+  /// `session.accountId` 校验天然一致；自订阅拦截也据身份账户比对。
+  Future<ResolvedIdentity> _requireIdentity() async {
+    final identity = await IdentityAccountCache.instance.resolve();
+    if (identity == null) {
+      throw const CreatorSubscribeException('请先在「我的 → 我的钱包」创建热钱包');
+    }
+    return identity;
   }
 
   Future<SharedPreferences> get _prefs async {

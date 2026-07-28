@@ -1,5 +1,4 @@
-// ignore: implementation_imports
-import 'package:bip39/src/wordlists/english.dart' show WORDLIST;
+import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter/material.dart';
 
 import '../app_theme.dart';
@@ -49,7 +48,7 @@ class _Bip39InputFieldState extends State<Bip39InputField> {
     }
 
     final prefix = currentWord.toLowerCase();
-    final matches = WORDLIST
+    final matches = bip39m.Language.english.list
         .where((w) => w.startsWith(prefix))
         .take(6)
         .toList(growable: false);

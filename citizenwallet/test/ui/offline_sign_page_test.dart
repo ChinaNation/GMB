@@ -52,7 +52,6 @@ void main() {
     final request = QrEnvelope<SignRequestBody>(
       kind: QrKind.signRequest,
       id: 'offline-req-hashonly-0001',
-      issuedAt: now,
       expiresAt: now + 90,
       body: SignRequestBody.fromHex(
         action: QrActions.runtimeUpgradeHash,

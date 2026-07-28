@@ -7,6 +7,8 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/my/creator/creator_api.dart';
 import 'package:citizenapp/my/creator/creator_service.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart' show TxPoolWatchCallback;
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -16,6 +18,14 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  // saveTiers 现按身份账户签名，会命中单例 IdentityAccountCache.instance。
+  // 注入 fake（身份=账户0，与 _FakeWalletManager/_FakeSessionProvider 同账户），
+  // 避免真链读/真 Isar 导致 flaky。
+  setUp(() {
+    IdentityAccountCache.debugInstance = _FakeIdentityCache();
+  });
+  tearDown(IdentityAccountCache.resetDebugInstance);
+
   const session = SquareSession(
     sessionToken: 't',
     accountId:
@@ -163,6 +173,21 @@ class _FakeSessionProvider extends SquareSessionProvider {
       );
 }
 
+/// 身份账户单源 fake：身份=账户0（与钱包/会话同账户），offline、不链读。
+class _FakeIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      const ResolvedIdentity(
+        accountId: _accountId,
+        ss58Address: _signerSs58Address,
+        accountIndex: 0,
+        snapshot: null,
+      );
+
+  @override
+  Future<String?> accountId({bool allowChainRead = true}) async => _accountId;
+}
+
 class _FakeWalletManager extends WalletManager {
   @override
   Future<WalletProfile?> getDefaultWallet() async => const WalletProfile(
@@ -180,7 +205,8 @@ class _FakeWalletManager extends WalletManager {
       );
 
   @override
-  Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async =>
+  Future<Uint8List> signForAccountId(
+          String accountId, Uint8List payload) async =>
       Uint8List(64);
 }
 

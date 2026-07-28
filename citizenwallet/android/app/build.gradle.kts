@@ -29,8 +29,8 @@ android {
 
     defaultConfig {
         applicationId = "org.citizenwallet"
-        // EncryptedSharedPreferences(flutter_secure_storage aOptions)需 API ≥ 23。
-        minSdk = maxOf(23, flutter.minSdkVersion)
+        // local_auth 3.x 与新 SecureStorage 加固配置统一要求 API ≥ 24。
+        minSdk = maxOf(24, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

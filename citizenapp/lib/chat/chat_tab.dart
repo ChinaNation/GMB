@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../8964/profile/user_qr_page.dart';
 import '../8964/profile/widgets/local_identity_avatar.dart';
+import '../my/myid/identity_account_cache.dart';
 import '../my/user/contact_book_page.dart';
 import '../qr/scan_dispatch_flow.dart';
 import '../ui/app_theme.dart';
@@ -409,9 +410,8 @@ class _ChatTabState extends State<ChatTab> {
     if (runtimeAddress != null && runtimeAddress.isNotEmpty) {
       return runtimeAddress;
     }
-    // 身份统一取默认用户钱包（列表中最靠前的热钱包）。
-    final wallet = await widget.walletManager.getDefaultWallet();
-    return wallet?.accountId ?? '';
+    // 兜底：身份账户（CID 绑定账户，单源 IdentityAccountCache；链读失败乐观回退账户0）。
+    return await IdentityAccountCache.instance.accountId() ?? '';
   }
 
   Future<void> _deleteLocalConversation(String conversationId) {

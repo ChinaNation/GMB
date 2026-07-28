@@ -57,6 +57,7 @@ void main() {
 
     expect(find.text('点击查看助记词'), findsOneWidget);
     expect(find.textContaining('钱包备份'), findsOneWidget);
+    expect(find.byTooltip('扫码签名'), findsOneWidget);
 
     await tester.tap(find.text('点击查看助记词'));
     await tester.pumpAndSettle();
@@ -77,7 +78,8 @@ void main() {
     });
 
     await tester.runAsync(() async {
-      await tester.pumpWidget(MaterialApp(home: WalletDetailPage(wallet: wallet)));
+      await tester
+          .pumpWidget(MaterialApp(home: WalletDetailPage(wallet: wallet)));
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pump();

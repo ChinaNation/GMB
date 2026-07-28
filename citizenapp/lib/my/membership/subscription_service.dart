@@ -4,6 +4,9 @@ import 'dart:typed_data';
 
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart'
+    show ResolvedIdentity;
 import 'package:citizenapp/rpc/chain_rpc.dart' show TxPoolWatchCallback;
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
@@ -156,18 +159,19 @@ class SubscriptionService {
     int expectedPriceFen, {
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final wallet = await _requireHotWallet();
+    await _requireHotWallet();
+    final identity = await _requireIdentity();
     try {
       final result = await _rpc.subscribePlatform(
-        fromSs58Address: wallet.ss58Address,
-        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        fromSs58Address: identity.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         level: level,
         expectedPriceFen: BigInt.from(expectedPriceFen),
-        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: wallet.accountId,
+        accountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -185,16 +189,17 @@ class SubscriptionService {
 
   /// 取消平台会员（撤销按月扣款授权）。
   Future<void> cancel({TxPoolWatchCallback? onWatchEvent}) async {
-    final wallet = await _requireHotWallet();
+    await _requireHotWallet();
+    final identity = await _requireIdentity();
     try {
       final result = await _rpc.cancelPlatform(
-        fromSs58Address: wallet.ss58Address,
-        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
-        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        fromSs58Address: identity.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
+        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: wallet.accountId,
+        accountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -215,18 +220,19 @@ class SubscriptionService {
     int expectedPriceFen, {
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final wallet = await _requireHotWallet();
+    await _requireHotWallet();
+    final identity = await _requireIdentity();
     try {
       final result = await _rpc.changePlatformPlan(
-        fromSs58Address: wallet.ss58Address,
-        signerPublicKey: Uint8List.fromList(hexToBytes(wallet.accountId)),
+        fromSs58Address: identity.ss58Address,
+        signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         level: level,
         expectedPriceFen: BigInt.from(expectedPriceFen),
-        sign: (payload) => _wallet.signWithWallet(wallet.walletIndex, payload),
+        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: wallet.accountId,
+        accountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -248,6 +254,17 @@ class SubscriptionService {
       throw const SubscriptionException('请先在「我的 → 我的钱包」创建热钱包');
     }
     return wallet;
+  }
+
+  /// 身份账户（CID 绑定账户，单源 [IdentityAccountCache]）：链上订阅交易的唯一签名者。
+  /// 与 [SquareSessionProvider.ensureSession] 同口径（会话 accountId 也取身份账户），
+  /// 故 `_confirm` 的本地/Cloudflare 证明键与 `session.accountId` 校验天然一致。
+  Future<ResolvedIdentity> _requireIdentity() async {
+    final identity = await IdentityAccountCache.instance.resolve();
+    if (identity == null) {
+      throw const SubscriptionException('请先在「我的 → 我的钱包」创建热钱包');
+    }
+    return identity;
   }
 
   Future<SharedPreferences> get _prefs async {

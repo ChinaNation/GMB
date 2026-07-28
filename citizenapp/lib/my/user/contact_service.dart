@@ -11,6 +11,7 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 通讯录唯一业务模型。公开昵称、头像和签名属于用户公开资料，不复制进通讯录；
@@ -197,10 +198,12 @@ class UserContactService {
     WalletManager? walletManager,
     SquareSessionProvider? sessionProvider,
     SquareApiClient? apiClient,
+    IdentityAccountCache? identityAccountCache,
     bool autoSync = true,
   })  : _walletManager = walletManager ?? WalletManager(),
         _sessionProvider = sessionProvider ?? SquareSessionProvider.instance,
         _apiClient = apiClient ?? SquareApiClient(),
+        _identityAccountCache = identityAccountCache,
         _autoSync = autoSync;
 
   static const int _ss58Prefix = 2027;
@@ -211,7 +214,13 @@ class UserContactService {
   final WalletManager _walletManager;
   final SquareSessionProvider _sessionProvider;
   final SquareApiClient _apiClient;
+  final IdentityAccountCache? _identityAccountCache;
   final bool _autoSync;
+
+  /// 通讯录归属 = **身份账户**(CID 绑定账户,唯一身份主键);通讯录密钥从身份账户
+  /// child 派生、云会话 accountId 亦身份账户,三者一致(彻底切,不留账户0)。
+  IdentityAccountCache get _identityCache =>
+      _identityAccountCache ?? IdentityAccountCache.instance;
 
   final ValueNotifier<ContactSyncState> syncState =
       ValueNotifier<ContactSyncState>(
@@ -220,7 +229,7 @@ class UserContactService {
 
   /// 通讯录只属于“我的钱包”中的默认热钱包，调用方不得用交易付款钱包覆盖。
   Future<List<UserContact>> getContacts() async {
-    final accountId = (await _requireDefaultWallet()).accountId;
+    final accountId = await _requireIdentityAccountId();
     return _getContacts(accountId);
   }
 
@@ -230,21 +239,20 @@ class UserContactService {
 
   /// 返回通讯录当前所属的默认用户账户，供扫码页做“不能添加自己”校验。
   Future<String> getAccountId() async =>
-      (await _requireDefaultWallet()).accountId;
+      await _requireIdentityAccountId();
 
   Future<ContactImportResult> addContact({
     required String ss58Address,
     required String contactName,
   }) async {
-    final wallet = await _requireDefaultWallet();
-    final currentAccountId = wallet.accountId;
+    final currentAccountId = await _requireIdentityAccountId();
     final normalizedSs58Address = normalizeSs58Address(ss58Address);
     final accountId = accountIdFromSs58(normalizedSs58Address);
     final normalizedName = contactName.trim();
     if (normalizedName.isEmpty) {
       throw const FormatException('联系人名称为空');
     }
-    if (accountId == wallet.accountId) {
+    if (accountId == currentAccountId) {
       throw const FormatException('不能把自己加入通讯录');
     }
 
@@ -273,7 +281,7 @@ class UserContactService {
       _PendingContactOp.upsert(contact.accountId, contact.updatedAt),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(wallet));
+      unawaited(_syncWallet(accountId));
     }
     return ContactImportResult(contact: contact, created: created);
   }
@@ -282,8 +290,7 @@ class UserContactService {
     String contactAccountId,
     String contactName,
   ) async {
-    final wallet = await _requireDefaultWallet();
-    final accountId = wallet.accountId;
+    final accountId = await _requireIdentityAccountId();
     final normalizedContactAccountId = requireAccountId(contactAccountId);
     final normalizedName = contactName.trim();
     if (normalizedName.isEmpty) {
@@ -308,14 +315,13 @@ class UserContactService {
       ),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(wallet));
+      unawaited(_syncWallet(accountId));
     }
     return _sorted(contacts);
   }
 
   Future<List<UserContact>> deleteContact(String contactAccountId) async {
-    final wallet = await _requireDefaultWallet();
-    final accountId = wallet.accountId;
+    final accountId = await _requireIdentityAccountId();
     final normalizedContactAccountId = requireAccountId(contactAccountId);
     final contacts = (await _getContacts(accountId))
         .where((item) => item.accountId != normalizedContactAccountId)
@@ -329,7 +335,7 @@ class UserContactService {
       ),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(wallet));
+      unawaited(_syncWallet(accountId));
     }
     return _sorted(contacts);
   }
@@ -338,18 +344,14 @@ class UserContactService {
   /// 绝不覆盖本机有效缓存；下一次正常写入会修复对应云端记录。
   /// 同步入口同样只接受默认用户；付款钱包和调用方参数不能改变密文归属。
   Future<List<UserContact>> sync() async {
-    final wallet = await _requireDefaultWallet();
-    return _syncWallet(wallet);
+    return _syncWallet(await _requireIdentityAccountId());
   }
 
-  Future<List<UserContact>> _syncWallet(WalletProfile wallet) async {
-    final accountId = wallet.accountId;
+  Future<List<UserContact>> _syncWallet(String accountId) async {
     await _setSyncState(accountId, ContactSyncPhase.syncing);
     try {
-      final keys = await _walletManager.ensureContactKeyMaterial(
-        walletIndex: wallet.walletIndex,
-        accountId: accountId,
-      );
+      final keys =
+          await _walletManager.ensureContactKeyMaterialForAccountId(accountId);
       final session = await _sessionProvider.ensureSession();
       if (session == null || session.accountId != accountId) {
         throw const SquareApiException('通讯录云同步需要默认热钱包会话');
@@ -421,8 +423,52 @@ class UserContactService {
     }
   }
 
+  /// CID 换绑重建:把通讯录从旧身份账户 [oldAccountId] 迁到新身份账户 [newAccountId]
+  /// (死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
+  ///
+  /// 本地明文缓存直接搬(无需解密),每条造 upsert 待办以强制用**新账户 child 密钥**重加密
+  /// 上云;随后清旧账户本地缓存与通讯录密钥,并触发一次新账户云同步。上云失败落既有待办
+  /// 机制,下次 sync 自动重试——最终一致收敛到新账户。迁移只搬本地权威副本,不依赖旧云端
+  /// 密文可解(旧密钥已换),故换绑后旧密钥即可安全丢弃。
+  Future<void> migrateContactsToNewIdentity(
+    String oldAccountId,
+    String newAccountId,
+  ) async {
+    final oldNorm = requireAccountId(oldAccountId);
+    final newNorm = requireAccountId(newAccountId);
+    if (oldNorm == newNorm) return;
+
+    final oldContacts = await _readContacts(oldNorm);
+    if (oldContacts.isNotEmpty) {
+      // 新账户换绑前非身份账户,通常无通讯录;稳妥并入其已有缓存,同 ID 以旧账户为准。
+      final merged = <String, UserContact>{};
+      for (final contact in await _readContacts(newNorm)) {
+        merged[contact.accountId] = contact;
+      }
+      for (final contact in oldContacts) {
+        merged[contact.accountId] = contact;
+      }
+      final contacts = merged.values.toList(growable: false);
+      // 全量 upsert 待办:强制用新账户 child 密钥重新加密上云。
+      final pending = contacts
+          .map((contact) =>
+              _PendingContactOp.upsert(contact.accountId, contact.updatedAt))
+          .toList(growable: false);
+      await _writeSnapshot(newNorm, contacts, pending);
+    }
+    // 清旧账户本地缓存(明文/待办/同步态)与通讯录密钥,杜绝残留。
+    await _deleteKvKeys(<String>[
+      '$_contactsPrefix$oldNorm',
+      '$_pendingPrefix$oldNorm',
+      '$_syncPrefix$oldNorm',
+    ]);
+    await _walletManager.deleteContactKeysForAccountId(oldNorm);
+    // 触发新账户云重建(内部吞异常并落待办,不阻断换绑重建主流程)。
+    await _syncWallet(newNorm);
+  }
+
   Future<ContactSyncState> readSyncState() async {
-    final accountId = (await _requireDefaultWallet()).accountId;
+    final accountId = await _requireIdentityAccountId();
     final raw = await _readKv('$_syncPrefix$accountId');
     if (raw == null) {
       return const ContactSyncState(phase: ContactSyncPhase.idle);
@@ -445,10 +491,13 @@ class UserContactService {
     }
   }
 
-  Future<WalletProfile> _requireDefaultWallet() async {
-    final wallet = await _walletManager.getDefaultWallet();
-    if (wallet == null) throw const WalletAuthException('请先创建默认热钱包');
-    return wallet;
+  /// 通讯录归属的**身份账户** accountId(身份主键 = CID 号)。无热钱包 / 无身份则抛。
+  Future<String> _requireIdentityAccountId() async {
+    final accountId = await _identityCache.accountId();
+    if (accountId == null || accountId.isEmpty) {
+      throw const WalletAuthException('请先创建默认热钱包');
+    }
+    return accountId;
   }
 
   Future<List<UserContact>> _readContacts(String accountId) async {
@@ -562,6 +611,13 @@ class UserContactService {
 
   Future<void> _writeKv(String key, String value) =>
       WalletIsar.instance.writeTxn((isar) => _putKvInTxn(isar, key, value));
+
+  Future<void> _deleteKvKeys(List<String> keys) =>
+      WalletIsar.instance.writeTxn((isar) async {
+        for (final key in keys) {
+          await isar.appKvEntitys.deleteByKey(key);
+        }
+      });
 
   Future<void> _putKvInTxn(Isar isar, String key, String value) async {
     final row = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();

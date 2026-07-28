@@ -8,9 +8,9 @@ import 'package:citizenapp/chat/chat_payload.dart';
 import 'package:citizenapp/chat/group/ui/open_group_chat.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 群聊打开器；测试可注入替身，正式运行走 [openGroupChat]。
 typedef GroupChatOpener = Future<void> Function(
@@ -40,7 +40,7 @@ class ChatSearchPage extends StatefulWidget {
   final ChatStore? store;
   final UserContactService? contactService;
 
-  /// 当前默认热钱包账户；不传则页面自行读取。
+  /// 当前身份账户（CID 绑定账户）；不传则页面自行读取。
   final String? accountId;
   final DirectChatOpener? directChatOpener;
   final GroupChatOpener? groupChatOpener;
@@ -81,7 +81,7 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
 
   Future<void> _load() async {
     final accountId = widget.accountId ??
-        (await WalletManager().getDefaultWallet())?.accountId ??
+        await IdentityAccountCache.instance.accountId() ??
         '';
     final conversations =
         await _store.readConversationPreviews(accountId: accountId);

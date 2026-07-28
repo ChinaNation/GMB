@@ -25,7 +25,7 @@ String loginSystemDisplayName(LoginSignRequestEnvelope c) {
 
 bool isLoginSignRequestExpired(LoginSignRequestEnvelope c) {
   final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-  return now > (c.expiresAt ?? 0);
+  return now >= (c.expiresAt ?? 0);
 }
 
 /// 登录请求的签名公钥必须与当前选中钱包 AccountId 完全一致。
@@ -41,8 +41,6 @@ bool loginRequestTargetsAccountId(
   }
   return request.body.signerPublicKeyHex == accountId;
 }
-
-const _maxClockSkewSeconds = 30;
 
 /// 解析登录签名请求 envelope。
 LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
@@ -67,13 +65,12 @@ LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
   }
 
   final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-  if (now > (env.expiresAt ?? 0) + _maxClockSkewSeconds) {
+  if (now >= (env.expiresAt ?? 0)) {
     throw const LoginQrException('登录二维码已过期');
   }
   _loginSystem(QrEnvelope<SignRequestBody>(
     kind: QrKind.signRequest,
     id: env.id,
-    issuedAt: env.issuedAt,
     expiresAt: env.expiresAt,
     body: body,
   ));
@@ -81,7 +78,6 @@ LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
   return QrEnvelope<SignRequestBody>(
     kind: QrKind.signRequest,
     id: env.id,
-    issuedAt: env.issuedAt,
     expiresAt: env.expiresAt,
     body: body,
   );
@@ -110,7 +106,6 @@ LoginSignResponseEnvelope buildLoginSignResponse({
   return QrEnvelope<SignResponseBody>(
     kind: QrKind.signResponse,
     id: request.id,
-    issuedAt: request.issuedAt,
     expiresAt: request.expiresAt,
     body: SignResponseBody.fromHex(
       signerPublicKeyHex: signerPublicKey,

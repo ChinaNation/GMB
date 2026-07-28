@@ -10,6 +10,7 @@ import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/bodies/sign_request_body.dart';
 import 'package:citizenwallet/signer/qr_signer.dart';
+import 'package:citizenwallet/isar/wallet_isar.dart';
 import 'package:citizenwallet/wallet/wallet_manager.dart';
 
 /// 给纯 call_data 拼上真实 SigningPayload 扩展尾(与节点端 build_signing_payload
@@ -40,7 +41,6 @@ SignRequestEnvelope _buildTestRequest({
   return QrEnvelope<SignRequestBody>(
     kind: QrKind.signRequest,
     id: requestId,
-    issuedAt: now,
     expiresAt: now + 90,
     body: SignRequestBody.fromHex(
       action: action,
@@ -57,10 +57,13 @@ void main() {
     late Account signingAccount;
 
     setUp(() async {
+      await WalletIsar.instance.resetForTest();
       walletManager = _FakeWalletManager();
       service = OfflineSignService(walletManager: walletManager);
       signingAccount = await walletManager.ensureAccount();
     });
+
+    tearDown(() => WalletIsar.instance.resetForTest());
 
     test('signParsedRequest should sign normal internal_vote (统一入口)', () async {
       // 所有管理员投票走 InternalVote(20).cast(0)
@@ -94,6 +97,36 @@ void main() {
         ),
         isTrue,
       );
+    });
+
+    test('同一请求 id 到期前只能签名一次', () async {
+      final payloadHex = _withSigningTailHex('0x140001000000000000000001');
+      final request = _buildTestRequest(
+        requestId: 'offline-replay-test-0001',
+        signerPublicKey: signingAccount.accountId,
+        payloadHex: payloadHex,
+        action: QrActions.internalVote,
+      );
+
+      await service.signParsedRequest(
+        accountId: signingAccount.accountId,
+        request: request,
+      );
+
+      expect(
+        () => service.signParsedRequest(
+          accountId: signingAccount.accountId,
+          request: request,
+        ),
+        throwsA(
+          isA<OfflineSignException>().having(
+            (e) => e.code,
+            'code',
+            OfflineSignErrorCode.replayed,
+          ),
+        ),
+      );
+      expect(walletManager.signCallCount, 1);
     });
 
     test('signParsedRequest 拒绝 action 与 payload 不一致', () async {
@@ -355,7 +388,8 @@ class _FakeWalletManager extends WalletManager {
       return existing;
     }
     final entropy =
-        bip39m.Mnemonic.fromSentence(_mnemonic, bip39m.Language.english).entropy;
+        bip39m.Mnemonic.fromSentence(_mnemonic, bip39m.Language.english)
+            .entropy;
     final miniSecret = await CryptoScheme.miniSecretFromEntropy(entropy);
     final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(miniSecret));
     pair.ss58Format = _ss58;

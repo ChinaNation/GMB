@@ -11,14 +11,12 @@ class QrEnvelope<T extends QrBody> {
   const QrEnvelope({
     required this.kind,
     required this.id,
-    required this.issuedAt,
     required this.expiresAt,
     required this.body,
   });
 
   final QrKind kind;
   final String? id;
-  final int? issuedAt;
   final int? expiresAt;
   final T body;
 
@@ -34,7 +32,7 @@ class QrEnvelope<T extends QrBody> {
       map['i'] = id;
       map['e'] = expiresAt;
     } else {
-      if (id != null || issuedAt != null || expiresAt != null) {
+      if (id != null || expiresAt != null) {
         throw StateError('固定码 ${kind.code} 不能包含 i/e');
       }
     }
@@ -59,9 +57,13 @@ class QrEnvelope<T extends QrBody> {
     }
     final kindWire = data['k'];
     final kind = QrKind.fromWire(kindWire);
+    requireExactKeys(
+      data,
+      kind.temporary ? const {'p', 'k', 'i', 'e', 'b'} : const {'p', 'k', 'b'},
+      'QR envelope',
+    );
 
     String? id;
-    int? issuedAt;
     int? expiresAt;
     if (kind.temporary) {
       id = _requireString(data, 'i');
@@ -92,7 +94,6 @@ class QrEnvelope<T extends QrBody> {
     return QrEnvelope<QrBody>(
       kind: kind,
       id: id,
-      issuedAt: issuedAt,
       expiresAt: expiresAt,
       body: body,
     );
@@ -117,4 +118,18 @@ class QrEnvelope<T extends QrBody> {
 
 abstract class QrBody {
   Map<String, dynamic> toJson();
+}
+
+/// 严格键集合校验：既拒绝未知字段，也拒绝缺失字段。
+void requireExactKeys(
+  Map<String, dynamic> data,
+  Set<String> expected,
+  String context,
+) {
+  final actual = data.keys.toSet();
+  if (actual.length != expected.length ||
+      !actual.containsAll(expected) ||
+      !expected.containsAll(actual)) {
+    throw FormatException('$context 字段集合不符合 QR_V1');
+  }
 }

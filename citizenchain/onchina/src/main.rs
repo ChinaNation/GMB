@@ -1073,19 +1073,19 @@ impl Db {
         Ok(())
     }
 
+    /// 机构文档(InstitutionDocument)按其机构 CID 的省/市分区。复用 primitives 权威单源
+    /// `cid_scope_codes`(机构 CID R5 = 省2 + 市3;人主体 CID 去地域化 → Err)。
+    /// 仅收机构 CID;人主体 CID 或畸形号落兜底 "ZS"/None,不把号段误读成区划码。
     fn scope_codes_from_cid(cid_number: &str) -> (String, Option<String>) {
-        let Some(r5) = cid_number.split('-').next() else {
+        let Ok((province, city)) = primitives::cid::number::cid_scope_codes(cid_number.as_bytes())
+        else {
             return ("ZS".to_string(), None);
         };
-        if r5.len() < 5 {
-            return ("ZS".to_string(), None);
-        }
-        let province_code = r5[0..2].to_string();
-        let c_part = &r5[2..5];
-        let city_code = if c_part == "000" {
+        let province_code = String::from_utf8_lossy(&province).into_owned();
+        let city_code = if &city == b"000" {
             None
         } else {
-            Some(c_part.to_string())
+            Some(String::from_utf8_lossy(&city).into_owned())
         };
         (province_code, city_code)
     }
@@ -2377,6 +2377,16 @@ fn main() {
             .route(
                 "/api/v1/admin/citizens/occupy/submit",
                 post(domains::citizens::occupy::submit_citizen_occupy),
+            )
+            // 换绑第一段:注册局对某匿名 CID 发起换绑 → 返回新钱包签名请求。
+            .route(
+                "/api/v1/admin/citizens/rebind/prepare",
+                post(domains::citizens::occupy::prepare_citizen_rebind),
+            )
+            // 换绑第二段:回传新账户换绑签名 → 返回管理员冷签请求二维码。
+            .route(
+                "/api/v1/admin/citizens/rebind/submit",
+                post(domains::citizens::occupy::submit_citizen_rebind),
             )
             .route(
                 "/api/v1/admin/chain/submit",

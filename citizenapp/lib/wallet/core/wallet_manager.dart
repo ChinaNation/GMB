@@ -966,21 +966,25 @@ class WalletManager {
     await _loadSigningKey(walletIndex);
   }
 
-  /// 读取当前热钱包的通讯录专用密钥。新建/导入钱包时已经用内存中的账户0 child
-  /// 预派生；老钱包第一次进入通讯录时才读取一次硬件金库 child（触发生物识别）
-  /// 并持久化。
-  Future<ContactKeyMaterial> ensureContactKeyMaterial({
-    required int walletIndex,
-    required String accountId,
-  }) async {
-    final profile = await _requireHotWalletProfile(walletIndex);
-    if (profile.accountId != accountId) {
-      throw const WalletAuthException('通讯录账户与当前钱包不一致');
-    }
+  /// 读取指定**身份账户**([accountId])的通讯录专用密钥。
+  ///
+  /// 身份主键 = CID 号:通讯录密钥从**身份账户 child** 域隔离派生(按 accountId 精确取
+  /// 硬件金库 child,与 [signForAccountId] 同源,非恒账户0)。walletIndex 由该账户所属
+  /// 钱包推得。首次读 child(触发生物识别)并持久化;换绑到新账户后密文重加密属换绑
+  /// 重建(死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
+  Future<ContactKeyMaterial> ensureContactKeyMaterialForAccountId(
+    String accountId,
+  ) async {
     final stored = await _readContactKeys(accountId);
     if (stored != null) return stored;
 
-    final childHex = await _readAccountKeyOrThrow(walletIndex, accountId);
+    final account = await getAccountByAccountId(accountId);
+    if (account == null) {
+      throw const WalletAuthException('通讯录账户不存在');
+    }
+    final profile = await _requireHotWalletProfileByMasterId(account.masterId);
+    final childHex =
+        await _readAccountKeyOrThrow(profile.walletIndex, accountId);
     final child = Uint8List.fromList(_hexToBytes(childHex));
     try {
       final derived = await _deriveContactKeys(accountId, child);
@@ -1159,6 +1163,39 @@ class WalletManager {
       },
     );
   }
+
+  /// 把设备子钥重新绑定到指定**身份账户** [identityAccountId](CID 换绑后调)。
+  ///
+  /// 身份主键 = CID 号,换绑后设备子钥须归属新绑定账户。**P-256 硬件子钥按 walletIndex
+  /// 存、不删不重生**(与 accountId 解耦);只用**身份账户的 child** 重签绑定证明(经
+  /// [signForAccountId],弹一次生物识别)、后端 `device/register` 把 p256 归属到身份账户。
+  /// 见死契约 [[cid-rebind-subkeys-must-auto-migrate]]:换绑 Finalized 后必自动成功更换。
+  /// 无 registrar(未接后端 / 测试)时静默跳过。
+  Future<void> rebindDeviceSubkeyToAccountId(String identityAccountId) async {
+    final registrar = _subkeyRegistrar;
+    if (registrar == null) {
+      return;
+    }
+    final wallet = await getDefaultWallet();
+    if (wallet == null) {
+      throw const WalletAuthException('无热钱包,无法重绑设备子钥');
+    }
+    await registrar(
+      walletIndex: wallet.walletIndex,
+      accountId: identityAccountId,
+      signBinding: (message) async {
+        final signature = await signForAccountId(identityAccountId, message);
+        return '0x${_toHex(signature.toList(growable: false))}';
+      },
+    );
+  }
+
+  /// 清除旧身份账户 [accountId] 的通讯录密钥缓存(CID 换绑重建时用)。
+  ///
+  /// 换绑后通讯录归属新账户、密文按新账户 child 重加密([[cid-rebind-subkeys-must-auto-migrate]]);
+  /// 旧账户的通讯录密钥不再有用,须删除以免残留。密钥可从 child 幂等重派,删除安全。
+  Future<void> deleteContactKeysForAccountId(String accountId) =>
+      _deleteContactKeys(accountId);
 
   /// 前置检查：设备必须有锁屏（生物识别 / 数字 / 图案 / PIN），否则拒绝
   /// 创建 / 导入热钱包（D3 fail-closed）。

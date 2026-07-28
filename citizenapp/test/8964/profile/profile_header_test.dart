@@ -7,10 +7,21 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/user_qr_page.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 
 import 'fake_profile.dart';
+
+/// 身份账户缓存 fake：resolve/accountId 返回 null，让 _resolveOwnAccount 回退成
+/// 「非本人」（行为与迁移前一致）；避免 instance 触发真链读/真 Isar。
+class _NullIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async => null;
+  @override
+  Future<String?> accountId({bool allowChainRead = true}) async => null;
+}
 
 Widget _wrap({
   required bool isSelf,
@@ -30,6 +41,12 @@ Widget _wrap({
 }
 
 void main() {
+  setUp(() {
+    IdentityAccountCache.debugInstance = _NullIdentityCache();
+  });
+
+  tearDown(IdentityAccountCache.resetDebugInstance);
+
   testWidgets('missing public name uses local nickname and keeps account below',
       (tester) async {
     await tester.pumpWidget(

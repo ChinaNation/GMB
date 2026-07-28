@@ -103,7 +103,8 @@ class _AppLockGateState extends State<_AppLockGate>
     }
 
     // 2. 检查设备锁（存储在 SecureStorage，防 root 篡改）
-    final deviceLockStr = await appSecureStorage.read(key: 'device_lock_enabled');
+    final deviceLockStr =
+        await appSecureStorage.read(key: 'device_lock_enabled');
     final deviceLockEnabled = deviceLockStr == 'true';
     if (deviceLockEnabled) {
       if (!mounted) return;
@@ -140,10 +141,9 @@ class _AppLockGateState extends State<_AppLockGate>
     try {
       final success = await _localAuth.authenticate(
         localizedReason: '请用生物识别验证身份以进入应用',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: true,
-        ),
+        biometricOnly: true,
+        persistAcrossBackgrounding: true,
+        sensitiveTransaction: true,
       );
       if (!mounted) return;
       if (success) {

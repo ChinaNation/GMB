@@ -1,4 +1,5 @@
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -15,23 +16,44 @@ class SquareSessionProvider {
     SquareApiClient? client,
     WalletManager? walletManager,
     DeviceSubkey? deviceSubkey,
+    IdentityAccountCache? identityAccountCache,
   })  : _client = client ?? SquareApiClient(),
         _walletManager = walletManager ?? WalletManager(),
-        _deviceSubkey = deviceSubkey ?? DeviceSubkey();
+        _deviceSubkey = deviceSubkey ?? DeviceSubkey(),
+        _identityAccountCache = identityAccountCache;
 
   static final SquareSessionProvider instance = SquareSessionProvider();
 
   final SquareApiClient _client;
   final WalletManager _walletManager;
   final DeviceSubkey _deviceSubkey;
+  final IdentityAccountCache? _identityAccountCache;
 
-  /// 返回默认热钱包的可用 session；无热钱包返回 null（调用方按不可用处理，不放行浏览）。
+  IdentityAccountCache get _identityCache =>
+      _identityAccountCache ?? IdentityAccountCache.instance;
+
+  /// 返回当前**身份账户**的可用 session；无热钱包返回 null（调用方按不可用处理）。
+  ///
+  /// **身份主键 = CID 号**:会话 `accountId` 取 CID 绑定的身份账户([IdentityAccountCache]),
+  /// 而设备子钥签名仍用钱包 `walletIndex`(P-256 子钥按 walletIndex 存,与 accountId
+  /// **解耦**)。这不是复用 [ensureSessionFor]——那条是钱包级(钱包名同步),accountId
+  /// 用钱包自己的;本方法是身份级,不走账户0 兼容路径。
   Future<SquareSession?> ensureSession() async {
     final wallet = await _walletManager.getDefaultWallet();
-    if (wallet == null) {
+    if (wallet == null || !wallet.isHotWallet) {
       return null;
     }
-    return ensureSessionFor(wallet);
+    final identityAccountId =
+        await _identityCache.accountId() ?? wallet.accountId;
+    return _client.ensureSession(
+      accountId: identityAccountId,
+      signLoginPayload: (loginMessage) async {
+        // 会话握手 = 非用户动权 → P-256 硬件子钥静默签名(后端 ES256 验,不读 seed)。
+        final raw =
+            await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
+        return '0x$raw';
+      },
+    );
   }
 
   /// 返回**指定钱包**账户的可用 session。

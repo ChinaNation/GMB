@@ -67,7 +67,10 @@ class SquareComposeSigners {
     }
     final hotWallet = hotWalletManager;
     if (hotWallet != null) {
-      return hotWallet.signWithWallet(walletIndex, payload);
+      // 发布上链签名者 = 身份账户(CID 绑定账户;identity.accountId 已是身份账户)，
+      // 按 accountId 精确取硬件金库 child 签，不走账户0。设备子钥登录(signLogin)
+      // 仍按 walletIndex,与此解耦。
+      return hotWallet.signForAccountId(accountId, payload);
     }
 
     final qrSigner = QrSigner();

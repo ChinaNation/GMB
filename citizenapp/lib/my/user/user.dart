@@ -12,6 +12,7 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/widgets/local_identity_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/my/creator/creator_page.dart';
 import 'package:citizenapp/my/membership/membership_page.dart';
@@ -67,12 +68,16 @@ class _ProfilePageState extends State<MyTab> {
   /// 不得覆盖新默认钱包。
   int _loadGeneration = 0;
 
-  /// 同一次 operational 状态下，同一默认钱包只做一次真实链身份刷新。
+  /// 同一次 operational 状态下，同一身份账户只做一次真实链身份刷新。
   String? _operationalIdentityAccount;
   bool _localStateLoaded = false;
 
-  /// 用户身份账户 = 默认用户钱包（列表中最靠前的热钱包）账户 ID。
-  String get _communicationAccountId => _defaultWallet?.accountId ?? '';
+  /// 身份账户(CID 绑定账户)ID，单源 [IdentityAccountCache]；链读失败乐观回退账户0，
+  /// 无热钱包空串。头像/背景 seed、昵称、「我的主页」入参都跟随它。
+  String _identityAccountId = '';
+
+  /// 用户身份账户 ID（展示口径）= 当前身份账户（CID 绑定账户，非恒账户0）。
+  String get _communicationAccountId => _identityAccountId;
 
   /// 用户昵称 = 默认钱包名称；钱包名称异常缺失时使用与统一主页一致的本地昵称，
   /// 绝不把钱包账户放进昵称位置。
@@ -156,11 +161,16 @@ class _ProfilePageState extends State<MyTab> {
     final generation = ++_loadGeneration;
     final profile = await _userProfileService.getState();
     final defaultWallet = await _walletManager.getDefaultWallet();
+    // 身份账户（CID 绑定账户；链读失败乐观回退账户0，无热钱包空串）。
+    final identityAccountId = await IdentityAccountCache.instance.accountId() ??
+        defaultWallet?.accountId ??
+        '';
     String? identityLevel;
     try {
-      final accountId = defaultWallet?.accountId ?? '';
-      final snapshot =
-          accountId.isEmpty ? null : await _badgeSnapshotStore.read(accountId);
+      // 徽章快照键 = 身份账户(与 MyIdService/square 写入口径一致;彻底切,不读账户0)。
+      final snapshot = identityAccountId.isEmpty
+          ? null
+          : await _badgeSnapshotStore.read(identityAccountId);
       identityLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
@@ -174,6 +184,7 @@ class _ProfilePageState extends State<MyTab> {
     setState(() {
       _userProfile = profile;
       _defaultWallet = defaultWallet;
+      _identityAccountId = identityAccountId;
       _defaultWalletIdentityLevel = identityLevel;
       _localStateLoaded = true;
     });
@@ -197,30 +208,38 @@ class _ProfilePageState extends State<MyTab> {
         _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
       return;
     }
-    final accountId = wallet?.accountId ?? '';
-    if (accountId.isEmpty || _operationalIdentityAccount == accountId) {
+    if (wallet == null) return;
+    final walletAccountId = wallet.accountId;
+    // 去重键 / votingAccountId 比对 / 徽章快照键都以身份账户为准（CID 绑定账户，
+    // 与身份展示同口径；链读失败乐观回退账户0）。默认钱包本身是否被换掉仍按钱包
+    // 账户做再入守卫，避免 account0 与 //n 混淆导致守卫误判。
+    final identityAccountId =
+        await IdentityAccountCache.instance.accountId() ?? walletAccountId;
+    if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
+    if (identityAccountId.isEmpty ||
+        _operationalIdentityAccount == identityAccountId) {
       return;
     }
-    _operationalIdentityAccount = accountId;
+    _operationalIdentityAccount = identityAccountId;
 
     final state = await _myIdService.getState();
-    if (!mounted || _defaultWallet?.accountId != accountId) return;
+    if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
 
     String? refreshedLevel;
     if (state.isCitizen &&
-        state.votingAccountId?.trim() == accountId &&
+        state.votingAccountId?.trim() == identityAccountId &&
         (state.identityLevel == 'voting' ||
             state.identityLevel == 'candidate')) {
       refreshedLevel = state.identityLevel;
     } else if (state.status == MyIdStatus.queryFailed) {
       // 纯默认用户模型下不再有多身份冲突;仅链读失败时回落徽章快照。
-      final snapshot = await _badgeSnapshotStore.read(accountId);
+      final snapshot = await _badgeSnapshotStore.read(identityAccountId);
       refreshedLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
       };
     }
-    if (!mounted || _defaultWallet?.accountId != accountId) return;
+    if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
     setState(() => _defaultWalletIdentityLevel = refreshedLevel);
   }
 
