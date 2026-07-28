@@ -2,6 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 
+const _accountA =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _accountB =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
 const _mainAccountId =
     '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _feeAccountId =
@@ -33,51 +37,51 @@ void main() {
 
   group('ClearingBankPrefs', () {
     test('loadSnapshot returns null when key absent', () async {
-      expect(await ClearingBankPrefs.loadSnapshot(0), isNull);
+      expect(await ClearingBankPrefs.loadSnapshot(_accountA), isNull);
     });
 
-    test('完整快照按 walletIndex 隔离', () async {
+    test('完整快照按 account_id 隔离', () async {
       await ClearingBankPrefs.saveSnapshot(
-        0,
+        _accountA,
         _snapshot(cidNumber: 'GD001-SCB05-000000001-2026'),
       );
       await ClearingBankPrefs.saveSnapshot(
-        1,
+        _accountB,
         _snapshot(cidNumber: 'BJ001-SCB0U-000000002-2026'),
       );
       expect(
-        (await ClearingBankPrefs.loadSnapshot(0))?.cidNumber,
+        (await ClearingBankPrefs.loadSnapshot(_accountA))?.cidNumber,
         'GD001-SCB05-000000001-2026',
       );
       expect(
-        (await ClearingBankPrefs.loadSnapshot(1))?.cidNumber,
+        (await ClearingBankPrefs.loadSnapshot(_accountB))?.cidNumber,
         'BJ001-SCB0U-000000002-2026',
       );
     });
 
-    test('clear removes only the specified walletIndex', () async {
-      await ClearingBankPrefs.saveSnapshot(0, _snapshot(cidNumber: 'AAA'));
-      await ClearingBankPrefs.saveSnapshot(1, _snapshot(cidNumber: 'BBB'));
-      await ClearingBankPrefs.clear(0);
-      expect(await ClearingBankPrefs.loadSnapshot(0), isNull);
-      expect((await ClearingBankPrefs.loadSnapshot(1))?.cidNumber, 'BBB');
+    test('clear removes only the specified account_id', () async {
+      await ClearingBankPrefs.saveSnapshot(_accountA, _snapshot(cidNumber: 'AAA'));
+      await ClearingBankPrefs.saveSnapshot(_accountB, _snapshot(cidNumber: 'BBB'));
+      await ClearingBankPrefs.clear(_accountA);
+      expect(await ClearingBankPrefs.loadSnapshot(_accountA), isNull);
+      expect((await ClearingBankPrefs.loadSnapshot(_accountB))?.cidNumber, 'BBB');
     });
 
     test('saveSnapshot overwrites previous value (切换清算行)', () async {
-      await ClearingBankPrefs.saveSnapshot(0, _snapshot(cidNumber: 'OLD'));
-      await ClearingBankPrefs.saveSnapshot(0, _snapshot(cidNumber: 'NEW'));
-      expect((await ClearingBankPrefs.loadSnapshot(0))?.cidNumber, 'NEW');
+      await ClearingBankPrefs.saveSnapshot(_accountA, _snapshot(cidNumber: 'OLD'));
+      await ClearingBankPrefs.saveSnapshot(_accountA, _snapshot(cidNumber: 'NEW'));
+      expect((await ClearingBankPrefs.loadSnapshot(_accountA))?.cidNumber, 'NEW');
     });
 
     test('saveSnapshot stores endpoint data', () async {
       await ClearingBankPrefs.saveSnapshot(
-        0,
+        _accountA,
         _snapshot(
           cidNumber: 'GD001-SCB05-000000001-2026',
         ),
       );
 
-      final snapshot = await ClearingBankPrefs.loadSnapshot(0);
+      final snapshot = await ClearingBankPrefs.loadSnapshot(_accountA);
       expect(snapshot, isNotNull);
       expect(snapshot!.cidNumber, 'GD001-SCB05-000000001-2026');
       expect(snapshot.wssUrl, 'ws://127.0.0.1:9944');
@@ -87,11 +91,12 @@ void main() {
 
     test('缺少费用账户的旧快照必须拒绝', () async {
       SharedPreferences.setMockInitialValues({
-        'clearing_bank_binding_0': '{"cid_number":"GD001-SCB05-000000001-2026",'
-            '"main_account_id":"$_mainAccountId",'
-            '"rpc_domain":"127.0.0.1","rpc_port":9944}',
+        'clearing_bank_binding_$_accountA':
+            '{"cid_number":"GD001-SCB05-000000001-2026",'
+                '"main_account_id":"$_mainAccountId",'
+                '"rpc_domain":"127.0.0.1","rpc_port":9944}',
       });
-      expect(await ClearingBankPrefs.loadSnapshot(0), isNull);
+      expect(await ClearingBankPrefs.loadSnapshot(_accountA), isNull);
     });
   });
 }

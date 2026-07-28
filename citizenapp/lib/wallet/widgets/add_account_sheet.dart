@@ -46,25 +46,36 @@ AccountIndexParse parseAccountIndices(String raw) {
 }
 
 /// 弹出「添加账户」底部面板；成功追加返回 `true`，否则返回 `null`。
+///
+/// [mode] 固定本次添加口径：`next`=添加下一个账户；`specify`=添加指定账户。
+/// 由「我的钱包」列表右上角「＋」的两个入口分别指定，面板内不再切换。
 Future<bool?> showAddAccountSheet(
   BuildContext context, {
   required String masterId,
+  required AddAccountMode mode,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => AddAccountSheet(masterId: masterId),
+    builder: (_) => AddAccountSheet(masterId: masterId, mode: mode),
   );
 }
 
-/// 无根多账户追加面板：录入本钱包助记词 → 选「下一个」或「指定序号」→ 落库。
+/// 无根多账户追加面板：录入本钱包助记词 →（按固定 [mode]）添加下一个 / 指定序号 → 落库。
 ///
 /// 无根设备不保存助记词，追加账户须重新录入；[WalletManager.addAccounts] 会先做
 /// 归属校验（助记词派生的账户0 必须等于 [masterId]），不符抛 [WalletAuthException]。
 class AddAccountSheet extends StatefulWidget {
-  const AddAccountSheet({super.key, required this.masterId});
+  const AddAccountSheet({
+    super.key,
+    required this.masterId,
+    required this.mode,
+  });
 
   final String masterId;
+
+  /// 固定的添加模式(由钱包列表「＋」的两个入口分别指定,面板内不再切换)。
+  final AddAccountMode mode;
 
   @override
   State<AddAccountSheet> createState() => _AddAccountSheetState();
@@ -75,7 +86,6 @@ class _AddAccountSheetState extends State<AddAccountSheet> {
   final TextEditingController _mnemonicController = TextEditingController();
   final TextEditingController _indexController = TextEditingController();
 
-  AddAccountMode _mode = AddAccountMode.next;
   int? _nextIndex;
   bool _submitting = false;
   String? _error;
@@ -123,7 +133,7 @@ class _AddAccountSheetState extends State<AddAccountSheet> {
     });
     try {
       final mnemonic = _mnemonicController.text;
-      if (_mode == AddAccountMode.next) {
+      if (widget.mode == AddAccountMode.next) {
         await _walletManager.addNextAccount(widget.masterId, mnemonic);
       } else {
         final parsed = parseAccountIndices(_indexController.text);
@@ -171,9 +181,9 @@ class _AddAccountSheetState extends State<AddAccountSheet> {
                   ),
                 ),
               ),
-              const Text(
-                '添加账户',
-                style: TextStyle(
+              Text(
+                widget.mode == AddAccountMode.next ? '添加下一个账户' : '添加指定账户',
+                style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.textPrimary,
@@ -187,27 +197,7 @@ class _AddAccountSheetState extends State<AddAccountSheet> {
               const SizedBox(height: 12),
               Bip39InputField(controller: _mnemonicController, wordCount: 0),
               const SizedBox(height: 16),
-              SegmentedButton<AddAccountMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: AddAccountMode.next,
-                    label: Text('下一个账户'),
-                    icon: Icon(Icons.add_circle_outline, size: 18),
-                  ),
-                  ButtonSegment(
-                    value: AddAccountMode.specify,
-                    label: Text('指定序号'),
-                    icon: Icon(Icons.tag_rounded, size: 18),
-                  ),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (value) => setState(() {
-                  _mode = value.first;
-                  _error = null;
-                }),
-              ),
-              const SizedBox(height: 12),
-              if (_mode == AddAccountMode.next)
+              if (widget.mode == AddAccountMode.next)
                 Text(
                   _nextIndex == null ? '将派生下一个账户' : '将派生 //$_nextIndex',
                   style: const TextStyle(

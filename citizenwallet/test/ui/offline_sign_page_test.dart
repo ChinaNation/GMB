@@ -1,6 +1,8 @@
 // 离线签名页 widget 测试(既有基线修复:runtime 升级哈希签的绿 banner 与明细
 // 不再自相矛盾)。normal + decoded==null 是 runtime 升级哈希签唯一产生的组合,
 // 旧代码在明细里错误地走了“拒绝签名”分支。
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,6 +78,39 @@ void main() {
     expect(find.text('32 字节升级摘要（哈希）'), findsOneWidget);
 
     // 强制释放页面,取消倒计时 Timer,避免 pending timer 报错。
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('占号请求(空 b.u)渲染签名页不崩溃,展示自选绑定账户', (tester) async {
+    // 回归:占号/换绑请求 b.u 留空,曾因展示行无条件求值 signerPublicKeyHex
+    // (对空 u 抛 FormatException)导致整页崩溃。
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    const cid = 'CN220-CTZN2-198805200-2026';
+    final boundedCid = <int>[cid.length << 2, ...cid.codeUnits]; // Compact(len)+cid
+    final payloadB64 = base64Url.encode(boundedCid).replaceAll('=', '');
+    final request = QrEnvelope<SignRequestBody>(
+      kind: QrKind.signRequest,
+      id: 'offline-req-occupy-0001',
+      expiresAt: now + 90,
+      body: SignRequestBody(
+        action: QrActions.citizenOccupy,
+        signerPublicKey: '', // 占号:b.u 留空,钱包自填本账户
+        payload: payloadB64,
+      ),
+    );
+    final raw = QrSigner().encodeRequest(request);
+
+    await tester.pumpWidget(MaterialApp(
+      home: OfflineSignPage(account: account, walletName: '钱包1', raw: raw),
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    // 核心断言:渲染过程不抛异常(修复前此处 FormatException 使整页红屏)。
+    expect(tester.takeException(), isNull);
+    // 展示「签名账户」行 + 自选绑定账户(account.accountId 截断),不是空 u。
+    expect(find.text('签名账户'), findsOneWidget);
+
     await tester.pumpWidget(const SizedBox());
   });
 }

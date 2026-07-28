@@ -5,23 +5,28 @@ import 'package:citizenapp/transaction/offchain-transaction/pages/deposit_page.d
 import 'package:citizenapp/transaction/offchain-transaction/pages/withdraw_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 零钱包详情页(链下清算行零钱包)。
 ///
-/// 从钱包详情「零钱包」按钮进入。承接原动作卡上的「充值到清算行」入口,并提供:
+/// 从账户详情「零钱包」按钮进入。承接原动作卡上的「充值到清算行」入口,并提供:
 /// - 零钱包余额(节点端 `offchain_queryBalance`);
 /// - 充值到清算行(链上账户 → 清算行零钱包,原 `DepositPage`);
 /// - 提现到链上(清算行 → 链上账户,`WithdrawPage`)。
+/// 一律按 `account_id` 键控,单钱包多账户下每账户独立零钱包。
 class PettyWalletPage extends StatefulWidget {
   const PettyWalletPage({
     super.key,
-    required this.wallet,
+    required this.accountId,
+    required this.ss58Address,
     required this.wssUrl,
     required this.displayTitle,
   });
 
-  final WalletProfile wallet;
+  /// 该账户链账户主键(0x+64hex)。
+  final String accountId;
+
+  /// 该账户 SS58 地址,用于查询零钱包余额。
+  final String ss58Address;
   final String wssUrl;
   final String displayTitle;
 
@@ -41,7 +46,7 @@ class _PettyWalletPageState extends State<PettyWalletPage> {
   Future<void> _loadBalance() async {
     try {
       final fen = await OffchainClearingBankRpc(widget.wssUrl)
-          .queryBalance(widget.wallet.ss58Address);
+          .queryBalance(widget.ss58Address);
       if (!mounted) return;
       setState(
           () => _balanceText = '¥${AmountFormat.formatThousands(fen / 100.0)}');
@@ -106,7 +111,12 @@ class _PettyWalletPageState extends State<PettyWalletPage> {
   Future<void> _openDeposit() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => DepositPage(wallet: widget.wallet)),
+      MaterialPageRoute(
+        builder: (_) => DepositPage(
+          accountId: widget.accountId,
+          ss58Address: widget.ss58Address,
+        ),
+      ),
     );
     await _loadBalance();
   }
@@ -115,8 +125,11 @@ class _PettyWalletPageState extends State<PettyWalletPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            WithdrawPage(wallet: widget.wallet, wssUrl: widget.wssUrl),
+        builder: (_) => WithdrawPage(
+          accountId: widget.accountId,
+          ss58Address: widget.ss58Address,
+          wssUrl: widget.wssUrl,
+        ),
       ),
     );
     await _loadBalance();

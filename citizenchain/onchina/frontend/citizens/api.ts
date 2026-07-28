@@ -271,12 +271,12 @@ export async function prepareCitizenOccupy(
   auth: AdminAuth,
   payload: CreateCitizenInput,
 ): Promise<PrepareCitizenOccupyResult> {
+  // 链上写(occupy_cid)= passkey + 冷签:prepare 段消费一次 passkey 断言(冷签在段3 chain/submit)。
+  const assertion = await assertPasskey(auth);
+  const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
   return request<PrepareCitizenOccupyResult>('/api/v1/admin/citizens', {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth),
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 }
@@ -307,9 +307,12 @@ export async function prepareCitizenRebind(
   cidNumber: string,
   actorRoleCode: string,
 ): Promise<PrepareCitizenRebindResult> {
+  // 链上写(admin_rebind_cid_account_id)= passkey + 冷签:prepare 段消费一次 passkey 断言(冷签在段3)。
+  const assertion = await assertPasskey(auth);
+  const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
   return request<PrepareCitizenRebindResult>('/api/v1/admin/citizens/rebind/prepare', {
     method: 'POST',
-    headers: jsonAdminHeaders(auth),
+    headers,
     body: JSON.stringify({ actor_role_code: actorRoleCode, cid_number: cidNumber }),
   });
 }

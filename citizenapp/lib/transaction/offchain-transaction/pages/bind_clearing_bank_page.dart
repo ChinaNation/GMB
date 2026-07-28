@@ -17,12 +17,17 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 class BindClearingBankPage extends StatefulWidget {
   const BindClearingBankPage({
     super.key,
-    required this.wallet,
+    required this.accountId,
+    required this.ss58Address,
     required this.bank,
     this.switchMode = false,
   });
 
-  final WalletProfile wallet;
+  /// L3 用户链账户主键(0x+64hex):按账户签名、构造 signerPublicKey、绑定缓存键。
+  final String accountId;
+
+  /// L3 用户 SS58 地址(绑定/切换 extrinsic 来源地址)。
+  final String ss58Address;
   final ClearingBankCandidate bank;
   final bool switchMode;
 
@@ -91,42 +96,35 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
   Future<void> _confirmBind() async {
     final mainAccountId = widget.bank.mainAccountId;
 
-    final wallet = widget.wallet;
-    if (!wallet.isHotWallet) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前仅支持热钱包绑定；冷钱包绑定需可独立验证的签名协议')),
-      );
-      return;
-    }
-
     setState(() => _submitting = true);
     try {
       final mainAccountIdBytes = _hexToBytes(mainAccountId);
       if (mainAccountIdBytes.length != 32) {
         throw Exception('主账户必须是 32 字节,实际 ${mainAccountIdBytes.length}');
       }
-      final publicKeyBytes = _hexToBytes(wallet.accountId);
+      final publicKeyBytes = _hexToBytes(widget.accountId);
       if (publicKeyBytes.length != 32) {
-        throw Exception('钱包公钥必须是 32 字节');
+        throw Exception('账户公钥必须是 32 字节');
       }
 
       final walletManager = WalletManager();
 
       final rpc = OnchainClearingBankRpc();
+      // 按当前账户私钥(child mini-secret)签名;冷钱包账户会在此抛出提示走扫码签名。
       final result = widget.switchMode
           ? await rpc.switchBank(
-              fromSs58Address: wallet.ss58Address,
+              fromSs58Address: widget.ss58Address,
               signerPublicKey: Uint8List.fromList(publicKeyBytes),
               newBankMainAccountId: Uint8List.fromList(mainAccountIdBytes),
               sign: (payload) =>
-                  walletManager.signWithWallet(wallet.walletIndex, payload),
+                  walletManager.signForAccountId(widget.accountId, payload),
             )
           : await rpc.bindClearingBank(
-              fromSs58Address: wallet.ss58Address,
+              fromSs58Address: widget.ss58Address,
               signerPublicKey: Uint8List.fromList(publicKeyBytes),
               bankMainAccountId: Uint8List.fromList(mainAccountIdBytes),
               sign: (payload) =>
-                  walletManager.signWithWallet(wallet.walletIndex, payload),
+                  walletManager.signForAccountId(widget.accountId, payload),
             );
 
       // 绑定成功后写入完整清算行快照。链上仍是最终权威,本地快照只用于
@@ -134,7 +132,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
       final endpoint = widget.bank.endpoint;
       final now = DateTime.now().millisecondsSinceEpoch;
       await ClearingBankPrefs.saveSnapshot(
-        wallet.walletIndex,
+        widget.accountId,
         ClearingBankBindingSnapshot(
           cidNumber: widget.bank.cidNumber,
           cidFullName: widget.bank.cidFullName,

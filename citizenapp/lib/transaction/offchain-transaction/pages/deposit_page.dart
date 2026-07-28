@@ -12,9 +12,17 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// - 链上费按金额 0.1% 最低 0.1 元，由 runtime 唯一 `RuntimeFeeRouter` 指定签名者付款。
 /// - 本步仅支持热钱包;冷钱包必须等充值 payload 可独立展示和验证后再接入。
 class DepositPage extends StatefulWidget {
-  const DepositPage({super.key, required this.wallet});
+  const DepositPage({
+    super.key,
+    required this.accountId,
+    required this.ss58Address,
+  });
 
-  final WalletProfile wallet;
+  /// L3 用户链账户主键(0x+64hex):清算行绑定缓存键、按账户签名、构造 signerPublicKey。
+  final String accountId;
+
+  /// L3 用户 SS58 地址(充值 extrinsic 来源地址)。
+  final String ss58Address;
 
   @override
   State<DepositPage> createState() => _DepositPageState();
@@ -38,8 +46,7 @@ class _DepositPageState extends State<DepositPage> {
   }
 
   Future<void> _loadBinding() async {
-    final binding =
-        await ClearingBankPrefs.loadSnapshot(widget.wallet.walletIndex);
+    final binding = await ClearingBankPrefs.loadSnapshot(widget.accountId);
     if (!mounted) return;
     setState(() => _binding = binding);
   }
@@ -100,35 +107,29 @@ class _DepositPageState extends State<DepositPage> {
       return;
     }
 
-    final wallet = widget.wallet;
     if (_binding == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先绑定清算行')),
       );
       return;
     }
-    if (!wallet.isHotWallet) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前仅支持热钱包充值；冷钱包充值需可独立验证的签名协议')),
-      );
-      return;
-    }
 
     setState(() => _submitting = true);
     try {
-      final publicKeyBytes = _hexToBytes(wallet.accountId);
+      final publicKeyBytes = _hexToBytes(widget.accountId);
       if (publicKeyBytes.length != 32) {
-        throw Exception('钱包公钥必须是 32 字节');
+        throw Exception('账户公钥必须是 32 字节');
       }
       final walletManager = WalletManager();
 
       final rpc = OnchainClearingBankRpc();
       final result = await rpc.deposit(
-        fromSs58Address: wallet.ss58Address,
+        fromSs58Address: widget.ss58Address,
         signerPublicKey: Uint8List.fromList(publicKeyBytes),
         amountFen: amountFen,
+        // 按当前账户私钥(child mini-secret)签名;冷钱包账户会在此抛出提示走扫码签名。
         sign: (payload) =>
-            walletManager.signWithWallet(wallet.walletIndex, payload),
+            walletManager.signForAccountId(widget.accountId, payload),
       );
 
       if (!mounted) return;

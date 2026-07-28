@@ -4,21 +4,26 @@ import 'package:citizenapp/transaction/offchain-transaction/services/clearing_ba
 import 'package:citizenapp/transaction/offchain-transaction/pages/bind_clearing_bank_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 「设置清算行」真实入口。
 ///
 ///
 /// - finalized `ClearingBankNodes` 是清算行目录和资格的唯一来源，机构链快照只补名称。
 /// - 页面只缓存绑定快照,不把本地缓存当作权威状态;绑定、切换和支付仍以链上校验为准。
+/// - 一律按 `account_id` 键控,单钱包多账户下每个账户独立绑定清算行。
 class ClearingBankSettingsPage extends StatefulWidget {
   const ClearingBankSettingsPage({
     super.key,
-    required this.wallet,
+    required this.accountId,
+    required this.ss58Address,
     this.directory,
   });
 
-  final WalletProfile wallet;
+  /// 该账户链账户主键(0x+64hex):绑定缓存键、按账户签名。
+  final String accountId;
+
+  /// 该账户 SS58 地址(绑定/切换 extrinsic 来源地址)。
+  final String ss58Address;
   final ClearingBankDirectory? directory;
 
   @override
@@ -51,9 +56,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
   }
 
   Future<void> _loadCurrent() async {
-    final snapshot = await ClearingBankPrefs.loadSnapshot(
-      widget.wallet.walletIndex,
-    );
+    final snapshot = await ClearingBankPrefs.loadSnapshot(widget.accountId);
     if (!mounted) return;
     setState(() {
       _current = snapshot;
@@ -85,7 +88,8 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
       context,
       MaterialPageRoute(
         builder: (_) => BindClearingBankPage(
-          wallet: widget.wallet,
+          accountId: widget.accountId,
+          ss58Address: widget.ss58Address,
           bank: item,
           switchMode: isSwitch,
         ),
@@ -158,7 +162,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
       isThreeLine: true,
       trailing: TextButton(
         onPressed: () async {
-          await ClearingBankPrefs.clear(widget.wallet.walletIndex);
+          await ClearingBankPrefs.clear(widget.accountId);
           await _loadCurrent();
         },
         child: const Text('清除缓存'),

@@ -371,7 +371,7 @@ class _PassportIdentityCard extends StatelessWidget {
   final String? registeredCid;
 
   String get _title => switch (tier) {
-        MyIdTier.visitor => '注册身份·访客',
+        MyIdTier.visitor => '身份·访客',
         MyIdTier.voting => '公民身份 · 投票',
         MyIdTier.candidate => '公民身份 · 竞选',
       };

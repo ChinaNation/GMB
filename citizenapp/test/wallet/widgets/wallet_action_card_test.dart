@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 
 /// WalletActionCard 渲染 + 行为测试(步骤 4 三按钮重排版)。
@@ -16,26 +15,15 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  const wallet = WalletProfile(
-    walletIndex: 0,
-    walletName: '测试钱包',
-    walletIcon: 'wallet',
-    balance: 0.0,
-    ss58Address: '5DummyAddress',
-    accountId:
-        '0x0000000000000000000000000000000000000000000000000000000000000000',
-    alg: 'sr25519',
-    ss58: 2027,
-    createdAtMillis: 0,
-    source: 'test',
-    signMode: 'local',
-  );
+  const accountId =
+      '0x0000000000000000000000000000000000000000000000000000000000000000';
+  const ss58Address = '5DummyAddress';
 
   Future<void> pumpCard(WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
-          body: WalletActionCard(wallet: wallet),
+          body: WalletActionCard(accountId: accountId, ss58Address: ss58Address),
         ),
       ),
     );

@@ -171,5 +171,14 @@ occupy 占即绑两次扫码(公民占号签名 + 管理员冷签)+ admin_rebind
 ### occupy 两次扫码时序
 prepare→{cid_number, citizen_sign_request} → 公民扫(自填账户签0x12)→{account_id,occupy_signature} → occupy/submit→{管理员sign_request} → 管理员扫→ chain/submit → 进块落档。rebind 同构(域 0x1F,新钱包扫)。
 
+## 全面审计(2026-07-28,security-reviewer + code-reviewer 产线索 → 逐条回原文核验)
+- **[CRITICAL] 已修 ✅**:citizenwallet `offline_sign_page.dart` 占号/换绑请求(b.u 空)展示行无条件求值 `signerPublicKeyHex` getter,而 citizenwallet `_b64ToBytes` 对空串 `throw`(citizenapp 版不抛)→ 整页 FormatException 红屏、占号/换绑冷钱包端 100% 崩溃。修:改用 `QrActions.isSelfAccountDomainAction(action)` 判断绕开会抛的 getter + 加占号渲染回归 widget 测试(`test/ui/offline_sign_page_test.dart`)。dart analyze 0 + 钱包全套绿。
+- **[HIGH] 授权分层倒挂 —— 已修 ✅(用户揪出:违反硬规则「查看=登录态/本地写=passkey/链上写=passkey+冷签」[[onchina-three-tier-write-auth]])**:occupy/rebind 是**链上写**(发 occupy_cid/admin_rebind extrinsic),原只有段3 冷签、漏了 prepare 的 passkey(revoke 有、它俩没有)。修:`prepare_citizen_occupy`/`prepare_citizen_rebind` 补 `require_admin_security_grant(CitizenOnchainPush)`(occupy.rs)+ 前端 `prepareCitizenOccupy`/`prepareCitizenRebind` 补 `assertPasskey`+`PASSKEY_ASSERTION_HEADER`(api.ts)。现三档合规:占号/换绑 = prepare passkey + 段3 冷签。
+- **[设计非 bug] admin_rebind 无旧账户签名 + 全国无辖区**=D4b 既定(丢钥代办,靠注册局线下核验);链上有独立第二道验签(configs.rs sr25519)兜底密码学层。
+- **[MEDIUM 记录] 审计失败静默丢弃**:`append_audit_log` fire-and-forget(既有框架模式,非本次回归);安全敏感事件建议独立告警通道。`consumed_at` 永不置位靠删行防重放(既有模式)。
+- **测试缺口 —— 已补 ✅**:①`verify_occupy_signature`/`verify_admin_rebind_signature` 加 sign→verify 往返 + 域分离拒绝测试(occupy.rs,onchina 154 绿);②新 `citizen_occupy_sign_service_test.dart`(citizenapp 6 项:prepare 解 CID/换绑 isOccupy/非占号拒/冷钱包拒/畸形 d 拒 + **硬编码常量 vs registry 防漂移断言**);③CRITICAL 的 occupy 渲染回归 widget 测试(citizenwallet)。
+- **已核验无问题(排除误判)**:occupy_cids_batch/cid_count 残留=仅注释;命名全 account_id 无 `_account`;op 域 0x11/0x12/0x1F 严格分离;冷热四端签名字节逐字节一致(golden 兜底);段2/段3 会话防重放(已消费检查)+`same_account_id` 防越权+验签失败即拒;空 b.u 放开仅限 occupy/rebind;旧全档案字段/getCidMeta 等无孤儿。
+- **门禁**:`cargo test --workspace` 81 批次 0 + citizenwallet/citizenapp `dart analyze` 0 + 两端 flutter test 全绿 + 前端 tsc 0。
+
 ## 门禁
 `cargo test --workspace` 全绿 + onchina 测试;链↔onchina occupy 调用字节契约一致;冷热链一致。

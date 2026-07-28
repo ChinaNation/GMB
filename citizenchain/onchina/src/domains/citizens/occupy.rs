@@ -467,6 +467,22 @@ pub(crate) async fn prepare_citizen_occupy(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // 链上写(occupy_cid extrinsic)硬规则 = passkey + 冷签:此处强制 passkey 断言(冷签在段3)。
+    let occupy_grant_payload = serde_json::json!({
+        "cid_type": validated.cid_type,
+        "actor_role_code": actor_role_code,
+        "op": "occupy",
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CitizenOnchainPush,
+        validated.cid_type.as_str(),
+        Some(&occupy_grant_payload),
+    ) {
+        return resp;
+    }
     let seed = cid_seed(&validated);
 
     // 发号:本地/链上双预查(占即绑,commitment 链上算 blake2_256(account_id),
@@ -736,6 +752,23 @@ pub(crate) async fn prepare_citizen_rebind(
             tracing::error!(error = %err, "query citizen by cid failed");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民档案查询失败");
         }
+    }
+    // 链上写(admin_rebind_cid_account_id extrinsic)硬规则 = passkey + 冷签:强制 passkey 断言(冷签在段3)。
+    // 换绑不要求旧账户签名(D4b 丢钥代办),passkey 是注册局侧唯一的操作者身份加固,不可省。
+    let rebind_grant_payload = serde_json::json!({
+        "cid_number": cid_number,
+        "actor_role_code": actor_role_code,
+        "op": "admin_rebind",
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CitizenOnchainPush,
+        cid_number.as_str(),
+        Some(&rebind_grant_payload),
+    ) {
+        return resp;
     }
 
     let issued_at = Utc::now();
@@ -1446,5 +1479,51 @@ mod tests {
             "22222222",
         );
         assert_eq!(hex::encode(out), expected);
+    }
+
+    /// 占号验签往返:真签名通过、篡改 cid 拒、换绑域验签器验占号签名拒(域分离防重放)。
+    #[test]
+    fn verify_occupy_signature_roundtrip_and_domain_separation() {
+        let pair = sr25519::Pair::from_seed(&[7u8; 32]);
+        let account = pair.public().0;
+        let account_hex = format!("0x{}", hex::encode(account));
+        let cid = "CN220-CTZN2-198805200-2026";
+        let mut payload = Vec::new();
+        append_bounded(&mut payload, cid.as_bytes());
+        payload.extend_from_slice(&account);
+        let msg =
+            primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_OCCUPY, &payload);
+        let sig_hex = format!("0x{}", hex::encode(pair.sign(&msg).0));
+
+        assert!(verify_occupy_signature(account_hex.as_str(), cid, sig_hex.as_str()));
+        // 篡改 cid → 拒。
+        assert!(!verify_occupy_signature(
+            account_hex.as_str(),
+            "CN220-CTZN2-000000000-2026",
+            sig_hex.as_str()
+        ));
+        // 占号签名拿去过换绑域验签器 → 拒(0x12 与 0x1F 分离)。
+        assert!(!verify_admin_rebind_signature(account_hex.as_str(), cid, sig_hex.as_str()));
+    }
+
+    /// 换绑验签往返 + 反向域分离。
+    #[test]
+    fn verify_admin_rebind_signature_roundtrip_and_domain_separation() {
+        let pair = sr25519::Pair::from_seed(&[9u8; 32]);
+        let account = pair.public().0;
+        let account_hex = format!("0x{}", hex::encode(account));
+        let cid = "CN330-NATP3-111111111-2026";
+        let mut payload = Vec::new();
+        append_bounded(&mut payload, cid.as_bytes());
+        payload.extend_from_slice(&account);
+        let msg = primitives::sign::signing_message(
+            primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
+            &payload,
+        );
+        let sig_hex = format!("0x{}", hex::encode(pair.sign(&msg).0));
+
+        assert!(verify_admin_rebind_signature(account_hex.as_str(), cid, sig_hex.as_str()));
+        // 换绑签名拿去过占号域验签器 → 拒。
+        assert!(!verify_occupy_signature(account_hex.as_str(), cid, sig_hex.as_str()));
     }
 }

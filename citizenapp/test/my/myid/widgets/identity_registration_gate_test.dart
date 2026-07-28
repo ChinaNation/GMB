@@ -60,8 +60,8 @@ void main() {
     )));
     await tester.pumpAndSettle();
     expect(find.text('真功能'), findsNothing);
-    expect(find.text('去注册身份'), findsOneWidget);
-    expect(find.text('注册身份后使用聊天'), findsOneWidget);
+    expect(find.text('注册'), findsOneWidget);
+    expect(find.text('注册后开始聊天'), findsOneWidget);
   });
 
   testWidgets('链已就绪仍读失败 → 不放行,提示重试(fail-closed)', (tester) async {
@@ -126,7 +126,7 @@ void main() {
       child: const Text('真功能'),
     )));
     await tester.pumpAndSettle();
-    expect(find.text('去注册身份'), findsOneWidget);
+    expect(find.text('注册'), findsOneWidget);
 
     // 模拟注册成功:判据转已注册 + 广播身份绑定变化 → gate 自动重判放行。
     resolver.registered = true;

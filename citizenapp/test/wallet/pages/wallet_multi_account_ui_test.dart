@@ -54,6 +54,9 @@ WalletProfile _makeColdWallet({int walletIndex = 2, String name = '冷钱包'}) 
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  // 文件级唯一 Isar 生命周期(隔离临时目录)。必须在 main() 顶部调一次,不能在多个 group
+  // 内各调一次——两个 group 各开一次 IsarCore 会导致第二个 setUpAll 挂死(12 分钟超时)。
+  useIsolatedIsar();
 
   group('parseAccountIndices（空格分隔多序号解析）', () {
     test('连续 "1 2 3" → [1,2,3]', () {
@@ -86,23 +89,53 @@ void main() {
     });
   });
 
-  group('入口只余导入冷钱包（热钱包创建/导入入口已删）', () {
-    testWidgets('WalletEntryChooserSheet 只有「导入冷钱包」', (tester) async {
-      var tapped = false;
+  group('「＋」入口三项菜单（添加下一个账户 / 添加指定账户 / 导入冷钱包）', () {
+    testWidgets('有热钱包时三项齐全,导入冷钱包在最下', (tester) async {
+      var next = false;
+      var specify = false;
+      var cold = false;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: WalletEntryChooserSheet(onImportCold: () => tapped = true),
+            body: WalletEntryChooserSheet(
+              canAddAccount: true,
+              onAddNextAccount: () => next = true,
+              onAddSpecifyAccount: () => specify = true,
+              onImportCold: () => cold = true,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('添加下一个账户'), findsOneWidget);
+      expect(find.text('添加指定账户'), findsOneWidget);
+      expect(find.text('导入冷钱包'), findsOneWidget);
+      // 不得出现热钱包创建 / 导入入口。
+      expect(find.text('创建钱包'), findsNothing);
+      expect(find.text('导入热钱包'), findsNothing);
+
+      await tester.tap(find.text('添加下一个账户'));
+      await tester.tap(find.text('添加指定账户'));
+      await tester.tap(find.text('导入冷钱包'));
+      await tester.pump();
+      expect(next && specify && cold, isTrue);
+    });
+
+    testWidgets('无热钱包时只有「导入冷钱包」', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WalletEntryChooserSheet(
+              canAddAccount: false,
+              onAddNextAccount: () {},
+              onAddSpecifyAccount: () {},
+              onImportCold: () {},
+            ),
           ),
         ),
       );
       expect(find.text('导入冷钱包'), findsOneWidget);
-      expect(find.text('创建钱包'), findsNothing);
-      expect(find.text('导入热钱包'), findsNothing);
-
-      await tester.tap(find.text('导入冷钱包'));
-      await tester.pump();
-      expect(tapped, isTrue);
+      expect(find.text('添加下一个账户'), findsNothing);
+      expect(find.text('添加指定账户'), findsNothing);
     });
 
     testWidgets('WalletEmptyChoices 空态也只有「导入冷钱包」', (tester) async {
@@ -179,8 +212,19 @@ void main() {
     });
   });
 
-  group('AccountDetailPage（私钥默认隐藏）', () {
+  group('AccountDetailPage（私钥默认隐藏 + 找回钱包功能）', () {
+    // 账户详情渲染 WalletActionCard(读 ClearingBankPrefs/SharedPreferences)并加载本地
+    // 交易记录(Isar,由文件级 useIsolatedIsar 提供);此处只补 SharedPreferences mock。
+    setUp(() {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
     testWidgets('默认隐藏私钥，只显示「点击查看私钥」', (tester) async {
+      // 账户详情现含充值/提现/零钱包/清算行/交易记录,内容变高;放大测试视口让整页
+      // (含底部删除按钮)完整构建,避免惰性 ListView 未构建底部控件。
+      tester.view.physicalSize = const Size(1200, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
           home: AccountDetailPage(
@@ -200,6 +244,10 @@ void main() {
     });
 
     testWidgets('账户0 底部为「删除钱包」', (tester) async {
+      // 同上:放大测试视口让整页(含底部删除按钮)完整构建。
+      tester.view.physicalSize = const Size(1200, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
           home: AccountDetailPage(
@@ -215,7 +263,6 @@ void main() {
   });
 
   group('AddAccountSheet（重录助记词 + 多序号解析 → addAccounts）', () {
-    useIsolatedIsar();
     late FakeSecureSeedStore fakeStore;
     const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
 
@@ -246,23 +293,25 @@ void main() {
           .setMockMethodCallHandler(localAuthChannel, null);
     });
 
-    testWidgets('指定序号模式:露出序号输入框,可录入多序号 "1 5 9",提交按钮在场',
+    testWidgets('指定序号模式:直接露出序号输入框,可录入多序号 "1 5 9",提交按钮在场',
         (tester) async {
-      // 只验 UI 装配(渲染 / 模式切换 / 多序号录入 / 提交按钮在场)。
-      // 「1 5 9」→ [1,5,9] 解析由 parseAccountIndices 单测覆盖;addAccounts([1,5,9])
-      // 落库效果由 wallet_multi_account_test 覆盖 —— 不在 widget 层重复触发真实 isar
-      // 往返(testWidgets fake-async 下经 UI 触发的 addAccounts+getAccounts 不可靠)。
+      // 只验 UI 装配(指定序号模式渲染 / 多序号录入 / 提交按钮在场)。模式由入口固定,
+      // 面板内不再有切换器。「1 5 9」→ [1,5,9] 解析由 parseAccountIndices 单测覆盖;
+      // addAccounts([1,5,9]) 落库效果由 wallet_multi_account_test 覆盖。
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(body: AddAccountSheet(masterId: '0xmaster')),
+          home: Scaffold(
+            body: AddAccountSheet(
+              masterId: '0xmaster',
+              mode: AddAccountMode.specify,
+            ),
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // 切到「指定序号」模式,露出序号输入框。
-      await tester.tap(find.text('指定序号'));
-      await tester.pumpAndSettle();
-
+      // 指定序号模式直接露出序号输入框(面板内不再有模式切换器)。
+      expect(find.text('添加指定账户'), findsOneWidget);
       await tester.enterText(find.byType(TextField).at(1), '1 5 9');
       await tester.pump();
 

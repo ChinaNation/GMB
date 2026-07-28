@@ -6,9 +6,8 @@ import 'package:citizenapp/transaction/offchain-transaction/services/clearing_ba
 import 'package:citizenapp/transaction/offchain-transaction/pages/petty_wallet_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/withdraw_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 钱包详情页方案 2 的 3 列等宽操作区（充值/提现/零钱包）。
+/// 账户详情的 3 列等宽操作区（充值/提现/零钱包），一律按 `account_id` 键控。
 ///
 ///
 /// - 充值:进「链上充值」页(稳定币购买公民币,与清算行无关,**不需要绑定清算行**)。
@@ -16,10 +15,19 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// - 零钱包:**可点击**进「零钱包详情页」(链下清算行零钱包),需已绑定;页内含充值到零钱包。
 /// - 零钱包余额来自当前绑定清算行快照中的节点端点,通过 `offchain_queryBalance`
 ///   查询;失败时展示节点不可达,不再写死 0.00 元。
+/// - 单钱包多账户下每个账户独立绑定清算行、独立签名(见 `WalletManager.signForAccountId`)。
 class WalletActionCard extends StatefulWidget {
-  const WalletActionCard({super.key, required this.wallet});
+  const WalletActionCard({
+    super.key,
+    required this.accountId,
+    required this.ss58Address,
+  });
 
-  final WalletProfile wallet;
+  /// 该账户链账户主键(0x+64hex):充值目标、清算行绑定缓存键、按账户签名均以它为准。
+  final String accountId;
+
+  /// 该账户 SS58 地址,用于查询清算行存款余额。
+  final String ss58Address;
 
   @override
   State<WalletActionCard> createState() => WalletActionCardState();
@@ -36,8 +44,7 @@ class WalletActionCardState extends State<WalletActionCard> {
   }
 
   Future<void> refresh() async {
-    final binding =
-        await ClearingBankPrefs.loadSnapshot(widget.wallet.walletIndex);
+    final binding = await ClearingBankPrefs.loadSnapshot(widget.accountId);
     if (!mounted) return;
     setState(() {
       _binding = binding;
@@ -52,7 +59,7 @@ class WalletActionCardState extends State<WalletActionCard> {
     try {
       final balance = await OffchainClearingBankRpc(
         binding.wssUrl,
-      ).queryBalance(widget.wallet.ss58Address);
+      ).queryBalance(widget.ss58Address);
       if (!mounted) return;
       setState(() => _balanceText = _fenToYuan(balance));
     } catch (_) {
@@ -105,7 +112,7 @@ class WalletActionCardState extends State<WalletActionCard> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OnchainTopupPage(accountId: widget.wallet.accountId),
+        builder: (_) => OnchainTopupPage(accountId: widget.accountId),
       ),
     );
     await refresh();
@@ -121,7 +128,8 @@ class WalletActionCardState extends State<WalletActionCard> {
       context,
       MaterialPageRoute(
         builder: (_) => WithdrawPage(
-          wallet: widget.wallet,
+          accountId: widget.accountId,
+          ss58Address: widget.ss58Address,
           wssUrl: binding.wssUrl,
         ),
       ),
@@ -140,7 +148,8 @@ class WalletActionCardState extends State<WalletActionCard> {
       context,
       MaterialPageRoute(
         builder: (_) => PettyWalletPage(
-          wallet: widget.wallet,
+          accountId: widget.accountId,
+          ss58Address: widget.ss58Address,
           wssUrl: binding.wssUrl,
           displayTitle: binding.displayTitle,
         ),

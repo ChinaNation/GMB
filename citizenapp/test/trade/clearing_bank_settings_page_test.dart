@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// `ClearingBankSettingsPage` 基础渲染测试。
 ///
@@ -15,26 +14,18 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  const wallet = WalletProfile(
-    walletIndex: 0,
-    walletName: '测试钱包',
-    walletIcon: 'wallet',
-    balance: 0.0,
-    ss58Address: '5DummyAddress',
-    accountId:
-        '0x0000000000000000000000000000000000000000000000000000000000000000',
-    alg: 'sr25519',
-    ss58: 2027,
-    createdAtMillis: 0,
-    source: 'test',
-    signMode: 'local',
-  );
+  const accountId =
+      '0x0000000000000000000000000000000000000000000000000000000000000000';
+  const ss58Address = '5DummyAddress';
 
   testWidgets('renders AppBar title, search field and empty hint',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: ClearingBankSettingsPage(wallet: wallet),
+        home: ClearingBankSettingsPage(
+          accountId: accountId,
+          ss58Address: ss58Address,
+        ),
       ),
     );
     await tester.pumpAndSettle();

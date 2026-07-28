@@ -22,6 +22,7 @@ import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/account_detail_page.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
+import 'package:citizenapp/wallet/widgets/add_account_sheet.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_identity_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_onchain_balance_card.dart';
@@ -454,21 +455,50 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
-  /// 「＋」入口只余「导入冷钱包」。
+  /// 「＋」入口三项：添加下一个账户 / 添加指定账户 / 导入冷钱包。
   ///
   /// 热钱包（创建 / 导入助记词）唯一引导在首启门禁页（[CreateWalletOnboardingPage]）
-  /// 完成——一台设备一只热钱包，此处不再提供热钱包入口；追加账户走账户详情页的
-  /// 「添加账户」。冷钱包只存公钥、可与热钱包账户并列，保留入口。
+  /// 完成——一台设备一只热钱包，此处不再提供热钱包创建入口；追加账户收在本入口的两个
+  /// 添加项（对齐 CitizenWallet 冷端做法）。冷钱包只存公钥、可与热钱包账户并列，保留入口。
   Future<void> _showWalletEntryChooser() async {
+    // 存在热钱包才提供「添加账户」两项;masterId = 热钱包账户0 的 accountId。
+    final hot = _hotWallet(_wallets ?? const <WalletProfile>[]);
     await showModalBottomSheet<void>(
       context: context,
       builder: (context) => WalletEntryChooserSheet(
+        canAddAccount: hot != null,
+        onAddNextAccount: () {
+          Navigator.of(context).pop();
+          if (hot != null) {
+            _openAddAccount(hot.accountId, AddAccountMode.next);
+          }
+        },
+        onAddSpecifyAccount: () {
+          Navigator.of(context).pop();
+          if (hot != null) {
+            _openAddAccount(hot.accountId, AddAccountMode.specify);
+          }
+        },
         onImportCold: () {
           Navigator.of(context).pop();
           _openImportColdWalletPage();
         },
       ),
     );
+  }
+
+  /// 在唯一热钱包下按 [mode] 追加账户;成功后整页刷新并提示。
+  Future<void> _openAddAccount(String masterId, AddAccountMode mode) async {
+    final added = await showAddAccountSheet(
+      context,
+      masterId: masterId,
+      mode: mode,
+    );
+    if (added != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await _reload();
+    if (!mounted) return;
+    messenger.showSnackBar(const SnackBar(content: Text('已添加账户')));
   }
 
   /// 空态：热钱包由首启门禁强制创建，走不到这里没有热钱包的情况；此处只提供
@@ -488,7 +518,7 @@ class _WalletTabState extends State<WalletTab> {
         actions: [
           if (!_isSelectionMode)
             IconButton(
-              tooltip: '导入冷钱包',
+              tooltip: '添加账户 / 导入冷钱包',
               onPressed: _showWalletEntryChooser,
               icon: const Icon(Icons.add, size: 26),
             ),
@@ -620,16 +650,27 @@ class _WalletTabState extends State<WalletTab> {
   }
 }
 
-/// 「＋」入口底部面板：只余「导入冷钱包」一项。
+/// 「＋」入口底部面板：添加下一个账户 / 添加指定账户 / 导入冷钱包（导入冷钱包在最下）。
 ///
-/// 热钱包（创建 / 导入助记词）入口已从此处移除——一台设备一只热钱包，其唯一引导在
-/// 首启门禁页；此处不得再出现「创建钱包」「导入热钱包」。
+/// 热钱包（创建 / 导入助记词）入口不在此处——一台设备一只热钱包，其唯一引导在首启门禁页；
+/// 此处不得出现「创建钱包」「导入热钱包」。存在热钱包时才提供两个添加账户项
+/// （[canAddAccount]），追加走本钱包助记词校验归属，对齐 CitizenWallet 冷端做法。
 ///
 /// 仅供 wallet_page 自己使用,通过 `@visibleForTesting` 暴露给 widget 测试。
 @visibleForTesting
 class WalletEntryChooserSheet extends StatelessWidget {
-  const WalletEntryChooserSheet({super.key, required this.onImportCold});
+  const WalletEntryChooserSheet({
+    super.key,
+    required this.canAddAccount,
+    required this.onAddNextAccount,
+    required this.onAddSpecifyAccount,
+    required this.onImportCold,
+  });
 
+  /// 存在热钱包时才提供「添加下一个账户 / 添加指定账户」两项。
+  final bool canAddAccount;
+  final VoidCallback onAddNextAccount;
+  final VoidCallback onAddSpecifyAccount;
   final VoidCallback onImportCold;
 
   @override
@@ -638,6 +679,20 @@ class WalletEntryChooserSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (canAddAccount) ...[
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('添加下一个账户'),
+              subtitle: const Text('在本钱包下派生下一个序号账户'),
+              onTap: onAddNextAccount,
+            ),
+            ListTile(
+              leading: const Icon(Icons.tag_rounded),
+              title: const Text('添加指定账户'),
+              subtitle: const Text('指定序号恢复本钱包下的特定账户'),
+              onTap: onAddSpecifyAccount,
+            ),
+          ],
           ListTile(
             leading: const Icon(Icons.shield_outlined),
             title: const Text('导入冷钱包'),
@@ -1111,7 +1166,10 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         // 跳转「设置清算行」占位页。真实搜索/绑定流程等后续任务卡。
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => ClearingBankSettingsPage(wallet: widget.wallet),
+            builder: (_) => ClearingBankSettingsPage(
+              accountId: widget.wallet.accountId,
+              ss58Address: widget.wallet.ss58Address,
+            ),
           ),
         );
       case 'seed':
@@ -1286,7 +1344,11 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 ),
               ),
               // 三项操作紧接主视觉，保留原跳转和清算行绑定状态。
-              WalletActionCard(key: _actionCardKey, wallet: widget.wallet),
+              WalletActionCard(
+                key: _actionCardKey,
+                accountId: widget.wallet.accountId,
+                ss58Address: widget.wallet.ss58Address,
+              ),
               const SizedBox(height: 24),
               // 交易区使用一张完整白色卡片；标题和单条记录入口保持不变。
               Padding(

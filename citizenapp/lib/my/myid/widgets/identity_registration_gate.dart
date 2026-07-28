@@ -148,25 +148,29 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
   Widget build(BuildContext context) {
     if (_status == _GateStatus.registered) return widget.child;
 
+    // 未注册引导标题:聊天用「注册后开始聊天」,其余功能用「注册后使用{功能名}」(用户定稿文案)。
+    final featureLabel = widget.featureLabel;
+    final registerTitle =
+        featureLabel == '聊天' ? '注册后开始聊天' : '注册后使用$featureLabel';
+
     final Widget view = switch (_status) {
       _GateStatus.loading => const Center(child: CircularProgressIndicator()),
       _GateStatus.unregistered => _GateView(
           icon: Icons.badge_outlined,
-          title: '注册身份后使用${widget.featureLabel}',
-          body: '${widget.featureLabel}需要先注册你的公民身份(CID)。注册后即可使用。',
-          bannerTitle: '需要已注册身份',
-          bannerBody: '身份是你在链上的唯一主键;注册后聊天、广场、通讯录等功能对你开放。',
-          actionLabel: '去注册身份',
+          title: registerTitle,
+          bannerTitle: '需要注册身份',
+          bannerBody: '注册后可使用广场、聊天、通讯录等功能，未注册用户只能使用钱包、交易等功能。',
+          actionLabel: '注册',
           actionIcon: Icons.how_to_reg_outlined,
           onAction: _openRegister,
         ),
       _GateStatus.noWallet => _GateView(
           icon: Icons.account_balance_wallet_outlined,
           title: '需要热钱包',
-          body: '请先创建或导入热钱包,再注册身份使用${widget.featureLabel}。',
+          body: '请先创建或导入热钱包,再注册身份使用$featureLabel。',
           bannerTitle: '尚无热钱包',
           bannerBody: '钱包是注册身份与鉴权的前提。',
-          actionLabel: '去注册身份',
+          actionLabel: '注册',
           actionIcon: Icons.how_to_reg_outlined,
           onAction: _openRegister,
         ),
@@ -199,7 +203,7 @@ class _GateView extends StatelessWidget {
   const _GateView({
     required this.icon,
     required this.title,
-    required this.body,
+    this.body,
     required this.bannerTitle,
     required this.bannerBody,
     required this.actionLabel,
@@ -209,7 +213,9 @@ class _GateView extends StatelessWidget {
 
   final IconData icon;
   final String title;
-  final String body;
+
+  /// 标题下方说明小字;为空则不渲染(未注册态按用户要求删除该行)。
+  final String? body;
   final String bannerTitle;
   final String bannerBody;
   final String actionLabel;
@@ -244,16 +250,18 @@ class _GateView extends StatelessWidget {
                 color: AppTheme.textPrimary,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              body,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.6,
-                color: AppTheme.textSecondary,
+            if (body != null && body!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                body!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.6,
+                  color: AppTheme.textSecondary,
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 20),
             Container(
               width: double.infinity,

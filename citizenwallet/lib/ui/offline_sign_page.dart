@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'app_theme.dart';
+import '../qr/qr_protocols.dart';
 import '../signer/field_labels.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
@@ -333,10 +334,13 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
               _detailRow('请求 ID', request.id ?? ''),
               _detailRow(
                 '签名账户',
-                // 占号/换绑:请求 b.u 留空,展示用户自选的绑定账户。
-                _truncate(request.body.signerPublicKeyHex == '0x'
-                    ? widget.account.accountId
-                    : request.body.signerPublicKeyHex),
+                // 占号/换绑:请求 b.u 留空(signerPublicKeyHex getter 对空 u 会抛),
+                // 按动作判断展示用户自选的绑定账户,不触碰会抛异常的 getter。
+                _truncate(
+                  QrActions.isSelfAccountDomainAction(request.body.action)
+                      ? widget.account.accountId
+                      : request.body.signerPublicKeyHex,
+                ),
               ),
             ],
           ),

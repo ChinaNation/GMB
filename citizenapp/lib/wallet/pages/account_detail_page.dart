@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
+import 'package:citizenapp/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
+import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
-import 'package:citizenapp/wallet/widgets/add_account_sheet.dart';
+import 'package:citizenapp/wallet/pages/transaction_history_page.dart';
+import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 
-/// 账户详情（Lv3）：单个 `//index` 账户的名称、SS58 与私钥。
+/// 账户详情（Lv3）：单个 `//index` 账户 = 单钱包多账户下「以前的钱包详情」。
 ///
-/// 无根多账户下每账户私钥（child mini-secret）独立、单向：导出单账户只暴露该账户，
-/// 不牵连锚点账户0 或兄弟账户。私钥展示前需生物识别 + 防截屏 + 纯文本不可复制。
-/// 右上角「＋」提供「添加账户」（重新录入助记词追加同一钱包的其他 `//index`）。
+/// 承载该账户的全部钱包功能，一律按 `account_id` 键控：
+/// - 充值 / 提现 / 零钱包（[WalletActionCard]，链下清算行零钱包按账户独立绑定）；
+/// - 清算行（[ClearingBankSettingsPage] 绑定 / 切换）；
+/// - 交易记录（[TransactionHistoryPage]，按账户 `account_id` 查询）；
+/// - SS58 地址与私钥（child mini-secret 独立、单向；导出单账户不牵连锚点账户0 或
+///   兄弟账户，展示前生物识别 + 防截屏 + 纯文本不可复制）；
+/// - 删除该账户 / 删除整只钱包（账户0 为锚点）。
+///
+/// 追加账户不在本页：收在「我的钱包」列表右上角「＋」的「添加下一个账户 / 添加指定账户」。
 class AccountDetailPage extends StatefulWidget {
   const AccountDetailPage({
     super.key,
@@ -27,17 +37,56 @@ class AccountDetailPage extends StatefulWidget {
 class _AccountDetailPageState extends State<AccountDetailPage> {
   final WalletManager _walletManager = WalletManager();
 
+  /// 充值/提现/零钱包动作卡:下拉刷新时通过此 key 触发清算行余额重查。
+  final GlobalKey<WalletActionCardState> _actionCardKey =
+      GlobalKey<WalletActionCardState>();
+
   String? _privateKey;
   bool _privateKeyVisible = false;
   bool _screenshotGuardActive = false;
 
-  /// 本页是否改动过账户集合（增 / 删）；pop 时回传，供上一页刷新列表。
-  bool _changed = false;
+  /// 该账户最近交易记录(最多 5 条),按 `account_id` 查询。
+  List<LocalTxEntity> _recentRecords = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    // 初始化加载最近交易记录;链上到账由钱包 Tab 的 ChainTxMonitor 后台写入本地库,
+    // 本页通过下拉刷新 / 操作后回刷重新读取(不重复启动监听、不劫持全局回调)。
+    _loadRecentRecords();
+  }
 
   @override
   void dispose() {
     if (_screenshotGuardActive) ScreenshotGuard.disable();
     super.dispose();
+  }
+
+  Future<void> _loadRecentRecords() async {
+    try {
+      final records = await LocalTxStore.queryRecentByAccountId(
+        widget.account.accountId,
+        limit: 5,
+      );
+      if (!mounted) return;
+      setState(() => _recentRecords = records);
+    } catch (_) {
+      // 加载失败静默忽略,账户详情其余功能不受影响。
+    }
+  }
+
+  /// 下拉刷新:清算行余额卡 + 最近交易记录。
+  Future<void> _onPullRefresh() async {
+    await Future.wait<void>([
+      Future(() async {
+        try {
+          await _actionCardKey.currentState?.refresh();
+        } catch (_) {
+          // 清算行节点可能暂不可达,动作卡内部会展示节点不可达。
+        }
+      }),
+      _loadRecentRecords(),
+    ]);
   }
 
   Future<void> _revealPrivateKey() async {
@@ -93,19 +142,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       _privateKeyVisible = false;
       _privateKey = null;
     });
-  }
-
-  Future<void> _addAccount() async {
-    final added = await showAddAccountSheet(
-      context,
-      masterId: widget.account.masterId,
-    );
-    if (added == true && mounted) {
-      setState(() => _changed = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已追加账户')),
-      );
-    }
   }
 
   /// 删除：账户0 是钱包锚点 → 删除整只热钱包（连带全部账户）；其余账户 → 单删。
@@ -171,57 +207,84 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     );
   }
 
+  /// 进「设置清算行」页(按账户绑定 / 切换);返回后刷新动作卡的零钱包余额。
+  Future<void> _openClearingBank() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ClearingBankSettingsPage(
+          accountId: widget.account.accountId,
+          ss58Address: widget.account.ss58Address,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await _actionCardKey.currentState?.refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.account;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) Navigator.of(context).pop(_changed);
+        // 删除账户走 _delete 内的 pop(true);普通返回不改动账户集合,回传 false。
+        if (!didPop) Navigator.of(context).pop(false);
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('账户详情'),
           centerTitle: true,
-          actions: [
-            IconButton(
-              tooltip: '添加账户',
-              onPressed: _addAccount,
-              icon: const Icon(Icons.add),
-            ),
-          ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 20),
-            Container(
-              decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-              child: Column(
-                children: [
-                  _buildSs58Tile(),
-                  const Divider(height: 1, indent: 16, endIndent: 16),
-                  _buildPrivateKeyTile(),
-                ],
+        body: RefreshIndicator(
+          onRefresh: _onPullRefresh,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 16),
+              // 充值 / 提现 / 零钱包(按 account_id,链下清算行零钱包按账户独立绑定)。
+              Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                child: WalletActionCard(
+                  key: _actionCardKey,
+                  accountId: account.accountId,
+                  ss58Address: account.ss58Address,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: _delete,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.danger,
-                side: const BorderSide(color: AppTheme.danger),
+              const SizedBox(height: 12),
+              _buildClearingBankRow(),
+              const SizedBox(height: 12),
+              _buildTransactionHistoryCard(),
+              const SizedBox(height: 20),
+              Container(
+                decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+                child: Column(
+                  children: [
+                    _buildSs58Tile(),
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                    _buildPrivateKeyTile(),
+                  ],
+                ),
               ),
-              icon: Icon(
-                account.accountIndex == 0
-                    ? Icons.delete_forever_outlined
-                    : Icons.delete_outline,
-                size: 18,
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: _delete,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.danger,
+                  side: const BorderSide(color: AppTheme.danger),
+                ),
+                icon: Icon(
+                  account.accountIndex == 0
+                      ? Icons.delete_forever_outlined
+                      : Icons.delete_outline,
+                  size: 18,
+                ),
+                label: Text(account.accountIndex == 0 ? '删除钱包' : '删除该账户'),
               ),
-              label: Text(account.accountIndex == 0 ? '删除钱包' : '删除该账户'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -282,6 +345,136 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
         ],
       ),
     );
+  }
+
+  /// 清算行入口:整卡点击进「设置清算行」(绑定 / 切换)。
+  Widget _buildClearingBankRow() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        onTap: _openClearingBank,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(20),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+                child: const Icon(Icons.account_balance_outlined,
+                    size: 20, color: AppTheme.primaryDark),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '清算行',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '绑定 / 切换清算行',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  size: 20, color: AppTheme.textTertiary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 交易记录卡片:标题跳转完整列表 + 最近 5 条。
+  Widget _buildTransactionHistoryCard() {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
+      child: Column(children: _buildTransactionHistorySection()),
+    );
+  }
+
+  List<Widget> _buildTransactionHistorySection() {
+    return [
+      InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => TransactionHistoryPage(
+                ss58Address: widget.account.ss58Address,
+                accountId: widget.account.accountId,
+              ),
+            ),
+          );
+        },
+        child: const Padding(
+          padding: EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            children: [
+              Text(
+                '交易记录',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Spacer(),
+              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
+            ],
+          ),
+        ),
+      ),
+      const Divider(height: 1),
+      if (_recentRecords.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 36),
+          child: Center(
+            child: Text(
+              '暂无交易记录',
+              style: TextStyle(color: AppTheme.textTertiary),
+            ),
+          ),
+        )
+      else
+        ...List.generate(_recentRecords.length, (index) {
+          final record = _recentRecords[index];
+          return Column(
+            children: [
+              LocalTxRecordTile(
+                record: record,
+                showChevron: true,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LocalTxRecordDetailPage(record: record),
+                    ),
+                  );
+                },
+              ),
+              if (index < _recentRecords.length - 1) const Divider(height: 1),
+            ],
+          );
+        }),
+    ];
   }
 
   Widget _buildSs58Tile() {

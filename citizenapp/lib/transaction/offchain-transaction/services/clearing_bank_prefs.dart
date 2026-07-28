@@ -82,30 +82,30 @@ class ClearingBankBindingSnapshot {
 ///   (32 字节),**不是** CID `cid_number` 字符串。CitizenApp 同时需要 cid_number、
 ///   主账户和链上 `ClearingBankNodes` 端点,所以本地缓存升级为 JSON 快照。
 /// - 快照仅是用户体验缓存;绑定、支付、充值、提现前仍要查链上或清算行节点。
-/// - 缓存按 `walletIndex` 隔离,同 App 多钱包互不干扰。
+/// - 缓存按 `account_id` 隔离(单钱包多账户下,每个账户独立绑定清算行,互不干扰)。
 class ClearingBankPrefs {
   ClearingBankPrefs._();
 
   static const String _keyPrefix = 'clearing_bank_binding_';
 
-  /// 写入完整绑定快照。
+  /// 写入完整绑定快照。[accountId] 为该绑定账户的链账户主键(0x+64hex)。
   static Future<void> saveSnapshot(
-    int walletIndex,
+    String accountId,
     ClearingBankBindingSnapshot snapshot,
   ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      '$_keyPrefix$walletIndex',
+      '$_keyPrefix$accountId',
       jsonEncode(snapshot.toJson()),
     );
   }
 
-  /// 读取完整绑定快照。
+  /// 读取完整绑定快照。[accountId] 为该账户的链账户主键(0x+64hex)。
   static Future<ClearingBankBindingSnapshot?> loadSnapshot(
-    int walletIndex,
+    String accountId,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('$_keyPrefix$walletIndex');
+    final raw = prefs.getString('$_keyPrefix$accountId');
     if (raw == null || raw.trim().isEmpty) return null;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
@@ -124,8 +124,8 @@ class ClearingBankPrefs {
   }
 
   /// 清除(切换清算行后由 bind 页主动覆盖,或用户手动解绑时调)。
-  static Future<void> clear(int walletIndex) async {
+  static Future<void> clear(String accountId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('$_keyPrefix$walletIndex');
+    await prefs.remove('$_keyPrefix$accountId');
   }
 }
