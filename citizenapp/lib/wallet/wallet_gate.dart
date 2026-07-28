@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/my/myid/myid_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
@@ -18,13 +19,23 @@ import 'package:citizenapp/wallet/pages/create_wallet_onboarding_page.dart';
 /// 冷启动判定一次；此后监听 [WalletManager.walletsRevision]，运行期删光钱包
 /// 即时踢回初始化页。
 class WalletGate extends StatefulWidget {
-  const WalletGate({super.key, required this.child, this.defaultWalletLoader});
+  const WalletGate({
+    super.key,
+    required this.child,
+    this.defaultWalletLoader,
+    this.onInitialized,
+  });
 
   final Widget child;
 
   /// 有效热钱包加载器，测试注入用；默认 [WalletManager.getValidDefaultWallet]
   /// （列表最靠前的**有效**热钱包，没有则返回 null）。
   final Future<WalletProfile?> Function()? defaultWalletLoader;
+
+  /// 首次初始化(本次会话从 onboarding 新建/导入钱包)后的一次性引导,测试注入用;默认把
+  /// 用户带到身份页 [MyIdPage] 去注册身份(决策③:不改动主界面 5-tab 结构,返回即回落)。
+  /// **冷启动即有钱包的老用户不经此路径**,不打扰。
+  final void Function(BuildContext context)? onInitialized;
 
   @override
   State<WalletGate> createState() => _WalletGateState();
@@ -103,6 +114,13 @@ class _WalletGateState extends State<WalletGate> {
     _check();
   }
 
+  /// 默认初始化引导:一次性 push 身份页(返回即回落主界面,不改动 5-tab 结构)。
+  void _introduceIdentity(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MyIdPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
@@ -159,6 +177,12 @@ class _WalletGateState extends State<WalletGate> {
           onCreated: () {
             if (!mounted) return;
             setState(() => _status = _GateStatus.ready);
+            // 首帧后(child=AppShell 已挂载)一次性引导到身份页去注册身份;盖在广场 tab
+            // 之上,返回即回落广场——不改动底部 5-tab 结构。冷启动即有钱包不经这里。
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              (widget.onInitialized ?? _introduceIdentity)(context);
+            });
           },
         );
       case _GateStatus.ready:

@@ -244,7 +244,7 @@ export function CitizenDetailPage({
         const submitted = await submitChainSign(
           auth,
           output.request_id,
-          signed.signer_public_key,
+          signed.account_id,
           signed.signature,
         );
         notice.success(`公民身份已上链,交易哈希：${submitted.tx_hash}`);
@@ -284,7 +284,7 @@ export function CitizenDetailPage({
       const submitted = await submitChainSign(
         auth,
         prep.request_id,
-        signed.signer_public_key,
+        signed.account_id,
         signed.signature,
       );
       notice.success(`公民身份已吊销,交易哈希：${submitted.tx_hash}`);

@@ -84,6 +84,7 @@ void main() {
           ..balance = 0
           ..ss58Address = 'addr_$i'
           ..accountId = '0x${i.toRadixString(16).padLeft(64, '0')}'
+          ..masterId = '0x${i.toRadixString(16).padLeft(64, '0')}'
           ..alg = 'sr25519'
           ..ss58 = 2027
           ..createdAtMillis = i
@@ -149,6 +150,7 @@ void main() {
             ..balance = 0
             ..ss58Address = 'addr_$i'
             ..accountId = '0x${i.toRadixString(16).padLeft(64, '0')}'
+            ..masterId = '0x${i.toRadixString(16).padLeft(64, '0')}'
             ..alg = 'sr25519'
             ..ss58 = 2027
             ..createdAtMillis = i
@@ -175,6 +177,7 @@ void main() {
             ..balance = 0
             ..ss58Address = 'addr_$i'
             ..accountId = '0x${i.toRadixString(16).padLeft(64, '0')}'
+            ..masterId = '0x${i.toRadixString(16).padLeft(64, '0')}'
             ..alg = 'sr25519'
             ..ss58 = 2027
             ..createdAtMillis = i

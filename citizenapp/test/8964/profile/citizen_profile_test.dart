@@ -79,14 +79,14 @@ void main() {
 
       final unnamed = CitizenProfile.fromJson(_profileJson(displayName: ''));
       expect(unnamed.resolvedDisplayName('钱包A'), '钱包A');
-      final fallback = ProfilePresentation.forAccount(_owner).fallbackName;
+      final fallback = ProfilePresentation.forAccountId(_owner).fallbackName;
       expect(unnamed.resolvedDisplayName(''), fallback);
       expect(fallback, isNot(contains(_owner.substring(0, 6))));
     });
 
     test('local defaults are stable and reject account-derived nicknames', () {
-      final first = ProfilePresentation.forAccount(_owner);
-      final second = ProfilePresentation.forAccount(_owner);
+      final first = ProfilePresentation.forAccountId(_owner);
+      final second = ProfilePresentation.forAccountId(_owner);
       final short =
           '${_owner.substring(0, 6)}...${_owner.substring(_owner.length - 6)}';
 
@@ -101,7 +101,7 @@ void main() {
 
     test('SquareAuthor never falls back to its wallet account', () {
       const author = SquareAuthor(accountId: _owner, displayName: '');
-      expect(author.title, ProfilePresentation.forAccount(_owner).fallbackName);
+      expect(author.title, ProfilePresentation.forAccountId(_owner).fallbackName);
       expect(author.title, isNot(_owner));
     });
 

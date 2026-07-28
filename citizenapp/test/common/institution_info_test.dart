@@ -73,7 +73,7 @@ void main() {
   group('ProposalCapabilityRegistry', () {
     InstitutionInfo info({
       required String code,
-      required String account,
+      required String accountId,
       int orgType = OrgType.institution,
       String? cidNumber,
     }) {
@@ -89,10 +89,10 @@ void main() {
         accounts: personal
             ? null
             : InstitutionAccounts(
-                mainAccountId: account,
+                mainAccountId: accountId,
                 feeAccountId: '0x${'fe' * 32}',
               ),
-        personalAccountId: personal ? account : null,
+        personalAccountId: personal ? accountId : null,
       );
     }
 
@@ -106,7 +106,7 @@ void main() {
       final subject = ProposalSubject.fromInstitution(
         institution: info(
           code: 'NRC',
-          account: '0x${'33' * 32}',
+          accountId: '0x${'33' * 32}',
           orgType: OrgType.nrc,
           cidNumber: 'LN001-NRC0G-944805165-2026',
         ),
@@ -125,7 +125,7 @@ void main() {
 
     test('city registry is public institution, not governance', () {
       final subject = ProposalSubject.fromInstitution(
-        institution: info(code: 'CREG', account: '0x${'44' * 32}'),
+        institution: info(code: 'CREG', accountId: '0x${'44' * 32}'),
         institutionCode: 'CREG',
       );
       final result = kinds(subject);
@@ -140,7 +140,7 @@ void main() {
     test('private institution gets only generic active-account capabilities',
         () {
       final subject = ProposalSubject.fromInstitution(
-        institution: info(code: 'SFGQ', account: '0x${'55' * 32}'),
+        institution: info(code: 'SFGQ', accountId: '0x${'55' * 32}'),
         institutionCode: 'SFGQ',
       );
       final result = kinds(subject);
@@ -152,25 +152,25 @@ void main() {
     });
 
     test('personal multisig exposes admins change capability', () {
-      final account = '77' * 32;
+      final accountId = '77' * 32;
       final subject = ProposalSubject.fromInstitution(
         institution: info(
           code: 'PMUL',
-          account: account,
-          cidNumber: 'personal-account:$account',
+          accountId: accountId,
+          cidNumber: 'personal-account:$accountId',
         ),
         institutionCode: 'PMUL',
       );
       final result = kinds(subject);
       expect(subject.cidNumber, isNull);
-      expect(subject.personalAccountId, account);
+      expect(subject.personalAccountId, accountId);
       expect(result, contains(ProposalKind.transfer));
       expect(result, contains(ProposalKind.adminsChange));
     });
 
     test('unincorporated code does not auto-enable admins change', () {
       final subject = ProposalSubject.fromInstitution(
-        institution: info(code: 'UNIN', account: '0x${'66' * 32}'),
+        institution: info(code: 'UNIN', accountId: '0x${'66' * 32}'),
         institutionCode: 'UNIN',
       );
       final result = kinds(subject);

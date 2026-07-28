@@ -20,8 +20,8 @@ import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/wallet/pages/account_detail_page.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
-import 'package:citizenapp/wallet/pages/import_wallet_page.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_identity_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_onchain_balance_card.dart';
@@ -98,12 +98,12 @@ String? extractColdWalletImportAddress(String raw) {
   }
 }
 
-/// 钱包列表页：
-/// - 卡片单列横向布局，点击卡片直接进详情；
-/// - 钱包图标按冷热配色：热=墨绿主色 / 冷=蓝(离线签名设备调性)；
-/// - 三点菜单保留「重命名 / 删除钱包」2 项；
-/// - ReorderableListView 单列，长按拖拽排序；
-/// - 删除入口走三点菜单「删除钱包」+ 二次确认。
+/// 钱包列表页（单列横向卡片）：
+/// - 正常态：唯一热钱包的 `//index` 账户行 + 冷钱包行并列，点账户行进账户详情，
+///   点冷钱包行进冷钱包详情；
+/// - 选择交易钱包态（selectForTrade）：按钱包整只选择付款钱包，沿用 WalletProfile 行；
+/// - 钱包/账户图标按冷热配色：热=墨绿主色 / 冷=蓝(离线签名设备调性)；
+/// - 冷钱包行三点菜单保留「重命名 / 删除钱包」2 项 + 二次确认；账户的改名/删除收在账户详情页。
 class _WalletTabState extends State<WalletTab> {
   final WalletManager _walletService = WalletManager();
   final ChainRpc _chainRpc = ChainRpc();
@@ -111,6 +111,10 @@ class _WalletTabState extends State<WalletTab> {
   /// 拖拽要求同步可控的列表，FutureBuilder 异步流不便参与重排，
   /// 因此把钱包列表常驻在 state 上，加载完成后再 setState 触发渲染。
   List<WalletProfile>? _wallets;
+
+  /// 唯一热钱包（masterId = 账户0.accountId）下的全部 `//index` 账户（含账户0）。
+  /// 「我的钱包」正常态把它们逐个成行展示，与冷钱包 WalletProfile 行并列。
+  List<Account> _accounts = const <Account>[];
   bool _walletsLoading = true;
   bool _balanceRefreshing = false;
   String? _identityAccountId;
@@ -150,8 +154,11 @@ class _WalletTabState extends State<WalletTab> {
       if (list.isNotEmpty) {
         unawaited(ChainTxMonitor.instance.start());
       }
+      final accounts = await _loadHotAccounts(list);
+      if (!mounted) return null;
       setState(() {
         _wallets = list;
+        _accounts = accounts;
         _walletsLoading = false;
       });
       return list;
@@ -166,6 +173,31 @@ class _WalletTabState extends State<WalletTab> {
       });
       if (showSnack) _showWalletStoreErrorOnce(e);
       return null;
+    }
+  }
+
+  /// 唯一热钱包（列表最靠前的有效热钱包）；没有则 null。
+  ///
+  /// 热钱包的 `accountId` 即 masterId（建钱包时两者同源写入），据此拉全部
+  /// `//index` 账户。
+  WalletProfile? _hotWallet(List<WalletProfile> wallets) {
+    for (final wallet in wallets) {
+      if (wallet.isHotWallet && isAccountIdText(wallet.accountId)) {
+        return wallet;
+      }
+    }
+    return null;
+  }
+
+  /// 拉唯一热钱包下的账户集合；无热钱包或读取失败均回退空列表（此时列表只剩冷钱包）。
+  Future<List<Account>> _loadHotAccounts(List<WalletProfile> wallets) async {
+    final hot = _hotWallet(wallets);
+    if (hot == null) return const <Account>[];
+    try {
+      return await _walletService.getAccounts(hot.accountId);
+    } catch (e) {
+      AppLog.d('[Wallet] 账户列表读取失败: $e');
+      return const <Account>[];
     }
   }
 
@@ -395,59 +427,15 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
-  /// 拖拽排序回调：先 setState 反馈到 UI，再异步落盘 sortOrder。
-  /// 落盘失败只提示，不回滚 UI，避免视觉跳动。
-  ///
-  /// 特例：当拖拽改变了「默认用户钱包」（列表最靠前的热钱包）时，等于切换
-  /// 用户身份，需先通过身份验证才落盘；验证失败则回滚 UI、不切换。
-  Future<void> _onReorder(int oldIdx, int newIdx) async {
-    final wallets = _wallets;
-    if (wallets == null) return;
-    final next = reorderWalletProfiles(wallets, oldIdx, newIdx);
-    final newDefaultIndex = defaultUserWalletIndex(next);
-    final defaultChanged = newDefaultIndex != defaultUserWalletIndex(wallets);
-    if (defaultChanged && newDefaultIndex != null) {
-      try {
-        // 切换默认用户即换身份，先对新默认热钱包做一次生物识别验证。
-        await _walletService.verifyWalletAccess(newDefaultIndex);
-      } catch (_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('切换默认用户需通过身份验证')),
-        );
-        return;
-      }
-      if (!mounted) return;
-    }
-    setState(() {
-      _wallets = next;
-    });
-    try {
-      await _walletService.reorderWallets(
-        next.map((w) => w.walletIndex).toList(),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存顺序失败:$e')),
-      );
-    }
-  }
-
-  Future<void> _openCreatePage() async {
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AddWalletPage()),
+  /// 点账户行进入账户详情（Lv3）；返回改动过账户集合则整页刷新。
+  Future<void> _openAccountDetail(Account account, String walletName) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) =>
+            AccountDetailPage(account: account, walletName: walletName),
+      ),
     );
-    if (created == true) {
-      await _reload();
-    }
-  }
-
-  Future<void> _openImportPage() async {
-    final imported = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const ImportWalletPage()),
-    );
-    if (imported == true) {
+    if (changed == true) {
       await _reload();
     }
   }
@@ -478,138 +466,27 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
+  /// 「＋」入口只余「导入冷钱包」。
+  ///
+  /// 热钱包（创建 / 导入助记词）唯一引导在首启门禁页（[CreateWalletOnboardingPage]）
+  /// 完成——一台设备一只热钱包，此处不再提供热钱包入口；追加账户走账户详情页的
+  /// 「添加账户」。冷钱包只存公钥、可与热钱包账户并列，保留入口。
   Future<void> _showWalletEntryChooser() async {
     await showModalBottomSheet<void>(
       context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.add_circle_outline),
-                title: const Text('创建钱包'),
-                subtitle: const Text('私钥存在本机'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _openCreatePage();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.file_download_outlined),
-                title: const Text('导入热钱包'),
-                subtitle: const Text('通过助记词导入'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _openImportPage();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.shield_outlined),
-                title: const Text('导入冷钱包'),
-                subtitle: const Text('仅导入公钥，私钥保留在签名设备'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _openImportColdWalletPage();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildWalletEntryOption({
-    required Color color,
-    required String title,
-    required String description,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.45,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      builder: (context) => WalletEntryChooserSheet(
+        onImportCold: () {
+          Navigator.of(context).pop();
+          _openImportColdWalletPage();
+        },
       ),
     );
   }
 
+  /// 空态：热钱包由首启门禁强制创建，走不到这里没有热钱包的情况；此处只提供
+  /// 「导入冷钱包」入口（仅公钥、只读，可与热钱包账户并列）。
   Widget _buildEmptyWalletChoices() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '还没有钱包，请选择一种方式开始。',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 16),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.08,
-          children: [
-            _buildWalletEntryOption(
-              color: AppTheme.danger.withAlpha(15),
-              title: '创建钱包',
-              description: '创建私钥存在本机的热钱包',
-              onTap: _openCreatePage,
-            ),
-            _buildWalletEntryOption(
-              color: AppTheme.info.withAlpha(15),
-              title: '导入热钱包',
-              description: '导入钱包并将私钥存在本机',
-              onTap: _openImportPage,
-            ),
-            _buildWalletEntryOption(
-              color: AppTheme.warning.withAlpha(15),
-              title: '导入冷钱包',
-              description: '仅导入公钥，签名在外部设备',
-              onTap: _openImportColdWalletPage,
-            ),
-          ],
-        ),
-      ],
-    );
+    return WalletEmptyChoices(onImportCold: _openImportColdWalletPage);
   }
 
   @override
@@ -623,7 +500,7 @@ class _WalletTabState extends State<WalletTab> {
         actions: [
           if (!_isSelectionMode)
             IconButton(
-              tooltip: '创建/导入钱包',
+              tooltip: '导入冷钱包',
               onPressed: _showWalletEntryChooser,
               icon: const Icon(Icons.add, size: 26),
             ),
@@ -641,55 +518,218 @@ class _WalletTabState extends State<WalletTab> {
             );
           }
           final wallets = _wallets ?? const <WalletProfile>[];
-          if (wallets.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: _buildEmptyWalletChoices(),
-            );
-          }
-          final defaultWalletIndex = defaultUserWalletIndex(wallets);
-          return Column(
-            children: [
-              // 连接状态栏已移除：轻节点连接状态统一由「交易」tab 顶部那条承担，避免重复。
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _refreshBalancesFromChain,
-                  child: ReorderableListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: wallets.length,
-                    onReorder: _onReorder,
-                    buildDefaultDragHandles: !_isSelectionMode,
-                    itemBuilder: (ctx, idx) {
-                      final wallet = wallets[idx];
-                      // 身份字段损坏的钱包只能删除后重新导入：点进详情会在
-                      // 空 accountId 上再次抛错，等于把炸点从列表挪到详情。
-                      final isBroken = !isAccountIdText(wallet.accountId);
-                      return Padding(
-                        key: ValueKey('wallet_${wallet.walletIndex}'),
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: WalletListTile(
-                          wallet: wallet,
-                          showActions: !_isSelectionMode,
-                          isDefault: wallet.walletIndex == defaultWalletIndex,
-                          // 坏行 accountId 为空，不能靠它与身份账户比对（都空会误判）。
-                          isIdentityWallet: !isBroken &&
-                              wallet.accountId == _identityAccountId,
-                          isBroken: isBroken,
-                          onTap: () => isBroken
-                              ? _showBrokenWalletHint()
-                              : _openWalletDetail(wallet),
-                          onRename: () => _renameWallet(wallet),
-                          onDelete: () => _deleteWallet(wallet),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          );
+          return _isSelectionMode
+              ? _buildSelectionList(wallets)
+              : _buildMyWalletList(wallets);
         },
       ),
+    );
+  }
+
+  /// 选择交易钱包模式：按钱包（walletIndex）选付款钱包，沿用旧的 WalletProfile 列表
+  /// （账户级付款选择不在本任务范围内）。点选即设为 active 并回传。
+  Widget _buildSelectionList(List<WalletProfile> wallets) {
+    if (wallets.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: _buildEmptyWalletChoices(),
+      );
+    }
+    final defaultWalletIndex = defaultUserWalletIndex(wallets);
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      itemCount: wallets.length,
+      itemBuilder: (ctx, idx) {
+        final wallet = wallets[idx];
+        final isBroken = !isAccountIdText(wallet.accountId);
+        return Padding(
+          key: ValueKey('wallet_${wallet.walletIndex}'),
+          padding: const EdgeInsets.only(bottom: 8),
+          child: WalletListTile(
+            wallet: wallet,
+            showActions: false,
+            isDefault: wallet.walletIndex == defaultWalletIndex,
+            isIdentityWallet:
+                !isBroken && wallet.accountId == _identityAccountId,
+            isBroken: isBroken,
+            onTap: () =>
+                isBroken ? _showBrokenWalletHint() : _openWalletDetail(wallet),
+            onRename: () => _renameWallet(wallet),
+            onDelete: () => _deleteWallet(wallet),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 「我的钱包」正常态：唯一热钱包的 `//index` 账户逐行 + 冷钱包行并列展示。
+  ///
+  /// - 账户行（含账户0）点击进 [AccountDetailPage]；账户0 是全 App 默认用户身份。
+  /// - 冷钱包行沿用旧 [WalletListTile] 详情 / 重命名 / 删除行为，不受多账户改动影响。
+  /// - 身份字段损坏的钱包既不入账户列表也不算冷钱包，单列出来保留删除出路。
+  Widget _buildMyWalletList(List<WalletProfile> wallets) {
+    final hot = _hotWallet(wallets);
+    final hotName = hot?.walletName ?? '钱包';
+    final coldWallets = wallets
+        .where((w) => w.isColdWallet && isAccountIdText(w.accountId))
+        .toList(growable: false);
+    final brokenWallets = wallets
+        .where((w) => !isAccountIdText(w.accountId))
+        .toList(growable: false);
+
+    final rows = <Widget>[
+      for (final account in _accounts)
+        Padding(
+          key: ValueKey('account_${account.accountId}'),
+          padding: const EdgeInsets.only(bottom: 8),
+          child: WalletAccountTile(
+            account: account,
+            isDefault: account.accountIndex == 0,
+            isIdentity: account.accountId == _identityAccountId,
+            onTap: () => _openAccountDetail(account, hotName),
+          ),
+        ),
+      for (final cold in coldWallets)
+        Padding(
+          key: ValueKey('wallet_${cold.walletIndex}'),
+          padding: const EdgeInsets.only(bottom: 8),
+          child: WalletListTile(
+            wallet: cold,
+            showActions: true,
+            isIdentityWallet: cold.accountId == _identityAccountId,
+            onTap: () => _openWalletDetail(cold),
+            onRename: () => _renameWallet(cold),
+            onDelete: () => _deleteWallet(cold),
+          ),
+        ),
+      for (final broken in brokenWallets)
+        Padding(
+          key: ValueKey('wallet_${broken.walletIndex}'),
+          padding: const EdgeInsets.only(bottom: 8),
+          child: WalletListTile(
+            wallet: broken,
+            showActions: true,
+            isBroken: true,
+            onTap: _showBrokenWalletHint,
+            onRename: () => _renameWallet(broken),
+            onDelete: () => _deleteWallet(broken),
+          ),
+        ),
+    ];
+
+    if (rows.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: _buildEmptyWalletChoices(),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refreshBalancesFromChain,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: rows,
+      ),
+    );
+  }
+}
+
+/// 「＋」入口底部面板：只余「导入冷钱包」一项。
+///
+/// 热钱包（创建 / 导入助记词）入口已从此处移除——一台设备一只热钱包，其唯一引导在
+/// 首启门禁页；此处不得再出现「创建钱包」「导入热钱包」。
+///
+/// 仅供 wallet_page 自己使用,通过 `@visibleForTesting` 暴露给 widget 测试。
+@visibleForTesting
+class WalletEntryChooserSheet extends StatelessWidget {
+  const WalletEntryChooserSheet({super.key, required this.onImportCold});
+
+  final VoidCallback onImportCold;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.shield_outlined),
+            title: const Text('导入冷钱包'),
+            subtitle: const Text('仅导入公钥，私钥保留在签名设备'),
+            onTap: onImportCold,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 空态选项：只提供「导入冷钱包」入口，同样不含热钱包创建 / 导入。
+///
+/// 仅供 wallet_page 自己使用,通过 `@visibleForTesting` 暴露给 widget 测试。
+@visibleForTesting
+class WalletEmptyChoices extends StatelessWidget {
+  const WalletEmptyChoices({super.key, required this.onImportCold});
+
+  final VoidCallback onImportCold;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '还没有可展示的钱包。热钱包在首启时创建，这里可导入只读的冷钱包。',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 16),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onImportCold,
+            child: Ink(
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withAlpha(15),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.shield_outlined, color: AppTheme.warning),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '导入冷钱包',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '仅导入公钥，签名在外部设备',
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.45,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -896,6 +936,118 @@ class _WalletBadge extends StatelessWidget {
   }
 }
 
+/// 单行账户卡片：唯一热钱包下某个 `//index` 账户。
+///
+/// 左侧 46×46 序号徽标（#0、#1…）→ 中间账户名 + 短 SS58 → 右侧默认/身份徽标 + 箭头。
+/// 整卡 InkWell 点击进入 [AccountDetailPage]。账户没有独立的重命名/删除三点菜单，
+/// 这些操作收在账户详情页里（与冷钱包行的三点菜单区分开）。
+///
+/// 仅供 wallet_page 自己使用，通过 `@visibleForTesting` 暴露给 widget 测试。
+@visibleForTesting
+class WalletAccountTile extends StatelessWidget {
+  const WalletAccountTile({
+    super.key,
+    required this.account,
+    required this.onTap,
+    this.isDefault = false,
+    this.isIdentity = false,
+  });
+
+  final Account account;
+  final VoidCallback onTap;
+
+  /// 账户0（默认用户身份）。
+  final bool isDefault;
+
+  /// 链上唯一公民身份绑定的账户。
+  final bool isIdentity;
+
+  String _shortAddress(String address) {
+    if (address.length <= 16) return address;
+    return '${address.substring(0, 8)}…${address.substring(address.length - 6)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.cardDecoration(radius: AppTheme.radiusMd),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(20),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+                child: Text(
+                  '#${account.accountIndex}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primaryDark,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      account.accountName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryDark,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _shortAddress(account.ss58Address),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isIdentity || isDefault) ...[
+                const SizedBox(width: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    if (isIdentity)
+                      const _WalletBadge(label: '身份钱包', icon: Icons.verified),
+                    if (isDefault) const _WalletBadge(label: '默认用户'),
+                  ],
+                ),
+              ],
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right,
+                  size: 20, color: AppTheme.textTertiary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class WalletDetailPage extends StatefulWidget {
   const WalletDetailPage({super.key, required this.wallet});
 
@@ -1009,10 +1161,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           final seed =
               await _walletService.getSeedHex(widget.wallet.walletIndex);
           return seed != null ? '0x$seed' : null;
-        });
-      case 'mnemonic':
-        await _revealSecret('助记词', () async {
-          return _walletService.getMnemonic(widget.wallet.walletIndex);
         });
     }
   }
@@ -1144,10 +1292,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   value: 'clearing_bank',
                   child: Text('清算行'),
                 ),
-                if (widget.wallet.isHotWallet) ...[
+                if (widget.wallet.isHotWallet)
                   const PopupMenuItem(value: 'seed', child: Text('查看私钥')),
-                  const PopupMenuItem(value: 'mnemonic', child: Text('查看助记词')),
-                ],
               ],
             ),
           ],
@@ -1305,81 +1451,6 @@ class WalletIconRegistry {
       }
     }
     return Icons.account_balance_wallet_outlined;
-  }
-}
-
-class AddWalletPage extends StatefulWidget {
-  const AddWalletPage({super.key});
-
-  @override
-  State<AddWalletPage> createState() => _CreateWalletPageState();
-}
-
-class _CreateWalletPageState extends State<AddWalletPage> {
-  bool _isSaving = false;
-  int _wordCount = 12;
-
-  Future<void> _create() async {
-    setState(() {
-      _isSaving = true;
-    });
-    try {
-      await runCreateWalletFlow(context, wordCount: _wordCount);
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pop(true);
-    } catch (e, st) {
-      AppLog.d('wallet create failed: $e\n$st');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(walletOperationErrorMessage(e))),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('创建钱包')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('将创建一个 sr25519 钱包，并生成 SS58(2027) 地址。'),
-            const SizedBox(height: 8),
-            const Text('仅使用默认派生路径，不暴露自定义路径。'),
-            const SizedBox(height: 16),
-            SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 12, label: Text('12 个单词')),
-                ButtonSegment(value: 24, label: Text('24 个单词')),
-              ],
-              selected: {_wordCount},
-              onSelectionChanged: (v) => setState(() => _wordCount = v.first),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _wordCount == 24 ? '256 位熵，安全性更高' : '128 位熵，标准安全强度',
-              style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _isSaving ? null : _create,
-              child: Text(_isSaving ? '创建中...' : '确认创建'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

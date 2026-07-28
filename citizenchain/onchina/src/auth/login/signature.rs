@@ -9,15 +9,15 @@ use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr
 use crate::*;
 
 pub(crate) fn verify_admin_signature(
-    signer_public_key: &str,
+    account_id: &str,
     message: &str,
     signature_text: &str,
 ) -> bool {
-    if verify_admin_signature_bytes(signer_public_key, message.as_bytes(), signature_text) {
+    if verify_admin_signature_bytes(account_id, message.as_bytes(), signature_text) {
         return true;
     }
     let wrapped = format!("<Bytes>{}</Bytes>", message);
-    verify_admin_signature_bytes(signer_public_key, wrapped.as_bytes(), signature_text)
+    verify_admin_signature_bytes(account_id, wrapped.as_bytes(), signature_text)
 }
 
 /// 校验管理员使用的签名钱包对原始字节的 sr25519 签名。
@@ -25,11 +25,11 @@ pub(crate) fn verify_admin_signature(
 /// 链上中国治理 JSON 统一走 `verify_admin_signature`；本函数只作为内部底层验签工具，
 /// 不再承载机构创建内层凭证入口。
 pub(crate) fn verify_admin_signature_bytes(
-    signer_public_key: &str,
+    account_id: &str,
     message: &[u8],
     signature_text: &str,
 ) -> bool {
-    let Some(public_key_bytes) = parse_sr25519_public_key_bytes(signer_public_key) else {
+    let Some(public_key_bytes) = parse_sr25519_public_key_bytes(account_id) else {
         return false;
     };
     let normalized_sig = strip_0x_prefix(signature_text);

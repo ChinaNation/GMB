@@ -274,7 +274,7 @@ class ChatStore {
   /// Cloudflare 端 A 的设备登记由 Worker purge 删除；本地 Isar 是 A 私信**明文**
   /// 的唯一残留处，须一并清空以做到零残留。路由缓存（imRouteCacheEntity）是设备级
   /// 对端路由、非 accountId 归属，不在此清除。
-  Future<void> clearAllForAccount(String accountId) {
+  Future<void> clearAllForAccountId(String accountId) {
     return _walletIsar.writeTxn((isar) async {
       final conversations = await isar.chatConversationEntitys
           .filter()

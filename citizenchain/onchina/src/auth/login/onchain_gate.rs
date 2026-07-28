@@ -1,7 +1,7 @@
 //! 登录链上集合鉴权 + 会话签发(QR 登录与挑战登录共用)。
 //!
 //! (去中心化鉴权):
-//! - 验签证明扫码者持有 `signer_public_key` 私钥后,membership 真源切到**链上 Active 管理员集合**。
+//! - 验签证明扫码者持有 `account_id` 私钥后,membership 真源切到**链上 Active 管理员集合**。
 //! - 平台启动不预设机构;首次登录从 `verified_account_id` 反查候选机构,二次确认后本节点绑定唯一机构。
 //! - 后台 `revoke_stale_admin_sessions_loop` 周期复查,管理员被链上移除后≤TTL 失效。
 

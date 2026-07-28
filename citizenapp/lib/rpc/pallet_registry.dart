@@ -19,6 +19,11 @@ class PalletRegistry {
   // ---- PersonalManage (7) · 个人多签生命周期 ----
   static const int personalManagePallet = 7;
 
+  // ---- CitizenIdentity (10) · 公民链上身份(匿名自助占号 / 换绑) ----
+  static const int citizenIdentityPallet = 10;
+  static const int selfOccupyCidCall = 5;
+  static const int selfRebindCidAccountCall = 9;
+
   // ---- MultisigTransfer (17) ----
   static const int multisigTransferPallet = 17;
 

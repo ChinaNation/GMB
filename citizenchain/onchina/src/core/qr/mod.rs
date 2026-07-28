@@ -81,7 +81,7 @@ pub struct SignRequestBody {
     pub sig_alg: u8,
     /// u:目标/实际签名者公钥,32B base64url(no padding)。
     #[serde(rename = "u")]
-    pub signer_public_key: String,
+    pub account_id: String,
     /// d:待签 payload bytes 的 base64url(no padding)。
     #[serde(rename = "d")]
     pub payload: String,
@@ -90,7 +90,7 @@ pub struct SignRequestBody {
 #[derive(Debug, Clone)]
 pub struct SignResponseBody {
     /// 0x + 32B hex 公钥。parse 时由 b.u 解码得到。
-    pub signer_public_key: String,
+    pub account_id: String,
     /// 0x + 64B hex 签名。parse 时由 b.s 解码得到。
     pub signature: String,
 }
@@ -136,12 +136,12 @@ pub fn login_request_body(
     system: &str,
     target_account_id: &str,
 ) -> Result<SignRequestBody, QrParseError> {
-    let signer_public_key = public_key_hex_to_b64(target_account_id)
+    let account_id = public_key_hex_to_b64(target_account_id)
         .ok_or_else(|| QrParseError::BadField("目标 account_id 必须为 32 字节规范账户".into()))?;
     Ok(SignRequestBody {
         action: action_login(),
         sig_alg: 1,
-        signer_public_key,
+        account_id,
         payload: URL_SAFE_NO_PAD.encode(system.as_bytes()),
     })
 }
@@ -284,7 +284,7 @@ pub fn parse_sign_response(raw: &str) -> Result<SignResponseEnvelope, QrParseErr
         .ok_or_else(|| QrParseError::BadField("b 必填".into()))?;
     let body: CompactResponseBody = serde_json::from_value(body_val.clone())
         .map_err(|e| QrParseError::BadField(format!("b: {}", e)))?;
-    let signer_public_key = b64_to_prefixed_hex(&body.u, 32, "b.u")?;
+    let account_id = b64_to_prefixed_hex(&body.u, 32, "b.u")?;
     let signature = b64_to_prefixed_hex(&body.s, 64, "b.s")?;
 
     Ok(SignResponseEnvelope {
@@ -293,7 +293,7 @@ pub fn parse_sign_response(raw: &str) -> Result<SignResponseEnvelope, QrParseErr
         id: Some(id),
         expires_at: Some(expires_at),
         body: SignResponseBody {
-            signer_public_key,
+            account_id,
             signature,
         },
     })
@@ -382,7 +382,7 @@ mod tests {
     fn login_request_always_targets_user_contact_account() {
         let body = login_request_body("onchina", ACCOUNT_ID).expect("规范账户应生成登录请求");
         assert_eq!(
-            b64_to_prefixed_hex(&body.signer_public_key, 32, "b.u").expect("b.u 应可解码"),
+            b64_to_prefixed_hex(&body.account_id, 32, "b.u").expect("b.u 应可解码"),
             ACCOUNT_ID
         );
     }

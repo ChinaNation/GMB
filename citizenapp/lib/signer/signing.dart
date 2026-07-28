@@ -28,6 +28,10 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 /// 公民身份上链确认(对齐 OP_SIGN_CITIZEN_IDENTITY)。
 const int kOpSignCitizenIdentity = 0x10;
 
+/// 匿名 CID 自助换绑:旧绑定账户对 `(cid_number, new_account_id)` 的授权签名
+/// (对齐 OP_SIGN_CID_REBIND;哈希域,与占号域 0x12 分离防重放)。
+const int kOpSignCidRebind = 0x11;
+
 /// 机构登记(对齐 OP_SIGN_INST)。
 const int kOpSignInst = 0x13;
 

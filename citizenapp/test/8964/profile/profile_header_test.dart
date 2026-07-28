@@ -40,7 +40,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final fallback = ProfilePresentation.forAccount(kOwner).fallbackName;
+    final fallback = ProfilePresentation.forAccountId(kOwner).fallbackName;
     expect(find.text(fallback), findsWidgets);
     expect(find.textContaining(kOwner.substring(0, 6)), findsOneWidget);
     expect(find.text(kOwner), findsNothing);

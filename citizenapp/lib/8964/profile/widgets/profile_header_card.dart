@@ -59,7 +59,7 @@ class ProfileHeaderCard extends StatelessWidget {
   bool get _membershipActive => profile?.membershipActive ?? false;
 
   String get _name {
-    return ProfilePresentation.forAccount(accountId).resolveDisplayName(
+    return ProfilePresentation.forAccountId(accountId).resolveDisplayName(
       walletName: fallbackName,
       publicName: profile?.displayName,
     );
@@ -255,8 +255,8 @@ class _Stat extends StatelessWidget {
   }
 }
 
-String _shortenAccount(String account) {
-  if (account.length <= 12) return account;
-  return '${account.substring(0, 6)}...'
-      '${account.substring(account.length - 6)}';
+String _shortenAccount(String accountId) {
+  if (accountId.length <= 12) return accountId;
+  return '${accountId.substring(0, 6)}...'
+      '${accountId.substring(accountId.length - 6)}';
 }

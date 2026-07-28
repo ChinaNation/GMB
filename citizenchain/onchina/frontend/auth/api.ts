@@ -113,7 +113,7 @@ export async function queryAdminQrLoginResult(
 export async function completeAdminQrLogin(input: {
   challenge_id: string;
   session_id?: string;
-  signer_public_key: string;
+  account_id: string;
   signature: string;
 }): Promise<AdminLoginCompleteResult> {
   return request<AdminLoginCompleteResult>('/api/v1/admin/auth/qr/complete', {

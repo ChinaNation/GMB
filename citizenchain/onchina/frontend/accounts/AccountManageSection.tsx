@@ -70,7 +70,7 @@ export function AccountManageSection({ auth }: AccountManageSectionProps) {
     try {
       const prepared = await deleteAccount(auth, cidNumber, accountName, roleCode);
       const signed = await signChain(prepared.request_id, prepared.sign_request);
-      await submitChainSign(auth, prepared.request_id, signed.signer_public_key, signed.signature);
+      await submitChainSign(auth, prepared.request_id, signed.account_id, signed.signature);
       notice.success(`账户 "${accountName}" 关闭提案已提交,机构内部投票通过后生效`);
       reload();
     } catch (err) {

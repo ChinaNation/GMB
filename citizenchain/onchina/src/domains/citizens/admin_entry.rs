@@ -24,21 +24,15 @@ use crate::*;
 ///
 /// 居住省市由当前注册局办理上下文校验,前端只负责回传当前选择。
 /// 本地建档不得要求链账户；儿童或暂未开户公民同样能先发放电子护照。
+/// 匿名占号请求(第一段):只需岗位码 + 人主体类型。姓名/出生/居住/性别等档案全部
+/// 后期在详情页编辑完善(现有严格逻辑),占号阶段不收。用户钱包账户与签名在第二段
+/// `submit_citizen_occupy` 收集。
 #[derive(Deserialize)]
 pub(crate) struct AdminCreateCitizenInput {
     /// 当前注册局内的任职岗位码；与机构 CID、管理员签名钱包共同构成权限主体。
     pub(crate) actor_role_code: String,
-    pub(crate) family_name: String,
-    pub(crate) given_name: String,
-    pub(crate) citizen_sex: String,
-    pub(crate) citizen_birth_date: String,
-    pub(crate) province_name: String,
-    pub(crate) city_name: String,
-    pub(crate) town_code: String,
-    pub(crate) birth_province_code: String,
-    pub(crate) birth_city_code: String,
-    pub(crate) birth_town_code: String,
-    pub(crate) voting_eligible: bool,
+    /// 人主体类型:CTZN(公民)/ NATP(居民)。必填,决定发号机构码,区分公民与居民。
+    pub(crate) cid_type: String,
 }
 
 /// 直接录入公民返回 DTO。
@@ -69,6 +63,8 @@ pub(crate) struct AdminCreateCitizenOutput {
 /// 建档输入校验产物:两阶段占号流程经会话 JSON 往返(ADR-031 D6)。
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct ValidatedCitizenInput {
+    /// 人主体类型:CTZN / NATP(已校验)。发号机构码单源。
+    pub(crate) cid_type: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
     pub(crate) citizen_sex: String,
@@ -90,97 +86,73 @@ pub(crate) fn validate_citizen_input(
     ctx: &crate::auth::login::AdminAuthContext,
     input: &AdminCreateCitizenInput,
 ) -> Result<ValidatedCitizenInput, axum::response::Response> {
-    let family_name = required_trimmed(&input.family_name, "family_name")?;
-    let given_name = required_trimmed(&input.given_name, "given_name")?;
-    let citizen_sex = normalize_citizen_sex(input.citizen_sex.as_str())?;
-    let citizen_birth_date =
-        parse_required_date(input.citizen_birth_date.as_str(), "citizen_birth_date")?;
-    let today = Utc::now().date_naive();
-    if citizen_birth_date > today {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "出生日期不能晚于今天",
-        ));
-    }
-    if input.voting_eligible && !is_voting_age_at(today, citizen_birth_date) {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "未满16周岁不能设置选举资格",
-        ));
-    }
-
-    let (province_name, city_name) =
-        resolve_citizen_scope(ctx, &input.province_name, &input.city_name)?;
-    let province_code = match crate::cid::china::province_code_by_name(province_name.as_str()) {
-        Some(v) => v.to_string(),
-        None => return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份")),
+    let cid_type = match input.cid_type.trim() {
+        "CTZN" => "CTZN".to_string(),
+        "NATP" => "NATP".to_string(),
+        _ => {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "人主体类型必须是 CTZN(公民) 或 NATP(居民)",
+            ))
+        }
     };
-    let city_code =
-        match crate::cid::china::city_code_by_name(province_name.as_str(), city_name.as_str()) {
-            Some(v) => v.to_string(),
-            None => return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理城市")),
-        };
-    let town_code = required_trimmed(&input.town_code, "town_code")?;
-    if !crate::cid::china::town_exists(
-        province_code.as_str(),
-        city_code.as_str(),
-        town_code.as_str(),
-    ) {
-        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的镇代码"));
+    // 匿名占号:居住省/市取办理注册局作用域(给本地记录一个省分区键);其余档案(姓名/出生/
+    // 性别/出生地/居住镇)后期在详情页编辑完善(现有严格逻辑),占号阶段一律留空。
+    let scope = crate::scope::get_visible_scope(ctx);
+    if !scope.can_write {
+        return Err(api_error(StatusCode::FORBIDDEN, 1003, "当前登录无办理权限"));
     }
-
-    let birth_province_code = required_trimmed(&input.birth_province_code, "birth_province_code")?;
-    let birth_city_code = required_trimmed(&input.birth_city_code, "birth_city_code")?;
-    let birth_town_code = required_trimmed(&input.birth_town_code, "birth_town_code")?;
-    let Some((birth_province_name, Some(_birth_city_name), Some(_birth_town_name))) =
-        crate::cid::china::area_name_by_codes(
-            birth_province_code.as_str(),
-            Some(birth_city_code.as_str()),
-            Some(birth_town_code.as_str()),
-        )
-    else {
+    let Some(province_name) = scope.locked_province_name.clone() else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "未知的出生省市镇代码",
+            "当前注册局缺少省作用域,无法占号",
         ));
     };
-    if birth_province_name.is_empty() {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "未知的出生省份代码",
-        ));
-    }
+    let Some(province_code) = crate::cid::china::province_code_by_name(province_name.as_str()) else {
+        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份"));
+    };
+    let province_code = province_code.to_string();
+    let (city_name, city_code) = match scope.locked_city_name.clone() {
+        Some(city_name) => {
+            let Some(city_code) =
+                crate::cid::china::city_code_by_name(province_name.as_str(), city_name.as_str())
+            else {
+                return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理城市"));
+            };
+            (city_name, city_code.to_string())
+        }
+        None => (String::new(), String::new()),
+    };
 
     Ok(ValidatedCitizenInput {
-        family_name,
-        given_name,
-        citizen_sex,
-        citizen_birth_date: citizen_birth_date.format("%Y-%m-%d").to_string(),
+        cid_type,
+        family_name: String::new(),
+        given_name: String::new(),
+        citizen_sex: String::new(),
+        citizen_birth_date: String::new(),
         province_name,
         city_name,
         province_code,
         city_code,
-        town_code,
-        birth_province_code,
-        birth_city_code,
-        birth_town_code,
-        voting_eligible: input.voting_eligible,
+        town_code: String::new(),
+        birth_province_code: String::new(),
+        birth_city_code: String::new(),
+        birth_town_code: String::new(),
+        voting_eligible: false,
     })
 }
 
-/// 建档种子:档案稳定字段确定性派生;发号种子与链上承诺哈希同源。
-pub(crate) fn citizen_cid_seed(v: &ValidatedCitizenInput) -> String {
-    let birth = NaiveDate::parse_from_str(v.citizen_birth_date.as_str(), "%Y-%m-%d")
-        .expect("validated birth date");
+/// 发号种子:链上中国注册局所有人主体登记(匿名/投票/竞选)统一走本种子,
+/// 由档案稳定字段确定性派生(落库失败恢复时同种子续用同号)。
+pub(crate) fn cid_seed(v: &ValidatedCitizenInput) -> String {
+    // 出生日期可空(匿名占号档案选填),种子按字符串原样哈希,不解析成 NaiveDate。
     local_citizen_cid_seed(
         &v.family_name,
         &v.given_name,
         &v.citizen_sex,
-        birth,
+        &v.citizen_birth_date,
         &v.province_code,
         &v.city_code,
         &v.town_code,
@@ -206,7 +178,7 @@ pub(crate) fn generate_citizen_cid_candidate(
         p1: "1",
         province_name: v.province_name.as_str(),
         city_name: v.city_name.as_str(),
-        institution: "CTZN",
+        institution: v.cid_type.as_str(),
     })
     .map_err(|err| {
         let detail = format!("公民身份CID生成失败: {err}");
@@ -227,13 +199,14 @@ pub(crate) fn persist_citizen_record(
     state: &AppState,
     headers: &HeaderMap,
     account_id: &str,
+    citizen_account_id: &str,
     v: &ValidatedCitizenInput,
     cid_number: &str,
     onchain_tx_hash: &str,
     onchain_block_number: Option<u64>,
 ) -> Result<CitizenRecord, axum::response::Response> {
-    let citizen_birth_date = NaiveDate::parse_from_str(v.citizen_birth_date.as_str(), "%Y-%m-%d")
-        .expect("validated birth date");
+    // 匿名占号:档案选填,出生日期可空,不解析成 NaiveDate(空串会 panic),按字符串原样落库。
+    let citizen_birth_date = v.citizen_birth_date.clone();
     let family_name = v.family_name.clone();
     let given_name = v.given_name.clone();
     let citizen_sex = v.citizen_sex.clone();
@@ -246,23 +219,11 @@ pub(crate) fn persist_citizen_record(
     let cid_number = cid_number.to_string();
 
     let now = Utc::now();
-    let passport_no = match state.db.allocate_passport_no(
-        province_code.as_str(),
-        city_code.as_str(),
-        cid_number.as_str(),
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::error!(error = %err, "allocate passport no failed");
-            return Err(api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "护照号生成失败",
-            ));
-        }
-    };
-    let valid_from = passport_valid_from(now);
-    let valid_until = passport_valid_until(now, passport_validity_years(now, citizen_birth_date));
+    // 匿名占号不发护照:护照号 + 有效期留空;护照随详情页完善(填入出生日期)时由
+    // admin_update_citizen 一次性签发(护照有效期属投票 CID 档,非匿名档)。
+    let passport_no = String::new();
+    let valid_from = String::new();
+    let valid_until = String::new();
     let id = match state.db.next_citizen_id() {
         Ok(v) => v,
         Err(err) => {
@@ -282,9 +243,10 @@ pub(crate) fn persist_citizen_record(
         family_name: family_name.clone(),
         given_name: given_name.clone(),
         citizen_sex: citizen_sex.clone(),
-        citizen_birth_date: citizen_birth_date.format("%Y-%m-%d").to_string(),
-        account_id: None,
-        account_verified_at: None,
+        citizen_birth_date: citizen_birth_date.clone(),
+        // 占即绑:占号阶段就绑定用户钱包账户(链上 occupy_cid 已绑)。
+        account_id: Some(citizen_account_id.to_string()),
+        account_verified_at: Some(now),
         citizen_status: CitizenStatus::Normal,
         voting_eligible: v.voting_eligible,
         passport_valid_from: valid_from.clone(),
@@ -379,78 +341,12 @@ pub(crate) struct ResolvedCitizenAccount {
     pub(crate) ss58_address: String,
 }
 
-fn required_trimmed(value: &str, field: &str) -> Result<String, axum::response::Response> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        let detail = format!("{field} 不能为空");
-        return Err(api_error(StatusCode::BAD_REQUEST, 1001, detail.as_str()));
-    }
-    Ok(trimmed.to_string())
-}
-
-fn parse_required_date(value: &str, field: &str) -> Result<NaiveDate, axum::response::Response> {
-    let value = required_trimmed(value, field)?;
-    NaiveDate::parse_from_str(value.as_str(), "%Y-%m-%d").map_err(|_| {
-        let detail = format!("{field} 必须是 YYYY-MM-DD");
-        api_error(StatusCode::BAD_REQUEST, 1001, detail.as_str())
-    })
-}
-
-fn normalize_citizen_sex(value: &str) -> Result<String, axum::response::Response> {
-    let value = required_trimmed(value, "citizen_sex")?;
-    match value.as_str() {
-        "MALE" | "FEMALE" => Ok(value),
-        _ => Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "citizen_sex 仅支持 MALE / FEMALE",
-        )),
-    }
-}
-
-fn resolve_citizen_scope(
-    ctx: &crate::auth::login::AdminAuthContext,
-    requested_province_name: &str,
-    requested_city_name: &str,
-) -> Result<(String, String), axum::response::Response> {
-    let province_name = required_trimmed(requested_province_name, "province_name")?;
-    let city_name = required_trimmed(requested_city_name, "city_name")?;
-    let scope = crate::scope::get_visible_scope(ctx);
-    if !scope.can_write {
-        return Err(api_error(StatusCode::FORBIDDEN, 1003, "当前登录无办理权限"));
-    }
-    if !scope.includes_province(province_name.as_str()) {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "province_name out of current admin scope",
-        ));
-    }
-    if !scope.includes_city(city_name.as_str()) {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "city_name out of current admin scope",
-        ));
-    }
-    let Some(province) = crate::cid::china::provinces()
-        .iter()
-        .find(|p| p.province_name == province_name)
-    else {
-        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份"));
-    };
-    if !province.cities.iter().any(|c| c.city_name == city_name) {
-        return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理城市"));
-    }
-    Ok((province_name, city_name))
-}
-
 #[allow(clippy::too_many_arguments)]
 fn local_citizen_cid_seed(
     family_name: &str,
     given_name: &str,
     citizen_sex: &str,
-    citizen_birth_date: NaiveDate,
+    citizen_birth_date: &str,
     province_code: &str,
     city_code: &str,
     town_code: &str,
@@ -458,15 +354,14 @@ fn local_citizen_cid_seed(
     birth_city_code: &str,
     birth_town_code: &str,
 ) -> String {
-    // 本地建档阶段没有账户 ID,因此 CID 种子只能来自档案自身的稳定字段。
-    // 钱包绑定属于后续链上身份推送,不得回头改变本地身份号。
+    // 发号种子来自可得档案字段(匿名占号时多为空,靠 nonce 碰撞重试保唯一);
+    // 钱包账户属占即绑,不进种子(避免回头改变本地身份号)。
     let mut hasher = Sha256::new();
-    let birth_date_text = citizen_birth_date.format("%Y-%m-%d").to_string();
     for part in [
         family_name,
         given_name,
         citizen_sex,
-        birth_date_text.as_str(),
+        citizen_birth_date,
         province_code,
         city_code,
         town_code,

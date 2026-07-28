@@ -205,7 +205,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
           await ProposalQueryService().fetchNextProposalId();
 
       final result = await _manageService.submitProposeClosePersonal(
-        account: widget.institution.personalAccountId,
+        accountId: widget.institution.personalAccountId,
         beneficiaryAddress: beneficiary,
         fromSs58Address: wallet.ss58Address,
         signerPublicKey: Uint8List.fromList(publicKeyBytes),

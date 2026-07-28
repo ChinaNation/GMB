@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sr25519/sr25519.dart' as sr;
+import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -11,13 +13,47 @@ import '../support/isar_test_env.dart';
 
 const _mnemonicA =
     'legal winner thank year wave sausage worth useful legal winner thank yellow';
-// 另一条合法但派生不同公钥的助记词，用于自愈"助记词不一致"分支。
+// 另一条合法但派生不同公钥的助记词（回归：曾用于自愈"助记词不一致"分支）。
 const _mnemonicB =
     'abandon abandon abandon abandon abandon abandon abandon abandon '
     'abandon abandon abandon about';
 
 String _coldSs58(int byte) =>
     Keyring().encodeAddress(List<int>.filled(32, byte), 2027);
+
+String _hex(List<int> b) =>
+    b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+
+/// 助记词 → 母种子（master mini-secret，32B）。
+Future<Uint8List> _masterSeed(String mnemonic) async {
+  final entropy = Mnemonic.fromSentence(mnemonic, Language.english).entropy;
+  return Uint8List.fromList(await CryptoScheme.miniSecretFromEntropy(entropy));
+}
+
+/// 复现 WalletManager 的账户 child mini-secret 派生（金标同源）。
+List<int> _childMiniSecret(List<int> seed, int index) {
+  final junctions = SecretUri.fromStr('//$index').junctions;
+  var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
+  late List<int> child;
+  for (final j in junctions) {
+    final cc = j.junctionId.sublist(0, 32);
+    final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
+    child = derived.$1.encode();
+    rootSk = derived.$1.expandEd25519();
+  }
+  return child;
+}
+
+/// 安全不变量断言：存的必须是账户0(`//0`) 的 child，绝不是母种子。
+Future<void> _expectChildStoredNotSeed(
+  String mnemonic,
+  String storedHex,
+) async {
+  final master = await _masterSeed(mnemonic);
+  final child = _childMiniSecret(master, 0);
+  expect(storedHex, _hex(child), reason: '严档存的必须是账户0 //0 的 child');
+  expect(storedHex, isNot(_hex(master)), reason: '绝不持久化母种子');
+}
 
 class _MemoryBlobStore implements VaultBlobStore {
   final Map<String, String> values = <String, String>{};
@@ -38,9 +74,8 @@ void main() {
 
   late FakeSecureSeedStore fakeStore;
 
-  // 动钱动权验证已上移到 WalletManager 的 local_auth；单测里把该 channel
-  // 打桩为「验证通过」，让 signWithWallet/verifyWalletAccess 走到 seed 读取与
-  // 自愈分支（否则纯 Dart 环境无插件实现，authenticate 抛 MissingPluginException）。
+  // 动钱动权验证已上移到 WalletManager 的硬件金库读 child；单测里把 local_auth
+  // channel 打桩为「验证通过」，让纯 Dart 环境不因缺插件而抛。
   const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
 
   setUp(() async {
@@ -70,8 +105,8 @@ void main() {
         .setMockMethodCallHandler(localAuthChannel, null);
   });
 
-  group('WalletManager — 热钱包创建/导入/删除', () {
-    test('create/import/delete 保持 profile 与安全存储同步', () async {
+  group('WalletManager — 热钱包创建/导入/删除（ROOTLESS）', () {
+    test('create/import/delete 只存账户0 child，不存种子/助记词', () async {
       final manager = WalletManager();
 
       final created = await manager.createWallet();
@@ -80,26 +115,36 @@ void main() {
       expect(created.profile.ss58, 2027);
       expect(created.profile.signMode, 'local');
       expect(created.mnemonic.trim().split(RegExp(r'\s+')).length, 12);
-      // seed（64 hex）与助记词分别落入严档 / 宽档金库。
-      expect(fakeStore.seeds[1], isNotNull);
-      expect(fakeStore.seeds[1]!.length, 64);
-      expect(fakeStore.mnemonics[1], created.mnemonic);
+      // 严档只落账户0 child（64 hex）；无母种子、无助记词档。
+      final createdKey = fakeStore.accountKeys[created.profile.accountId];
+      expect(createdKey, isNotNull);
+      expect(createdKey!.length, 64);
+      await _expectChildStoredNotSeed(created.mnemonic, createdKey);
+      // 助记词绝不出现在任何持久化条目里（只一次性返回供备份）。
+      expect(fakeStore.accountKeys.values, isNot(contains(created.mnemonic)));
+      expect(fakeStore.accountKeys.length, 1);
+      // 账户0 作为锚点账户同步落库,出现在 getAccounts。
+      final createdAccounts =
+          await manager.getAccounts(created.profile.accountId);
+      expect(createdAccounts.map((a) => a.accountIndex).toList(), [0]);
+
+      // 一台设备仅一个热钱包:删掉当前热钱包后才能导入下一只。
+      await manager.deleteWallet(created.profile.walletIndex);
+      expect(await manager.getWallets(), isEmpty);
+      expect(fakeStore.accountKeys, isEmpty);
 
       final imported = await manager.importWallet(_mnemonicA);
-      expect(imported.walletIndex, 2);
+      expect(imported.walletIndex, 1);
       expect(imported.signMode, 'local');
-      expect(fakeStore.seeds[2], isNotNull);
-      expect(fakeStore.mnemonics[2], _mnemonicA);
+      final importedKey = fakeStore.accountKeys[imported.accountId];
+      expect(importedKey, isNotNull);
+      await _expectChildStoredNotSeed(_mnemonicA, importedKey!);
 
-      await manager.deleteWallet(2);
-      expect(fakeStore.seeds.containsKey(2), isFalse);
-      expect(fakeStore.mnemonics.containsKey(2), isFalse);
-
-      await manager.deleteWallet(1);
+      await manager.deleteWallet(imported.walletIndex);
+      expect(fakeStore.accountKeys.containsKey(imported.accountId), isFalse);
       expect(await manager.getWallet(), isNull);
       expect(await manager.getWallets(), isEmpty);
-      expect(fakeStore.seeds, isEmpty);
-      expect(fakeStore.mnemonics, isEmpty);
+      expect(fakeStore.accountKeys, isEmpty);
     });
 
     test('importWallet 拒绝非法助记词', () async {
@@ -142,7 +187,7 @@ void main() {
       );
       // 未落库、未写密钥。
       expect(await manager.getWallets(), isEmpty);
-      expect(fakeStore.seeds, isEmpty);
+      expect(fakeStore.accountKeys, isEmpty);
     });
   });
 
@@ -161,10 +206,9 @@ void main() {
       WalletManager.subkeyRegistrar = failingRegistrar;
       final manager = WalletManager();
       await expectLater(manager.createWallet(), throwsA(isA<Exception>()));
-      // 钱包未落库、seed/助记词无残留 → WalletGate 维持 needsWallet。
+      // 钱包未落库、child 无残留 → WalletGate 维持 needsWallet。
       expect(await manager.getWallets(), isEmpty);
-      expect(fakeStore.seeds, isEmpty);
-      expect(fakeStore.mnemonics, isEmpty);
+      expect(fakeStore.accountKeys, isEmpty);
     });
 
     test('importWallet 注册失败 → 整笔回滚，无残留', () async {
@@ -175,11 +219,10 @@ void main() {
         throwsA(isA<Exception>()),
       );
       expect(await manager.getWallets(), isEmpty);
-      expect(fakeStore.seeds, isEmpty);
-      expect(fakeStore.mnemonics, isEmpty);
+      expect(fakeStore.accountKeys, isEmpty);
     });
 
-    test('createWallet 注册成功 → 落库并用主钥对绑定证明签名', () async {
+    test('createWallet 注册成功 → 落库并用账户0 对绑定证明签名', () async {
       String? seenAccountId;
       WalletManager.subkeyRegistrar = ({
         required int walletIndex,
@@ -194,73 +237,75 @@ void main() {
       final created = await manager.createWallet();
       expect(seenAccountId, created.profile.accountId);
       expect((await manager.getWallets()).length, 1);
-      expect(fakeStore.seeds[created.profile.walletIndex], isNotNull);
+      expect(fakeStore.accountKeys[created.profile.accountId], isNotNull);
     });
   });
 
   group('WalletManager — 统一签名', () {
     final payload = Uint8List.fromList(List<int>.generate(32, (i) => i));
 
-    test('统一签名：每次都读一次 seed（无会话缓存）', () async {
+    test('统一签名：每次都读一次 child（无会话缓存）', () async {
       final manager = WalletManager();
       await manager.importWallet(_mnemonicA);
-      fakeStore.readSeedCount = 0;
+      fakeStore.readCount = 0;
 
       final sig = await manager.signWithWallet(1, payload);
       await manager.signWithWallet(1, payload);
 
       expect(sig.length, 64);
-      // 两次签名 = 两次读 seed（两次验证），不复用、无会话密钥。
-      expect(fakeStore.readSeedCount, 2);
+      // 两次签名 = 两次读 child（两次验证），不复用、无会话密钥。
+      expect(fakeStore.readCount, 2);
     });
 
-    test('verifyWalletAccess 读一次 seed 触发一次验证（切换身份用）', () async {
+    test('verifyWalletAccess 读一次 child 触发一次验证（切换身份用）', () async {
       final manager = WalletManager();
       await manager.importWallet(_mnemonicA);
-      fakeStore.readSeedCount = 0;
+      fakeStore.readCount = 0;
 
       await manager.verifyWalletAccess(1);
 
-      expect(fakeStore.readSeedCount, 1);
+      expect(fakeStore.readCount, 1);
     });
 
-    test('AuthCancelled 上抛，绝不自愈重写 seed', () async {
+    test('AuthCancelled 上抛，绝不吞没', () async {
       final manager = WalletManager();
-      await manager.importWallet(_mnemonicA);
-      fakeStore.putSeedCount = 0;
-      fakeStore.cancelSeedReads.add(1);
+      final imported = await manager.importWallet(_mnemonicA);
+      fakeStore.putCount = 0;
+      fakeStore.cancelReads.add(imported.accountId);
 
       await expectLater(
         manager.signWithWallet(1, payload),
         throwsA(isA<AuthCancelled>()),
       );
-      expect(fakeStore.putSeedCount, 0);
+      // 无根 = 无自愈重写。
+      expect(fakeStore.putCount, 0);
     });
   });
 
-  group('WalletManager — seed 严档失效自愈', () {
+  group('WalletManager — 密钥失效 fail-closed（无根 = 无自愈）', () {
     final payload = Uint8List.fromList(List<int>.generate(32, (_) => 7));
 
-    test('KEK 失效 → 从助记词自愈重封装并签名成功', () async {
+    test('KEK 失效 → fail-closed 抛需重新导入，绝不重写 child', () async {
       final manager = WalletManager();
-      await manager.importWallet(_mnemonicA);
-      expect(fakeStore.putSeedCount, 1);
-      final originalSeed = fakeStore.seeds[1];
+      final imported = await manager.importWallet(_mnemonicA);
+      fakeStore.putCount = 0;
+      fakeStore.invalidatedAccountIds.add(imported.accountId);
 
-      fakeStore.invalidatedSeeds.add(1);
-      final sig = await manager.signWithWallet(1, payload);
-
-      expect(sig.length, 64);
-      expect(fakeStore.putSeedCount, 2); // 自愈重封装一次
-      expect(fakeStore.seeds[1], originalSeed); // 重派生得到相同 seed
-      expect(fakeStore.invalidatedSeeds.contains(1), isFalse);
+      await expectLater(
+        manager.signWithWallet(1, payload),
+        throwsA(
+          isA<WalletAuthException>()
+              .having((e) => e.message, 'message', contains('重新导入')),
+        ),
+      );
+      // 无母种子 / 助记词可自愈，绝不重派生重写。
+      expect(fakeStore.putCount, 0);
     });
 
-    test('助记词也缺失 → 抛需重新导入', () async {
+    test('child 条目缺失 → fail-closed 抛需重新导入', () async {
       final manager = WalletManager();
-      await manager.importWallet(_mnemonicA);
-      fakeStore.invalidatedSeeds.add(1);
-      fakeStore.mnemonics.remove(1);
+      final imported = await manager.importWallet(_mnemonicA);
+      fakeStore.accountKeys.remove(imported.accountId);
 
       await expectLater(
         manager.signWithWallet(1, payload),
@@ -271,35 +316,25 @@ void main() {
       );
     });
 
-    test('助记词与钱包不一致 → 抛无法恢复，不写错误 seed', () async {
+    test('回归：曾派生不同公钥的助记词，如今无自愈路径读取它', () async {
+      // _mnemonicB 仅作历史回归标记：无自愈后，签名只认严档 child，助记词不再入库。
       final manager = WalletManager();
-      await manager.importWallet(_mnemonicA);
-      fakeStore.putSeedCount = 0;
-      fakeStore.invalidatedSeeds.add(1);
-      fakeStore.mnemonics[1] = _mnemonicB; // 派生不同公钥
-
-      await expectLater(
-        manager.signWithWallet(1, payload),
-        throwsA(
-          isA<WalletAuthException>()
-              .having((e) => e.message, 'message', contains('不一致')),
-        ),
-      );
-      // publicKey 校验在 deleteSeed/putSeed 之前，错误 seed 不落库。
-      expect(fakeStore.putSeedCount, 0);
+      final imported = await manager.importWallet(_mnemonicB);
+      final key = fakeStore.accountKeys[imported.accountId];
+      expect(key, isNotNull);
+      await _expectChildStoredNotSeed(_mnemonicB, key!);
     });
   });
 
   group('WalletManager — 冷钱包', () {
-    test('importColdWallet 只存公开账户资料，seed 金库无条目', () async {
+    test('importColdWallet 只存公开账户资料，child 金库无条目', () async {
       final manager = WalletManager();
       final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x11));
       expect(cold.signMode, 'external');
-      expect(fakeStore.seeds.containsKey(cold.walletIndex), isFalse);
-      expect(fakeStore.mnemonics.containsKey(cold.walletIndex), isFalse);
+      expect(fakeStore.accountKeys.containsKey(cold.accountId), isFalse);
     });
 
-    test('deleteWallet 冷钱包不影响 seed 金库', () async {
+    test('deleteWallet 冷钱包不影响 child 金库', () async {
       final manager = WalletManager();
       final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x11));
       await manager.deleteWallet(cold.walletIndex);

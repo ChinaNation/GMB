@@ -118,6 +118,7 @@ Future<void> _seedWalletRow(String name) async {
       ..walletIcon = 'wallet'
       ..balance = 0
       ..accountId = _accountId
+      ..masterId = _accountId
       ..ss58Address = _ss58
       ..alg = 'sr25519'
       ..ss58 = 2027

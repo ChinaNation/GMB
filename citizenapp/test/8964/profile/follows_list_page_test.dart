@@ -45,7 +45,7 @@ void main() {
     expect(find.byType(ListTile), findsNWidgets(2));
     expect(find.text('关注'), findsOneWidget);
     expect(
-      find.text(ProfilePresentation.forAccount(
+      find.text(ProfilePresentation.forAccountId(
               '0x0101010101010101010101010101010101010101010101010101010101010101')
           .fallbackName),
       findsOneWidget,

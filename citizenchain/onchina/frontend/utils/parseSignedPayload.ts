@@ -7,7 +7,7 @@ import type { SignResponseBody } from '../core/citizenQr';
 
 export type SignedLoginPayload = {
   challenge_id: string;
-  signer_public_key: string;
+  account_id: string;
   signature: string;
 };
 
@@ -29,12 +29,12 @@ export function parseSignedLoginPayload(
   }
   const body = env.body as SignResponseBody;
   const challenge_id = env.id || fallbackChallengeId;
-  if (!challenge_id || !body.signer_public_key || !body.signature) {
-    throw new Error('签名二维码缺少必要字段(id/signer_public_key/signature)');
+  if (!challenge_id || !body.account_id || !body.signature) {
+    throw new Error('签名二维码缺少必要字段(id/account_id/signature)');
   }
   return {
     challenge_id,
-    signer_public_key: body.signer_public_key,
+    account_id: body.account_id,
     signature: body.signature,
   };
 }
@@ -42,7 +42,7 @@ export function parseSignedLoginPayload(
 export type SignedReceiptPayload = {
   challenge_id: string;
   signature: string;
-  signer_public_key?: string;
+  account_id?: string;
   payload_hash?: string;
 };
 
@@ -74,12 +74,12 @@ export function parseSignedReceiptPayload(
   }
   const challenge_id = env.id || fallbackChallengeId;
   const body = env.body as SignResponseBody;
-  if (!challenge_id || !body.signature || !body.signer_public_key) {
-    throw new Error('签名二维码缺少必要字段(id/signer_public_key/signature)');
+  if (!challenge_id || !body.signature || !body.account_id) {
+    throw new Error('签名二维码缺少必要字段(id/account_id/signature)');
   }
   return {
     challenge_id,
     signature: body.signature,
-    signer_public_key: body.signer_public_key,
+    account_id: body.account_id,
   };
 }

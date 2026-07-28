@@ -26,7 +26,7 @@ class PublicInstitutionAdminListPage extends StatefulWidget {
 
 class _PublicInstitutionAdminListPageState
     extends State<PublicInstitutionAdminListPage> {
-  Map<String, double> _balanceByAccount = const {};
+  Map<String, double> _balanceByAccountId = const {};
 
   @override
   void initState() {
@@ -42,8 +42,8 @@ class _PublicInstitutionAdminListPageState
     }
   }
 
-  static String _balanceKey(String account) {
-    final trimmed = account.trim();
+  static String _balanceKey(String accountId) {
+    final trimmed = accountId.trim();
     return (trimmed.startsWith('0x') || trimmed.startsWith('0X')
             ? trimmed.substring(2)
             : trimmed)
@@ -51,19 +51,19 @@ class _PublicInstitutionAdminListPageState
   }
 
   Future<void> _loadBalances() async {
-    final accounts = {
+    final accountIds = {
       for (final view in widget.admins) _balanceKey(view.admin.account_id),
-    }.where((account) => account.isNotEmpty).toList(growable: false);
-    if (accounts.isEmpty) {
-      if (mounted) setState(() => _balanceByAccount = const {});
+    }.where((accountId) => accountId.isNotEmpty).toList(growable: false);
+    if (accountIds.isEmpty) {
+      if (mounted) setState(() => _balanceByAccountId = const {});
       return;
     }
     try {
-      final balances = await ChainRpc().fetchFinalizedBalances(accounts);
-      if (mounted) setState(() => _balanceByAccount = balances);
+      final balances = await ChainRpc().fetchFinalizedBalances(accountIds);
+      if (mounted) setState(() => _balanceByAccountId = balances);
     } catch (_) {
       // 只读管理员列表的余额失败不影响资料展示。
-      if (mounted) setState(() => _balanceByAccount = const {});
+      if (mounted) setState(() => _balanceByAccountId = const {});
     }
   }
 
@@ -92,7 +92,7 @@ class _PublicInstitutionAdminListPageState
                 return InstitutionAssignmentCard(
                   adminView: adminView,
                   index: i + 1,
-                  balanceYuan: _balanceByAccount[
+                  balanceYuan: _balanceByAccountId[
                       _balanceKey(adminView.admin.account_id)],
                 );
               },

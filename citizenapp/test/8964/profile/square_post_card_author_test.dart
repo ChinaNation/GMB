@@ -44,7 +44,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text(ProfilePresentation.forAccount(kOwner).fallbackName),
+      find.text(ProfilePresentation.forAccountId(kOwner).fallbackName),
       findsOneWidget,
     );
     expect(find.byType(Image), findsWidgets);

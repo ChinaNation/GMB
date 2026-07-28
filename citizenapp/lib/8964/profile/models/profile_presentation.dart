@@ -76,10 +76,10 @@ class ProfilePresentation {
     'assets/profile_defaults/couleur-tomatoes-10368988_1280.jpg',
   ];
 
-  factory ProfilePresentation.forAccount(String accountId) {
-    final account = accountId.trim();
+  factory ProfilePresentation.forAccountId(String accountId) {
+    accountId = accountId.trim();
     // 空账户只用于页面尚未加载钱包时的稳定占位，不代表真实用户。
-    final seed = account.isEmpty ? 'citizenapp-default-profile' : account;
+    final seed = accountId.isEmpty ? 'citizenapp-default-profile' : accountId;
     final namePrefix = _stableHash(seed, 0x4e414d45) % _namePrefixes.length;
     final nameSuffix = _stableHash(seed, 0x4e49434b) % _nameSuffixes.length;
     final avatarIndex = _stableHash(seed, 0x41564154) % assets.length;
@@ -88,7 +88,7 @@ class ProfilePresentation {
       bannerIndex = (bannerIndex + 1) % assets.length;
     }
     return ProfilePresentation._(
-      accountId: account,
+      accountId: accountId,
       fallbackName: '${_namePrefixes[namePrefix]}${_nameSuffixes[nameSuffix]}',
       avatarAsset: assets[avatarIndex],
       bannerAsset: assets[bannerIndex],

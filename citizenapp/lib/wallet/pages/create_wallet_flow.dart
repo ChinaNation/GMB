@@ -30,8 +30,9 @@ String walletOperationErrorMessage(Object error) {
 
 /// 创建热钱包完整流程：生成密钥并落库 → 记基线余额 → 防截屏展示助记词备份弹窗。
 ///
-/// 钱包页与首启强制创建页共用。创建失败向上抛出，由调用方决定错误展示；
-/// 返回时钱包已落库（备份弹窗即使被进程杀死跳过，助记词仍可在钱包详情查看）。
+/// 首启强制创建页共用。创建失败向上抛出，由调用方决定错误展示；返回时钱包已落库。
+/// 无根模型：助记词**不持久化**，此弹窗是唯一一次展示，关闭即不可再取回——必须手抄
+/// 备份或存入公民钱包，否则无法恢复钱包 / 追加其他账户。
 Future<WalletCreationResult> runCreateWalletFlow(
   BuildContext context, {
   required int wordCount,
@@ -59,8 +60,9 @@ Future<WalletCreationResult> runCreateWalletFlow(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '助记词已加密存储在本机，后续可在钱包详情中查看。\n'
-              '请务必手抄备份并妥善保管，这是恢复钱包的唯一凭证。\n'
+              '公民 App 不保存助记词，关闭本弹窗后将无法再次显示。\n'
+              '请立即手抄备份，或在「公民钱包」中妥善保管——这是恢复钱包'
+              '与追加其他账户的唯一凭证。\n'
               '不支持复制，不支持截屏。',
             ),
             const SizedBox(height: 12),

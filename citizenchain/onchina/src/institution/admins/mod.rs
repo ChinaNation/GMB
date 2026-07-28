@@ -588,14 +588,14 @@ fn legal_representative_change(
 
 pub(crate) async fn build_chain_sign_output(
     state: &AppState,
-    actor_public_key: &str,
+    account_id: &str,
     cid_number: &str,
     purpose: &'static str,
     call_data: Vec<u8>,
     chain_action: u16,
     context: serde_json::Value,
 ) -> Result<PrepareInstitutionChainOutput, axum::response::Response> {
-    let prepared = chain_submit::prepare_signing(&call_data, actor_public_key)
+    let prepared = chain_submit::prepare_signing(&call_data, account_id)
         .await
         .map_err(|err| {
             tracing::error!(error = %err, "prepare institution governance signing failed");
@@ -612,14 +612,14 @@ pub(crate) async fn build_chain_sign_output(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
-        actor_public_key,
+        account_id,
         &prepared.payload,
         chain_action,
     )?;
     let session = ChainSignSession {
         request_id: request_id.clone(),
         purpose: purpose.to_string(),
-        actor_public_key: actor_public_key.to_string(),
+        account_id: account_id.to_string(),
         call_data: call_data.clone(),
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex,

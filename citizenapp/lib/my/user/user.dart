@@ -76,7 +76,7 @@ class _ProfilePageState extends State<MyTab> {
 
   /// 用户昵称 = 默认钱包名称；钱包名称异常缺失时使用与统一主页一致的本地昵称，
   /// 绝不把钱包账户放进昵称位置。
-  String get _nickname => ProfilePresentation.forAccount(
+  String get _nickname => ProfilePresentation.forAccountId(
         _communicationAccountId,
       ).resolveDisplayName(walletName: _defaultWallet?.walletName);
 
@@ -273,7 +273,7 @@ class _ProfilePageState extends State<MyTab> {
   }
 
   void _openCreator() {
-    // 创作者档位/收入与 MyTab 头部展示无关，跟随「电子护照/设置」惯例不回读 _loadState。
+    // 创作者档位/收入与 MyTab 头部展示无关，跟随「身份/设置」惯例不回读 _loadState。
     Navigator.of(context).push<void>(
       MaterialPageRoute(builder: (_) => const CreatorPage()),
     );
@@ -558,8 +558,8 @@ class _ProfilePageState extends State<MyTab> {
                         color: AppTheme.primary,
                         size: 24,
                       ),
-                      title: '电子护照',
-                      subtitle: '查看身份',
+                      title: '身份',
+                      subtitle: '注册与查看',
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => const MyIdPage()),
@@ -673,7 +673,7 @@ class _HeaderBackground extends StatelessWidget {
     final file = hasImage ? File(path!) : null;
     final validImage = file != null && file.existsSync();
 
-    final fallback = ProfilePresentation.forAccount(seed).bannerAsset;
+    final fallback = ProfilePresentation.forAccountId(seed).bannerAsset;
     final ImageProvider<Object> backgroundImage;
     if (validImage) {
       backgroundImage = FileImage(file);

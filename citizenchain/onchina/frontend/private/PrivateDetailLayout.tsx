@@ -905,7 +905,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       const output = await submitChainSign(
         auth,
         prepared.request_id,
-        signed.signer_public_key,
+        signed.account_id,
         signed.signature,
       );
       notice.success(`链交易已提交：${output.tx_hash}`);

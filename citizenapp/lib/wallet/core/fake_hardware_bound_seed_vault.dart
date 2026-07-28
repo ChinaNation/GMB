@@ -1,11 +1,11 @@
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
-/// [SecureSeedStore] 的内存 fake，供单测与非真机场景注入
+/// [SecureSeedStore] 的内存 fake（ROOTLESS），供单测与非真机场景注入
 /// （[WalletManager.debugSeedStore]）。
 ///
-/// 默认所有「认证」通过；可通过 [nextSeedReadError] / [nextMnemonicReadError]
-/// 注入一次性错误，模拟 KEK 失效（[SeedKeyInvalidated]）/ 用户取消
-/// （[AuthCancelled]）等自愈与中止路径。
+/// 只存账户 child mini-secret（按 accountId 分键），无母种子 / 助记词档。默认
+/// 所有「认证」通过；可通过 [nextReadError] 注入一次性错误，模拟 KEK 失效
+/// （[SeedKeyInvalidated]）/ 用户取消（[AuthCancelled]）等中止路径。
 class FakeHardwareBoundSeedVault implements SecureSeedStore {
   FakeHardwareBoundSeedVault({
     this.authStatusValue = SecureAuthStatus.available,
@@ -14,59 +14,46 @@ class FakeHardwareBoundSeedVault implements SecureSeedStore {
   /// [authStatus] 的返回值，测试可改写模拟无锁屏 / 不支持。
   SecureAuthStatus authStatusValue;
 
-  final Map<int, String> _seeds = <int, String>{};
-  final Map<int, String> _mnemonics = <int, String>{};
+  /// accountId → child mini-secret hex。
+  final Map<String, String> _accountKeys = <String, String>{};
 
-  /// 下一次 [readSeed] 抛出的错误；抛出后自动清空（一次性）。
-  SecureSeedException? nextSeedReadError;
-
-  /// 下一次 [readMnemonic] 抛出的错误；抛出后自动清空（一次性）。
-  SecureSeedException? nextMnemonicReadError;
+  /// 下一次 [readAccountKey] 抛出的错误；抛出后自动清空（一次性）。
+  SecureSeedException? nextReadError;
 
   @override
   Future<SecureAuthStatus> authStatus() async => authStatusValue;
 
   @override
-  Future<void> putSeed(int walletIndex, String seedHex) async {
-    _seeds[walletIndex] = seedHex;
+  Future<void> putAccountKey({
+    required int walletIndex,
+    required String accountId,
+    required String childMiniSecretHex,
+  }) async {
+    _accountKeys[accountId] = childMiniSecretHex;
   }
 
   @override
-  Future<String?> readSeed(int walletIndex) async {
-    final error = nextSeedReadError;
+  Future<String?> readAccountKey({
+    required int walletIndex,
+    required String accountId,
+  }) async {
+    final error = nextReadError;
     if (error != null) {
-      nextSeedReadError = null;
+      nextReadError = null;
       throw error;
     }
-    return _seeds[walletIndex];
+    return _accountKeys[accountId];
   }
 
   @override
-  Future<bool> hasSeed(int walletIndex) async =>
-      _seeds.containsKey(walletIndex);
+  Future<bool> hasAccountKey(String accountId) async =>
+      _accountKeys.containsKey(accountId);
 
   @override
-  Future<void> deleteSeed(int walletIndex) async {
-    _seeds.remove(walletIndex);
-  }
-
-  @override
-  Future<void> putMnemonic(int walletIndex, String mnemonic) async {
-    _mnemonics[walletIndex] = mnemonic;
-  }
-
-  @override
-  Future<String?> readMnemonic(int walletIndex) async {
-    final error = nextMnemonicReadError;
-    if (error != null) {
-      nextMnemonicReadError = null;
-      throw error;
-    }
-    return _mnemonics[walletIndex];
-  }
-
-  @override
-  Future<void> deleteMnemonic(int walletIndex) async {
-    _mnemonics.remove(walletIndex);
+  Future<void> deleteAccountKey({
+    required int walletIndex,
+    required String accountId,
+  }) async {
+    _accountKeys.remove(accountId);
   }
 }

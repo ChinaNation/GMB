@@ -8,25 +8,25 @@ import 'mls_boundary.dart';
 
 /// 群成员标识 = "account_id:device_id"(MLS BasicCredential 内容)。
 /// 扇出/名册以**账户**为单位(recipient_account_id),故从标识取账户段。
-String accountFromMemberIdentity(String identity) {
+String accountIdFromMemberIdentity(String identity) {
   final index = identity.indexOf(':');
   return index < 0 ? identity : identity.substring(0, index);
 }
 
 /// 一批成员标识 → 去重账户集合(可选排除自己)。
-List<String> accountsFromMemberIdentities(
+List<String> accountIdsFromMemberIdentities(
   Iterable<String> identities, {
-  String? excludeAccount,
+  String? excludeAccountId,
 }) {
   final seen = <String>{};
   final result = <String>[];
   for (final identity in identities) {
-    final account = accountFromMemberIdentity(identity);
-    if (account.isEmpty || account == excludeAccount) {
+    final accountId = accountIdFromMemberIdentity(identity);
+    if (accountId.isEmpty || accountId == excludeAccountId) {
       continue;
     }
-    if (seen.add(account)) {
-      result.add(account);
+    if (seen.add(accountId)) {
+      result.add(accountId);
     }
   }
   return result;
@@ -85,21 +85,21 @@ class GroupCreated {
 /// 加人/删人产生的 Commit 束。
 ///
 /// add:`commit` 发给现有成员,`welcome` 发给全部新人(单条覆盖 N 人)。
-/// remove:仅 `commit`,发给剩余成员 + 被删者;`removedAccounts` 为被删账户。
+/// remove:仅 `commit`,发给剩余成员 + 被删者;`removedAccountIds` 为被删账户。
 class GroupCommitBundle {
   const GroupCommitBundle({
     required this.groupId,
     required this.epoch,
     required this.commit,
     this.welcome,
-    this.removedAccounts = const [],
+    this.removedAccountIds = const [],
   });
 
   final String groupId;
   final int epoch;
   final MlsWireMessage commit;
   final MlsWireMessage? welcome;
-  final List<String> removedAccounts;
+  final List<String> removedAccountIds;
 }
 
 /// `group_process` 处理入站群消息的结果。

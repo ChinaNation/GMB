@@ -37,17 +37,17 @@ InstitutionInfo? findInstitutionByCidNumber(String cidNumber) {
 /// execution account、主账户或管理员钱包回落反推身份。
 InstitutionInfo? personalMultisigFromAccountId(List<int> accountIdBytes) {
   if (accountIdBytes.length != 32) return null;
-  final account = '0x${_hexEncode(accountIdBytes)}';
-  final cidFullName = '个人多签 ${account.substring(2, 10)}';
-  final cidFullNameEn = 'Personal Multisig ${account.substring(2, 10)}';
+  final accountId = '0x${_hexEncode(accountIdBytes)}';
+  final cidFullName = '个人多签 ${accountId.substring(2, 10)}';
+  final cidFullNameEn = 'Personal Multisig ${accountId.substring(2, 10)}';
   return InstitutionInfo(
     cidFullName: cidFullName,
     cidShortName: cidFullName,
     cidFullNameEn: cidFullNameEn,
     cidShortNameEn: cidFullNameEn,
-    cidNumber: 'personal-account:$account',
+    cidNumber: 'personal-account:$accountId',
     orgType: OrgType.personalMultisig,
-    personalAccountId: account,
+    personalAccountId: accountId,
   );
 }
 

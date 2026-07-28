@@ -1128,30 +1128,9 @@ pub(crate) async fn institution_accounts_lookup(
     Ok(out)
 }
 
-/// 链上 CID 占号登记查询结果(发号预查与幂等续用识别用,字段最小化)。
-pub(crate) struct OnChainCidRecord {
-    pub(crate) commitment: [u8; 32],
-    pub(crate) status_active: bool,
-}
-
-/// 读链上 `CitizenIdentity::CidRegistry`;None = 号未被占。
-pub(crate) async fn cid_registry_lookup(
-    cid_number: &str,
-) -> Result<Option<OnChainCidRecord>, String> {
-    /// 与 pallet `CidRecord` 字段序一致的最小解码结构。
-    #[derive(codec::Decode)]
-    struct RawRecord {
-        _registrar_cid_number: Vec<u8>,
-        commitment: [u8; 32],
-        _province: alloc_vec_u8::Bytes,
-        _city: alloc_vec_u8::Bytes,
-        status: u8,
-        _registered_at: u32,
-        _revoked_at: Option<u32>,
-    }
-    mod alloc_vec_u8 {
-        pub(super) type Bytes = Vec<u8>;
-    }
+/// 读链上 `CitizenIdentity::CidRegistry` 判占用:`true` = 已占号(含墓碑,号永不复用)。
+/// 占即绑后 commitment 链上算,onchina 发号只需判该号是否空闲,不再读记录字段。
+pub(crate) async fn cid_registry_lookup(cid_number: &str) -> Result<bool, String> {
     let ws_url = super::chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
         .await
@@ -1166,20 +1145,12 @@ pub(crate) async fn cid_registry_lookup(
         "CidRegistry",
         vec![dynamic::Value::from_bytes(cid_number.as_bytes())],
     );
-    let Some(value) = storage
+    let occupied = storage
         .fetch(&query)
         .await
         .map_err(|e| format!("fetch cid registry failed: {e}"))?
-    else {
-        return Ok(None);
-    };
-    let mut raw = value.encoded();
-    let record = RawRecord::decode(&mut raw)
-        .map_err(|e| format!("decode cid registry record failed: {e}"))?;
-    Ok(Some(OnChainCidRecord {
-        commitment: record.commitment,
-        status_active: record.status == 0,
-    }))
+        .is_some();
+    Ok(occupied)
 }
 
 /// 链上公民竞选身份专属公开档案(投票身份为 None)。

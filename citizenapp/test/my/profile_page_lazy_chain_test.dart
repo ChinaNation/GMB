@@ -79,8 +79,8 @@ void main() {
     expect(find.byType(IdentityBadge), findsOneWidget);
     expect(find.text('钱包'), findsOneWidget);
     expect(find.text('管理账户'), findsOneWidget);
-    expect(find.text('电子护照'), findsOneWidget);
-    expect(find.text('查看身份'), findsOneWidget);
+    expect(find.text('身份'), findsOneWidget);
+    expect(find.text('注册与查看'), findsOneWidget);
     expect(find.text('个人服务'), findsOneWidget);
     expect(find.text('会员｜订阅'), findsOneWidget);
     expect(find.text('创作者'), findsOneWidget);

@@ -59,8 +59,8 @@ pub(crate) async fn admin_auth_qr_sign_request(
     let challenge_id = Uuid::new_v4().to_string();
     // challenge_text:客户端生成 k=2 登录签名响应时的原文(与 CitizenWallet 端的
     // buildSignatureMessage(kind=signResponse, ...) 拼接规则保持一致)。
-    // 注意 <principal> 位置由客户端签名时填入 signer_public_key，后端验证时同样
-    // 以 signer_public_key 为 principal 重新拼接。这里保存的 challenge_text 仅作
+    // 注意 <principal> 位置由客户端签名时填入 account_id，后端验证时同样
+    // 以 account_id 为 principal 重新拼接。这里保存的 challenge_text 仅作
     // 回放保护用的唯一 token,实际验证在 admin_auth_qr_complete 中重建。
     let challenge_text = format!(
         "{}|{}|{}|{}|{}|",
@@ -129,26 +129,26 @@ pub(crate) async fn admin_auth_qr_complete(
     Json(input): Json<AdminQrCompleteInput>,
 ) -> impl IntoResponse {
     if input.challenge_id.trim().is_empty()
-        || input.signer_public_key.trim().is_empty()
+        || input.account_id.trim().is_empty()
         || input.signature.trim().is_empty()
     {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "challenge_id, signer_public_key, signature are required",
+            "challenge_id, account_id, signature are required",
         );
     }
 
     let now = Utc::now();
     let challenge_id = input.challenge_id.trim().to_string();
     let client_session_id = input.session_id.clone();
-    let Some(signer_public_key) =
-        crate::crypto::pubkey::normalize_account_id(input.signer_public_key.as_str())
+    let Some(account_id) =
+        crate::crypto::pubkey::normalize_account_id(input.account_id.as_str())
     else {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "signer_public_key must be lowercase 0x plus 64 hexadecimal characters",
+            "account_id must be lowercase 0x plus 64 hexadecimal characters",
         );
     };
     let signature = input.signature.trim().to_string();
@@ -171,10 +171,10 @@ pub(crate) async fn admin_auth_qr_complete(
         }
         let session_id = challenge.session_id.clone();
         let challenge_expire_at = challenge.expire_at.timestamp();
-        let verify_public_key = signer_public_key.clone();
+        let verify_public_key = account_id.clone();
         if !same_account_id(challenge.account_id.as_str(), verify_public_key.as_str()) {
             return Err(
-                "http:forbidden:signer_public_key must match targeted account_id".to_string(),
+                "http:forbidden:account_id must match targeted account_id".to_string(),
             );
         }
         // 重建完整签名原文,与 CitizenWallet 端 k=2 登录签名响应规则一致。
@@ -189,7 +189,6 @@ pub(crate) async fn admin_auth_qr_complete(
             warn!(
                 request = %challenge_id,
                 account_id = %challenge.account_id,
-                signer_public_key = %verify_public_key,
                 "qr login signature verify failed"
             );
             return Err("http:unprocessable:login signature verify failed".to_string());
@@ -215,11 +214,11 @@ pub(crate) async fn admin_auth_qr_complete(
         Err(err) if err == "http:gone:sign request expired" => {
             return api_error(StatusCode::GONE, 1007, "sign request expired");
         }
-        Err(err) if err == "http:forbidden:signer_public_key must match targeted account_id" => {
+        Err(err) if err == "http:forbidden:account_id must match targeted account_id" => {
             return api_error(
                 StatusCode::FORBIDDEN,
                 1003,
-                "signer_public_key must match targeted account_id",
+                "account_id must match targeted account_id",
             );
         }
         Err(err) if err == "http:unprocessable:login signature verify failed" => {

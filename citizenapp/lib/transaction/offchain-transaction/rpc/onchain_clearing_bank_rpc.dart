@@ -92,12 +92,12 @@ class OnchainClearingBankRpc {
   Future<({String txHash, int usedNonce})> switchBank({
     required String fromSs58Address,
     required Uint8List signerPublicKey,
-    required Uint8List newBankMainAccount,
+    required Uint8List newBankMainAccountId,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) {
     final callData = _buildAccountIdCall(
       _switchBankCallIndex,
-      newBankMainAccount,
+      newBankMainAccountId,
     );
     return _submitExtrinsic(
       fromSs58Address: fromSs58Address,

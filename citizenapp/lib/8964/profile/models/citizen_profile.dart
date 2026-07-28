@@ -53,7 +53,7 @@ class CitizenProfile {
   /// 本人钱包名是昵称真源，`display_name` 是公开镜像；均缺失时使用本地
   /// 稳定默认昵称，绝不把完整或截断账户当昵称。
   String resolvedDisplayName(String fallback) {
-    return ProfilePresentation.forAccount(accountId).resolveDisplayName(
+    return ProfilePresentation.forAccountId(accountId).resolveDisplayName(
       walletName: fallback,
       publicName: displayName,
     );

@@ -159,7 +159,7 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
   Future<void> _openContact(UserContact contact) async {
     final opener = widget.directChatOpener ?? openDirectChat;
     final title = contact.contactName.trim().isEmpty
-        ? ProfilePresentation.forAccount(contact.accountId).fallbackName
+        ? ProfilePresentation.forAccountId(contact.accountId).fallbackName
         : contact.contactName;
     await opener(context, peerAccountId: contact.accountId, title: title);
   }

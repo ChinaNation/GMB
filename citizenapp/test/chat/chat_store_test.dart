@@ -192,7 +192,7 @@ void main() {
     expect(forB.single.attachmentId, 'att-grp');
   });
 
-  test('clearAllForAccount 连带清理该 accountId 会话的待投递媒体', () async {
+  test('clearAllForAccountId 连带清理该 accountId 会话的待投递媒体', () async {
     final store = ChatStore();
     // 以出站信封建立 accountId=alice 的会话行(conversationId=conv-own)。
     final envelope = const MlsWireMessage(
@@ -228,7 +228,7 @@ void main() {
     );
     expect(await store.outgoingMediaCount(), 1);
 
-    await store.clearAllForAccount(
+    await store.clearAllForAccountId(
         '0x1111111111111111111111111111111111111111111111111111111111111111');
     expect(await store.outgoingMediaCount(), 0);
   });

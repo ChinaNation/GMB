@@ -175,7 +175,7 @@ export function CitizenCreateModal({
       const submitted = await submitChainSign<CreateCitizenResult>(
         auth,
         prepared.request_id,
-        signed.signer_public_key,
+        signed.account_id,
         signed.signature,
       );
       const result = submitted.citizen;

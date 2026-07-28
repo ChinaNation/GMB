@@ -35,7 +35,7 @@ class SquareAccountDeletionService {
     // 2. 服务端确认后清本地，做到零残留。
     await _profileCache.clear(accountId);
     _api.clearSession(accountId);
-    await _chatStore.clearAllForAccount(accountId);
+    await _chatStore.clearAllForAccountId(accountId);
     // 服务端 square_device_subkeys 已 purge，删本机原生子钥迫使下次干净重注册。
     await _deviceSubkey.delete(walletIndex);
   }

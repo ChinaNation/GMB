@@ -164,7 +164,7 @@ pub(crate) struct AdminQrSignRequestOutput {
 pub(crate) struct AdminQrCompleteInput {
     pub(crate) challenge_id: String,
     pub(crate) session_id: Option<String>,
-    pub(crate) signer_public_key: String,
+    pub(crate) account_id: String,
     pub(crate) signature: String,
 }
 

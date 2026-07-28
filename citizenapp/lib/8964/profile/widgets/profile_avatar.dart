@@ -98,7 +98,7 @@ class _StableDefaultAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      ProfilePresentation.forAccount(seed).avatarAsset,
+      ProfilePresentation.forAccountId(seed).avatarAsset,
       width: size,
       height: size,
       fit: BoxFit.cover,

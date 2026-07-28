@@ -479,7 +479,9 @@ fn validate_citizen_record(
     record: &CitizenCidRecord,
     block: Option<u32>,
 ) -> Result<(), GuardError> {
-    if parse_cid(cid)? != *b"CTZN" || record.registrar_cid_number.is_empty() {
+    // 人主体 CID(公民 CTZN / 居民 NATP / 智能人 SMTP)统一放行:占号入口接受 CTZN|NATP
+    // (自助/注册局占即绑),与 `valid_province_city` 的 is_person_code 去地域化判定一致。
+    if !is_person_code(&parse_cid(cid)?) || record.registrar_cid_number.is_empty() {
         return Err(GuardError::InvalidCidNamespace);
     }
     match record.status {
@@ -620,9 +622,12 @@ where
     let registry: CitizenCidRecord = decode_exact(&registry_raw, "CidRegistry")?;
     validate_citizen_record(cid, &registry, None)?;
 
-    let identity_raw =
-        read(&storage_key::voting_identity(cid)).ok_or(GuardError::CitizenIdentityDeleted)?;
-    let _: CitizenVotingIdentity = decode_exact(&identity_raw, "VotingIdentityByCid")?;
+    // 投票身份、竞选身份是用户可选项,不是必须:匿名 CID(占号即绑账户、无投票身份)
+    // 合法。存在则校验可解码,不存在则放行——守卫不强制任何身份信息,用户只凭钱包账户
+    // 即可占号绑定。投票身份一旦创建不得删除的单调性由 `check_transition` 单独兜底。
+    if let Some(identity_raw) = read(&storage_key::voting_identity(cid)) {
+        let _: CitizenVotingIdentity = decode_exact(&identity_raw, "VotingIdentityByCid")?;
+    }
 
     let account_raw = read(&storage_key::account_id_by_cid(cid))
         .ok_or(GuardError::CitizenAccountIdBindingMissing)?;
@@ -1128,6 +1133,23 @@ mod tests {
         .into_bytes()
     }
 
+    fn natp_cid_number(tag: &str) -> Vec<u8> {
+        primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                public_key: tag,
+                p1: "1",
+                province_code: "GD",
+                province_name: "广东省",
+                city_code: "001",
+                city_name: "荔湾市",
+                year: "2026",
+                institution: "NATP",
+            },
+        )
+        .expect("valid resident CID")
+        .into_bytes()
+    }
+
     fn citizen_state(cid: &[u8], account: [u8; 32]) -> BTreeMap<Vec<u8>, Vec<u8>> {
         BTreeMap::from([
             (
@@ -1155,6 +1177,31 @@ mod tests {
                     1u32,
                 )
                     .encode(),
+            ),
+            (storage_key::account_id_by_cid(cid), account.encode()),
+            (
+                storage_key::cid_by_account_id(&account),
+                cid.to_vec().encode(),
+            ),
+        ])
+    }
+
+    /// 匿名 CID 状态:占号即绑账户(登记记录空居住地 + 账户双向绑定),**无投票身份**。
+    /// 用于验证守卫接受「用户只提供钱包账户」的匿名注册(身份是可选项、非必须)。
+    fn anonymous_citizen_state(cid: &[u8], account: [u8; 32]) -> BTreeMap<Vec<u8>, Vec<u8>> {
+        BTreeMap::from([
+            (
+                storage_key::citizen_registry(cid),
+                CitizenCidRecord {
+                    registrar_cid_number: b"registrar".to_vec(),
+                    commitment: [3u8; 32],
+                    residence_province_code: Vec::new(),
+                    residence_city_code: Vec::new(),
+                    status: CitizenCidStatus::Active,
+                    registered_at: 1,
+                    revoked_at: None,
+                }
+                .encode(),
             ),
             (storage_key::account_id_by_cid(cid), account.encode()),
             (
@@ -1290,6 +1337,65 @@ mod tests {
                 &GenesisReference::default(),
             ),
             Err(GuardError::CitizenAccountIdBindingMissing)
+        );
+    }
+
+    #[test]
+    fn anonymous_person_cid_binds_account_without_voting_identity() {
+        // 居民(NATP)匿名 CID:占号即绑账户,无投票身份、空居住地。守卫必须放行——
+        // 用户只凭钱包账户即可注册,投票/竞选身份是可选项而非必须。
+        // 同时覆盖两处守卫一致性:命名空间放行 CTZN|NATP(is_person_code)+ 身份可选。
+        let cid = natp_cid_number("anon-guard");
+        let account = [9u8; 32];
+        let post = anonymous_citizen_state(&cid, account);
+
+        // 增量路径:占即绑一笔新块,匿名 CID 过 check_transition。
+        let delta = post
+            .iter()
+            .map(|(key, value)| (key.clone(), Some(value.clone())))
+            .collect();
+        assert_eq!(
+            check_transition(
+                1,
+                &delta,
+                |_| None,
+                |key| post.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
+        );
+
+        // 绑定闭环校验(增量与全量路径共用的咽喉):匿名 CID 无投票身份也放行。
+        assert_eq!(
+            validate_citizen_identity_binding(&cid, &|key| post.get(key).cloned()),
+            Ok(())
+        );
+
+        // 换绑:匿名 CID 从旧账户换到新账户(admin_rebind / self_rebind 共用的绑定迁移),
+        // 无投票身份也必须过守卫。
+        let new_account = [10u8; 32];
+        let mut rebound = anonymous_citizen_state(&cid, new_account);
+        rebound.remove(&storage_key::cid_by_account_id(&account));
+        let rebind_delta = BTreeMap::from([
+            (
+                storage_key::account_id_by_cid(&cid),
+                Some(new_account.encode()),
+            ),
+            (storage_key::cid_by_account_id(&account), None),
+            (
+                storage_key::cid_by_account_id(&new_account),
+                Some(cid.to_vec().encode()),
+            ),
+        ]);
+        assert_eq!(
+            check_transition(
+                2,
+                &rebind_delta,
+                |key| post.get(key).cloned(),
+                |key| rebound.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
         );
     }
 }

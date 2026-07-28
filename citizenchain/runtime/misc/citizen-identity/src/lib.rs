@@ -35,8 +35,6 @@ pub type FamilyName = BoundedVec<u8, ConstU32<PERSON_NAME_MAX_BYTES>>;
 /// 名。与 `family_name` 分开保存，不生成或存储合并姓名。
 pub type GivenName = BoundedVec<u8, ConstU32<PERSON_NAME_MAX_BYTES>>;
 pub const MIN_ONCHAIN_CITIZEN_AGE_YEARS: u8 = 16;
-/// 批量占号单笔上限。
-pub const MAX_CID_OCCUPY_BATCH: u32 = 10_000;
 
 /// 从 Runtime 最大区块权重派生公民人口日期维护的独立预算。
 ///
@@ -102,25 +100,6 @@ pub struct CidRecord<BlockNumber> {
     pub registered_at: BlockNumber,
     pub revoked_at: Option<BlockNumber>,
 }
-
-/// 批量占号单项。
-#[derive(
-    Clone,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Eq,
-    PartialEq,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-)]
-pub struct CidOccupyItem {
-    pub cid_number: CidNumberBound,
-    pub commitment: [u8; 32],
-}
-
-pub type CidOccupyItemsBound = BoundedVec<CidOccupyItem, ConstU32<MAX_CID_OCCUPY_BATCH>>;
 
 /// days since 1970-01-01 → 公历 (年, 月, 日)。
 ///
@@ -476,6 +455,32 @@ pub trait CitizenIdentityAuthority<AccountId, Signature> {
         signature: &Signature,
     ) -> bool;
 
+    /// 匿名 CID 管理鉴权(注册局占号/换绑):任一在册注册局(CREG 市级 / FRG 省级)
+    /// 持 citizen-identity 管理权即可,**不做辖区匹配**——CID 是全国号、匿名无省市归属。
+    /// 与 `can_manage_voting_identity`(需居住地作用域精确匹配)分离。
+    fn can_manage_anonymous_cid(
+        registrar: &AccountId,
+        actor_cid_number: &[u8],
+        actor_role_code: &[u8],
+        action_code: u32,
+    ) -> bool;
+
+    /// 校验用户对注册局占号 `(cid_number, account_id)` 的授权签名(op_tag `OP_SIGN_CID_OCCUPY`),
+    /// 证明所占匿名 CID 绑定的钱包账户受本人控制;与换绑签名域分离防重放。
+    fn verify_occupy_signature(
+        account_id: &AccountId,
+        payload: &[u8],
+        signature: &Signature,
+    ) -> bool;
+
+    /// 校验注册局代匿名 CID 换绑时,新账户对 `(cid_number, new_account_id)` 的控制证明
+    /// (op_tag `OP_SIGN_CID_ADMIN_REBIND`);与占号域分离,防注册局重放占号签名成换绑。
+    fn verify_admin_rebind_signature(
+        account_id: &AccountId,
+        payload: &[u8],
+        signature: &Signature,
+    ) -> bool;
+
     /// 为 FRAME benchmark 返回一组真实注册局岗位授权主体。
     ///
     /// 具体 runtime 必须从其正式创世机构、岗位和任职目录选择主体；benchmark
@@ -518,6 +523,31 @@ impl<AccountId, Signature> CitizenIdentityAuthority<AccountId, Signature> for ()
     }
 
     fn verify_rebind_signature(
+        _account_id: &AccountId,
+        _payload: &[u8],
+        _signature: &Signature,
+    ) -> bool {
+        false
+    }
+
+    fn can_manage_anonymous_cid(
+        _registrar: &AccountId,
+        _actor_cid_number: &[u8],
+        _actor_role_code: &[u8],
+        _action_code: u32,
+    ) -> bool {
+        false
+    }
+
+    fn verify_occupy_signature(
+        _account_id: &AccountId,
+        _payload: &[u8],
+        _signature: &Signature,
+    ) -> bool {
+        false
+    }
+
+    fn verify_admin_rebind_signature(
         _account_id: &AccountId,
         _payload: &[u8],
         _signature: &Signature,
@@ -808,10 +838,14 @@ pub mod pallet {
         InvalidBirthDate,
         /// 出生日期写入后不可修改,更新竞选身份时不得变更。
         BirthDateImmutable,
+        /// 出生省市镇、性别写入竞选档后不可修改(D4a:填后锁定)。
+        CandidateProfileImmutable,
         InvalidDateRange,
         InvalidCitizenCode,
         UnauthorizedRegistrar,
         InvalidCitizenSignature,
+        /// 注册局占号:用户对占号账户的授权签名无效。
+        InvalidOccupySignature,
         UnderVotingAge,
         /// 该永久 CID 已经建立投票身份；登记入口不得兼作更新入口。
         VotingIdentityAlreadyExists,
@@ -825,6 +859,8 @@ pub mod pallet {
         CivicRebindRequiresRegistrar,
         /// 自助换绑:旧绑定账户的授权签名无效。
         InvalidRebindSignature,
+        /// 注册局代换绑:新账户的控制证明签名无效。
+        InvalidAdminRebindSignature,
         CidNotFound,
         VotingIdentityNotFound,
         CidAlreadyOccupied,
@@ -891,11 +927,11 @@ pub mod pallet {
                 !VotingIdentityByCid::<T>::contains_key(&payload.cid_number),
                 Error::<T>::VotingIdentityAlreadyExists
             );
-            Self::ensure_account_id_binding_available(&payload.cid_number, &payload.account_id)?;
+            // 账户已在占号阶段绑定(占即绑);登记只做纯升级,校验现有绑定不重绑。
+            Self::ensure_current_account_id_binding(&payload.cid_number, &payload.account_id)?;
 
             let identity = Self::identity_from_payload(&payload);
             Self::replace_voting_identity(payload.cid_number.clone(), identity, None)?;
-            Self::bind_account_id(&payload.cid_number, &payload.account_id);
             T::OnVotingIdentityRegistered::on_voting_identity_registered(
                 &payload.account_id,
                 payload.cid_number.as_slice(),
@@ -935,12 +971,13 @@ pub mod pallet {
                 &citizen_signature,
             )?;
             Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
-            Self::ensure_account_id_binding_available(
+            // 账户已在占号阶段绑定(占即绑);升级只做纯升级,校验现有绑定不重绑。
+            Self::ensure_current_account_id_binding(
                 &payload.voting.cid_number,
                 &payload.voting.account_id,
             )?;
 
-            Self::ensure_birth_date_immutable(&payload.voting.cid_number, payload.birth_date)?;
+            Self::ensure_candidate_locked_immutable(&payload.voting.cid_number, &payload)?;
 
             let old = VotingIdentityByCid::<T>::get(&payload.voting.cid_number);
             // 竞选身份可作为公民首次上链(第 3 条:不强制先投票)。首次即建投票身份时,
@@ -948,7 +985,6 @@ pub mod pallet {
             let is_first_onchain_identity = old.is_none();
             let identity = Self::identity_from_payload(&payload.voting);
             Self::replace_voting_identity(payload.voting.cid_number.clone(), identity, old)?;
-            Self::bind_account_id(&payload.voting.cid_number, &payload.voting.account_id);
             if is_first_onchain_identity {
                 T::OnVotingIdentityRegistered::on_voting_identity_registered(
                     &payload.voting.account_id,
@@ -1043,7 +1079,7 @@ pub mod pallet {
                 &payload.voting.account_id,
             )?;
 
-            Self::ensure_birth_date_immutable(&payload.voting.cid_number, payload.birth_date)?;
+            Self::ensure_candidate_locked_immutable(&payload.voting.cid_number, &payload)?;
 
             let old = VotingIdentityByCid::<T>::get(&payload.voting.cid_number)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
@@ -1193,8 +1229,71 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 占号:公民建档先行登记 CID 号,链上原子「验格式+查重+登记」是
-        /// 全局唯一的唯一仲裁;成功后注册局才落本地档案。
+        /// 注册局代匿名 CID 换绑:用户丢失旧钱包钥、到线下注册局把 CID 换绑到新账户,
+        /// CID 与社交资产不变(D4b)。origin = 注册局管理员(代办,不需旧账户签名);任一在册
+        /// 注册局可办(`can_manage_anonymous_cid`,全国号不辖区匹配);新账户对
+        /// `(cid_number, new_account_id)` 的签名(域 `OP_SIGN_CID_ADMIN_REBIND`)证新账户受控。
+        /// 匿名限定:已升级投票/竞选公民只能经对应注册局换绑(留后期)。费=机构付费。
+        /// 复用删批量占号释放出的 `call_index(7)`。
+        #[pallet::call_index(7)]
+        #[pallet::weight(<T as Config>::WeightInfo::admin_rebind_cid_account())]
+        pub fn admin_rebind_cid_account(
+            origin: OriginFor<T>,
+            actor_cid_number: CidNumberBound,
+            actor_role_code: RoleCodeBound,
+            cid_number: CidNumberBound,
+            new_account_id: T::AccountId,
+            new_account_signature: SignatureOf<T>,
+        ) -> DispatchResult {
+            let registrar = ensure_signed(origin)?;
+            // 旧账户 = 该 CID 当前绑定账户(不存在=号未占/已吊销 → 拒)。
+            let old_account_id =
+                AccountIdByCid::<T>::get(&cid_number).ok_or(Error::<T>::NotBoundToAnyCid)?;
+            // 匿名限定:已升级投票/竞选公民只能经对应注册局换绑(留后期)。
+            ensure!(
+                !VotingIdentityByCid::<T>::contains_key(&cid_number),
+                Error::<T>::CivicRebindRequiresRegistrar
+            );
+            // 鉴权:任一在册注册局持 citizen-identity 管理权即可,不做辖区匹配(全国号)。
+            ensure!(
+                T::CitizenIdentityAuthority::can_manage_anonymous_cid(
+                    &registrar,
+                    actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
+                    7,
+                ),
+                Error::<T>::UnauthorizedRegistrar
+            );
+            // 新账户控制证明:新账户对 (cid ‖ 新账户) 的签名(域 OP_SIGN_CID_ADMIN_REBIND,防重放)。
+            let payload = (cid_number.clone(), new_account_id.clone()).encode();
+            Self::ensure_admin_rebind_signature(
+                &new_account_id,
+                &payload,
+                &new_account_signature,
+            )?;
+            // 新账户任意,但不得已绑另一个 CID(一账户一 CID)。
+            if let Some(existing) = CidByAccountId::<T>::get(&new_account_id) {
+                ensure!(
+                    existing == cid_number,
+                    Error::<T>::AccountIdAlreadyBoundToAnotherCid
+                );
+            }
+            // 换绑:删旧反向索引、写新双向绑定(old==new 幂等 no-op)。
+            Self::rebind_account_id(&cid_number, &old_account_id, &new_account_id);
+            Self::deposit_event(Event::<T>::CidAccountRebound {
+                cid_number,
+                old_account_id,
+                new_account_id,
+            });
+            Ok(())
+        }
+
+        /// 注册局占号(占即绑,匿名):管理员一笔冷签为用户占一个 CN 前缀的匿名身份 CID
+        /// 并当场绑定用户钱包账户。类型限 CTZN(公民)/ NATP(居民);CID 为全国号、无省市
+        /// 归属,任一在册注册局(CREG/FRG)均可办(`can_manage_anonymous_cid`,不做辖区匹配)。
+        /// 用户对 `(cid_number, account_id)` 的签名(域 `OP_SIGN_CID_OCCUPY`)证明账户受控;
+        /// commitment 链上算 `blake2_256(account_id 公钥)`(与自助占号同基);不写 VotingIdentity
+        /// (匿名),居住/姓名等档案改由 onchina 链下 `citizens` 表选填保存。
         #[pallet::call_index(6)]
         #[pallet::weight(<T as Config>::WeightInfo::occupy_cid())]
         pub fn occupy_cid(
@@ -1202,82 +1301,46 @@ pub mod pallet {
             actor_cid_number: CidNumberBound,
             actor_role_code: RoleCodeBound,
             cid_number: CidNumberBound,
-            commitment: [u8; 32],
-            residence_province_code: AreaCodeBound,
-            residence_city_code: AreaCodeBound,
+            account_id: T::AccountId,
+            citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
+            // 类型:公民 CTZN 或 居民 NATP(智能人 SMTP 与机构码拒)。
+            Self::ensure_valid_self_registrable_cid(&cid_number)?;
+            // 鉴权:任一在册注册局持 citizen-identity 管理权即可,不做辖区匹配(全国号)。
             ensure!(
-                !residence_province_code.is_empty() && !residence_city_code.is_empty(),
-                Error::<T>::EmptyResidenceScope
-            );
-            ensure!(
-                T::CitizenIdentityAuthority::can_manage_voting_identity(
+                T::CitizenIdentityAuthority::can_manage_anonymous_cid(
                     &registrar,
                     actor_cid_number.as_slice(),
                     actor_role_code.as_slice(),
-                    residence_province_code.as_slice(),
-                    residence_city_code.as_slice(),
-                    CitizenIdentityLevel::Voting,
                     6,
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
-            Self::ensure_valid_citizen_cid(&cid_number)?;
+            // 用户签名:对 (cid ‖ 账户) 的授权,证账户受控(域 OP_SIGN_CID_OCCUPY,防重放)。
+            let payload = (cid_number.clone(), account_id.clone()).encode();
+            Self::ensure_occupy_signature(&account_id, &payload, &citizen_signature)?;
+            // 一账户一 CID + CID 未被他人绑(复用双向闭环校验)。
+            Self::ensure_account_id_binding_available(&cid_number, &account_id)?;
+            // 占号:actor_cid 作 registrar、居住地空(匿名去地域);
+            // commitment = blake2_256(account_id),格式+类型+全局原子查重在 do_occupy_cid 内。
+            let commitment = blake2_256(&account_id.encode());
+            let empty_area = AreaCodeBound::default();
             Self::do_occupy_cid(
                 &actor_cid_number,
                 &cid_number,
                 &commitment,
-                &residence_province_code,
-                &residence_city_code,
-            )
-        }
-
-        /// 批量占号:同一注册局同一作用域一次占 N 号(批量建档摊薄冷签);
-        /// 任一项失败整笔回滚。
-        #[pallet::call_index(7)]
-        #[pallet::weight(<T as Config>::WeightInfo::occupy_cids_batch(items.len() as u32))]
-        pub fn occupy_cids_batch(
-            origin: OriginFor<T>,
-            actor_cid_number: CidNumberBound,
-            actor_role_code: RoleCodeBound,
-            items: CidOccupyItemsBound,
-            residence_province_code: AreaCodeBound,
-            residence_city_code: AreaCodeBound,
-        ) -> DispatchResult {
-            let registrar = ensure_signed(origin)?;
-            ensure!(!items.is_empty(), Error::<T>::EmptyCidNumber);
-            ensure!(
-                !residence_province_code.is_empty() && !residence_city_code.is_empty(),
-                Error::<T>::EmptyResidenceScope
-            );
-            ensure!(
-                T::CitizenIdentityAuthority::can_manage_voting_identity(
-                    &registrar,
-                    actor_cid_number.as_slice(),
-                    actor_role_code.as_slice(),
-                    residence_province_code.as_slice(),
-                    residence_city_code.as_slice(),
-                    CitizenIdentityLevel::Voting,
-                    7,
-                ),
-                Error::<T>::UnauthorizedRegistrar
-            );
-            for item in items.iter() {
-                Self::ensure_valid_citizen_cid(&item.cid_number)?;
-                Self::do_occupy_cid(
-                    &actor_cid_number,
-                    &item.cid_number,
-                    &item.commitment,
-                    &residence_province_code,
-                    &residence_city_code,
-                )?;
-            }
+                &empty_area,
+                &empty_area,
+            )?;
+            // 占即绑:写双向绑定(匿名 CID = 有绑定、无 VotingIdentity)。
+            Self::bind_account_id(&cid_number, &account_id);
             Ok(())
         }
 
         /// 吊销:登记表墓碑(Active→Revoked,永不复用);号已绑定链上身份
-        /// 则联动置 Revoked。作用域授权用占号时登记的居住地,防跨域吊销。
+        /// 则联动置 Revoked。已升级投票/竞选公民按其登记居住地作用域授权(防跨域吊销);
+        /// 匿名 CID(无投票身份、全国号无居住地)任一在册注册局可吊销。
         #[pallet::call_index(8)]
         #[pallet::weight(<T as Config>::WeightInfo::revoke_cid())]
         pub fn revoke_cid(
@@ -1292,18 +1355,25 @@ pub mod pallet {
                 rec.status == CidRecordStatus::Active,
                 Error::<T>::CidAlreadyRevoked
             );
-            ensure!(
-                T::CitizenIdentityAuthority::can_manage_voting_identity(
+            // 居住地作用域取自投票身份(占号阶段已去地域,CidRecord 不再存居住地)。
+            let authorized = match VotingIdentityByCid::<T>::get(&cid_number) {
+                Some(identity) => T::CitizenIdentityAuthority::can_manage_voting_identity(
                     &registrar,
                     actor_cid_number.as_slice(),
                     actor_role_code.as_slice(),
-                    rec.residence_province_code.as_slice(),
-                    rec.residence_city_code.as_slice(),
+                    identity.residence_province_code.as_slice(),
+                    identity.residence_city_code.as_slice(),
                     CitizenIdentityLevel::Voting,
                     8,
                 ),
-                Error::<T>::UnauthorizedRegistrar
-            );
+                None => T::CitizenIdentityAuthority::can_manage_anonymous_cid(
+                    &registrar,
+                    actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
+                    8,
+                ),
+            };
+            ensure!(authorized, Error::<T>::UnauthorizedRegistrar);
             if AccountIdByCid::<T>::contains_key(&cid_number) {
                 Self::revoke_bound_identity(&cid_number)?;
             }
@@ -1517,6 +1587,36 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 校验用户对注册局占号账户的授权签名(op_tag OP_SIGN_CID_OCCUPY)。
+        fn ensure_occupy_signature(
+            account_id: &T::AccountId,
+            payload: &[u8],
+            signature: &SignatureOf<T>,
+        ) -> DispatchResult {
+            ensure!(
+                T::CitizenIdentityAuthority::verify_occupy_signature(
+                    account_id, payload, signature,
+                ),
+                Error::<T>::InvalidOccupySignature
+            );
+            Ok(())
+        }
+
+        /// 校验注册局代换绑时新账户的控制证明签名(op_tag OP_SIGN_CID_ADMIN_REBIND)。
+        fn ensure_admin_rebind_signature(
+            account_id: &T::AccountId,
+            payload: &[u8],
+            signature: &SignatureOf<T>,
+        ) -> DispatchResult {
+            ensure!(
+                T::CitizenIdentityAuthority::verify_admin_rebind_signature(
+                    account_id, payload, signature,
+                ),
+                Error::<T>::InvalidAdminRebindSignature
+            );
+            Ok(())
+        }
+
         /// 初次登记或候选升级时校验 CID↔账户双向绑定没有指向另一主体。
         fn ensure_account_id_binding_available(
             cid_number: &CidNumberBound,
@@ -1656,16 +1756,23 @@ pub mod pallet {
             Self::age_from_birth_date(identity.birth_date)
         }
 
-        /// 出生日期写一次即锁定:已存在竞选身份时,入参出生日期必须与链上一致,
-        /// 否则拒绝(防止升级/更新竞选身份时篡改出生日期)。
-        fn ensure_birth_date_immutable(
+        /// 竞选档锁定字段写一次即不可改(D4a):已存在竞选身份时,入参的出生日期、
+        /// 出生省市镇、性别都必须与链上一致,否则拒绝(防止升级/更新时篡改)。
+        fn ensure_candidate_locked_immutable(
             cid_number: &CidNumberBound,
-            incoming: u32,
+            incoming: &CandidateIdentityPayload<T::AccountId>,
         ) -> DispatchResult {
             if let Some(existing) = CandidateIdentityByCid::<T>::get(cid_number) {
                 ensure!(
-                    existing.birth_date == incoming,
+                    existing.birth_date == incoming.birth_date,
                     Error::<T>::BirthDateImmutable
+                );
+                ensure!(
+                    existing.birth_province_code == incoming.birth_province_code
+                        && existing.birth_city_code == incoming.birth_city_code
+                        && existing.birth_town_code == incoming.birth_town_code
+                        && existing.citizen_sex == incoming.citizen_sex,
+                    Error::<T>::CandidateProfileImmutable
                 );
             }
             Ok(())

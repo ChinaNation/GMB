@@ -75,7 +75,7 @@ export async function commitAdminAction<T>(
   auth: AdminAuth,
   input: {
     action_id: string;
-    signer_public_key: string;
+    account_id: string;
     signature: string;
     payload_hash: string;
   },
@@ -88,10 +88,10 @@ export async function commitAdminAction<T>(
 }
 
 // 组件提供的「扫码签名」回调:给定已 prepare 的 PASSKEY_COLD_SIGN 动作,
-// 弹出公民钱包二维码并扫描签名响应,解析出 signer_public_key/signature 回传。
+// 弹出公民钱包二维码并扫描签名响应,解析出 account_id/signature 回传。
 export type ScanSignResolver = (
   prepared: PrepareAdminActionOutput,
-) => Promise<{ signer_public_key: string; signature: string }>;
+) => Promise<{ account_id: string; signature: string }>;
 
 // 统一的 PASSKEY_COLD_SIGN 安全授权:prepare → 组件扫码签名 → commit 取回一次性 grant。
 // SESSION 动作不走这里(无 commit,业务 handler 仅凭会话执行)。
@@ -105,10 +105,10 @@ export async function createScanSignSecurityGrant(
   if (prepared.auth_type !== 'PASSKEY_COLD_SIGN' || !prepared.sign_request) {
     throw new Error('该操作缺少公民钱包扫码签名请求');
   }
-  const { signer_public_key, signature } = await signWithScan(prepared);
+  const { account_id, signature } = await signWithScan(prepared);
   return commitAdminAction<AdminSecurityGrantOutput>(auth, {
     action_id: prepared.action_id,
-    signer_public_key,
+    account_id,
     signature,
     payload_hash: prepared.payload_hash,
   });

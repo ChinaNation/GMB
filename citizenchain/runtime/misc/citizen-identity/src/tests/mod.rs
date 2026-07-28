@@ -133,6 +133,34 @@ impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIde
     ) -> bool {
         signature.as_slice() == b"valid"
     }
+
+    fn can_manage_anonymous_cid(
+        registrar: &u64,
+        actor_cid_number: &[u8],
+        actor_role_code: &[u8],
+        _action_code: u32,
+    ) -> bool {
+        // 匿名 CID 全国号,不做辖区匹配:只认在册注册局(账户 100 + 岗位主体一致)。
+        *registrar == 100
+            && actor_cid_number == registrar_cid_number().as_slice()
+            && actor_role_code == registrar_role_code().as_slice()
+    }
+
+    fn verify_occupy_signature(
+        _account_id: &u64,
+        _payload: &[u8],
+        signature: &pallet::SignatureOf<Test>,
+    ) -> bool {
+        signature.as_slice() == b"valid"
+    }
+
+    fn verify_admin_rebind_signature(
+        _account_id: &u64,
+        _payload: &[u8],
+        signature: &pallet::SignatureOf<Test>,
+    ) -> bool {
+        signature.as_slice() == b"valid"
+    }
 }
 
 impl Config for Test {
@@ -209,25 +237,20 @@ fn registrar_role_code() -> RoleCodeBound {
         .expect("registrar role code should fit")
 }
 
-/// 测试承诺哈希:由 tag 填充,幂等续用用同值。
-fn commitment_for(tag: &str) -> [u8; 32] {
-    let mut c = [0u8; 32];
-    let bytes = tag.as_bytes();
-    let n = bytes.len().min(32);
-    c[..n].copy_from_slice(&bytes[..n]);
-    c
+/// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100)。占即绑账户,默认账户 1。
+fn occupy_tag(tag: &str) {
+    occupy_tag_as(tag, 1);
 }
 
-/// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100,作用域 43/4301)。
-fn occupy_tag(tag: &str) {
+/// 注册局占号并绑定指定账户(多占测试须给不同账户,一账户一 CID)。
+fn occupy_tag_as(tag: &str, account: u64) {
     assert_ok!(CitizenIdentity::occupy_cid(
         RuntimeOrigin::signed(100),
         registrar_cid_number(),
         registrar_role_code(),
         cid(&citizen_cid_number(tag)),
-        commitment_for(tag),
-        code(b"43"),
-        code(b"4301"),
+        account,
+        valid_signature(),
     ));
 }
 
@@ -562,6 +585,131 @@ fn self_rebind_cid_account_rejects_civic_cid() {
 }
 
 #[test]
+fn admin_rebind_cid_account_moves_binding_to_new_account() {
+    new_test_ext().execute_with(|| {
+        // 注册局占号绑账户 1(匿名),用户丢钥后由注册局代换绑到账户 2。
+        occupy_tag_as("adm1", 1);
+        assert_ok!(CitizenIdentity::admin_rebind_cid_account(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&citizen_cid_number("adm1")),
+            2,
+            valid_signature(),
+        ));
+        assert_eq!(
+            AccountIdByCid::<Test>::get(cid(&citizen_cid_number("adm1"))),
+            Some(2)
+        );
+        assert_eq!(
+            CidByAccountId::<Test>::get(2),
+            Some(cid(&citizen_cid_number("adm1")))
+        );
+        assert_eq!(CidByAccountId::<Test>::get(1), None);
+    });
+}
+
+#[test]
+fn admin_rebind_cid_account_rejects_unoccupied_cid() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&citizen_cid_number("adm_none")),
+                2,
+                valid_signature(),
+            ),
+            Error::<Test>::NotBoundToAnyCid
+        );
+    });
+}
+
+#[test]
+fn admin_rebind_cid_account_rejects_civic_cid() {
+    new_test_ext().execute_with(|| {
+        // civic(有投票身份)换绑只能经对应注册局的 civic 流程(留后期),此入口拒。
+        occupy_tag("0001");
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            voting_payload(1, &citizen_cid_number("0001")),
+            valid_signature(),
+        ));
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&citizen_cid_number("0001")),
+                2,
+                valid_signature(),
+            ),
+            Error::<Test>::CivicRebindRequiresRegistrar
+        );
+    });
+}
+
+#[test]
+fn admin_rebind_cid_account_rejects_unauthorized_registrar() {
+    new_test_ext().execute_with(|| {
+        occupy_tag_as("adm3", 1);
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account(
+                RuntimeOrigin::signed(999),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&citizen_cid_number("adm3")),
+                2,
+                valid_signature(),
+            ),
+            Error::<Test>::UnauthorizedRegistrar
+        );
+    });
+}
+
+#[test]
+fn admin_rebind_cid_account_rejects_invalid_new_signature() {
+    new_test_ext().execute_with(|| {
+        occupy_tag_as("adm2", 1);
+        let bad_sig: pallet::SignatureOf<Test> = b"nope".to_vec().try_into().expect("sig fits");
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&citizen_cid_number("adm2")),
+                2,
+                bad_sig,
+            ),
+            Error::<Test>::InvalidAdminRebindSignature
+        );
+    });
+}
+
+#[test]
+fn admin_rebind_cid_account_rejects_new_account_bound_to_another_cid() {
+    new_test_ext().execute_with(|| {
+        // adm4a 绑账户 1、adm4b 绑账户 2;把 adm4a 换绑到已绑 adm4b 的账户 2 → 拒。
+        occupy_tag_as("adm4a", 1);
+        occupy_tag_as("adm4b", 2);
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&citizen_cid_number("adm4a")),
+                2,
+                valid_signature(),
+            ),
+            Error::<Test>::AccountIdAlreadyBoundToAnotherCid
+        );
+    });
+}
+
+#[test]
 fn natp_resident_cannot_become_voting_citizen() {
     new_test_ext().execute_with(|| {
         // q3 补充约束:NATP 居民永远无法升级投票/竞选公民(register 走 CTZN 校验)。
@@ -626,9 +774,9 @@ fn duplicate_cid_cannot_move_to_another_account_id() {
 #[test]
 fn updating_identity_cannot_replace_permanent_cid() {
     new_test_ext().execute_with(|| {
-        // 占号先行:身份写入前置。
-        occupy_tag("0001");
-        occupy_tag("0002");
+        // 占号先行:身份写入前置(占即绑,两号绑不同账户)。
+        occupy_tag_as("0001", 1);
+        occupy_tag_as("0002", 2);
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
@@ -651,9 +799,10 @@ fn updating_identity_cannot_replace_permanent_cid() {
             AccountIdByCid::<Test>::get(cid(&citizen_cid_number("0001"))),
             Some(1)
         );
+        // 占即绑:0002 虽未登记投票身份,占号时已绑账户 2(匿名 CID)。
         assert_eq!(
             AccountIdByCid::<Test>::get(cid(&citizen_cid_number("0002"))),
-            None
+            Some(2)
         );
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
         assert_eq!(
@@ -739,7 +888,7 @@ fn citizen_subject_rejects_revoked_identity_and_cid() {
 #[test]
 fn candidate_identity_requires_family_name_and_given_name_separately() {
     new_test_ext().execute_with(|| {
-        occupy_tag("EMPTY-FAMILY");
+        occupy_tag_as("EMPTY-FAMILY", 1);
         let mut empty_family = candidate_payload(1, &citizen_cid_number("EMPTY-FAMILY"));
         empty_family.family_name = Default::default();
         assert_noop!(
@@ -753,7 +902,7 @@ fn candidate_identity_requires_family_name_and_given_name_separately() {
             Error::<Test>::EmptyFamilyName
         );
 
-        occupy_tag("EMPTY-GIVEN");
+        occupy_tag_as("EMPTY-GIVEN", 2);
         let mut empty_given = candidate_payload(2, &citizen_cid_number("EMPTY-GIVEN"));
         empty_given.given_name = Default::default();
         assert_noop!(
@@ -1000,7 +1149,7 @@ fn passport_activates_on_valid_from_and_deactivates_after_valid_until() {
 fn population_transition_limit_hides_partial_day_and_blocks_identity_changes() {
     new_test_ext().execute_with(|| {
         for (account_id, tag) in [(1, "BATCH-1"), (2, "BATCH-2"), (3, "BATCH-3")] {
-            occupy_tag(tag);
+            occupy_tag_as(tag, account_id);
             let mut payload = voting_payload(account_id, &citizen_cid_number(tag));
             payload.passport_valid_from = 20260703;
             payload.passport_valid_until = 20300101;
@@ -1183,6 +1332,49 @@ fn candidate_birth_date_is_immutable_on_update() {
 }
 
 #[test]
+fn candidate_birth_scope_and_sex_are_immutable_on_update() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("IMMUT-PROFILE");
+        let cid = citizen_cid_number("IMMUT-PROFILE");
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            candidate_payload(1, &cid),
+            valid_signature(),
+        ));
+
+        // 更新竞选身份时试图改性别 → 拒绝(D4a:填后锁定)。
+        let mut tampered_sex = candidate_payload(1, &cid);
+        tampered_sex.citizen_sex = CitizenSex::Male;
+        assert_noop!(
+            CitizenIdentity::update_candidate_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                tampered_sex,
+                valid_signature(),
+            ),
+            Error::<Test>::CandidateProfileImmutable
+        );
+
+        // 试图改出生市码 → 同样拒绝。
+        let mut tampered_city = candidate_payload(1, &cid);
+        tampered_city.birth_city_code = code(b"4302");
+        assert_noop!(
+            CitizenIdentity::update_candidate_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                tampered_city,
+                valid_signature(),
+            ),
+            Error::<Test>::CandidateProfileImmutable
+        );
+    });
+}
+
+#[test]
 fn candidate_illegal_birth_date_rejected() {
     new_test_ext().execute_with(|| {
         occupy_tag("BADDOB");
@@ -1277,23 +1469,96 @@ fn non_citizen_family_code_is_rejected() {
 }
 
 #[test]
-fn occupy_cid_is_idempotent_for_same_registrar_and_commitment() {
+fn occupy_cid_binds_account_and_stays_anonymous() {
+    use codec::Encode;
     new_test_ext().execute_with(|| {
-        occupy_tag("OCC-1");
-        // 同注册局+同承诺重复提交:幂等放行(落库失败恢复路径)。
-        occupy_tag("OCC-1");
-        // 承诺不同:视为撞号,拒绝。
+        let cid_bytes = citizen_cid_number("OCC-BIND");
+        assert_ok!(CitizenIdentity::occupy_cid(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&cid_bytes),
+            7,
+            valid_signature(),
+        ));
+        // 占即绑:双向绑定成立。
+        assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(7));
+        assert_eq!(CidByAccountId::<Test>::get(7), Some(cid(&cid_bytes)));
+        // 登记记录:注册局 registrar + 空居住地(全国号)+ Active + commitment=blake2_256(账户)。
+        let rec = CidRegistry::<Test>::get(cid(&cid_bytes)).expect("record");
+        assert_eq!(rec.registrar_cid_number, registrar_cid_number());
+        assert!(rec.residence_province_code.is_empty());
+        assert!(rec.residence_city_code.is_empty());
+        assert_eq!(rec.status, CidRecordStatus::Active);
+        assert_eq!(rec.commitment, sp_io::hashing::blake2_256(&7u64.encode()));
+        // 匿名:无投票身份。
+        assert!(!VotingIdentityByCid::<Test>::contains_key(cid(&cid_bytes)));
+    });
+}
+
+#[test]
+fn occupy_cid_accepts_resident_natp_type() {
+    new_test_ext().execute_with(|| {
+        let natp = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                public_key: "occ-natp",
+                p1: "1",
+                province_code: "",
+                province_name: "",
+                city_code: "",
+                city_name: "",
+                year: "2026",
+                institution: "NATP",
+            },
+        )
+        .expect("natp cid should generate")
+        .into_bytes();
+        assert_ok!(CitizenIdentity::occupy_cid(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&natp),
+            8,
+            valid_signature(),
+        ));
+        assert_eq!(CidByAccountId::<Test>::get(8), Some(cid(&natp)));
+    });
+}
+
+#[test]
+fn occupy_cid_is_idempotent_for_same_registrar_and_account() {
+    new_test_ext().execute_with(|| {
+        occupy_tag_as("OCC-1", 1);
+        // 同注册局 + 同账户重复提交:commitment=blake2_256(账户) 同值,幂等放行。
+        occupy_tag_as("OCC-1", 1);
+        // 另一账户抢占同 CID:一账户一 CID 双向绑定拦截。
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
                 cid(&citizen_cid_number("OCC-1")),
-                commitment_for("OTHER"),
-                code(b"43"),
-                code(b"4301"),
+                2,
+                valid_signature(),
             ),
-            Error::<Test>::CidAlreadyOccupied
+            Error::<Test>::CidAccountIdBindingMismatch
+        );
+    });
+}
+
+#[test]
+fn occupy_cid_rejects_invalid_signature() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&citizen_cid_number("BAD-SIG")),
+                1,
+                b"nope".to_vec().try_into().expect("signature should fit"),
+            ),
+            Error::<Test>::InvalidOccupySignature
         );
     });
 }
@@ -1301,87 +1566,30 @@ fn occupy_cid_is_idempotent_for_same_registrar_and_commitment() {
 #[test]
 fn occupy_cid_rejects_unauthorized_registrar_and_bad_number() {
     new_test_ext().execute_with(|| {
+        // 非在册注册局账户:匿名鉴权拒。
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(999),
                 registrar_cid_number(),
                 registrar_role_code(),
                 cid(&citizen_cid_number("OCC-2")),
-                commitment_for("OCC-2"),
-                code(b"43"),
-                code(b"4301"),
+                1,
+                valid_signature(),
             ),
             Error::<Test>::UnauthorizedRegistrar
         );
-        // 公权机构号打公民占号入口:家族断言拒绝。
+        // 公权机构号打公民占号入口:类型断言拒(CTZN|NATP 之外)。
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
                 cid(&public_cid_number("OCC-2")),
-                commitment_for("OCC-2"),
-                code(b"43"),
-                code(b"4301"),
+                1,
+                valid_signature(),
             ),
             Error::<Test>::InvalidCitizenCode
         );
-    });
-}
-
-#[test]
-fn occupy_cids_batch_rolls_back_entirely_on_any_conflict() {
-    new_test_ext().execute_with(|| {
-        occupy_tag("B-TAKEN");
-        let items: CidOccupyItemsBound = alloc::vec![
-            CidOccupyItem {
-                cid_number: cid(&citizen_cid_number("B-1")),
-                commitment: commitment_for("B-1"),
-            },
-            CidOccupyItem {
-                cid_number: cid(&citizen_cid_number("B-TAKEN")),
-                commitment: commitment_for("CONFLICT"),
-            },
-        ]
-        .try_into()
-        .expect("batch fits");
-        assert_noop!(
-            CitizenIdentity::occupy_cids_batch(
-                RuntimeOrigin::signed(100),
-                registrar_cid_number(),
-                registrar_role_code(),
-                items,
-                code(b"43"),
-                code(b"4301"),
-            ),
-            Error::<Test>::CidAlreadyOccupied
-        );
-        // 整笔回滚:B-1 未被占。
-        assert!(CidRegistry::<Test>::get(cid(&citizen_cid_number("B-1"))).is_none());
-
-        // 全部合法则整批占号成功。
-        let ok_items: CidOccupyItemsBound = alloc::vec![
-            CidOccupyItem {
-                cid_number: cid(&citizen_cid_number("B-2")),
-                commitment: commitment_for("B-2"),
-            },
-            CidOccupyItem {
-                cid_number: cid(&citizen_cid_number("B-3")),
-                commitment: commitment_for("B-3"),
-            },
-        ]
-        .try_into()
-        .expect("batch fits");
-        assert_ok!(CitizenIdentity::occupy_cids_batch(
-            RuntimeOrigin::signed(100),
-            registrar_cid_number(),
-            registrar_role_code(),
-            ok_items,
-            code(b"43"),
-            code(b"4301"),
-        ));
-        assert!(CidRegistry::<Test>::get(cid(&citizen_cid_number("B-2"))).is_some());
-        assert!(CidRegistry::<Test>::get(cid(&citizen_cid_number("B-3"))).is_some());
     });
 }
 
@@ -1441,16 +1649,15 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
             ),
             Error::<Test>::CidAlreadyRevoked
         );
-        // 墓碑号任何人不可再占(号码永不复用)。
+        // 墓碑号原绑定账户也不可再占(号码永不复用;绑定闭环放行、do_occupy 见墓碑拒)。
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
                 cid(&citizen_cid_number("RV-1")),
-                commitment_for("RV-1"),
-                code(b"43"),
-                code(b"4301"),
+                1,
+                valid_signature(),
             ),
             Error::<Test>::CidAlreadyOccupied
         );
@@ -1472,8 +1679,8 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
 #[test]
 fn permanent_cid_update_keeps_registry_record_active() {
     new_test_ext().execute_with(|| {
-        occupy_tag("CHG-A");
-        occupy_tag("CHG-B");
+        occupy_tag_as("CHG-A", 1);
+        occupy_tag_as("CHG-B", 2);
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),

@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/my/myid/myid_service.dart';
+import 'package:citizenapp/my/myid/widgets/rebind_account_sheet.dart';
+import 'package:citizenapp/my/myid/widgets/register_identity_sheet.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 电子护照页。
+/// 身份页(原电子护照)。
 ///
-/// 页面始终展示访客轻节点、投票身份、竞选身份三张卡。只有默认用户当前身份对应的
-/// 卡片排在首位、标记“当前身份”并展示真实链上值；非当前公民卡只展示该身份涉及
-/// 的字段名称，不能重复泄露当前用户数据。链读取失败时不静默降级成访客轻节点。
+/// 页面始终展示访客、投票身份、竞选身份三张卡。只有当前身份对应的卡片排在
+/// 首位、标记"当前身份"并展示真实链上值;非当前公民卡只展示该身份涉及的字段名称,
+/// 不能重复泄露当前用户数据。链读取失败时不静默降级成访客。
+///
+/// 右上角按钮随状态切换:纯访客→「注册」(自助占一个匿名 CID);匿名已注册→「更换」
+/// (把 CID 换绑到另一个本地账户);投票/竞选→「更换」但只提示须去注册局。访客卡在
+/// 已占匿名 CID 时于卡内补显「身份CID号」,徽章色不变(仍访客,决策:不新增卡/色)。
+/// 顶部支持下拉刷新。
 class MyIdPage extends StatefulWidget {
   const MyIdPage({super.key, this.myIdService});
 
@@ -29,14 +36,25 @@ class _MyIdPageState extends State<MyIdPage> {
   late final MyIdService _myIdService;
   MyIdState _state = const MyIdState(tier: MyIdTier.visitor);
   bool _loading = true;
+  bool _submitting = false;
 
   bool get _isQueryFailed => _state.status == MyIdStatus.queryFailed;
+
+  /// 右上主操作按钮文案:状态未知(链读失败)不给操作;纯访客「注册」;其余(匿名已
+  /// 注册 / 投票 / 竞选)「更换」。civic 的「更换」点击后只提示走注册局。
+  String? get _actionLabel {
+    if (_isQueryFailed) return null;
+    if (_state.tier == MyIdTier.visitor && !_state.isAnonymousRegistered) {
+      return '注册';
+    }
+    return '更换';
+  }
 
   @override
   void initState() {
     super.initState();
     _myIdService = widget.myIdService ?? MyIdService();
-    // 默认用户切换必须让电子护照立即重排，和广场、聊天共用同一身份版本号。
+    // 身份账户切换必须让身份页立即重排，和广场、聊天共用同一身份版本号。
     WalletManager.walletsRevision.addListener(_loadState);
     _loadState();
   }
@@ -54,11 +72,11 @@ class _MyIdPageState extends State<MyIdPage> {
       nextState = await _myIdService.getState();
     } on Exception catch (error) {
       // Service 正常会把链错误收口为 queryFailed；这里兜住依赖异常，仍不能把
-      // 未知错误误认成访客轻节点。
+      // 未知错误误认成访客。
       nextState = MyIdState(
         tier: MyIdTier.visitor,
         status: MyIdStatus.queryFailed,
-        errorMessage: '电子护照读取失败：$error',
+        errorMessage: '身份读取失败:$error',
       );
     }
     if (!mounted) return;
@@ -66,6 +84,82 @@ class _MyIdPageState extends State<MyIdPage> {
       _state = nextState;
       _loading = false;
     });
+  }
+
+  /// 右上按钮总入口:civic 提示走注册局;匿名已注册→换绑;纯访客→注册。
+  Future<void> _onPrimaryAction() async {
+    if (_submitting || _loading) return;
+    if (_state.isCitizen) {
+      _showSnack('投票 / 竞选身份只能在对应注册局线下更换。');
+      return;
+    }
+    if (_state.isAnonymousRegistered) {
+      await _onRebind();
+    } else {
+      await _onRegister();
+    }
+  }
+
+  Future<void> _onRegister() async {
+    final accounts = await _myIdService.listBindableAccounts();
+    if (!mounted) return;
+    final choice = await showRegisterIdentitySheet(context, accounts: accounts);
+    if (choice == null || !mounted) return;
+    await _runSubmit(() async {
+      final cid = await _myIdService.registerAnonymousCid(
+        institution: choice.institution,
+        bindAccountId: choice.bindAccountId,
+      );
+      return '身份 CID 已注册:$cid';
+    });
+  }
+
+  Future<void> _onRebind() async {
+    final cid = _state.cidNumber;
+    if (cid == null || cid.trim().isEmpty) return;
+    final targets = await _myIdService.listRebindTargets();
+    if (!mounted) return;
+    final newAccountId =
+        await showRebindAccountSheet(context, targets: targets);
+    if (newAccountId == null || !mounted) return;
+    await _runSubmit(() async {
+      await _myIdService.rebindCidTo(
+          cidNumber: cid, newAccountId: newAccountId);
+      return '身份 CID 已换绑到所选账户';
+    });
+  }
+
+  /// 统一提交外壳:置 loading → 跑动作 → 成功提示并回刷身份 → 失败提示;不吞异常。
+  Future<void> _runSubmit(Future<String> Function() action) async {
+    setState(() => _submitting = true);
+    try {
+      final message = await action();
+      if (!mounted) return;
+      _showSnack(message);
+      await _loadState();
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showSnack(_describeError(error), isError: true);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppTheme.danger : null,
+      ),
+    );
+  }
+
+  String _describeError(Object error) {
+    if (error is WalletAuthException) return error.message;
+    final text = error.toString();
+    const prefix = 'Exception: ';
+    return text.startsWith(prefix) ? text.substring(prefix.length) : text;
   }
 
   List<MyIdTier> _orderedTiers() {
@@ -86,56 +180,78 @@ class _MyIdPageState extends State<MyIdPage> {
     final tiers = _orderedTiers();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('电子护照'),
+        title: const Text('身份'),
         centerTitle: true,
         actions: [
-          IconButton(
-            tooltip: '刷新',
-            onPressed: _loading ? null : _loadState,
-            icon: const Icon(Icons.refresh),
-          ),
+          if (_actionLabel != null)
+            _submitting
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 18),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: TextButton(
+                      onPressed: _loading ? null : _onPrimaryAction,
+                      child: Text(_actionLabel!),
+                    ),
+                  ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        children: [
-          if (_loading)
-            const LinearProgressIndicator(minHeight: 2)
-          else
-            const SizedBox(height: 2),
-          if (_isQueryFailed) ...[
-            const SizedBox(height: 12),
-            _PassportMessageBanner(
-              message: _state.errorMessage ?? '链上身份读取失败',
-              isError: true,
-              onRetry: _loading ? null : _loadState,
-            ),
-          ] else if ((_state.errorMessage ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _PassportMessageBanner(message: _state.errorMessage!),
-          ],
-          const SizedBox(height: 14),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: Column(
-                children: [
-                  for (var index = 0; index < tiers.length; index++) ...[
-                    _PassportIdentityCard(
-                      key: ValueKey<String>(
-                          'passport-card-${tiers[index].name}'),
-                      tier: tiers[index],
-                      current: _isCurrent(tiers[index]),
-                      showActualValues: _showActualValues(tiers[index]),
-                      fields: _fieldsFor(tiers[index]),
-                    ),
-                    if (index != tiers.length - 1) const SizedBox(height: 14),
+      body: RefreshIndicator(
+        onRefresh: _loadState,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            if (_loading)
+              const LinearProgressIndicator(minHeight: 2)
+            else
+              const SizedBox(height: 2),
+            if (_isQueryFailed) ...[
+              const SizedBox(height: 12),
+              _PassportMessageBanner(
+                message: _state.errorMessage ?? '链上身份读取失败',
+                isError: true,
+                onRetry: _loading ? null : _loadState,
+              ),
+            ] else if ((_state.errorMessage ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _PassportMessageBanner(message: _state.errorMessage!),
+            ],
+            const SizedBox(height: 14),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Column(
+                  children: [
+                    for (var index = 0; index < tiers.length; index++) ...[
+                      _PassportIdentityCard(
+                        key: ValueKey<String>(
+                            'passport-card-${tiers[index].name}'),
+                        tier: tiers[index],
+                        current: _isCurrent(tiers[index]),
+                        showActualValues: _showActualValues(tiers[index]),
+                        fields: _fieldsFor(tiers[index]),
+                        registeredCid: tiers[index] == MyIdTier.visitor &&
+                                _state.isAnonymousRegistered
+                            ? _state.cidNumber
+                            : null,
+                      ),
+                      if (index != tiers.length - 1) const SizedBox(height: 14),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -150,7 +266,7 @@ class _MyIdPageState extends State<MyIdPage> {
         mono: true,
       ),
       _PassportField(
-        label: '公民CID号',
+        label: '身份CID号',
         value: showValues ? _displayValue(_state.cidNumber) : null,
         mono: true,
       ),
@@ -243,6 +359,7 @@ class _PassportIdentityCard extends StatelessWidget {
     required this.current,
     required this.showActualValues,
     required this.fields,
+    this.registeredCid,
   });
 
   final MyIdTier tier;
@@ -250,8 +367,11 @@ class _PassportIdentityCard extends StatelessWidget {
   final bool showActualValues;
   final List<_PassportField> fields;
 
+  /// 访客卡专用:已占匿名 CID 时的 CID 号(非空则在卡内补显「身份CID号」)。
+  final String? registeredCid;
+
   String get _title => switch (tier) {
-        MyIdTier.visitor => '访客轻节点',
+        MyIdTier.visitor => '注册身份·访客',
         MyIdTier.voting => '公民身份 · 投票',
         MyIdTier.candidate => '公民身份 · 竞选',
       };
@@ -307,7 +427,7 @@ class _PassportIdentityCard extends StatelessWidget {
                       tooltip: _title,
                     ),
                     const SizedBox(width: 12),
-                    // Flexible（非 Expanded）让标题只占内容宽度，匿名标签紧贴“访客轻节点”右侧，
+                    // Flexible（非 Expanded）让标题只占内容宽度，匿名标签紧贴访客卡标题右侧，
                     // 而不是被撑到卡片最右端；标题过长时仍走省略号避免溢出。
                     Flexible(
                       child: Text(
@@ -322,7 +442,7 @@ class _PassportIdentityCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // 访客轻节点默认匿名，用一枚小标签直接点明，替代原“没有公民身份信息”整段空态。
+                    // 访客卡默认匿名，用一枚小标签直接点明，替代原“没有公民身份信息”整段空态。
                     if (tier == MyIdTier.visitor) ...[
                       const SizedBox(width: 8),
                       _AnonymousTag(color: _color),
@@ -330,8 +450,22 @@ class _PassportIdentityCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // 访客轻节点无上链字段：删去空态整块后卡片只保留标题行，高度自然收缩。
-              if (tier != MyIdTier.visitor) ...[
+              // 访客卡:已占匿名 CID 时补一行「身份CID号」;纯访客只留标题行,高度自然收缩。
+              if (tier == MyIdTier.visitor) ...[
+                if (registeredCid != null &&
+                    registeredCid!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  _PassportFieldRow(
+                    field: _PassportField(
+                      label: '身份CID号',
+                      value: registeredCid,
+                      mono: true,
+                    ),
+                    color: _color,
+                    showValue: true,
+                  ),
+                ],
+              ] else ...[
                 const SizedBox(height: 14),
                 for (var index = 0; index < fields.length; index++) ...[
                   _PassportFieldRow(
@@ -371,7 +505,7 @@ class _PassportIdentityCard extends StatelessWidget {
   }
 }
 
-/// 访客轻节点的“匿名”提示标签：小圆角药丸 + 隐私图标，沿用所在卡片的身份色。
+/// 访客卡的“匿名”提示标签：小圆角药丸 + 隐私图标，沿用所在卡片的身份色。
 class _AnonymousTag extends StatelessWidget {
   const _AnonymousTag({required this.color});
 

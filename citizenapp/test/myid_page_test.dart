@@ -57,7 +57,7 @@ void main() {
   testWidgets('三张身份卡始终存在且旧访客文案彻底删除', (tester) async {
     await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
 
-    expect(find.text('访客轻节点'), findsOneWidget);
+    expect(find.text('注册身份·访客'), findsOneWidget);
     expect(find.text('公民身份 · 投票'), findsOneWidget);
     expect(find.text('公民身份 · 竞选'), findsOneWidget);
     // 旧文案零残留
@@ -157,7 +157,7 @@ void main() {
     expect(find.text('链上身份读取失败'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
     expect(find.text('当前身份'), findsNothing);
-    expect(find.text('访客轻节点'), findsOneWidget);
+    expect(find.text('注册身份·访客'), findsOneWidget);
     expect(find.text('公民身份 · 投票'), findsOneWidget);
     expect(find.text('公民身份 · 竞选'), findsOneWidget);
     expect(find.text('—'), findsNothing);
@@ -250,6 +250,90 @@ void main() {
     expect(find.text('选择钱包'), findsNothing);
     expect(find.text('更换钱包'), findsNothing);
     expect(find.text('扫码签名'), findsNothing);
+  });
+
+  testWidgets('页面改名为「身份」,不再叫电子护照', (tester) async {
+    await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
+    expect(find.widgetWithText(AppBar, '身份'), findsOneWidget);
+    expect(find.text('电子护照'), findsNothing);
+  });
+
+  testWidgets('纯访客右上是「注册」按钮,访客卡无 CID 行', (tester) async {
+    await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
+    expect(find.widgetWithText(TextButton, '注册'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '更换'), findsNothing);
+    // 访客卡内不含 CID 行(其余卡的字段名不算)。
+    expect(
+      find.descendant(
+        of: card(MyIdTier.visitor),
+        matching: find.text('身份CID号'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('匿名已注册:右上「更换」+ 访客卡显身份CID号,匿名标签仍在', (tester) async {
+    await pumpPage(
+      tester,
+      const MyIdState(
+        tier: MyIdTier.visitor,
+        votingAccountId: 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E',
+        cidNumber: 'CN000-CTZN1-000000001-2026',
+      ),
+    );
+    expect(find.widgetWithText(TextButton, '更换'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '注册'), findsNothing);
+    final visitorCard = card(MyIdTier.visitor);
+    expect(
+      find.descendant(of: visitorCard, matching: find.text('身份CID号')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: visitorCard,
+        matching: find.text('CN000-CTZN1-000000001-2026'),
+      ),
+      findsOneWidget,
+    );
+    // 决策:不新增卡/色,访客卡仍是「注册身份·访客」+匿名标签。
+    expect(find.byKey(const ValueKey<String>('passport-anonymous-tag')),
+        findsOneWidget);
+  });
+
+  testWidgets('投票公民右上是「更换」按钮', (tester) async {
+    await pumpPage(tester, _votingState);
+    expect(find.widgetWithText(TextButton, '更换'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '注册'), findsNothing);
+  });
+
+  testWidgets('链读失败态右上不显示注册/更换按钮', (tester) async {
+    await pumpPage(
+      tester,
+      const MyIdState(
+        tier: MyIdTier.visitor,
+        status: MyIdStatus.queryFailed,
+        errorMessage: '链上身份读取失败',
+      ),
+    );
+    expect(find.widgetWithText(TextButton, '注册'), findsNothing);
+    expect(find.widgetWithText(TextButton, '更换'), findsNothing);
+  });
+
+  testWidgets('公民卡 CID 字段文案改为「身份CID号」', (tester) async {
+    await pumpPage(tester, _votingState);
+    expect(
+      find.descendant(
+        of: card(MyIdTier.voting),
+        matching: find.text('身份CID号'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('公民CID号'), findsNothing);
+  });
+
+  testWidgets('身份页支持下拉刷新', (tester) async {
+    await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
+    expect(find.byType(RefreshIndicator), findsOneWidget);
   });
 }
 

@@ -42,8 +42,8 @@ class AdminSetValidation {
         )
         .toList(growable: false);
     _validateCount(account.kind, account.institutionCode, normalized.length);
-    final nextAccounts = normalized.map((admin) => admin.account_id).toSet();
-    if (nextAccounts.length != normalized.length) {
+    final nextAccountIds = normalized.map((admin) => admin.account_id).toSet();
+    if (nextAccountIds.length != normalized.length) {
       throw StateError('新管理员列表存在重复公钥');
     }
     if (_sameAdmins(account.admins, normalized)) {
@@ -73,11 +73,11 @@ class AdminSetValidation {
 
   static bool _sameAdmins(List<AdminPerson> left, List<AdminPerson> right) {
     if (left.length != right.length) return false;
-    final leftByAccount = {
+    final leftByAccountId = {
       for (final admin in left) admin.account_id: admin,
     };
     for (final admin in right) {
-      final current = leftByAccount[admin.account_id];
+      final current = leftByAccountId[admin.account_id];
       if (current == null ||
           current.family_name != admin.family_name ||
           current.given_name != admin.given_name) {

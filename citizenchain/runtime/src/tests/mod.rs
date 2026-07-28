@@ -96,6 +96,22 @@ fn sign_citizen_identity_payload(
         .expect("citizen identity signature fits")
 }
 
+/// 注册局占号(占即绑)时,用户对 `(cid_number, account_id)` 的授权签名(域 OP_SIGN_CID_OCCUPY)。
+fn sign_cid_occupy(
+    signer_pair: &sr25519::Pair,
+    cid_number: &citizen_identity::CidNumberBound,
+    account_id: &AccountId,
+) -> citizen_identity::pallet::SignatureOf<Runtime> {
+    let payload = codec::Encode::encode(&(cid_number.clone(), account_id.clone()));
+    let msg = primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_OCCUPY, &payload);
+    signer_pair
+        .sign(&msg)
+        .0
+        .to_vec()
+        .try_into()
+        .expect("cid occupy signature fits")
+}
+
 fn setup_frg_citizen_identity_admin(
     province_code: &[u8],
 ) -> (

@@ -102,7 +102,7 @@ class SquareAuthor {
   }
 
   String get title {
-    return ProfilePresentation.forAccount(accountId).resolveDisplayName(
+    return ProfilePresentation.forAccountId(accountId).resolveDisplayName(
       publicName: displayName,
     );
   }

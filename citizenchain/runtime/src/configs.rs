@@ -582,7 +582,7 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                 | citizen_identity::pallet::Call::occupy_cid {
                     actor_cid_number, ..
                 }
-                | citizen_identity::pallet::Call::occupy_cids_batch {
+                | citizen_identity::pallet::Call::admin_rebind_cid_account {
                     actor_cid_number, ..
                 }
                 | citizen_identity::pallet::Call::revoke_cid {
@@ -1453,6 +1453,97 @@ impl
             let public = sr25519::Public::from_raw(raw_account);
             let msg = primitives::sign::signing_message(
                 primitives::sign::OP_SIGN_CID_REBIND,
+                payload,
+            );
+            sr25519_verify(&signature, &msg, &public)
+        }
+    }
+
+    fn can_manage_anonymous_cid(
+        registrar: &AccountId,
+        actor_cid_number: &[u8],
+        actor_role_code: &[u8],
+        action_code: u32,
+    ) -> bool {
+        let Ok(actor_text) = core::str::from_utf8(actor_cid_number) else {
+            return false;
+        };
+        let Some(actor_code) = primitives::cid::code::institution_code_from_cid_number(actor_text)
+        else {
+            return false;
+        };
+        // 匿名 CID 为全国号、无省市归属:只要求发起主体是在册注册局(省级 FRG /
+        // 市级 CREG)且持 citizen-identity 管理权,不做辖区匹配。
+        const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
+        if actor_code != primitives::cid::code::FRG && actor_code != CITY_REGISTRY_CODE {
+            return false;
+        }
+        let role_subject = entity_primitives::RoleSubject {
+            cid_number: actor_cid_number.to_vec(),
+            role_code: actor_role_code.to_vec(),
+        };
+        let business_action_id = entity_primitives::BusinessActionId {
+            module_tag: entity_primitives::business_action::MODULE_CITIZEN_IDENTITY.to_vec(),
+            action_code,
+        };
+        RuntimeInstitutionRoleAuthorization::is_authorized(
+            registrar,
+            &role_subject,
+            &business_action_id,
+            RolePermissionOperation::Propose,
+        )
+    }
+
+    fn verify_occupy_signature(
+        account_id: &AccountId,
+        payload: &[u8],
+        signature: &citizen_identity::pallet::SignatureOf<Runtime>,
+    ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (account_id, payload);
+            return !signature.is_empty();
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
+                return false;
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+                return false;
+            };
+            let public = sr25519::Public::from_raw(raw_account);
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_CID_OCCUPY,
+                payload,
+            );
+            sr25519_verify(&signature, &msg, &public)
+        }
+    }
+
+    fn verify_admin_rebind_signature(
+        account_id: &AccountId,
+        payload: &[u8],
+        signature: &citizen_identity::pallet::SignatureOf<Runtime>,
+    ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (account_id, payload);
+            return !signature.is_empty();
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
+                return false;
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+                return false;
+            };
+            let public = sr25519::Public::from_raw(raw_account);
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
                 payload,
             );
             sr25519_verify(&signature, &msg, &public)

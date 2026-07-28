@@ -36,7 +36,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(
-      find.text(ProfilePresentation.forAccount(peer).fallbackName),
+      find.text(ProfilePresentation.forAccountId(peer).fallbackName),
       findsOneWidget,
     );
     expect(find.text(peer), findsNothing);

@@ -356,7 +356,7 @@ void main() {
   });
 
   test('公民提案流按默认机构码和订阅机构 CID 合并过滤', () {
-    Uint8List account(int seed) => Uint8List.fromList(
+    Uint8List accountIdBytes(int seed) => Uint8List.fromList(
           List<int>.filled(32, seed),
         );
 
@@ -385,22 +385,22 @@ void main() {
     const ignoredSameCodeCid = 'LN001-CGOVC-000000002-2026';
     final ids = service.filterCitizenProposalFeedIds(
       [
-        proposal(1, code: 'NRC', institution: account(0x11)),
-        proposal(2, code: 'PRC', institution: account(0x22)),
-        proposal(3, code: 'PRB', institution: account(0x33)),
+        proposal(1, code: 'NRC', institution: accountIdBytes(0x11)),
+        proposal(2, code: 'PRC', institution: accountIdBytes(0x22)),
+        proposal(3, code: 'PRB', institution: accountIdBytes(0x33)),
         proposal(
           4,
           code: 'CGOV',
-          institution: account(0x44),
+          institution: accountIdBytes(0x44),
           subjectCidNumbers: const [subscribedCid],
         ),
         proposal(
           5,
           code: 'CGOV',
-          institution: account(0x45),
+          institution: accountIdBytes(0x45),
           subjectCidNumbers: const [ignoredSameCodeCid],
         ),
-        proposal(6, code: 'PRS', institution: account(0x66)),
+        proposal(6, code: 'PRS', institution: accountIdBytes(0x66)),
       ],
       defaultCodes: const {
         'NRC',

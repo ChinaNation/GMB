@@ -289,22 +289,7 @@ pub trait WeightInfo {
 	fn occupy_cid() -> Weight;
 	fn self_occupy_cid() -> Weight;
 	fn self_rebind_cid_account() -> Weight;
-	/// Storage: `PublicManage::Institutions` (r:1 w:0)
-	/// Proof: `PublicManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
-	/// Storage: `PrivateManage::Institutions` (r:1 w:0)
-	/// Proof: `PrivateManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
-	/// Storage: `PublicAdmins::AdminAccounts` (r:1 w:0)
-	/// Proof: `PublicAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(646480), added: 648955, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRoles` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRoles` (`max_values`: None, `max_size`: Some(362), added: 2837, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRoleAssignments` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRoleAssignments` (`max_values`: None, `max_size`: Some(539152), added: 541627, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRolePermissions` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRolePermissions` (`max_values`: None, `max_size`: Some(35205), added: 37680, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::CidRegistry` (r:10000 w:10000)
-	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
-	/// The range of component `n` is `[1, 10000]`.
-	fn occupy_cids_batch(n: u32, ) -> Weight;
+	fn admin_rebind_cid_account() -> Weight;
 	/// Storage: `CitizenIdentity::CidRegistry` (r:1 w:1)
 	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
 	/// Storage: `PublicManage::Institutions` (r:1 w:0)
@@ -727,34 +712,13 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(3))
 			.saturating_add(T::DbWeight::get().writes(3))
 	}
-	/// Storage: `PublicManage::Institutions` (r:1 w:0)
-	/// Proof: `PublicManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
-	/// Storage: `PrivateManage::Institutions` (r:1 w:0)
-	/// Proof: `PrivateManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
-	/// Storage: `PublicAdmins::AdminAccounts` (r:1 w:0)
-	/// Proof: `PublicAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(646480), added: 648955, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRoles` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRoles` (`max_values`: None, `max_size`: Some(362), added: 2837, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRoleAssignments` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRoleAssignments` (`max_values`: None, `max_size`: Some(539152), added: 541627, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRolePermissions` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRolePermissions` (`max_values`: None, `max_size`: Some(35205), added: 37680, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::CidRegistry` (r:10000 w:10000)
-	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
-	/// The range of component `n` is `[1, 10000]`.
-	fn occupy_cids_batch(n: u32, ) -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `20650`
-		//  Estimated: `649945 + n * (2633 +/-0)`
-		// Minimum execution time: 111_000_000 picoseconds.
-		Weight::from_parts(112_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 649945))
-			// Standard Error: 1_320
-			.saturating_add(Weight::from_parts(6_089_532, 0).saturating_mul(n.into()))
+	/// 注册局代换绑(手工权重,dev):同自助换绑 + 注册局岗位授权读(6)、写双向绑定(3);
+	/// 待 benchmark 精化。
+	fn admin_rebind_cid_account() -> Weight {
+		Weight::from_parts(60_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 12000))
 			.saturating_add(T::DbWeight::get().reads(6))
-			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n.into())))
-			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 2633).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().writes(3))
 	}
 	/// Storage: `CitizenIdentity::CidRegistry` (r:1 w:1)
 	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
@@ -1218,34 +1182,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(3))
 			.saturating_add(RocksDbWeight::get().writes(3))
 	}
-	/// Storage: `PublicManage::Institutions` (r:1 w:0)
-	/// Proof: `PublicManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
-	/// Storage: `PrivateManage::Institutions` (r:1 w:0)
-	/// Proof: `PrivateManage::Institutions` (`max_values`: None, `max_size`: Some(773), added: 3248, mode: `MaxEncodedLen`)
-	/// Storage: `PublicAdmins::AdminAccounts` (r:1 w:0)
-	/// Proof: `PublicAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(646480), added: 648955, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRoles` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRoles` (`max_values`: None, `max_size`: Some(362), added: 2837, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRoleAssignments` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRoleAssignments` (`max_values`: None, `max_size`: Some(539152), added: 541627, mode: `MaxEncodedLen`)
-	/// Storage: `PublicManage::InstitutionRolePermissions` (r:1 w:0)
-	/// Proof: `PublicManage::InstitutionRolePermissions` (`max_values`: None, `max_size`: Some(35205), added: 37680, mode: `MaxEncodedLen`)
-	/// Storage: `CitizenIdentity::CidRegistry` (r:10000 w:10000)
-	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)
-	/// The range of component `n` is `[1, 10000]`.
-	fn occupy_cids_batch(n: u32, ) -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `20650`
-		//  Estimated: `649945 + n * (2633 +/-0)`
-		// Minimum execution time: 111_000_000 picoseconds.
-		Weight::from_parts(112_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 649945))
-			// Standard Error: 1_320
-			.saturating_add(Weight::from_parts(6_089_532, 0).saturating_mul(n.into()))
+	fn admin_rebind_cid_account() -> Weight {
+		Weight::from_parts(60_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 12000))
 			.saturating_add(RocksDbWeight::get().reads(6))
-			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(n.into())))
-			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 2633).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().writes(3))
 	}
 	/// Storage: `CitizenIdentity::CidRegistry` (r:1 w:1)
 	/// Proof: `CitizenIdentity::CidRegistry` (`max_values`: None, `max_size`: Some(158), added: 2633, mode: `MaxEncodedLen`)

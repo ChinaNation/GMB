@@ -503,12 +503,12 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       if (signed.challenge_id !== adminActionModal.actionId) {
         throw new Error('签名响应与当前请求不匹配');
       }
-      if (!signed.signer_public_key) {
-        throw new Error('签名响应缺少 signer_public_key');
+      if (!signed.account_id) {
+        throw new Error('签名响应缺少 account_id');
       }
       const result = await commitAdminAction(auth, {
         action_id: adminActionModal.actionId,
-        signer_public_key: signed.signer_public_key,
+        account_id: signed.account_id,
         signature: signed.signature,
         payload_hash: adminActionModal.payloadHash,
       });

@@ -551,8 +551,9 @@ impl Db {
         }
         let province_code = record.province_code.trim().to_string();
         let city_code = record.city_code.trim().to_string();
-        if province_code.is_empty() || city_code.is_empty() {
-            return Err("citizen province_code/city_code is required".to_string());
+        // 省码是分区键必填;市码可空(省级 FRG 注册局无市;匿名占号归办理注册局省分区)。
+        if province_code.is_empty() {
+            return Err("citizen province_code is required".to_string());
         }
         let status = if matches!(record.computed_identity_status(), CitizenStatus::Normal) {
             "ACTIVE"
@@ -667,22 +668,26 @@ impl Db {
             ],
         )
         .map_err(|e| format!("upsert citizens failed: {e}"))?;
-        conn.execute(
-            "INSERT INTO passport_numbers (passport_no, cid_number, province_code, city_code, created_at)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (passport_no) DO UPDATE SET
-                cid_number = EXCLUDED.cid_number,
-                province_code = EXCLUDED.province_code,
-                city_code = EXCLUDED.city_code",
-            &[
-                &record.passport_no,
-                &cid_number,
-                &province_code,
-                &city_code,
-                &record.created_at,
-            ],
-        )
-        .map_err(|e| format!("upsert passport number failed: {e}"))?;
+        // 匿名占号无护照(护照随详情页完善出生日期时一次性签发)→ 空护照号不登记 passport_numbers,
+        // 否则多条匿名记录会在 passport_no='' 主键冲突。
+        if !record.passport_no.trim().is_empty() {
+            conn.execute(
+                "INSERT INTO passport_numbers (passport_no, cid_number, province_code, city_code, created_at)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (passport_no) DO UPDATE SET
+                    cid_number = EXCLUDED.cid_number,
+                    province_code = EXCLUDED.province_code,
+                    city_code = EXCLUDED.city_code",
+                &[
+                    &record.passport_no,
+                    &cid_number,
+                    &province_code,
+                    &city_code,
+                    &record.created_at,
+                ],
+            )
+            .map_err(|e| format!("upsert passport number failed: {e}"))?;
+        }
         Ok(())
     }
 
@@ -2368,6 +2373,11 @@ fn main() {
                 get(domains::citizens::handler::admin_list_citizens)
                     .post(domains::citizens::occupy::prepare_citizen_occupy),
             )
+            // 占号第二段:管理员回传用户占号签名 → 返回管理员冷签请求二维码。
+            .route(
+                "/api/v1/admin/citizens/occupy/submit",
+                post(domains::citizens::occupy::submit_citizen_occupy),
+            )
             .route(
                 "/api/v1/admin/chain/submit",
                 post(domains::citizens::occupy::submit_chain_sign),
@@ -2676,7 +2686,7 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "origin is required" => "ONCHINA_LOGIN_ORIGIN_REQUIRED",
         "session_id is required" => "ONCHINA_LOGIN_SESSION_REQUIRED",
         "domain is required" => "ONCHINA_LOGIN_DOMAIN_REQUIRED",
-        "challenge_id, signer_public_key, signature are required" => {
+        "challenge_id, account_id, signature are required" => {
             "ONCHINA_LOGIN_REQUEST_INVALID"
         }
         "challenge_id and session_id are required" => "ONCHINA_LOGIN_RESULT_PARAM_REQUIRED",
@@ -2684,7 +2694,7 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "sign request already consumed" => "ONCHINA_LOGIN_CHALLENGE_CONSUMED",
         "sign request session mismatch" => "ONCHINA_LOGIN_SESSION_MISMATCH",
         "sign request expired" => "ONCHINA_LOGIN_CHALLENGE_EXPIRED",
-        "signer_public_key must match targeted account_id" => "ONCHINA_LOGIN_SIGNER_MISMATCH",
+        "account_id must match targeted account_id" => "ONCHINA_LOGIN_SIGNER_MISMATCH",
         "login signature verify failed" => "ONCHINA_LOGIN_SIGNATURE_VERIFY_FAILED",
         "chain unreachable" => "ONCHINA_LOGIN_CHAIN_UNREACHABLE",
         "desktop governance institution is not supported by OnChina" => {

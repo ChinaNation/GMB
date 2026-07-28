@@ -224,12 +224,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             .catchError((_) => <ActivatedAdmin>[]),
       ]);
       final adminViews = results[0] as List<InstitutionAdminView>;
-      final adminAccounts = adminViews
+      final adminAccountIds = adminViews
           .map((view) => view.admin.account_id)
           .toList(growable: false);
       final ctx = results[1] as ProposalContext;
       final activated = results[2] as List<ActivatedAdmin>;
-      final coldAccountIds = await _loadImportedColdAccountIds(adminAccounts);
+      final coldAccountIds = await _loadImportedColdAccountIds(adminAccountIds);
       if (ctx.isAdmin) {
         ProposalContextResolver.markInstitutionAdmin(
           _inst?.cidNumber ?? govInfo.cidNumber,

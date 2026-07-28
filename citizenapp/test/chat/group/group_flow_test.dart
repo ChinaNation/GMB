@@ -65,7 +65,7 @@ class _FakeGroupCrypto implements MlsGroupCrypto {
       groupId: groupId,
       epoch: _epoch[groupId]!,
       commit: _wire(groupId, 'commit'),
-      removedAccounts: memberAccountIds,
+      removedAccountIds: memberAccountIds,
     );
   }
 
@@ -132,10 +132,10 @@ Future<ChatDeliveryResult> _okDeliverer(
       state: ChatMessageDeliveryState.sent,
     );
 
-MlsKeyPackage _keyPackage(String account, String device) => MlsKeyPackage(
-      accountId: account,
+MlsKeyPackage _keyPackage(String accountId, String device) => MlsKeyPackage(
+      accountId: accountId,
       deviceId: device,
-      keyPackageId: 'kp-$account',
+      keyPackageId: 'kp-$accountId',
       keyPackageBytes: const [1, 2],
       cipherSuite: '',
       createdAtMillis: 0,
@@ -254,7 +254,7 @@ void main() {
       actorAccountId:
           '0x3333333333333333333333333333333333333333333333333333333333333333',
       actorDeviceId: 'devA',
-      targetAccounts: ['acctC'],
+      targetAccountIds: ['acctC'],
     );
     final afterRemove = await store.readGroup(groupId);
     expect(afterRemove!.memberAccountIds.toSet(), {

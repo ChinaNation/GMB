@@ -1,24 +1,25 @@
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
-/// 内存版 [SecureSeedStore]，供 WalletManager 单测注入。
+/// 内存版 [SecureSeedStore]（ROOTLESS），供 WalletManager 单测注入。
 ///
-/// 通过开关模拟硬件后端的三种异常路径：严档 KEK 失效、用户取消、无锁屏；
-/// 并记录读写计数用于断言"每次签名都读一次 seed""自愈发生了 re-put"等行为。
+/// 只存账户 child mini-secret（按 accountId 分键），无母种子 / 助记词档。通过
+/// 开关模拟硬件后端的三种异常路径：严档 KEK 失效、用户取消、无锁屏；并记录读
+/// 写计数用于断言「每次签名都读一次密钥」「密钥失效 fail-closed」等行为。
 class FakeSecureSeedStore implements SecureSeedStore {
-  final Map<int, String> seeds = <int, String>{};
-  final Map<int, String> mnemonics = <int, String>{};
+  /// accountId → child mini-secret hex。
+  final Map<String, String> accountKeys = <String, String>{};
 
-  /// 这些钱包的 [readSeed] 抛 [SeedKeyInvalidated]（模拟换/加指纹后 KEK 失效）。
-  final Set<int> invalidatedSeeds = <int>{};
+  /// 这些账户的 [readAccountKey] 抛 [SeedKeyInvalidated]（模拟换/加指纹后 KEK 失效）。
+  final Set<String> invalidatedAccountIds = <String>{};
 
-  /// 这些钱包的 [readSeed] 抛 [AuthCancelled]（模拟用户取消/超时）。
-  final Set<int> cancelSeedReads = <int>{};
+  /// 这些账户的 [readAccountKey] 抛 [AuthCancelled]（模拟用户取消/超时）。
+  final Set<String> cancelReads = <String>{};
 
   /// 设备无锁屏：所有写入 fail-closed，[authStatus] 返回 noDeviceLock。
   bool noDeviceLock = false;
 
-  int readSeedCount = 0;
-  int putSeedCount = 0;
+  int readCount = 0;
+  int putCount = 0;
 
   @override
   Future<SecureAuthStatus> authStatus() async {
@@ -28,57 +29,46 @@ class FakeSecureSeedStore implements SecureSeedStore {
   }
 
   @override
-  Future<void> putSeed(int walletIndex, String seedHex) async {
+  Future<void> putAccountKey({
+    required int walletIndex,
+    required String accountId,
+    required String childMiniSecretHex,
+  }) async {
     if (noDeviceLock) {
       throw const NoDeviceCredential('设备无锁屏，无法写入密钥');
     }
-    putSeedCount++;
-    seeds[walletIndex] = seedHex;
-    // 写入即视为 KEK 已重建，清除失效标记（自愈重封装后应可正常读取）。
-    invalidatedSeeds.remove(walletIndex);
+    putCount++;
+    accountKeys[accountId] = childMiniSecretHex;
+    invalidatedAccountIds.remove(accountId);
   }
 
   @override
-  Future<String?> readSeed(int walletIndex) async {
-    readSeedCount++;
-    if (cancelSeedReads.contains(walletIndex)) {
+  Future<String?> readAccountKey({
+    required int walletIndex,
+    required String accountId,
+  }) async {
+    readCount++;
+    if (cancelReads.contains(accountId)) {
       throw const AuthCancelled('用户取消认证');
     }
-    if (invalidatedSeeds.contains(walletIndex)) {
+    if (invalidatedAccountIds.contains(accountId)) {
       throw const SeedKeyInvalidated('KEK 已失效');
     }
-    return seeds[walletIndex];
+    return accountKeys[accountId];
   }
 
-  /// 存在性判定：对齐真实现只探密文 blob 的语义 —— **不计入 [readSeedCount]**
-  /// （它不是一次 seed 读取），也不受 KEK 失效 / 用户取消标记影响。
+  /// 存在性判定：对齐真实现只探密文 blob 的语义 —— **不计入 [readCount]**
+  /// （它不是一次密钥读取），也不受 KEK 失效 / 用户取消标记影响。
   @override
-  Future<bool> hasSeed(int walletIndex) async => seeds.containsKey(walletIndex);
+  Future<bool> hasAccountKey(String accountId) async =>
+      accountKeys.containsKey(accountId);
 
   @override
-  Future<void> deleteSeed(int walletIndex) async {
-    seeds.remove(walletIndex);
-    invalidatedSeeds.remove(walletIndex);
-  }
-
-  @override
-  Future<void> putMnemonic(int walletIndex, String mnemonic) async {
-    if (noDeviceLock) {
-      throw const NoDeviceCredential('设备无锁屏，无法写入密钥');
-    }
-    mnemonics[walletIndex] = mnemonic;
-  }
-
-  @override
-  Future<String?> readMnemonic(int walletIndex) async {
-    if (cancelSeedReads.contains(walletIndex)) {
-      throw const AuthCancelled('用户取消认证');
-    }
-    return mnemonics[walletIndex];
-  }
-
-  @override
-  Future<void> deleteMnemonic(int walletIndex) async {
-    mnemonics.remove(walletIndex);
+  Future<void> deleteAccountKey({
+    required int walletIndex,
+    required String accountId,
+  }) async {
+    accountKeys.remove(accountId);
+    invalidatedAccountIds.remove(accountId);
   }
 }

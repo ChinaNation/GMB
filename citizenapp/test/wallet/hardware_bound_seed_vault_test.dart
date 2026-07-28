@@ -5,6 +5,12 @@ import 'package:citizenapp/wallet/core/fake_hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
+/// 样例 accountId（规范 0x + 64 hex），仅用于键控密文 blob。
+const String _accountA =
+    '0x2afba9278e30ccf6a6ceb3a8b6e336b70068f045c666f2e7f4f9cc5f47db8972';
+const String _accountB =
+    '0xb606fc73f57f03cdb4c932d475ab426043e429cecc2ffff0d2672b0df8398c48';
+
 /// 内存 blob store，避免单测耦合 flutter_secure_storage v10 的通道内部。
 class _MemBlobStore implements VaultBlobStore {
   final Map<String, String> store = <String, String>{};
@@ -31,29 +37,44 @@ void main() {
 
     setUp(() => vault = FakeHardwareBoundSeedVault());
 
-    test('seed put/read/delete round-trip', () async {
-      expect(await vault.readSeed(1), isNull);
-      await vault.putSeed(1, 'deadbeef');
-      expect(await vault.readSeed(1), 'deadbeef');
-      await vault.deleteSeed(1);
-      expect(await vault.readSeed(1), isNull);
+    test('account key put/read/delete round-trip', () async {
+      expect(
+        await vault.readAccountKey(walletIndex: 1, accountId: _accountA),
+        isNull,
+      );
+      await vault.putAccountKey(
+        walletIndex: 1,
+        accountId: _accountA,
+        childMiniSecretHex: 'deadbeef',
+      );
+      expect(
+        await vault.readAccountKey(walletIndex: 1, accountId: _accountA),
+        'deadbeef',
+      );
+      expect(await vault.hasAccountKey(_accountA), isTrue);
+      await vault.deleteAccountKey(walletIndex: 1, accountId: _accountA);
+      expect(
+        await vault.readAccountKey(walletIndex: 1, accountId: _accountA),
+        isNull,
+      );
+      expect(await vault.hasAccountKey(_accountA), isFalse);
     });
 
-    test('mnemonic put/read/delete round-trip', () async {
-      await vault.putMnemonic(2, 'word1 word2 word3');
-      expect(await vault.readMnemonic(2), 'word1 word2 word3');
-      await vault.deleteMnemonic(2);
-      expect(await vault.readMnemonic(2), isNull);
-    });
-
-    test('injected readSeed error thrown once then cleared', () async {
-      await vault.putSeed(1, 'x');
-      vault.nextSeedReadError = const SeedKeyInvalidated('changed');
+    test('injected readAccountKey error thrown once then cleared', () async {
+      await vault.putAccountKey(
+        walletIndex: 1,
+        accountId: _accountA,
+        childMiniSecretHex: 'x',
+      );
+      vault.nextReadError = const SeedKeyInvalidated('changed');
       await expectLater(
-        () => vault.readSeed(1),
+        () => vault.readAccountKey(walletIndex: 1, accountId: _accountA),
         throwsA(isA<SeedKeyInvalidated>()),
       );
-      expect(await vault.readSeed(1), 'x');
+      expect(
+        await vault.readAccountKey(walletIndex: 1, accountId: _accountA),
+        'x',
+      );
     });
 
     test('authStatusValue is returned', () async {
@@ -116,35 +137,80 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    test('putSeed uses strict tier + strict blob key', () async {
-      await vault.putSeed(3, 'seedhex');
+    test('putAccountKey uses strict tier + per-account blob key', () async {
+      await vault.putAccountKey(
+        walletIndex: 3,
+        accountId: _accountA,
+        childMiniSecretHex: 'childhex',
+      );
       final enc = calls.firstWhere((c) => c.method == 'encrypt');
       expect(enc.arguments['tier'], 'strict');
       expect(enc.arguments['walletIndex'], 3);
-      expect(blobs.store['wallet_seed_env_v1_3'], isNotNull);
+      expect(blobs.store['wallet_account_key_v1_$_accountA'], isNotNull);
     });
 
-    test('putMnemonic uses recovery tier + recovery blob key', () async {
-      await vault.putMnemonic(5, 'w1 w2 w3');
-      final enc = calls.firstWhere((c) => c.method == 'encrypt');
-      expect(enc.arguments['tier'], 'recovery');
-      expect(blobs.store['wallet_recovery_env_v1_5'], isNotNull);
+    test('two accounts share wallet KEK but keep distinct blobs', () async {
+      await vault.putAccountKey(
+        walletIndex: 3,
+        accountId: _accountA,
+        childMiniSecretHex: 'a',
+      );
+      await vault.putAccountKey(
+        walletIndex: 3,
+        accountId: _accountB,
+        childMiniSecretHex: 'b',
+      );
+      // 两个账户共享 walletIndex=3 的严档 KEK（tier=strict），各存独立 blob。
+      expect(blobs.store['wallet_account_key_v1_$_accountA'], isNotNull);
+      expect(blobs.store['wallet_account_key_v1_$_accountB'], isNotNull);
+      expect(
+        blobs.store['wallet_account_key_v1_$_accountA'],
+        isNot(blobs.store['wallet_account_key_v1_$_accountB']),
+      );
     });
 
-    test('seed put/read round-trip through channel + blob store', () async {
-      await vault.putSeed(3, 'seedhex');
-      expect(await vault.readSeed(3), 'seedhex');
+    test('account key put/read round-trip through channel + blob store',
+        () async {
+      await vault.putAccountKey(
+        walletIndex: 3,
+        accountId: _accountA,
+        childMiniSecretHex: 'childhex',
+      );
+      expect(
+        await vault.readAccountKey(walletIndex: 3, accountId: _accountA),
+        'childhex',
+      );
     });
 
-    test('readSeed returns null and skips decrypt when no blob', () async {
-      expect(await vault.readSeed(42), isNull);
+    test('hasAccountKey probes blob without decrypt', () async {
+      expect(await vault.hasAccountKey(_accountA), isFalse);
+      await vault.putAccountKey(
+        walletIndex: 3,
+        accountId: _accountA,
+        childMiniSecretHex: 'x',
+      );
+      expect(await vault.hasAccountKey(_accountA), isTrue);
       expect(calls.where((c) => c.method == 'decrypt'), isEmpty);
     });
 
-    test('deleteSeed removes blob and deletes strict KEK', () async {
-      await vault.putSeed(3, 'x');
-      await vault.deleteSeed(3);
-      expect(blobs.store.containsKey('wallet_seed_env_v1_3'), isFalse);
+    test('readAccountKey returns null and skips decrypt when no blob',
+        () async {
+      expect(
+        await vault.readAccountKey(walletIndex: 42, accountId: _accountA),
+        isNull,
+      );
+      expect(calls.where((c) => c.method == 'decrypt'), isEmpty);
+    });
+
+    test('deleteAccountKey removes blob and deletes strict KEK', () async {
+      await vault.putAccountKey(
+        walletIndex: 3,
+        accountId: _accountA,
+        childMiniSecretHex: 'x',
+      );
+      await vault.deleteAccountKey(walletIndex: 3, accountId: _accountA);
+      expect(blobs.store.containsKey('wallet_account_key_v1_$_accountA'),
+          isFalse);
       final del = calls.firstWhere((c) => c.method == 'deleteKey');
       expect(del.arguments['tier'], 'strict');
       expect(del.arguments['walletIndex'], 3);
@@ -153,7 +219,11 @@ void main() {
     test('encrypt returning null throws SecureStoreUnavailable', () async {
       encryptReturnsNull = true;
       await expectLater(
-        () => vault.putSeed(1, 'x'),
+        () => vault.putAccountKey(
+          walletIndex: 1,
+          accountId: _accountA,
+          childMiniSecretHex: 'x',
+        ),
         throwsA(isA<SecureStoreUnavailable>()),
       );
     });
@@ -166,10 +236,17 @@ void main() {
       ('somethingElse', isA<SecureStoreUnavailable>()),
     ];
     for (final mapping in mappings) {
-      test('readSeed maps ${mapping.$1} error code', () async {
-        await vault.putSeed(3, 'x');
+      test('readAccountKey maps ${mapping.$1} error code', () async {
+        await vault.putAccountKey(
+          walletIndex: 3,
+          accountId: _accountA,
+          childMiniSecretHex: 'x',
+        );
         decryptErrorCode = mapping.$1;
-        await expectLater(() => vault.readSeed(3), throwsA(mapping.$2));
+        await expectLater(
+          () => vault.readAccountKey(walletIndex: 3, accountId: _accountA),
+          throwsA(mapping.$2),
+        );
       });
     }
 

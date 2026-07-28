@@ -6,19 +6,25 @@ import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/area_path_formatter.dart';
 import 'package:citizenapp/citizen/public/data/isar_admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
+import 'package:citizenapp/citizen/cid/cid_generator.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
+import 'identity_account_resolver.dart';
 import 'identity_badge_snapshot_store.dart';
-import 'citizen_identity_chain_reader.dart';
 
-/// 电子护照身份档。
+/// 身份页身份档。
 ///
-/// 护照身份钥匙**只认默认用户**(`WalletManager.getDefaultWallet()` = 钱包列表中
-/// 最靠前的热钱包,与聊天/发动态同源)。默认用户切换即跟随;链上一人一 CID 一账户
-/// 一身份,故不再扫全钱包、不再有多身份冲突。
+/// 身份钥匙 = **CID 绑定的钱包账户**(经 [IdentityAccountResolver] 解析:优先账户0、
+/// 未命中查子账户;见 memory `citizenapp-cid-identity-master-key`)。身份主键是 CID 号,
+/// 绑定账户切换(换绑)即跟随;链上一人一 CID 一账户一身份,故无多身份冲突。
 enum MyIdTier {
-  /// 默认用户账户链上无投票身份 → 访客轻节点（默认匿名，无上链公民身份）。
+  /// 访客(默认匿名)。含两子态,均用同一张访客卡、同一枚访客徽章:
+  /// - **纯访客**:账户从未占号(`cidNumber` 为空)。
+  /// - **匿名已注册**:账户自助占了一个 CID 并双向绑定,但链上无 `VotingIdentityByCid`
+  ///   (`cidNumber` 非空,见 [MyIdState.isAnonymousRegistered])。仅在第 1 卡展示该 CID 号,
+  ///   不升级徽章色/卡片(投票/竞选身份只能经注册局线下升级)。
   visitor,
 
   /// 钱包与永久 CID 双向绑定闭环完整，且存在 `VotingIdentityByCid`。
@@ -31,7 +37,7 @@ enum MyIdTier {
 /// 护照有效期/生命周期状态(仅公民档有意义;`queryFailed` 为链读失败兜底)。
 enum MyIdStatus { normal, notYetValid, expired, revoked, queryFailed }
 
-/// 电子护照只读链上状态(默认用户维度)。
+/// 身份页只读链上状态(身份账户维度)。
 class MyIdState {
   const MyIdState({
     required this.tier,
@@ -54,7 +60,7 @@ class MyIdState {
   /// 公民档的护照状态;访客为 null,链读失败为 [MyIdStatus.queryFailed]。
   final MyIdStatus? status;
 
-  /// 链上投票绑定账户 = 默认用户钱包地址(SS58)。访客不显示,为 null。
+  /// 链上投票绑定账户 = CID 绑定账户地址(SS58)。访客不显示,为 null。
   final String? votingAccountId;
   final String? cidNumber;
 
@@ -80,6 +86,11 @@ class MyIdState {
 
   bool get isCitizen => tier == MyIdTier.voting || tier == MyIdTier.candidate;
 
+  /// 访客卡的「已占匿名 CID」子态:访客档 + 已绑定 CID 号(无投票身份)。
+  /// UI 据此在第 1 卡展示 CID 号、把右上按钮从「注册」切成「更换」。
+  bool get isAnonymousRegistered =>
+      tier == MyIdTier.visitor && (cidNumber?.trim().isNotEmpty ?? false);
+
   /// 徽章分色信号:visitor/voting/candidate,与 [IdentityBadgeSnapshotStore] 契约一致。
   String get identityLevel => switch (tier) {
         MyIdTier.candidate => 'candidate',
@@ -94,55 +105,54 @@ class MyIdService {
     ChainRpc? chainRpc,
     AdminDivisionStore? divisionStore,
     IdentityBadgeSnapshotStore? badgeSnapshotStore,
-    CitizenIdentityChainReader? identityChainReader,
+    IdentityAccountResolver? identityResolver,
+    CitizenIdentityRpc? identityRpc,
     DateTime Function()? nowProvider,
+    int Function()? cidYearProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
         _divisionStore = divisionStore ?? IsarAdminDivisionStore(),
         _badgeSnapshotStore =
             badgeSnapshotStore ?? IdentityBadgeSnapshotStore(),
-        _identityChainReader = identityChainReader ??
-            CitizenIdentityChainReader(chainRpc: chainRpc),
-        _nowProvider = nowProvider ?? _beijingNow;
+        _identityResolver = identityResolver ??
+            IdentityAccountResolver(
+              walletManager: walletManager,
+              chainRpc: chainRpc,
+            ),
+        _identityRpc = identityRpc ??
+            CitizenIdentityRpc(
+              chainRpc: chainRpc,
+              walletManager: walletManager,
+            ),
+        _nowProvider = nowProvider ?? _beijingNow,
+        _cidYearProvider = cidYearProvider ?? _utcYear;
 
   final WalletManager _walletManager;
   final AdminDivisionStore _divisionStore;
   final IdentityBadgeSnapshotStore _badgeSnapshotStore;
-  final CitizenIdentityChainReader _identityChainReader;
+  final IdentityAccountResolver _identityResolver;
+  final CitizenIdentityRpc _identityRpc;
   final DateTime Function() _nowProvider;
+  final int Function() _cidYearProvider;
 
   /// 链上护照有效期窗口按 UTC+8 判定(与 runtime `can_vote` 口径一致),
   /// 避免本机时区在跨日边界把"今天"算差一天。
   static DateTime _beijingNow() =>
       DateTime.now().toUtc().add(const Duration(hours: 8));
 
-  /// 读取默认用户的电子护照状态。
-  ///
-  /// 只读默认用户那一个账户的链上 finalized 身份:
-  /// 钱包反查永久 CID 后，必须同时满足 CID Active、CID↔钱包双向绑定和
-  /// `VotingIdentityByCid` 存在；再有 `CandidateIdentityByCid` 才是竞选公民。
-  Future<MyIdState> getState() async {
-    WalletProfile? wallet;
-    try {
-      wallet = await _walletManager.getDefaultWallet();
-    } catch (e) {
-      AppLog.d('myid default wallet load failed: $e');
-      return const MyIdState(
-        tier: MyIdTier.visitor,
-        status: MyIdStatus.queryFailed,
-        errorMessage: '默认用户读取失败',
-      );
-    }
-    if (wallet == null) {
-      // 无热钱包 → 无默认用户 → 访客(引导创建钱包)。
-      return const MyIdState(tier: MyIdTier.visitor, errorMessage: '请先创建钱包');
-    }
+  /// 自助占号的 CID 年份取 **UTC 当前年**(与 CID 生成金标口径一致,不随本机时区漂移)。
+  static int _utcYear() => DateTime.now().toUtc().year;
 
-    CitizenIdentityChainSnapshot? chainIdentity;
+  /// 读取当前身份账户(CID 绑定账户)的身份状态。
+  ///
+  /// 身份主键 = CID 号;先经 [IdentityAccountResolver] 解析出 CID 绑定的钱包账户
+  /// (优先账户0,未命中查子账户,全未命中回退账户0=未注册),再取其链上 finalized
+  /// 身份闭环:CID Active、CID↔账户双向绑定、`VotingIdentityByCid`(+`Candidate` 才竞选)。
+  Future<MyIdState> getState() async {
+    ResolvedIdentity? resolved;
     try {
-      chainIdentity =
-          await _identityChainReader.readByAccountId(wallet.accountId);
+      resolved = await _identityResolver.resolve();
     } catch (e) {
-      AppLog.d('myid chain identity query failed: $e');
+      AppLog.d('myid identity resolve failed: $e');
       // 链读失败不静默降级访客、不覆盖徽章快照,交由 UI 提示重试。
       return const MyIdState(
         tier: MyIdTier.visitor,
@@ -150,13 +160,30 @@ class MyIdService {
         errorMessage: '链上身份读取失败',
       );
     }
+    if (resolved == null) {
+      // 无热钱包 → 无身份账户 → 访客(引导创建钱包)。
+      return const MyIdState(tier: MyIdTier.visitor, errorMessage: '请先创建钱包');
+    }
+
+    final identityAccountId = resolved.accountId;
+    final chainIdentity = resolved.snapshot;
 
     if (chainIdentity == null) {
-      await _persistBadgeSnapshot(wallet.accountId, 'visitor');
+      await _persistBadgeSnapshot(identityAccountId, 'visitor');
       return const MyIdState(tier: MyIdTier.visitor);
     }
 
-    final voting = _decodeVotingIdentity(chainIdentity.votingIdentity);
+    if (chainIdentity.isAnonymous) {
+      // 匿名已注册:访客卡 + 展示 CID;徽章仍访客色(决策:不新增卡/色)。
+      await _persistBadgeSnapshot(identityAccountId, 'visitor');
+      return MyIdState(
+        tier: MyIdTier.visitor,
+        votingAccountId: identityAccountId,
+        cidNumber: chainIdentity.cidNumber,
+      );
+    }
+
+    final voting = _decodeVotingIdentity(chainIdentity.votingIdentity!);
     if (voting == null) {
       // 有记录但解不开 = 数据异常,不静默当访客。
       return const MyIdState(
@@ -178,7 +205,7 @@ class MyIdService {
         candidateRaw == null ? null : _decodeCandidateIdentity(candidateRaw);
     final tier = candidate != null ? MyIdTier.candidate : MyIdTier.voting;
     await _persistBadgeSnapshot(
-      wallet.accountId,
+      identityAccountId,
       tier == MyIdTier.candidate ? 'candidate' : 'voting',
     );
 
@@ -193,7 +220,7 @@ class MyIdService {
     return MyIdState(
       tier: tier,
       status: status,
-      votingAccountId: wallet.accountId,
+      votingAccountId: identityAccountId,
       cidNumber: chainIdentity.cidNumber,
       residenceDistrict: residence,
       passportValidFrom: _formatDateInt(voting.passportValidFrom),
@@ -206,6 +233,100 @@ class MyIdService {
       citizenBirthDate:
           candidate == null ? null : _formatDateInt(candidate.birthDate),
     );
+  }
+
+  /// 自助占一个匿名 CID,把它绑定到用户所选的钱包账户 [bindAccountId](null = 账户0),
+  /// 返回占用的 CID 号。
+  ///
+  /// 身份主键 = CID 号;绑定账户是用户自选的鉴权凭证(可任意 `//n`,私钥泄漏可换绑)。
+  /// [institution] 取 [kCidInstitutionCitizen](公民)/ [kCidInstitutionResident](居民)。
+  /// 年份取 UTC 当前年;CID = f(绑定 accountId, institution, year),撞号由链端 registry
+  /// 兜底吸收。提交经 `self_occupy_cid` 由绑定账户自签自付费(触发一次生物识别);成功后
+  /// 广播身份绑定变化,常驻页重读身份。
+  Future<String> registerAnonymousCid({
+    required String institution,
+    String? bindAccountId,
+  }) async {
+    final wallet = await _walletManager.getDefaultWallet();
+    if (wallet == null) {
+      throw const WalletAuthException('无热钱包,请先创建钱包');
+    }
+    // 绑定账户:默认账户0(=当前热钱包),或用户所选的本地账户。
+    final String resolvedBindAccountId;
+    final String bindSs58;
+    if (bindAccountId == null || bindAccountId == wallet.accountId) {
+      resolvedBindAccountId = wallet.accountId;
+      bindSs58 = wallet.ss58Address;
+    } else {
+      final account = await _walletManager.getAccountByAccountId(bindAccountId);
+      if (account == null) {
+        throw const WalletAuthException('绑定账户不存在');
+      }
+      resolvedBindAccountId = account.accountId;
+      bindSs58 = account.ss58Address;
+    }
+    final cid = generateCitizenCid(
+      accountId: resolvedBindAccountId,
+      institution: institution,
+      year: _cidYearProvider(),
+    );
+    await _identityRpc.selfOccupyCid(
+      cidNumber: cid,
+      accountId: resolvedBindAccountId,
+      fromSs58Address: bindSs58,
+    );
+    WalletManager.notifyIdentityBindingChanged();
+    return cid;
+  }
+
+  /// 把当前身份 CID [cidNumber] 换绑到另一本地账户 [newAccountId]。
+  ///
+  /// 旧账户 = **当前 CID 绑定账户**(经 [IdentityAccountResolver] 解析,可为任意 `//n`,
+  /// 非恒账户0),对 `(cid,new)` 授权;新账户自签提交 `self_rebind_cid_account`(旧、新各
+  /// 触发一次生物识别)。换绑成功后 CID 归新账户、广播身份绑定变化,常驻页/身份页跟随。
+  /// 仅**匿名 CID** 可自助换绑;投票/竞选链端强制走注册局(`CivicRebindRequiresRegistrar`)。
+  Future<void> rebindCidTo({
+    required String cidNumber,
+    required String newAccountId,
+  }) async {
+    final resolved = await _identityResolver.resolve();
+    if (resolved == null || !resolved.isRegistered) {
+      throw const WalletAuthException('当前无已注册身份,无法换绑');
+    }
+    final oldAccountId = resolved.accountId;
+    final newAccount = await _walletManager.getAccountByAccountId(newAccountId);
+    if (newAccount == null) {
+      throw const WalletAuthException('目标账户不存在');
+    }
+    if (newAccount.accountId == oldAccountId) {
+      throw const WalletAuthException('目标账户与当前身份账户相同');
+    }
+    await _identityRpc.selfRebindCidAccount(
+      cidNumber: cidNumber,
+      newAccountId: newAccount.accountId,
+      oldAccountId: oldAccountId,
+      newFromSs58Address: newAccount.ss58Address,
+    );
+    WalletManager.notifyIdentityBindingChanged();
+  }
+
+  /// 列出可作换绑目标的本地账户(当前身份账户以外的全部账户)。
+  Future<List<Account>> listRebindTargets() async {
+    final wallet = await _walletManager.getDefaultWallet();
+    if (wallet == null) return const <Account>[];
+    final resolved = await _identityResolver.resolve();
+    final currentIdentityAccountId = resolved?.accountId ?? wallet.accountId;
+    final accounts = await _walletManager.getAccounts(wallet.accountId);
+    return accounts
+        .where((account) => account.accountId != currentIdentityAccountId)
+        .toList(growable: false);
+  }
+
+  /// 列出注册 CID 时可选的绑定账户(当前热钱包下全部本地账户,含账户0)。
+  Future<List<Account>> listBindableAccounts() async {
+    final wallet = await _walletManager.getDefaultWallet();
+    if (wallet == null) return const <Account>[];
+    return _walletManager.getAccounts(wallet.accountId);
   }
 
   /// 把三段行政区码预 join 成「省·市·镇」展示串;省码空则返回空串。
@@ -234,7 +355,7 @@ class MyIdService {
     }
   }
 
-  /// 写默认用户的身份徽章快照,供非链页面(个人页/广场)展示,不作权限依据。
+  /// 写身份账户的身份徽章快照,供非链页面(个人页/广场)展示,不作权限依据。
   Future<void> _persistBadgeSnapshot(String accountId, String level) async {
     try {
       await _badgeSnapshotStore.write(

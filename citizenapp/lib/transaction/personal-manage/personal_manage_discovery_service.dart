@@ -83,14 +83,14 @@ class PersonalManageDiscoveryService {
       );
     }
 
-    final scannedAccounts = <String>{};
+    final scannedAccountIds = <String>{};
     var newlyAdded = 0;
 
     for (final acc in mine) {
       final personalAccountId = acc.personalAccountId!;
       final meta = metas[personalAccountId];
       if (meta == null) continue;
-      scannedAccounts.add(personalAccountId);
+      scannedAccountIds.add(personalAccountId);
       final added = await _upsertPersonal(
         accountId: personalAccountId,
         name: meta.accountName,
@@ -103,7 +103,7 @@ class PersonalManageDiscoveryService {
       if (added) newlyAdded++;
     }
 
-    final orphans = await _reverseValidateAndDelete(scannedAccounts);
+    final orphans = await _reverseValidateAndDelete(scannedAccountIds);
 
     return PersonalManageDiscoveryStats(
       subjectsScanned: scan.totalKeys,
@@ -159,7 +159,7 @@ class PersonalManageDiscoveryService {
     });
   }
 
-  Future<int> _reverseValidateAndDelete(Set<String> scannedAccounts) async {
+  Future<int> _reverseValidateAndDelete(Set<String> scannedAccountIds) async {
     var closed = 0;
     await WalletIsar.instance.writeTxn((isar) async {
       final stalePersonals = await isar.personalAccountEntitys
@@ -167,7 +167,7 @@ class PersonalManageDiscoveryService {
           .discoveredViaAdminEqualTo(true)
           .findAll();
       for (final p in stalePersonals) {
-        if (!scannedAccounts.contains(_requireAccountId(p.accountId))) {
+        if (!scannedAccountIds.contains(_requireAccountId(p.accountId))) {
           // 链上注销后仍保留本地账户入口，只把状态标成已注销；
           // 用户在详情页点“删除”时才真正清空本机数据。
           await PersonalMultisigLocalState.putStatusInTxn(

@@ -513,7 +513,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       await submitChainSign(
         auth,
         result.request_id,
-        signed.signer_public_key,
+        signed.account_id,
         signed.signature,
       );
       if (isPrivate && privateType) {

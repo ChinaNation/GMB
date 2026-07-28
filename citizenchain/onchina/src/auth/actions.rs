@@ -52,7 +52,7 @@ pub(crate) struct CommitAdminActionInput {
     action_id: String,
     /// 冷钱包扫码签名(PasskeyColdSign 档必填;Session 动作不走 commit)。
     #[serde(default)]
-    signer_public_key: Option<String>,
+    account_id: Option<String>,
     #[serde(default)]
     signature: Option<String>,
     #[serde(default)]
@@ -199,12 +199,12 @@ async fn ensure_account_id_on_chain_admin(
 async fn ensure_signer_on_chain_admin(
     db: &Db,
     actor_cid_number: &str,
-    signer_public_key: &str,
+    account_id: &str,
 ) -> Result<(), axum::response::Response> {
     ensure_account_id_on_chain_admin(
         db,
         actor_cid_number,
-        signer_public_key,
+        account_id,
         "not an on-chain admin",
     )
     .await
@@ -254,7 +254,7 @@ pub(crate) async fn prepare_admin_action(
                 qr_proto: crate::core::qr::QR_V1,
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
-                actor_public_key: ctx.account_id.as_str(),
+                account_id: ctx.account_id.as_str(),
                 actor_cid_number: actor_cid_number.as_str(),
                 actor_province_name: province.as_str(),
                 target: preview.target.as_str(),
@@ -388,13 +388,13 @@ pub(crate) async fn commit_admin_action(
     }
     // ── 冷签 step-up:冷钱包扫码签名 + signer ∈ 本机构链上 Active 集合。
     //    所有可 commit 动作(Session 已在上方拒绝)一律走此校验。
-    let signer_public_key = match input.signer_public_key.as_deref() {
+    let account_id = match input.account_id.as_deref() {
         Some(v) => v,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "signer_public_key is required",
+                "account_id is required",
             )
         }
     };
@@ -408,7 +408,7 @@ pub(crate) async fn commit_admin_action(
     };
     if let Err(resp) = verify_account_signature(
         ctx.account_id.as_str(),
-        signer_public_key,
+        account_id,
         signature,
         payload_hash,
         challenge.payload_hash.as_str(),
@@ -417,7 +417,7 @@ pub(crate) async fn commit_admin_action(
         return resp;
     }
     if let Err(resp) =
-        ensure_signer_on_chain_admin(&state.db, &actor_cid_number, signer_public_key).await
+        ensure_signer_on_chain_admin(&state.db, &actor_cid_number, account_id).await
     {
         return resp;
     }

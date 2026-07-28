@@ -25,6 +25,14 @@ class WalletProfileEntity {
   @Index(unique: true, replace: true)
   late String accountId;
 
+  /// 主指纹 = 账户0(`//0`)的 accountId,唯一标识这套助记词(一只钱包)。
+  ///
+  /// 无根多账户模型下,同一 masterId 下的全部账户([AccountEntity])共享一套助记词;
+  /// interim identity = 账户0,故热钱包的 masterId 恒等于本行 accountId。冷钱包无
+  /// 派生概念,masterId 亦取其 accountId。用于「account.masterId → 定位 walletIndex」。
+  @Index()
+  late String masterId;
+
   @Index(unique: true, replace: true)
   late String ss58Address;
 
@@ -39,6 +47,37 @@ class WalletProfileEntity {
   /// 用户拖拽排序后的稳定顺序。
   /// 数值越小越靠前；排序时优先按 sortOrder 升序，相同则按 walletIndex 兜底。
   int sortOrder = 0;
+}
+
+/// 一只钱包(masterId)下按派生序号展开的一个账户(`//index`,含账户0 = `//0`)。
+///
+/// 无根模型:本行只存该账户的公开身份(accountId / ss58 / 序号 / 显示名),叶子私钥
+/// (child mini-secret)只落硬件金库([SecureSeedStore],按 accountId 分键)。同一
+/// masterId 下多行 = 一套助记词展开的多账户;账户0 是锚点,masterId = 账户0.accountId。
+@collection
+class AccountEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 所属钱包主指纹(= 账户0 的 accountId);按此分组取一只钱包的全部账户。
+  @Index()
+  late String masterId;
+
+  /// 派生序号:`//index`(账户0 = 0,其余 1..1989)。
+  late int accountIndex;
+
+  /// 账户公钥 accountId(小写 `0x` + 64 位十六进制),全局唯一。
+  @Index(unique: true, replace: true)
+  late String accountId;
+
+  /// 账户本链 SS58 地址,全局唯一。
+  @Index(unique: true, replace: true)
+  late String ss58Address;
+
+  /// 账户显示名(账户0 默认「账户0」,其余「账户<index>」)。
+  late String accountName;
+
+  /// 本地创建/发现时间(毫秒)。
+  late int createdAtMillis;
 }
 
 @collection
@@ -135,27 +174,27 @@ class MultisigLocalDetailSnapshot {
       final adminRaw = decoded['admins'];
       if (adminRaw is! List) return null;
       final admins = <AdminPerson>[];
-      final accounts = <String>{};
+      final accountIds = <String>{};
       for (final item in adminRaw) {
         if (item is! Map) return null;
-        final account = item['account_id'];
+        final accountId = item['account_id'];
         final cidNumber = item['cid_number'];
         final familyName = item['family_name'];
         final givenName = item['given_name'];
-        if (account is! String ||
+        if (accountId is! String ||
             cidNumber is! String ||
             familyName is! String ||
             givenName is! String ||
-            account.isEmpty ||
+            accountId.isEmpty ||
             familyName.isEmpty ||
             givenName.isEmpty ||
-            !isAccountIdText(account) ||
-            !accounts.add(account)) {
+            !isAccountIdText(accountId) ||
+            !accountIds.add(accountId)) {
           return null;
         }
         admins.add(
           AdminPerson(
-            account_id: account,
+            account_id: accountId,
             cid_number: cidNumber,
             family_name: familyName,
             given_name: givenName,
@@ -985,6 +1024,7 @@ class WalletIsar {
         existing.localTxEntitys;
         existing.chatConversationEntitys;
         existing.chatRouteCacheEntitys;
+        existing.accountEntitys;
         return existing;
       } catch (_) {
         // schema 不完整，关闭旧实例后重新打开
@@ -995,6 +1035,7 @@ class WalletIsar {
     final dir = await _resolveDirectory();
     final schemas = [
       WalletProfileEntitySchema,
+      AccountEntitySchema,
       WalletSettingsEntitySchema,
       LoginReplayEntitySchema,
       AppKvEntitySchema,

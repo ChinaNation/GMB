@@ -30,16 +30,19 @@ class SecureStorageBlobStore implements VaultBlobStore {
   Future<void> delete(String key) => _storage.delete(key: key);
 }
 
-/// [SecureSeedStore] 的硬件绑定后端（信封加密 + auth-bound KEK）。
+/// [SecureSeedStore] 的硬件绑定后端（信封加密 + auth-bound KEK）——ROOTLESS。
 ///
-/// seed / 助记词经原生桥（Android RSA-2048 KEK + BiometricPrompt.CryptoObject）
-/// 加密成密文 blob，blob 由 [VaultBlobStore] 静默持久化：
+/// 账户的 child mini-secret 经原生桥（Android RSA-2048 KEK +
+/// BiometricPrompt.CryptoObject）加密成密文 blob，blob 由 [VaultBlobStore]
+/// 静默持久化：
 /// - 写（put）：公钥加密，**静默**，不弹生物识别（创建钱包 0 弹窗）。
-/// - 读（read）：私钥解密，触发一次系统认证 —— 严档 seed 仅强生物识别、宽档
-///   助记词允许生物识别或设备凭证。
+/// - 读（read）：私钥解密，**触发一次强生物识别**（唯一的严档金库）。
+///
+/// KEK 按 walletIndex 绑定，密文 blob 按 accountId 分键——同一钱包多账户共享
+/// 一把严档 KEK，各账户各存一份密文；[hasAccountKey] 只探 blob 存在性。
 ///
 /// 原生错误按 [SecureSeedException] 子类型分类，供 [WalletManager] 决定
-/// 自愈（[SeedKeyInvalidated]）/ 中止（[AuthCancelled]）/ fail-closed
+/// 中止（[AuthCancelled]）/ 提示重新导入（[SeedKeyInvalidated]）/ fail-closed
 /// （[NoDeviceCredential]）/ 上抛（[SecureStoreUnavailable]）。
 class HardwareBoundSeedVault implements SecureSeedStore {
   HardwareBoundSeedVault({
@@ -50,21 +53,18 @@ class HardwareBoundSeedVault implements SecureSeedStore {
 
   static const String _channelName = 'org.citizenapp/hw_seed_vault';
   static const String _tierStrict = 'strict';
-  static const String _tierRecovery = 'recovery';
 
   final MethodChannel _channel;
   final VaultBlobStore _blobStore;
 
-  static String _seedBlobKey(int walletIndex) =>
-      'wallet_seed_env_v1_$walletIndex';
-  static String _recoveryBlobKey(int walletIndex) =>
-      'wallet_recovery_env_v1_$walletIndex';
+  static String _accountBlobKey(String accountId) =>
+      'wallet_account_key_v1_$accountId';
 
   @override
   Future<SecureAuthStatus> authStatus() async {
     try {
       final res = await _channel.invokeMapMethod<String, dynamic>('authStatus');
-      // 方案 A：创建热钱包要求已录入强生物识别（严档 seed 是纯生物档）。
+      // 方案 A：创建热钱包要求已录入强生物识别（严档 child 是纯生物档）。
       final biometric = res?['strongBiometricEnrolled'] == true;
       return biometric
           ? SecureAuthStatus.available
@@ -77,41 +77,38 @@ class HardwareBoundSeedVault implements SecureSeedStore {
   }
 
   @override
-  Future<void> putSeed(int walletIndex, String seedHex) =>
-      _put(_tierStrict, _seedBlobKey(walletIndex), walletIndex, seedHex);
+  Future<void> putAccountKey({
+    required int walletIndex,
+    required String accountId,
+    required String childMiniSecretHex,
+  }) =>
+      _put(_accountBlobKey(accountId), walletIndex, childMiniSecretHex);
 
   @override
-  Future<String?> readSeed(int walletIndex) =>
-      _read(_tierStrict, _seedBlobKey(walletIndex), walletIndex);
+  Future<String?> readAccountKey({
+    required int walletIndex,
+    required String accountId,
+  }) =>
+      _read(_accountBlobKey(accountId), walletIndex);
 
   /// 只读密文 blob 判存在，**不调 `decrypt`**——因此不触发生物识别。
   @override
-  Future<bool> hasSeed(int walletIndex) async {
+  Future<bool> hasAccountKey(String accountId) async {
     try {
-      return await _blobStore.read(_seedBlobKey(walletIndex)) != null;
+      return await _blobStore.read(_accountBlobKey(accountId)) != null;
     } on PlatformException catch (e) {
       throw SecureStoreUnavailable(e.message ?? e.code);
     }
   }
 
   @override
-  Future<void> deleteSeed(int walletIndex) =>
-      _delete(_tierStrict, _seedBlobKey(walletIndex), walletIndex);
-
-  @override
-  Future<void> putMnemonic(int walletIndex, String mnemonic) =>
-      _put(_tierRecovery, _recoveryBlobKey(walletIndex), walletIndex, mnemonic);
-
-  @override
-  Future<String?> readMnemonic(int walletIndex) =>
-      _read(_tierRecovery, _recoveryBlobKey(walletIndex), walletIndex);
-
-  @override
-  Future<void> deleteMnemonic(int walletIndex) =>
-      _delete(_tierRecovery, _recoveryBlobKey(walletIndex), walletIndex);
+  Future<void> deleteAccountKey({
+    required int walletIndex,
+    required String accountId,
+  }) =>
+      _delete(_accountBlobKey(accountId), walletIndex);
 
   Future<void> _put(
-    String tier,
     String blobKey,
     int walletIndex,
     String plaintext,
@@ -120,7 +117,7 @@ class HardwareBoundSeedVault implements SecureSeedStore {
     try {
       final result =
           await _channel.invokeMethod<String>('encrypt', <String, dynamic>{
-        'tier': tier,
+        'tier': _tierStrict,
         'walletIndex': walletIndex,
         'plaintext': plaintext,
       });
@@ -138,7 +135,7 @@ class HardwareBoundSeedVault implements SecureSeedStore {
     }
   }
 
-  Future<String?> _read(String tier, String blobKey, int walletIndex) async {
+  Future<String?> _read(String blobKey, int walletIndex) async {
     final String? blob;
     try {
       blob = await _blobStore.read(blobKey);
@@ -150,7 +147,7 @@ class HardwareBoundSeedVault implements SecureSeedStore {
     }
     try {
       return await _channel.invokeMethod<String>('decrypt', <String, dynamic>{
-        'tier': tier,
+        'tier': _tierStrict,
         'walletIndex': walletIndex,
         'blob': blob,
       });
@@ -159,7 +156,7 @@ class HardwareBoundSeedVault implements SecureSeedStore {
     }
   }
 
-  Future<void> _delete(String tier, String blobKey, int walletIndex) async {
+  Future<void> _delete(String blobKey, int walletIndex) async {
     try {
       await _blobStore.delete(blobKey);
     } on PlatformException catch (e) {
@@ -167,7 +164,7 @@ class HardwareBoundSeedVault implements SecureSeedStore {
     }
     try {
       await _channel.invokeMethod<void>('deleteKey', <String, dynamic>{
-        'tier': tier,
+        'tier': _tierStrict,
         'walletIndex': walletIndex,
       });
     } on PlatformException catch (e) {

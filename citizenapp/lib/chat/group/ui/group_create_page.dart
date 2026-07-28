@@ -70,7 +70,7 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
     try {
       final group = await _runtime.createGroup(
         name: _nameController.text.trim(),
-        inviteeAccounts: _selected.toList(growable: false),
+        inviteeAccountIds: _selected.toList(growable: false),
       );
       if (!mounted) return;
       Navigator.of(context).pop();

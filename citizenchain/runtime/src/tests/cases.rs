@@ -1164,15 +1164,14 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
             real_cid_number("RUNTIME-0001", "CTZN", "1")
                 .try_into()
                 .expect("cid number should fit");
-        // 占号先行:身份写入前置。
+        // 占号先行:身份写入前置(占即绑用户钱包账户 + 用户占号签名)。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
             actor_cid_number.clone(),
             actor_role_code.clone(),
             citizen_cid_number.clone(),
-            [7u8; 32],
-            b"HU".to_vec().try_into().expect("province should fit"),
-            b"4301".to_vec().try_into().expect("city should fit"),
+            account_id.clone(),
+            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id),
         ));
         let payload = build_voting_identity_payload(
             account_id.clone(),
@@ -1243,17 +1242,18 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
         let signer_pair =
             sr25519::Pair::from_string("//citizen-wallet-3", None).expect("signer pair");
         let account_id = AccountId::new(signer_pair.public().0);
-        // 占号先行:身份写入前置。
+        let citizen_cid_number: citizen_identity::CidNumberBound =
+            real_cid_number("RUNTIME-0003", "CTZN", "1")
+                .try_into()
+                .expect("cid number should fit");
+        // 占号先行:身份写入前置(占即绑用户钱包账户 + 用户占号签名)。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
             actor_cid_number.clone(),
             actor_role_code.clone(),
-            real_cid_number("RUNTIME-0003", "CTZN", "1")
-                .try_into()
-                .expect("cid number should fit"),
-            [7u8; 32],
-            b"HU".to_vec().try_into().expect("province should fit"),
-            b"4301".to_vec().try_into().expect("city should fit"),
+            citizen_cid_number.clone(),
+            account_id.clone(),
+            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id),
         ));
         let voting = build_voting_identity_payload(
             account_id.clone(),
@@ -1355,18 +1355,18 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_account_id() {
             sr25519::Pair::from_string("//square-citizen-wallet", None).expect("signer pair");
         let account_id = AccountId::new(signer_pair.public().0);
         let cid_number = real_cid_number("SQUARE-0001", "CTZN", "1");
+        let citizen_cid_number: citizen_identity::CidNumberBound = cid_number
+            .clone()
+            .try_into()
+            .expect("cid number should fit");
 
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
             actor_cid_number.clone(),
             actor_role_code.clone(),
-            cid_number
-                .clone()
-                .try_into()
-                .expect("cid number should fit"),
-            [8u8; 32],
-            b"HU".to_vec().try_into().expect("province should fit"),
-            b"4301".to_vec().try_into().expect("city should fit"),
+            citizen_cid_number.clone(),
+            account_id.clone(),
+            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id),
         ));
         let payload = build_voting_identity_payload(
             account_id.clone(),

@@ -113,6 +113,34 @@ impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
     ) -> bool {
         signature.as_slice() == b"valid"
     }
+
+    fn can_manage_anonymous_cid(
+        registrar: &u64,
+        actor_cid_number: &[u8],
+        actor_role_code: &[u8],
+        action_code: u32,
+    ) -> bool {
+        *registrar == 100
+            && actor_cid_number == registrar_cid_number().as_slice()
+            && actor_role_code == registrar_role_code().as_slice()
+            && matches!(action_code, 6)
+    }
+
+    fn verify_occupy_signature(
+        _account_id: &u64,
+        _payload: &[u8],
+        signature: &citizen_identity::pallet::SignatureOf<Test>,
+    ) -> bool {
+        signature.as_slice() == b"valid"
+    }
+
+    fn verify_admin_rebind_signature(
+        _account_id: &u64,
+        _payload: &[u8],
+        signature: &citizen_identity::pallet::SignatureOf<Test>,
+    ) -> bool {
+        signature.as_slice() == b"valid"
+    }
 }
 
 /// 固定链上时间(2026-07-02 00:00 UTC),集成测试夹具护照落在有效期窗口内。
@@ -189,7 +217,7 @@ fn registrar_role_code() -> citizen_identity::RoleCodeBound {
         .expect("registrar role code should fit")
 }
 
-/// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100,作用域 43/4301)。
+/// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100)。占即绑账户 1。
 fn occupy_tag(tag: &str) {
     assert_ok!(CitizenIdentity::occupy_cid(
         RuntimeOrigin::signed(100),
@@ -198,9 +226,8 @@ fn occupy_tag(tag: &str) {
         citizen_cid_number(tag)
             .try_into()
             .expect("cid number should fit"),
-        [7u8; 32],
-        b"43".to_vec().try_into().expect("province should fit"),
-        b"4301".to_vec().try_into().expect("city should fit"),
+        1,
+        valid_signature(),
     ));
 }
 

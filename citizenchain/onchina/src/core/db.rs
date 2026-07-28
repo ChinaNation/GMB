@@ -116,8 +116,8 @@ impl Db {
              CREATE TABLE IF NOT EXISTS chain_sign_sessions (
                 request_id TEXT PRIMARY KEY,
                 purpose TEXT NOT NULL,
-                actor_public_key TEXT NOT NULL
-                    CHECK (actor_public_key ~ '^0x[0-9a-f]{64}$'),
+                account_id TEXT NOT NULL
+                    CHECK (account_id ~ '^0x[0-9a-f]{64}$'),
                 call_data TEXT NOT NULL,
                 nonce BIGINT NOT NULL,
                 signing_hash TEXT NOT NULL,

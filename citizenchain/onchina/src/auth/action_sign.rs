@@ -24,7 +24,7 @@ pub(crate) struct AdminSignedPayload<'a> {
     pub(crate) qr_proto: &'static str,
     pub(crate) action_id: &'a str,
     pub(crate) action_type: &'a str,
-    pub(crate) actor_public_key: &'a str,
+    pub(crate) account_id: &'a str,
     pub(crate) actor_cid_number: &'a str,
     pub(crate) actor_province_name: &'a str,
     pub(crate) target: &'a str,
@@ -53,17 +53,17 @@ pub(crate) fn hash_json(value: &serde_json::Value) -> String {
 /// ③ sr25519 验签通过。调用方(actions::commit)还会额外校验 signer ∈ 本机构链上 Active 集合。
 pub(crate) fn verify_account_signature(
     expected_actor_account_id: &str,
-    signer_public_key: &str,
+    account_id: &str,
     signature: &str,
     submitted_payload_hash: &str,
     expected_payload_hash: &str,
     payload_text: &str,
 ) -> Result<(), axum::response::Response> {
-    if !same_account_id(expected_actor_account_id, signer_public_key) {
+    if !same_account_id(expected_actor_account_id, account_id) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "signer_public_key does not match actor_account_id",
+            "account_id does not match actor_account_id",
         ));
     }
     if submitted_payload_hash.trim().to_lowercase() != expected_payload_hash {
@@ -73,7 +73,7 @@ pub(crate) fn verify_account_signature(
             "payload hash mismatch",
         ));
     }
-    if !crate::auth::login::verify_admin_signature(signer_public_key, payload_text, signature) {
+    if !crate::auth::login::verify_admin_signature(account_id, payload_text, signature) {
         return Err(api_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             2004,
@@ -94,7 +94,7 @@ mod tests {
             qr_proto: "QR_V1",
             action_id: "action-1",
             action_type: "INSTITUTION_CREATE_ACCOUNT",
-            actor_public_key: "0x1111111111111111111111111111111111111111111111111111111111111111",
+            account_id: "0x1111111111111111111111111111111111111111111111111111111111111111",
             actor_cid_number: "LN001-FRG0G-000000001-2026",
             actor_province_name: "北京市",
             target: "target",
@@ -105,7 +105,7 @@ mod tests {
         });
         assert_eq!(
             text,
-            "{\"domain\":\"onchina_admin_governance\",\"qr_proto\":\"QR_V1\",\"action_id\":\"action-1\",\"action_type\":\"INSTITUTION_CREATE_ACCOUNT\",\"actor_public_key\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"actor_cid_number\":\"LN001-FRG0G-000000001-2026\",\"actor_province_name\":\"北京市\",\"target\":\"target\",\"request_hash\":\"0xaa\",\"before_hash\":\"0xbb\",\"after_hash\":\"0xcc\",\"expires_at\":123}"
+            "{\"domain\":\"onchina_admin_governance\",\"qr_proto\":\"QR_V1\",\"action_id\":\"action-1\",\"action_type\":\"INSTITUTION_CREATE_ACCOUNT\",\"account_id\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"actor_cid_number\":\"LN001-FRG0G-000000001-2026\",\"actor_province_name\":\"北京市\",\"target\":\"target\",\"request_hash\":\"0xaa\",\"before_hash\":\"0xbb\",\"after_hash\":\"0xcc\",\"expires_at\":123}"
         );
     }
 }

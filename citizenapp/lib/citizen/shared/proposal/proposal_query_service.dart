@@ -237,9 +237,9 @@ class ProposalQueryService {
     InstitutionInfo institution,
   ) async {
     if (isPersonalAccountIdentity(institution.cidNumber)) {
-      final accounts = await fetchAdminSnapshot(proposalId, institution);
-      return accounts
-          .map((account) => EligibleVoterTicket(voterAccountId: account))
+      final accountIds = await fetchAdminSnapshot(proposalId, institution);
+      return accountIds
+          .map((accountId) => EligibleVoterTicket(voterAccountId: accountId))
           .toList(growable: false);
     }
     final plan = await fetchVotePlan(proposalId);
@@ -250,14 +250,14 @@ class ProposalQueryService {
     for (final subject in plan.voterSubjects) {
       final role = subject.roleSubject;
       if (role == null || role.cidNumber != institution.cidNumber) continue;
-      final accounts = await fetchRoleVoterSnapshot(
+      final accountIds = await fetchRoleVoterSnapshot(
         proposalId,
         role.cidNumber,
         role.roleCode,
       );
-      for (final account in accounts) {
+      for (final accountId in accountIds) {
         tickets.add(EligibleVoterTicket(
-          voterAccountId: account,
+          voterAccountId: accountId,
           cidNumber: role.cidNumber,
           voterRoleCode: role.roleCode,
         ));

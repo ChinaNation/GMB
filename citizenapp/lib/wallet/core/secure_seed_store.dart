@@ -1,54 +1,52 @@
-/// 钱包密钥的硬件级安全存储抽象。
+/// 钱包账户密钥的硬件级安全存储抽象（ROOTLESS 单账户模型，S7.1）。
 ///
-/// 公民 App 的热钱包 seed 与助记词必须绑定系统级用户认证（生物识别/设备
-/// 密码），解密动作本身在 Keystore/Keychain 触发验证，密钥永不出硬件。本
-/// 接口把这层能力从具体插件后端解耦，[WalletManager] 只依赖它。
+/// 公民 App 无根：**只存账户的 child mini-secret**（`//index` 叶子私钥，
+/// 账户0 = `//0`），**绝不存母种子、绝不存助记词**。助记词仅在创建时一次性
+/// 展示供用户手抄 / 存入 citizenwallet，之后即丢弃。
 ///
-/// 分两档金库（access control 语义不同，见 [HardwareBoundSeedVault]）：
-/// - seedVault（严）：seed hex，增/删任一指纹即永久失效，保护高频签名路径。
-/// - recoveryVault（宽）：助记词，跟随生物变更不失效、设备密码可兜底，
-///   供 seed 失效后静默自愈（自愈编排在 [WalletManager] 层，本 store 不做）。
+/// child mini-secret 是 App 唯一的认证凭据，落入唯一的严档金库（纯生物识别
+/// 保护）：读取（签名用）触发生物识别，取消 / 失败 → fail-closed 拒绝。写入
+/// 静默。本接口把这层能力从具体插件后端解耦，[WalletManager] 只依赖它。
 ///
 /// 本 store 只负责「存储 + 错误分类」，抛出的 [SecureSeedException] 子类型
-/// 让上层区分「该自愈」「该中止」「无锁屏」。
+/// 让上层区分「该中止」「无锁屏」「金库不可用」「密钥已失效」。
 abstract interface class SecureSeedStore {
   /// 设备认证能力，仅供 UI 文案参考；D3 硬门禁以实际读写抛出的
   /// [NoDeviceCredential] 为准，不依赖本方法。
   Future<SecureAuthStatus> authStatus();
 
-  /// 写入指定钱包的 seed 到严档金库；触发一次系统认证。
-  Future<void> putSeed(int walletIndex, String seedHex);
-
-  /// 从严档金库读取 seed；触发系统认证。
+  /// 写入指定账户的 child mini-secret 到严档金库；**静默**，不触发生物识别。
   ///
-  /// - 用户取消/超时 → 抛 [AuthCancelled]（中止，绝不自愈）。
-  /// - KEK 失效（换/加指纹等）→ 抛 [SeedKeyInvalidated]（上层从助记词自愈）。
+  /// KEK 按 [walletIndex] 绑定（同钱包多账户共享一把 KEK），blob 按
+  /// [accountId] 分键，故每个账户各有独立密文。
+  Future<void> putAccountKey({
+    required int walletIndex,
+    required String accountId,
+    required String childMiniSecretHex,
+  });
+
+  /// 从严档金库读取指定账户的 child mini-secret；**触发生物识别**。
+  ///
+  /// - 用户取消 / 超时 → 抛 [AuthCancelled]（中止，绝不吞没）。
+  /// - KEK 失效（换 / 加指纹等）→ 抛 [SeedKeyInvalidated]（上层提示重新导入）。
   /// - 条目不存在 → 返回 `null`。
-  Future<String?> readSeed(int walletIndex);
+  Future<String?> readAccountKey({
+    required int walletIndex,
+    required String accountId,
+  });
 
-  /// 指定钱包的 seed 条目**是否存在**——只探密文 blob，**不解密、不触发认证**。
+  /// 指定账户的 child 条目**是否存在**——只探密文 blob，**不解密、不触发认证**。
   ///
-  /// 严档 seed 是纯生物档，真解密会弹生物识别；门控只需排除「有壳无钥」
+  /// child 是纯生物档，真解密会弹生物识别；门控只需排除「有壳无钥」
   /// （钱包行在、密钥没了）的钱包，故用静默存在性判定，避免每次冷启动弹指纹。
   /// 后端不可用时抛 [SecureStoreUnavailable]，由上层走错误态而非判死。
-  Future<bool> hasSeed(int walletIndex);
+  Future<bool> hasAccountKey(String accountId);
 
-  /// 删除指定钱包的 seed 条目，连带释放其 keystore key。
-  ///
-  /// 自愈重派生前必须先删失效条目，`putSeed` 才会生成全新的有效 key。
-  Future<void> deleteSeed(int walletIndex);
-
-  /// 写入指定钱包的助记词到宽档金库；触发一次系统认证。
-  Future<void> putMnemonic(int walletIndex, String mnemonic);
-
-  /// 从宽档金库读取助记词；触发系统认证。
-  ///
-  /// - 用户取消/超时 → 抛 [AuthCancelled]。
-  /// - 条目不存在 → 返回 `null`。
-  Future<String?> readMnemonic(int walletIndex);
-
-  /// 删除指定钱包的助记词条目。
-  Future<void> deleteMnemonic(int walletIndex);
+  /// 删除指定账户的 child 条目，连带释放该钱包的 keystore KEK。
+  Future<void> deleteAccountKey({
+    required int walletIndex,
+    required String accountId,
+  });
 }
 
 /// 设备认证能力（咨询用）。
@@ -63,7 +61,7 @@ enum SecureAuthStatus {
   unsupported,
 }
 
-/// 安全存储层的错误分类根。上层据具体子类型决定自愈 / 中止 / 提示。
+/// 安全存储层的错误分类根。上层据具体子类型决定中止 / 提示 / fail-closed。
 sealed class SecureSeedException implements Exception {
   const SecureSeedException(this.message);
 
@@ -73,12 +71,15 @@ sealed class SecureSeedException implements Exception {
   String toString() => '$runtimeType: $message';
 }
 
-/// 严档 KEK 已失效（换/加指纹、锁屏变更等）——上层应从宽档助记词自愈。
+/// 严档 KEK 已失效（换/加指纹、锁屏变更等）。
+///
+/// 无根模型没有母种子 / 助记词可自愈——App 只存 child，密钥失效即不可再生，
+/// 上层应提示用户用助记词（存在 citizenwallet / 手抄件）重新导入钱包。
 final class SeedKeyInvalidated extends SecureSeedException {
   const SeedKeyInvalidated(super.message);
 }
 
-/// 用户取消或认证超时——中止当前操作，绝不触发自愈。
+/// 用户取消或认证超时——中止当前操作，绝不吞没。
 final class AuthCancelled extends SecureSeedException {
   const AuthCancelled(super.message);
 }
@@ -88,7 +89,7 @@ final class NoDeviceCredential extends SecureSeedException {
   const NoDeviceCredential(super.message);
 }
 
-/// 后端不可用或非上述三类的未知底层错误——上抛，不静默、不误判成自愈。
+/// 后端不可用或非上述三类的未知底层错误——上抛，不静默、不误判。
 final class SecureStoreUnavailable extends SecureSeedException {
   const SecureStoreUnavailable(super.message);
 }

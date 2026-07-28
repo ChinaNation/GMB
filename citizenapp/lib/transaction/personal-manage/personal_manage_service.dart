@@ -179,7 +179,7 @@ class PersonalManageService {
 
   /// 提交 PersonalManage::propose_close extrinsic。
   Future<({String txHash, int usedNonce})> submitProposeClosePersonal({
-    required String account,
+    required String accountId,
     required String beneficiaryAddress,
     required String fromSs58Address,
     required Uint8List signerPublicKey,
@@ -188,7 +188,7 @@ class PersonalManageService {
     final output = ByteOutput();
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCloseCallIndex);
-    output.write(_hexDecode(account));
+    output.write(_hexDecode(accountId));
     final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
     output.write(beneficiaryId);
     return _signAndSubmit(
@@ -214,19 +214,19 @@ class PersonalManageService {
         .toList(growable: false);
     if (addresses.isEmpty) return {};
 
-    final storageKeyByAccount = <String, String>{
+    final storageKeyByAccountId = <String, String>{
       for (final address in addresses)
         address:
             '0x${_hexEncode(PersonalManageStorageCodec.personalAccountsKey(address))}',
     };
 
     final values = await _rpc.fetchStorageBatchChunked(
-      storageKeyByAccount.values.toSet(),
+      storageKeyByAccountId.values.toSet(),
       chunkSize: chunkSize,
     );
 
     final result = <String, ({String creatorAccountId, String accountName})?>{};
-    for (final entry in storageKeyByAccount.entries) {
+    for (final entry in storageKeyByAccountId.entries) {
       final data = values[entry.value];
       final meta = data == null
           ? null
@@ -286,8 +286,8 @@ class PersonalManageService {
     if (addresses.isEmpty) return {};
 
     final personalKeyByAddress = <String, String>{};
-    final adminKeyByAccount = <String, String>{};
-    final accountIdByAccount = <String, Uint8List>{};
+    final adminKeyByAccountId = <String, String>{};
+    final accountIdByAccountId = <String, Uint8List>{};
     final firstRoundKeys = <String>[];
 
     for (final address in addresses) {
@@ -298,9 +298,9 @@ class PersonalManageService {
           '0x${_hexEncode(PersonalManageStorageCodec.personalAccountsKey(address))}';
       final adminKey =
           '0x${_hexEncode(PersonalManageStorageCodec.adminAccountKey(accountId))}';
-      accountIdByAccount[address] = accountId;
+      accountIdByAccountId[address] = accountId;
       personalKeyByAddress[address] = personalKey;
-      adminKeyByAccount[address] = adminKey;
+      adminKeyByAccountId[address] = adminKey;
       firstRoundKeys
         ..add(personalKey)
         ..add(adminKey);
@@ -312,11 +312,11 @@ class PersonalManageService {
     );
     final result = <String, AccountInfo?>{};
     final personalByAddress = <String, PersonalManageAccountSnapshot>{};
-    final adminByAccount = <String, PersonalManageAdminSnapshot>{};
+    final adminByAccountId = <String, PersonalManageAdminSnapshot>{};
 
     for (final address in addresses) {
       final personalData = firstRoundValues[personalKeyByAddress[address]];
-      final adminData = firstRoundValues[adminKeyByAccount[address]];
+      final adminData = firstRoundValues[adminKeyByAccountId[address]];
       if (personalData == null || adminData == null) {
         result[address] = null;
         continue;
@@ -329,35 +329,35 @@ class PersonalManageService {
         continue;
       }
       personalByAddress[address] = personal;
-      adminByAccount[address] = admin;
+      adminByAccountId[address] = admin;
     }
 
-    final activeThresholdKeyByAccount = <String, String>{};
-    for (final entry in adminByAccount.entries) {
-      final accountId = accountIdByAccount[entry.key]!;
-      activeThresholdKeyByAccount[entry.key] =
+    final activeThresholdKeyByAccountId = <String, String>{};
+    for (final entry in adminByAccountId.entries) {
+      final accountId = accountIdByAccountId[entry.key]!;
+      activeThresholdKeyByAccountId[entry.key] =
           '0x${_hexEncode(PersonalManageStorageCodec.activePersonalThresholdKey(accountId))}';
     }
     final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
-      activeThresholdKeyByAccount.values,
+      activeThresholdKeyByAccountId.values,
       chunkSize: chunkSize,
     );
 
-    final thresholdByAccount = <String, int?>{};
-    for (final entry in activeThresholdKeyByAccount.entries) {
+    final thresholdByAccountId = <String, int?>{};
+    for (final entry in activeThresholdKeyByAccountId.entries) {
       final threshold = PersonalManageStorageCodec.decodeDynamicThreshold(
         activeThresholdValues[entry.value],
       );
-      thresholdByAccount[entry.key] = threshold;
+      thresholdByAccountId[entry.key] = threshold;
     }
 
     for (final address in addresses) {
       final personal = personalByAddress[address];
-      final admin = adminByAccount[address];
+      final admin = adminByAccountId[address];
       if (personal == null || admin == null) continue;
       result[address] = AccountInfo(
         adminsLen: admin.adminsLen,
-        threshold: thresholdByAccount[address],
+        threshold: thresholdByAccountId[address],
         admins: admin.admins,
         status: _statusFromByte(personal.statusByte),
       );

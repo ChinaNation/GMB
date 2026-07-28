@@ -5,7 +5,7 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use alloc::{format, vec, vec::Vec};
+use alloc::{format, vec};
 
 use frame_benchmarking::v2::*;
 use frame_support::weights::Weight;
@@ -16,10 +16,9 @@ use crate::{
         AccountIdByCid, CidRegistry, Config, PopulationMaintenanceFault, PopulationReadyDate,
         VotingIdentityByCid,
     },
-    AreaCodeBound, Call, CandidateIdentityPayload, CidNumberBound, CidOccupyItem,
-    CidOccupyItemsBound, CidRecord, CidRecordStatus, CitizenIdentityAuthority, CitizenSex,
-    CitizenStatus, FamilyName, GivenName, Pallet, RoleCodeBound, VotingIdentityPayload,
-    MAX_CID_OCCUPY_BATCH,
+    AreaCodeBound, Call, CandidateIdentityPayload, CidNumberBound, CidRecord, CidRecordStatus,
+    CitizenIdentityAuthority, CitizenSex, CitizenStatus, FamilyName, GivenName, Pallet,
+    RoleCodeBound, VotingIdentityPayload,
 };
 
 const BENCHMARK_TIMESTAMP_MILLIS: u64 = 1_800_000_000_000;
@@ -304,7 +303,9 @@ mod benchmarks {
     #[benchmark]
     fn occupy_cid() {
         let authority = authority::<T>();
+        let account_id: T::AccountId = whitelisted_caller();
         let cid_number = citizen_cid(6);
+        let signature = signature::<T>();
 
         #[extrinsic_call]
         _(
@@ -312,12 +313,12 @@ mod benchmarks {
             authority.1,
             authority.2,
             cid_number.clone(),
-            [6u8; 32],
-            authority.3,
-            authority.4,
+            account_id.clone(),
+            signature,
         );
 
-        assert!(CidRegistry::<T>::contains_key(cid_number));
+        assert!(CidRegistry::<T>::contains_key(&cid_number));
+        assert_eq!(AccountIdByCid::<T>::get(&cid_number), Some(account_id));
     }
 
     #[benchmark]
@@ -356,28 +357,30 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn occupy_cids_batch(n: Linear<1, MAX_CID_OCCUPY_BATCH>) {
+    fn admin_rebind_cid_account() {
+        // 先自助占号建匿名 CID(旧账户绑定),再由注册局代换绑到新账户。
         let authority = authority::<T>();
-        let items: Vec<CidOccupyItem> = (0..n)
-            .map(|index| CidOccupyItem {
-                cid_number: citizen_cid(10_000 + index),
-                commitment: [index as u8; 32],
-            })
-            .collect();
-        let first_cid = items[0].cid_number.clone();
-        let items: CidOccupyItemsBound = items.try_into().expect("benchmark batch fits");
+        let old_account_id: T::AccountId = account("admin_rebind_old", 0, 0);
+        let new_account_id: T::AccountId = whitelisted_caller();
+        let cid_number = citizen_cid(9);
+        Pallet::<T>::self_occupy_cid(
+            RawOrigin::Signed(old_account_id).into(),
+            cid_number.clone(),
+        )
+        .expect("self occupy sets up the binding");
+        let signature = signature::<T>();
 
         #[extrinsic_call]
         _(
             RawOrigin::Signed(authority.0),
             authority.1,
             authority.2,
-            items,
-            authority.3,
-            authority.4,
+            cid_number.clone(),
+            new_account_id.clone(),
+            signature,
         );
 
-        assert!(CidRegistry::<T>::contains_key(first_cid));
+        assert_eq!(AccountIdByCid::<T>::get(&cid_number), Some(new_account_id));
     }
 
     #[benchmark]

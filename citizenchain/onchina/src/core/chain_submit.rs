@@ -70,14 +70,14 @@ pub(crate) async fn fetch_genesis_hash() -> Result<[u8; 32], String> {
     <[u8; 32]>::try_from(bytes.as_slice()).map_err(|_| "genesis hash must be 32 bytes".to_string())
 }
 
-fn public_key_to_ss58(public_key: &str) -> Result<String, String> {
-    let public = chain_signing::parse_sr25519_public_key(public_key)?;
+fn public_key_to_ss58(account_id: &str) -> Result<String, String> {
+    let public = chain_signing::parse_sr25519_public_key(account_id)?;
     Ok(public.to_ss58check_with_version(sp_core::crypto::Ss58AddressFormat::custom(2027)))
 }
 
 /// 实时读链上 nonce(死规则 P-SIGN-001:nonce 只来自链,不缓存不自增)。
-pub(crate) async fn fetch_nonce(public_key: &str) -> Result<u32, String> {
-    let ss58 = public_key_to_ss58(public_key)?;
+pub(crate) async fn fetch_nonce(account_id: &str) -> Result<u32, String> {
+    let ss58 = public_key_to_ss58(account_id)?;
     let result = rpc_post(
         "system_accountNextIndex",
         Value::Array(vec![Value::from(ss58)]),
@@ -92,9 +92,9 @@ pub(crate) async fn fetch_nonce(public_key: &str) -> Result<u32, String> {
 /// prepare:实时取 nonce/版本/创世哈希,构建 QR 审阅载荷与签名校验哈希。
 pub(crate) async fn prepare_signing(
     call_data: &[u8],
-    signer_public_key: &str,
+    account_id: &str,
 ) -> Result<PreparedChainSign, String> {
-    let nonce = fetch_nonce(signer_public_key).await?;
+    let nonce = fetch_nonce(account_id).await?;
     let (spec_version, tx_version) = fetch_runtime_version().await?;
     let genesis_hash = fetch_genesis_hash().await?;
     let material = chain_signing::build_signing_material(
@@ -114,7 +114,7 @@ pub(crate) async fn prepare_signing(
 /// submit:重建材料校验哈希 → 本地验签 → dry-run → 提交,返回交易哈希。
 pub(crate) async fn assemble_and_submit(
     call_data: &[u8],
-    signer_public_key: &str,
+    account_id: &str,
     signature_hex: &str,
     nonce: u32,
     expected_signing_hash_hex: &str,
@@ -133,7 +133,7 @@ pub(crate) async fn assemble_and_submit(
         return Err("签名载荷与会话不一致(runtime 版本或创世哈希已变化),请重新发起".into());
     }
 
-    let public = chain_signing::parse_sr25519_public_key(signer_public_key)?;
+    let public = chain_signing::parse_sr25519_public_key(account_id)?;
     let signature = chain_signing::parse_sr25519_signature_hex(signature_hex)?;
     if !chain_signing::verify_signature(&material, &signature, &public) {
         return Err("sr25519 本地验签失败,拒绝提交".to_string());
@@ -185,13 +185,13 @@ pub(crate) async fn assemble_and_submit(
 /// 即已被打包(InBestBlock 可靠代理)。观察窗口结束只表示本次请求尚未确认，
 /// 不得解释为 PoW 已超过最晚出块时间或交易必然失效。
 pub(crate) async fn wait_nonce_consumed(
-    public_key: &str,
+    account_id: &str,
     submitted_nonce: u32,
 ) -> Result<(), String> {
     let deadline = std::time::Instant::now()
         + std::time::Duration::from_secs(WAIT_CONFIRMATION_OBSERVATION_SECS);
     loop {
-        let current = fetch_nonce(public_key).await?;
+        let current = fetch_nonce(account_id).await?;
         if current > submitted_nonce {
             return Ok(());
         }

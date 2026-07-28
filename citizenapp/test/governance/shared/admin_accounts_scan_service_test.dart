@@ -25,7 +25,7 @@ void main() {
     required String key,
     required String institutionCode,
     required int kind,
-    required List<String> adminAccounts,
+    required List<String> adminAccountIds,
   }) =>
       ScannedAdminAccount(
         cidNumber: kind == AdminAccountStorageCodec.kindPersonal ? null : key,
@@ -33,7 +33,7 @@ void main() {
             kind == AdminAccountStorageCodec.kindPersonal ? key : null,
         institutionCode: institutionCode,
         kind: kind,
-        admins: adminAccounts
+        admins: adminAccountIds
             .map(
               (account) => AdminPerson(
                 account_id: account,
@@ -51,13 +51,13 @@ void main() {
           key: 'CID-01',
           institutionCode: 'CGOV',
           kind: AdminAccountStorageCodec.kindPublicInstitution,
-          adminAccounts: [myAccountId],
+          adminAccountIds: [myAccountId],
         ),
         acc(
           key: '02',
           institutionCode: 'PMUL',
           kind: AdminAccountStorageCodec.kindPersonal,
-          adminAccounts: [myAccountId],
+          adminAccountIds: [myAccountId],
         ),
       ]);
 
@@ -75,13 +75,13 @@ void main() {
           key: '01',
           institutionCode: 'PMUL',
           kind: AdminAccountStorageCodec.kindPersonal,
-          adminAccounts: [myAccountId],
+          adminAccountIds: [myAccountId],
         ),
         acc(
           key: '02',
           institutionCode: 'XXXX',
           kind: AdminAccountStorageCodec.kindPersonal,
-          adminAccounts: [myAccountId],
+          adminAccountIds: [myAccountId],
         ),
       ]);
       final result = AdminAccountsScanService.filterMine(
@@ -99,12 +99,12 @@ void main() {
             key: '01',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
-            adminAccounts: [myAccountId, otherAccountId]),
+            adminAccountIds: [myAccountId, otherAccountId]),
         acc(
             key: '02',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
-            adminAccounts: [otherAccountId]),
+            adminAccountIds: [otherAccountId]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
@@ -120,7 +120,7 @@ void main() {
             key: '01',
             institutionCode: 'PMUL',
             kind: AdminAccountStorageCodec.kindPersonal,
-            adminAccounts: [secondAccountId]),
+            adminAccountIds: [secondAccountId]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,

@@ -290,7 +290,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
   Widget build(BuildContext context) {
     final avatarKey = widget.initialProfile?.avatarObjectKey;
     final bannerKey = widget.initialProfile?.bannerObjectKey;
-    final defaults = ProfilePresentation.forAccount(widget.accountId);
+    final defaults = ProfilePresentation.forAccountId(widget.accountId);
     return Scaffold(
       appBar: AppBar(
         title: const Text('编辑资料'),

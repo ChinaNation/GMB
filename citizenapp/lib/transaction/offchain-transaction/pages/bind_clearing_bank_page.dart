@@ -117,7 +117,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ? await rpc.switchBank(
               fromSs58Address: wallet.ss58Address,
               signerPublicKey: Uint8List.fromList(publicKeyBytes),
-              newBankMainAccount: Uint8List.fromList(mainAccountIdBytes),
+              newBankMainAccountId: Uint8List.fromList(mainAccountIdBytes),
               sign: (payload) =>
                   walletManager.signWithWallet(wallet.walletIndex, payload),
             )

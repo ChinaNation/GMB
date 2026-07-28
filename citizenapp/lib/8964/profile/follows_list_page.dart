@@ -138,13 +138,13 @@ class _FollowsListPageState extends State<FollowsListPage> {
     if (mounted) setState(() {});
   }
 
-  void _openProfile(String account) {
+  void _openProfile(String accountId) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UserProfilePage(
-          accountId: account,
+          accountId: accountId,
           isSelf: false,
-          initialProfile: _profiles[account],
+          initialProfile: _profiles[accountId],
         ),
       ),
     );
@@ -196,7 +196,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
           }
           final entry = _entries[index];
           final profile = _profiles[entry.accountId];
-          final presentation = ProfilePresentation.forAccount(entry.accountId);
+          final presentation = ProfilePresentation.forAccountId(entry.accountId);
           final avatarKey = profile?.avatarObjectKey;
           return ListTile(
             leading: ProfileAvatar(
@@ -230,9 +230,9 @@ class _FollowsListPageState extends State<FollowsListPage> {
     );
   }
 
-  String _shorten(String account) {
-    if (account.length <= 12) return account;
-    return '${account.substring(0, 6)}...'
-        '${account.substring(account.length - 6)}';
+  String _shorten(String accountId) {
+    if (accountId.length <= 12) return accountId;
+    return '${accountId.substring(0, 6)}...'
+        '${accountId.substring(accountId.length - 6)}';
   }
 }

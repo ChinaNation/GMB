@@ -68,7 +68,7 @@ function RepresentativeVotePanel({ auth }: Props) {
       const submitted = await submitChainSign(
         auth,
         prepared.request_id,
-        signed.signer_public_key,
+        signed.account_id,
         signed.signature,
       );
       message.success(`表决交易已提交：${submitted.tx_hash}`);

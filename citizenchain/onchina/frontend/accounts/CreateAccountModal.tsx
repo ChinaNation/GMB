@@ -76,7 +76,7 @@ export const CreateAccountModal: React.FC<Props> = ({
     try {
       const prepared = await createAccount(auth, cidNumber, name, roleCode);
       const signed = await signChain(prepared.request_id, prepared.sign_request);
-      await submitChainSign(auth, prepared.request_id, signed.signer_public_key, signed.signature);
+      await submitChainSign(auth, prepared.request_id, signed.account_id, signed.signature);
       notice.success('新增账户提案已提交,机构内部投票通过后生效');
       onCreated();
     } catch (err) {

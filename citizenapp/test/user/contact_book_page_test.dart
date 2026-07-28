@@ -163,7 +163,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final fallback =
-        ProfilePresentation.forAccount(_contactAccountId).fallbackName;
+        ProfilePresentation.forAccountId(_contactAccountId).fallbackName;
     expect(find.textContaining('$fallback · w5Bc7m'), findsOneWidget);
     expect(find.text(_contactAddress), findsNothing);
   });

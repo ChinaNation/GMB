@@ -16,7 +16,7 @@ pub(crate) fn build_sign_request(
     request_id: &str,
     issued_at: i64,
     expires_at: i64,
-    actor_public_key: &str,
+    account_id: &str,
     payload_text: &str,
     action: u16,
 ) -> Result<String, axum::response::Response> {
@@ -24,7 +24,7 @@ pub(crate) fn build_sign_request(
         request_id,
         issued_at,
         expires_at,
-        actor_public_key,
+        account_id,
         payload_text.as_bytes(),
         action,
     )
@@ -38,15 +38,15 @@ pub(crate) fn build_sign_request_bytes(
     request_id: &str,
     _issued_at: i64,
     expires_at: i64,
-    actor_public_key: &str,
+    account_id: &str,
     payload_bytes: &[u8],
     action: u16,
 ) -> Result<String, axum::response::Response> {
-    let Some(public_key_b64) = public_key_hex_to_b64(actor_public_key) else {
+    let Some(public_key_b64) = public_key_hex_to_b64(account_id) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "actor_public_key must be lowercase 0x plus 64 hexadecimal characters",
+            "account_id must be lowercase 0x plus 64 hexadecimal characters",
         ));
     };
     let sign_request = serde_json::json!({

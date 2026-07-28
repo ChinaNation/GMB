@@ -215,9 +215,9 @@ class ChatRuntime {
     required int pendingOutgoing,
     required int unreadCount,
   }) async {
-    final account = accountId ?? await readAccountId();
+    final resolvedAccountId = accountId ?? await readAccountId();
     return ChatInboxOverview(
-      accountId: account,
+      accountId: resolvedAccountId,
       pendingOutgoing: pendingOutgoing,
       unreadCount: unreadCount,
     );
@@ -462,10 +462,10 @@ class ChatRuntime {
   /// 建群:选联系人账户,领其 KeyPackage 批量加入,创建者为 admin。
   Future<ChatGroup> createGroup({
     required String name,
-    List<String> inviteeAccounts = const [],
+    List<String> inviteeAccountIds = const [],
   }) async {
     final context = await _readyContext(await _readAccount());
-    final invitees = await _fetchInviteeKeyPackages(context, inviteeAccounts);
+    final invitees = await _fetchInviteeKeyPackages(context, inviteeAccountIds);
     final groupId = newGroupId(context.account.accountId);
     return _groupFlow(context).createGroup(
       groupId: groupId,
@@ -479,10 +479,10 @@ class ChatRuntime {
   /// 加人(仅 admin)。
   Future<void> addGroupMembers({
     required String groupId,
-    required List<String> inviteeAccounts,
+    required List<String> inviteeAccountIds,
   }) async {
     final context = await _readyContext(await _readAccount());
-    final invitees = await _fetchInviteeKeyPackages(context, inviteeAccounts);
+    final invitees = await _fetchInviteeKeyPackages(context, inviteeAccountIds);
     await _groupFlow(context).addMembers(
       groupId: groupId,
       actorAccountId: context.account.accountId,
@@ -494,14 +494,14 @@ class ChatRuntime {
   /// 删人(仅 admin,按账户)。
   Future<void> removeGroupMembers({
     required String groupId,
-    required List<String> targetAccounts,
+    required List<String> targetAccountIds,
   }) async {
     final context = await _readyContext(await _readAccount());
     await _groupFlow(context).removeMembers(
       groupId: groupId,
       actorAccountId: context.account.accountId,
       actorDeviceId: context.deviceId,
-      targetAccounts: targetAccounts,
+      targetAccountIds: targetAccountIds,
     );
   }
 
@@ -582,19 +582,19 @@ class ChatRuntime {
   /// 兜底补齐 accountId 供群扇出定位新人。
   Future<List<MlsKeyPackage>> _fetchInviteeKeyPackages(
     _ChatAccountContext context,
-    List<String> inviteeAccounts,
+    List<String> inviteeAccountIds,
   ) async {
     final packages = <MlsKeyPackage>[];
-    for (final account in inviteeAccounts) {
+    for (final accountId in inviteeAccountIds) {
       final available = await context.transport.fetchKeyPackages(
-        accountId: account,
+        accountId: accountId,
         requesterAccountId: context.account.accountId,
       );
       if (available.isEmpty) {
-        throw StateError('对方 $account 没有可用 Chat KeyPackage');
+        throw StateError('对方 $accountId 没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        accountId: account,
+        accountId: accountId,
         keyPackageId: available.first.keyPackageId,
         requesterAccountId: context.account.accountId,
       );
@@ -602,7 +602,7 @@ class ChatRuntime {
         consumed.accountId.isNotEmpty
             ? consumed
             : MlsKeyPackage(
-                accountId: account,
+                accountId: accountId,
                 deviceId: consumed.deviceId,
                 keyPackageId: consumed.keyPackageId,
                 keyPackageBytes: consumed.keyPackageBytes,

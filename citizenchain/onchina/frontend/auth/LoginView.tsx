@@ -149,7 +149,7 @@ export function LoginView() {
       const completion = await completeAdminQrLogin({
         challenge_id: payload.challenge_id,
         session_id: pendingQrLogin.session_id,
-        signer_public_key: payload.signer_public_key,
+        account_id: payload.account_id,
         signature: payload.signature,
       });
       if (completion.status === 'BINDING_REQUIRED' && completion.binding) {

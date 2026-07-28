@@ -237,7 +237,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Future<void> _message(UserContact contact) async {
     final profile = _profiles[contact.accountId];
-    final title = ProfilePresentation.forAccount(contact.accountId)
+    final title = ProfilePresentation.forAccountId(contact.accountId)
         .resolveDisplayName(publicName: profile?.displayName);
     final opener = widget.directChatOpener ?? openDirectChat;
     await opener(
@@ -297,7 +297,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
     final visible = _contacts.where((contact) {
       if (query.isEmpty) return true;
       final profile = _profiles[contact.accountId];
-      final publicName = ProfilePresentation.forAccount(contact.accountId)
+      final publicName = ProfilePresentation.forAccountId(contact.accountId)
           .resolveDisplayName(publicName: profile?.displayName)
           .toLowerCase();
       return contact.contactName.toLowerCase().contains(query) ||
@@ -439,7 +439,7 @@ class _ContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final publicName = ProfilePresentation.forAccount(contact.accountId)
+    final publicName = ProfilePresentation.forAccountId(contact.accountId)
         .resolveDisplayName(publicName: profile?.displayName);
     final bio = profile?.bio.trim() ?? '';
     final secondary = '$publicName · ${_shortAddress(contact.ss58Address)}';

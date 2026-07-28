@@ -269,7 +269,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
         (response['commit_wire_hex'] ?? '').toString(),
         MlsMessageKind.application,
       ),
-      removedAccounts: removed,
+      removedAccountIds: removed,
     );
   }
 

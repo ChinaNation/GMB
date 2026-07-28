@@ -20,6 +20,7 @@ Future<void> seedHotWallet() async {
       ..balance = 0
       ..ss58Address = 'bootstrap-test-address'
       ..accountId = 'ab' * 32
+      ..masterId = 'ab' * 32
       ..alg = 'sr25519'
       ..ss58 = 2027
       ..createdAtMillis = 0

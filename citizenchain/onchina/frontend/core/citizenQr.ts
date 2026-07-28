@@ -28,13 +28,13 @@ export function isFixedKind(kind: QrKind): boolean {
 export interface SignRequestBody {
   action: number;
   sig_alg: 1;
-  signer_public_key: string;
+  account_id: string;
   payload: string;
   payload_hex: string;
 }
 
 export interface SignResponseBody {
-  signer_public_key: string;
+  account_id: string;
   signature: string;
 }
 
@@ -151,7 +151,7 @@ function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
   return {
     action,
     sig_alg: 1,
-    signer_public_key: b64ToHex(u, 32, 'b.u'),
+    account_id: b64ToHex(u, 32, 'b.u'),
     payload: d,
     payload_hex: b64ToPayloadHex(d),
   };
@@ -162,7 +162,7 @@ function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
   const u = requireCompactB64(b, 'u');
   const s = requireCompactB64(b, 's');
   return {
-    signer_public_key: b64ToHex(u, 32, 'b.u'),
+    account_id: b64ToHex(u, 32, 'b.u'),
     signature: b64ToHex(s, 64, 'b.s'),
   };
 }

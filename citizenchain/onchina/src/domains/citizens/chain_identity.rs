@@ -274,9 +274,9 @@ pub(crate) async fn complete_citizen_onchain_signature(
             "公民签名响应与当前业务操作不一致",
         );
     }
-    let signer_public_key = sign_response.body.signer_public_key;
+    let account_id = sign_response.body.account_id;
     if !same_account_id(
-        signer_public_key.as_str(),
+        account_id.as_str(),
         citizen_account.account_id.as_str(),
     ) {
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与录入钱包不一致");
@@ -357,7 +357,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     let session = crate::domains::citizens::occupy::ChainSignSession {
         request_id: request_id.clone(),
         purpose: crate::domains::citizens::occupy::PURPOSE_CITIZEN_IDENTITY_PUSH.to_string(),
-        actor_public_key: ctx.account_id.clone(),
+        account_id: ctx.account_id.clone(),
         call_data: call.clone(),
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex.clone(),

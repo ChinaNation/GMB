@@ -39,7 +39,7 @@ class SquareSession {
 }
 
 /// 会员订阅态（ADR-036：与身份彻底解耦）。只描述付费订阅本身，不含任何链上身份信息；
-/// 身份展示由电子护照（myid）单独负责。
+/// 身份展示由身份页（myid）单独负责。
 class SquareMembershipState {
   const SquareMembershipState({
     required this.active,

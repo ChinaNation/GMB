@@ -49,7 +49,7 @@ class InstitutionRoleStorageCodec {
     if (count == null) return null;
     offset += count.$2;
     final admins = <AdminPerson>[];
-    final accounts = <String>{};
+    final accountIds = <String>{};
     for (var i = 0; i < count.$1; i++) {
       if (offset + 32 > data.length) return null;
       final accountId = '0x${_hex(data.sublist(offset, offset + 32))}';
@@ -84,7 +84,7 @@ class InstitutionRoleStorageCodec {
           family_name: utf8.decode(familyName.$1),
           given_name: utf8.decode(givenName.$1),
         );
-        if (!accounts.add(admin.account_id)) return null;
+        if (!accountIds.add(admin.account_id)) return null;
         admins.add(admin);
       } on FormatException {
         return null;
@@ -133,7 +133,7 @@ class InstitutionRoleStorageCodec {
       if (cid == null) return null;
       offset = cid.$2;
       if (offset + 32 > data.length) return null;
-      final account = _hex(data.sublist(offset, offset + 32));
+      final accountId = _hex(data.sublist(offset, offset + 32));
       offset += 32;
       final code = _readBytes(data, offset, minLength: 1, maxLength: 64);
       if (code == null) return null;
@@ -158,7 +158,7 @@ class InstitutionRoleStorageCodec {
       try {
         out.add(InstitutionAdminAssignment(
           cidNumber: utf8.decode(cid.$1),
-          account_id: account,
+          account_id: accountId,
           roleCode: utf8.decode(code.$1),
           termStart: termStart,
           termEnd: termEnd,

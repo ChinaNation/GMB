@@ -51,7 +51,7 @@ class AdminListPage extends StatefulWidget {
 
 class _AdminListPageState extends State<AdminListPage> {
   late Set<String> _activatedAccountIds;
-  Map<String, double> _balanceByAccount = const {};
+  Map<String, double> _balanceByAccountId = const {};
 
   @override
   void initState() {
@@ -68,28 +68,28 @@ class _AdminListPageState extends State<AdminListPage> {
     }
   }
 
-  static String _balanceKey(String account) {
-    if (!isAccountIdText(account)) {
+  static String _balanceKey(String accountId) {
+    if (!isAccountIdText(accountId)) {
       throw const FormatException('account_id 必须为小写 0x + 64 位十六进制');
     }
-    return account;
+    return accountId;
   }
 
   Future<void> _loadBalances() async {
-    final accounts = {
+    final accountIds = {
       for (final view in widget.admins) _balanceKey(view.admin.account_id),
-    }.where((account) => account.isNotEmpty).toList(growable: false);
-    if (accounts.isEmpty) {
-      if (mounted) setState(() => _balanceByAccount = const {});
+    }.where((accountId) => accountId.isNotEmpty).toList(growable: false);
+    if (accountIds.isEmpty) {
+      if (mounted) setState(() => _balanceByAccountId = const {});
       return;
     }
     try {
-      final balances = await ChainRpc().fetchFinalizedBalances(accounts);
+      final balances = await ChainRpc().fetchFinalizedBalances(accountIds);
       if (!mounted) return;
-      setState(() => _balanceByAccount = balances);
+      setState(() => _balanceByAccountId = balances);
     } catch (_) {
       // 余额展示失败不影响管理员激活流程,卡片保留“余额”标签且值为空。
-      if (mounted) setState(() => _balanceByAccount = const {});
+      if (mounted) setState(() => _balanceByAccountId = const {});
     }
   }
 
@@ -153,7 +153,7 @@ class _AdminListPageState extends State<AdminListPage> {
                 institution: widget.institution,
                 accountIdentity: widget.accountIdentity,
                 onActivated: () => _onAdminActivated(accountId),
-                balanceYuan: _balanceByAccount[_balanceKey(accountId)],
+                balanceYuan: _balanceByAccountId[_balanceKey(accountId)],
               );
             }),
         ],

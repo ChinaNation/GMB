@@ -209,7 +209,7 @@ pub(crate) async fn propose_platform_price(
     let session = crate::domains::citizens::occupy::ChainSignSession {
         request_id: request_id.clone(),
         purpose: super::PURPOSE_PLATFORM_PRICE_PROPOSAL.to_string(),
-        actor_public_key: ctx.account_id.clone(),
+        account_id: ctx.account_id.clone(),
         call_data: call,
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex,

@@ -1053,7 +1053,7 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final peerName = ProfilePresentation.forAccount(widget.peerUserId)
+    final peerName = ProfilePresentation.forAccountId(widget.peerUserId)
         .resolveDisplayName(publicName: widget.title);
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
@@ -1173,7 +1173,7 @@ class _ChatPageState extends State<ChatPage> {
                         name: isMe
                             ? '我'
                             : widget.isGroup
-                                ? ProfilePresentation.forAccount(id)
+                                ? ProfilePresentation.forAccountId(id)
                                     .fallbackName
                                 : peerName,
                       );

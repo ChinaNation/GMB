@@ -41,7 +41,7 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
   final _thresholdController = TextEditingController();
   AdminAccountState? _subject;
   List<AdminPerson> _admins = const [];
-  Map<String, double> _balanceByAccount = const {};
+  Map<String, double> _balanceByAccountId = const {};
   WalletProfile? _selectedWallet;
   bool _loading = true;
   bool _submitting = false;
@@ -107,7 +107,7 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
                     const SizedBox(height: 12),
                     AdminSetEditor(
                       admins: _admins,
-                      balances: _balanceByAccount,
+                      balances: _balanceByAccountId,
                       onChanged: (value) => _setNewAdmins(account, value),
                     ),
                     const SizedBox(height: 12),
@@ -116,7 +116,7 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
                     AdminSetDiffCard(
                       currentAdmins: account.admins,
                       admins: _admins,
-                      balances: _balanceByAccount,
+                      balances: _balanceByAccountId,
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -156,8 +156,8 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
     unawaited(_loadBalances(value));
   }
 
-  static String _balanceKey(String account) {
-    final trimmed = account.trim();
+  static String _balanceKey(String accountId) {
+    final trimmed = accountId.trim();
     return (trimmed.startsWith('0x') || trimmed.startsWith('0X')
             ? trimmed.substring(2)
             : trimmed)
@@ -165,19 +165,19 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
   }
 
   Future<void> _loadBalances(List<AdminPerson> admins) async {
-    final accounts = {
+    final accountIds = {
       for (final admin in admins) _balanceKey(admin.account_id),
-    }.where((account) => account.isNotEmpty).toList(growable: false);
-    if (accounts.isEmpty) {
-      if (mounted) setState(() => _balanceByAccount = const {});
+    }.where((accountId) => accountId.isNotEmpty).toList(growable: false);
+    if (accountIds.isEmpty) {
+      if (mounted) setState(() => _balanceByAccountId = const {});
       return;
     }
     try {
-      final balances = await ChainRpc().fetchFinalizedBalances(accounts);
-      if (mounted) setState(() => _balanceByAccount = balances);
+      final balances = await ChainRpc().fetchFinalizedBalances(accountIds);
+      if (mounted) setState(() => _balanceByAccountId = balances);
     } catch (_) {
       // 管理员更换编辑态余额读取失败不影响集合修改,余额值留空。
-      if (mounted) setState(() => _balanceByAccount = const {});
+      if (mounted) setState(() => _balanceByAccountId = const {});
     }
   }
 

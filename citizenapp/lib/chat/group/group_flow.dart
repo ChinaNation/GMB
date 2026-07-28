@@ -89,7 +89,7 @@ class ChatGroupFlow {
         actorAccountId: accountId,
         actorDeviceId: localDeviceId,
         creatorAccountId: accountId,
-        existingAccounts: [accountId],
+        existingAccountIds: [accountId],
         invitees: invitees,
       );
     }
@@ -116,7 +116,7 @@ class ChatGroupFlow {
       actorAccountId: actorAccountId,
       actorDeviceId: actorDeviceId,
       creatorAccountId: group.creatorAccountId,
-      existingAccounts: group.memberAccountIds,
+      existingAccountIds: group.memberAccountIds,
       invitees: invitees,
     );
   }
@@ -126,22 +126,22 @@ class ChatGroupFlow {
     required String actorAccountId,
     required String actorDeviceId,
     required String creatorAccountId,
-    required List<String> existingAccounts,
+    required List<String> existingAccountIds,
     required List<MlsKeyPackage> invitees,
   }) async {
     final bundle = await _crypto.addMembers(groupId, invitees);
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
 
     // Welcome → 全部新人;Commit → 现有成员(减自己)。
-    final inviteeAccounts = accountsFromMemberIdentities(
+    final inviteeAccountIds = accountIdsFromMemberIdentities(
       invitees.map((keyPackage) => keyPackage.accountId),
-      excludeAccount: actorAccountId,
+      excludeAccountId: actorAccountId,
     );
     final welcome = bundle.welcome;
-    if (welcome != null && inviteeAccounts.isNotEmpty) {
+    if (welcome != null && inviteeAccountIds.isNotEmpty) {
       await _fanoutHandshake(
         wire: welcome,
-        recipients: inviteeAccounts,
+        recipients: inviteeAccountIds,
         senderAccountId: actorAccountId,
         senderDeviceId: actorDeviceId,
         groupId: groupId,
@@ -150,7 +150,7 @@ class ChatGroupFlow {
       );
     }
     final commitRecipients =
-        existingAccounts.where((account) => account != actorAccountId).toList();
+        existingAccountIds.where((account) => account != actorAccountId).toList();
     if (commitRecipients.isNotEmpty) {
       await _fanoutHandshake(
         wire: bundle.commit,
@@ -170,12 +170,12 @@ class ChatGroupFlow {
     required String groupId,
     required String actorAccountId,
     required String actorDeviceId,
-    required List<String> targetAccounts,
+    required List<String> targetAccountIds,
   }) async {
     final group = await _requireGroup(groupId);
     GroupMembership.ensureAdmin(
         adminSet: group.adminSet, actorAccountId: actorAccountId);
-    final bundle = await _crypto.removeMembers(groupId, targetAccounts);
+    final bundle = await _crypto.removeMembers(groupId, targetAccountIds);
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
 
     // Commit → 剩余成员 + 被删者(镜像此刻仍含被删者),都减自己。
@@ -551,7 +551,7 @@ class ChatGroupFlow {
             groupId: groupId,
             actorAccountId: _accountId,
             actorDeviceId: _localDeviceId,
-            targetAccounts: [envelope.senderAccountId],
+            targetAccountIds: [envelope.senderAccountId],
           );
         }
     }
@@ -583,7 +583,7 @@ class ChatGroupFlow {
     Iterable<String> identities,
     String creatorAccountId,
   ) {
-    final accounts = accountsFromMemberIdentities(identities);
+    final accounts = accountIdsFromMemberIdentities(identities);
     return {
       for (final account in accounts)
         account: account == creatorAccountId

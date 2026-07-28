@@ -117,7 +117,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
     if (selected != null && selected.isNotEmpty) {
       await _run(() => _runtime.addGroupMembers(
             groupId: widget.groupId,
-            inviteeAccounts: selected,
+            inviteeAccountIds: selected,
           ));
     }
   }
@@ -278,7 +278,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
                                           : () => _run(
                                               () => _runtime.removeGroupMembers(
                                                     groupId: widget.groupId,
-                                                    targetAccounts: [
+                                                    targetAccountIds: [
                                                       member.accountId
                                                     ],
                                                   )),

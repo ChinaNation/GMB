@@ -24,10 +24,15 @@ WalletProfile _hotProfile() {
   );
 }
 
-Widget _gate({required Future<WalletProfile?> Function() loader}) {
+Widget _gate({
+  required Future<WalletProfile?> Function() loader,
+  void Function(BuildContext context)? onInitialized,
+}) {
   return MaterialApp(
     home: WalletGate(
       defaultWalletLoader: loader,
+      // 默认注入 no-op,挡掉真身份页 push(会触发真链读);验证引导的用例另注入探针。
+      onInitialized: onInitialized ?? (_) {},
       child: const Scaffold(body: Text('main-shell')),
     ),
   );
@@ -90,6 +95,38 @@ void main() {
 
       expect(find.text('main-shell'), findsOneWidget);
       expect(find.byType(CreateWalletOnboardingPage), findsNothing);
+    });
+
+    testWidgets('首次初始化后一次性引导到身份页(onInitialized 触发)', (tester) async {
+      useTallViewport(tester);
+      var introduced = 0;
+      await tester.pumpWidget(_gate(
+        loader: () async => null,
+        onInitialized: (_) => introduced++,
+      ));
+      await tester.pumpAndSettle();
+
+      tester
+          .widget<CreateWalletOnboardingPage>(
+            find.byType(CreateWalletOnboardingPage),
+          )
+          .onCreated();
+      await tester.pumpAndSettle();
+
+      expect(find.text('main-shell'), findsOneWidget);
+      expect(introduced, 1, reason: '本次会话从 onboarding 建/导入应引导一次');
+    });
+
+    testWidgets('冷启动即有钱包不触发身份引导', (tester) async {
+      var introduced = 0;
+      await tester.pumpWidget(_gate(
+        loader: () async => _hotProfile(),
+        onInitialized: (_) => introduced++,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('main-shell'), findsOneWidget);
+      expect(introduced, 0, reason: '老用户冷启动即放行,不打扰');
     });
 
     testWidgets('本地库读取失败停在错误态，重试后恢复', (tester) async {
@@ -161,13 +198,19 @@ void main() {
       WalletManager.debugSeedStore = vault;
     });
 
-    test('热钱包 + accountId 规范 + ss58 一致 + 有种子 → 有效', () async {
-      await vault.putSeed(1, '00' * 32);
+    Future<void> putKey(String id) => vault.putAccountKey(
+          walletIndex: 1,
+          accountId: id,
+          childMiniSecretHex: '00' * 32,
+        );
+
+    test('热钱包 + accountId 规范 + ss58 一致 + 有 child → 有效', () async {
+      await putKey(accountId);
       expect(await WalletManager().isUsableHotWallet(profile()), isTrue);
     });
 
     test('冷钱包不作为门控依据', () async {
-      await vault.putSeed(1, '00' * 32);
+      await putKey(accountId);
       expect(
         await WalletManager().isUsableHotWallet(profile(signMode: 'external')),
         isFalse,
@@ -175,7 +218,7 @@ void main() {
     });
 
     test('accountId 为空的半残钱包不作为门控依据', () async {
-      await vault.putSeed(1, '00' * 32);
+      await putKey(accountId);
       expect(
         await WalletManager().isUsableHotWallet(profile(id: '', ss58: 'x')),
         isFalse,
@@ -183,14 +226,14 @@ void main() {
     });
 
     test('ss58 与 accountId 对不上不作为门控依据', () async {
-      await vault.putSeed(1, '00' * 32);
+      await putKey(accountId);
       expect(
         await WalletManager().isUsableHotWallet(profile(ss58: '对不上的地址')),
         isFalse,
       );
     });
 
-    test('有壳无钥（严档种子条目缺失）不作为门控依据', () async {
+    test('有壳无钥（严档 child 条目缺失）不作为门控依据', () async {
       expect(await WalletManager().isUsableHotWallet(profile()), isFalse);
     });
   });

@@ -329,12 +329,12 @@ class _PersonalManageAccountInfoPageState
         .toList(growable: false);
   }
 
-  List<AdminPerson> _adminsFromAccounts(List<String> accounts) => accounts
+  List<AdminPerson> _adminsFromAccounts(List<String> accountIds) => accountIds
       .map(_requireAccountId)
-      .where((account) => account.isNotEmpty)
+      .where((accountId) => accountId.isNotEmpty)
       .map(
-        (account) => AdminPerson(
-          account_id: account,
+        (accountId) => AdminPerson(
+          account_id: accountId,
           family_name: '管理',
           given_name: '员',
         ),

@@ -366,7 +366,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 本人钱包名是昵称真源，后端 display_name 是公开镜像；均缺失时使用
   /// 按账户稳定选择的本地昵称，账户本身永远不会出现在昵称位置。
   String get _displayName {
-    return ProfilePresentation.forAccount(widget.accountId).resolveDisplayName(
+    return ProfilePresentation.forAccountId(widget.accountId).resolveDisplayName(
       walletName: widget.isSelf ? _walletName : null,
       publicName: _profile?.displayName,
     );
@@ -385,7 +385,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Widget _bannerWidget() {
     final fallback = Image.asset(
-      ProfilePresentation.forAccount(widget.accountId).bannerAsset,
+      ProfilePresentation.forAccountId(widget.accountId).bannerAsset,
       fit: BoxFit.cover,
     );
     final url = _mediaUrl(_profile?.bannerObjectKey);

@@ -70,7 +70,7 @@ class InstitutionChainService {
     );
     offset += cidLen;
 
-    final account =
+    final accountId =
         _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32)));
     offset += 32;
 
@@ -86,7 +86,7 @@ class InstitutionChainService {
     return CloseProposalInfo(
       proposalId: proposalId,
       actorCidNumber: actorCidNumber,
-      institutionAccountId: account,
+      institutionAccountId: accountId,
       beneficiary: beneficiarySs58,
       proposer: proposerSs58,
     );
