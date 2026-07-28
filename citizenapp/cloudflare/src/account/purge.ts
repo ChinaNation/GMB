@@ -85,6 +85,33 @@ export async function purgeAccount(
   };
 }
 
+/// 换绑吊销:删除**旧身份账户**在 Cloudflare 的隐私/鉴权敏感数据(通讯录密文、Chat
+/// 端到端材料、设备子钥、登录挑战、会话),使换绑(常因私钥泄漏触发)后旧账户无法再
+/// 重建会话拉取旧通讯录密文。
+///
+/// **不删** posts / media / memberships / follows —— 这些随 CID 迁到新账户(「永不丢失」),
+/// 由身份迁移单独处理,不属吊销范围。幂等:重复调用为安全空操作。设备子钥/会话放最后删,
+/// 中途失败仍可用旧会话重试;删后旧账户彻底无法再登录。
+export async function revokeRebindOldAccount(
+  env: Env,
+  accountId: string
+): Promise<{ deleted_rows: number }> {
+  await closeChatRealtime(env, accountId);
+  const results = await env.DB.batch([
+    env.DB.prepare(`DELETE FROM square_contacts WHERE account_id = ?`).bind(accountId),
+    env.DB.prepare(`DELETE FROM chat_keypackages WHERE account_id = ?`).bind(accountId),
+    env.DB.prepare(`DELETE FROM chat_devices WHERE account_id = ?`).bind(accountId),
+    env.DB.prepare(`DELETE FROM chat_device_binding_nonces WHERE account_id = ?`).bind(accountId),
+    env.DB.prepare(`DELETE FROM square_login_challenges WHERE account_id = ?`).bind(accountId),
+    // 设备子钥放最后：删前若中途失败，旧会话仍可重试；删后旧账户彻底无法再登录。
+    env.DB.prepare(`DELETE FROM square_device_subkeys WHERE account_id = ?`).bind(accountId)
+  ]);
+  const deletedRows = results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);
+  await env.SQUARE_CACHE.delete(`square_identity:${accountId}`);
+  await clearAccountSessions(env, accountId);
+  return { deleted_rows: deletedRows };
+}
+
 /// 翻页硬删除某 R2 前缀下全部对象。
 async function deleteR2Prefix(
   env: Env,

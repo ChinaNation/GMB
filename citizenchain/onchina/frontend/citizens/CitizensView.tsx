@@ -24,6 +24,14 @@ function makeCitizenName(row: Pick<CitizenRow, 'family_name' | 'given_name'>) {
   return `${row.family_name ?? ''}${row.given_name ?? ''}`.trim() || '-';
 }
 
+/** 从 CID 机构段(第二段前 4 位)派生人主体类型:CTZN=公民 / NATP=居民。 */
+function citizenTypeLabel(cidNumber: string): string {
+  const code = cidNumber.split('-')[1]?.slice(0, 4);
+  if (code === 'CTZN') return '公民';
+  if (code === 'NATP') return '居民';
+  return '-';
+}
+
 function makeCenteredTitle(center: ReactNode, back?: () => void) {
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minHeight: 32 }}>
@@ -184,6 +192,13 @@ export function CitizensView() {
       render: (v: string | undefined) => v ?? '-',
     },
     {
+      title: '类型',
+      width: 90,
+      align: 'center',
+      render: (_v: unknown, row) =>
+        row.cid_number ? <Tag color="geekblue">{citizenTypeLabel(row.cid_number)}</Tag> : '-',
+    },
+    {
       title: '姓名',
       align: 'center',
       render: (_v: unknown, row) => makeCitizenName(row),
@@ -234,7 +249,7 @@ export function CitizensView() {
     <>
       <Card
         title={makeCenteredTitle(
-          activeProvinceName && activeCityName ? `${activeProvinceName} · ${activeCityName}` : '公民身份列表',
+          activeProvinceName && activeCityName ? `${activeProvinceName} · ${activeCityName}` : '公民/居民列表',
           selectedCity ? () => setSelectedCity(null) : undefined,
         )}
         bordered={false}
@@ -252,7 +267,7 @@ export function CitizensView() {
           }}
         >
           <Typography.Title level={4} style={{ margin: 0 }}>
-            公民列表
+            公民 / 居民列表
           </Typography.Title>
           <Form form={searchForm} layout="inline" onFinish={onSearch} style={{ rowGap: 12 }}>
             <Form.Item name="keyword" style={{ marginBottom: 0 }}>
@@ -278,7 +293,7 @@ export function CitizensView() {
                   disabled={!canUseCitizenList}
                   onClick={() => setCreateModalOpen(true)}
                 >
-                  新增公民
+                  新增公民 / 居民
                 </Button>
               </Form.Item>
             )}

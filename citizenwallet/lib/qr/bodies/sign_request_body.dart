@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:citizenwallet/qr/envelope.dart';
+import 'package:citizenwallet/qr/qr_protocols.dart';
 
 class SignRequestBody implements QrBody {
   const SignRequestBody({
@@ -54,11 +55,21 @@ class SignRequestBody implements QrBody {
     if (alg != 1) {
       throw const FormatException('签名请求 g 目前只允许 1(sr25519)');
     }
-    if (signerPublicKey is! String || signerPublicKey.isEmpty) {
-      throw const FormatException('签名请求 u 必填');
+    if (signerPublicKey is! String) {
+      throw const FormatException('签名请求 u 必须是字符串');
     }
-    if (_b64ToBytes(signerPublicKey, 'u').length != 32) {
-      throw const FormatException('签名请求 u 必须解码为 32 字节');
+    // 注册局占号/换绑域签名:b.u 留空,钱包扫码自填本账户;其余动作 u 必填 32B。
+    if (QrActions.isSelfAccountDomainAction(action)) {
+      if (signerPublicKey.isNotEmpty) {
+        throw const FormatException('占号/换绑签名请求 u 必须留空(钱包自填账户)');
+      }
+    } else {
+      if (signerPublicKey.isEmpty) {
+        throw const FormatException('签名请求 u 必填');
+      }
+      if (_b64ToBytes(signerPublicKey, 'u').length != 32) {
+        throw const FormatException('签名请求 u 必须解码为 32 字节');
+      }
     }
     if (payload is! String || payload.isEmpty) {
       throw const FormatException('签名请求 d 必填');

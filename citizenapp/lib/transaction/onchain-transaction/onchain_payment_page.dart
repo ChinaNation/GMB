@@ -372,7 +372,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     );
     if (!mounted || contact == null) return;
     setState(() {
-      // 通讯录始终属于默认用户；这里只接收联系人 SS58 地址，付款钱包保持不变。
+      // 通讯录始终属于身份账户；这里只接收联系人 SS58 地址，付款钱包保持不变。
       _toController.text = contact.ss58Address;
     });
   }

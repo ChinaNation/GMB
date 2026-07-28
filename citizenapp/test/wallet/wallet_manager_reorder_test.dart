@@ -110,7 +110,7 @@ void main() {
       expect(wallets[2].sortOrder, 2);
     });
 
-    test('reorderWallets 自增 walletsRevision(切默认用户的全端广播信号)', () async {
+    test('reorderWallets 自增 walletsRevision(切身份账户的全端广播信号)', () async {
       await seedThreeWallets();
       final manager = WalletManager();
 

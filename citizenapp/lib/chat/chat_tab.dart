@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../8964/profile/user_qr_page.dart';
 import '../8964/profile/widgets/local_identity_avatar.dart';
 import '../my/myid/identity_account_cache.dart';
+import '../my/myid/widgets/identity_registration_gate.dart';
 import '../my/user/contact_book_page.dart';
 import '../qr/scan_dispatch_flow.dart';
 import '../ui/app_theme.dart';
@@ -147,8 +148,8 @@ class _ChatTabState extends State<ChatTab> {
     );
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
     widget.selectedTab?.addListener(_onSelectedTabChanged);
-    // 本页常驻 IndexedStack；切换默认用户钱包（= 切换聊天身份）后经
-    // walletsRevision 广播重载，会话列表 accountId 立即切到新默认用户，
+    // 本页常驻 IndexedStack；切换身份账户（CID 换绑 / 切钱包）后经
+    // walletsRevision 广播重载，会话列表 accountId 立即切到新身份账户，
     // 不再等 App 退后台回前台。
     WalletManager.walletsRevision.addListener(_onWalletsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestCoordinate());
@@ -680,53 +681,57 @@ class _ChatTabState extends State<ChatTab> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ColoredBox(
-        color: AppTheme.scaffoldBg,
-        child: RefreshIndicator(
-          onRefresh: () => _reload(syncFirst: true),
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _ChatHeader(onAction: _onEntryAction)),
-              if (_error != null)
-                SliverToBoxAdapter(child: _ErrorBanner(message: _error!)),
-              if (!_loading && _accountId.isNotEmpty)
+    return IdentityRegistrationGate(
+      featureLabel: '聊天',
+      child: SafeArea(
+        child: ColoredBox(
+          color: AppTheme.scaffoldBg,
+          child: RefreshIndicator(
+            onRefresh: () => _reload(syncFirst: true),
+            child: CustomScrollView(
+              slivers: [
                 SliverToBoxAdapter(
-                  child: _SearchEntry(onTap: () => unawaited(_openSearch())),
-                ),
-              if (_loading)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_accountId.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _NoAccount(),
-                )
-              else if (_conversations.isNotEmpty)
-                SliverList.builder(
-                  itemCount: _conversations.length,
-                  itemBuilder: (context, index) {
-                    final preview = _conversations[index];
-                    return _ConversationTile(
-                      preview: preview,
-                      isFirst: index == 0,
-                      isLast: index == _conversations.length - 1,
-                      onTap: () => _openConversation(preview),
-                      onDelete: () => _confirmAndDeleteConversation(preview),
-                      onManage: preview.isGroup
-                          ? () => _openGroupManage(preview)
-                          : null,
-                    );
-                  },
-                )
-              else
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyConversationList(),
-                ),
-            ],
+                    child: _ChatHeader(onAction: _onEntryAction)),
+                if (_error != null)
+                  SliverToBoxAdapter(child: _ErrorBanner(message: _error!)),
+                if (!_loading && _accountId.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _SearchEntry(onTap: () => unawaited(_openSearch())),
+                  ),
+                if (_loading)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_accountId.isEmpty)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _NoAccount(),
+                  )
+                else if (_conversations.isNotEmpty)
+                  SliverList.builder(
+                    itemCount: _conversations.length,
+                    itemBuilder: (context, index) {
+                      final preview = _conversations[index];
+                      return _ConversationTile(
+                        preview: preview,
+                        isFirst: index == 0,
+                        isLast: index == _conversations.length - 1,
+                        onTap: () => _openConversation(preview),
+                        onDelete: () => _confirmAndDeleteConversation(preview),
+                        onManage: preview.isGroup
+                            ? () => _openGroupManage(preview)
+                            : null,
+                      );
+                    },
+                  )
+                else
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _EmptyConversationList(),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

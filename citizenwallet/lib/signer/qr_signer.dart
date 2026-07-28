@@ -39,6 +39,8 @@ class QrSigner {
   static const int maxPayloadChars = 32768;
   static const List<int> _gmbPrefix = [0x47, 0x4D, 0x42];
   static const int _opSignCitizenIdentity = 0x10;
+  static const int _opSignCidOccupy = 0x12;
+  static const int _opSignCidAdminRebind = 0x1F;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
   /// 请求 ID 合法性(共享单源:登录/离线签名同一规则,防两处漂移)。
@@ -101,16 +103,20 @@ class QrSigner {
   SignResponseEnvelope buildResponse({
     required SignRequestEnvelope request,
     required String signatureHex,
+    String? signerPublicKeyHexOverride,
     int? nowEpochSeconds,
   }) {
     final requestBody = request.body;
     _validateHexField(signatureHex, 'signature');
+    // 占号/换绑:请求 b.u 留空,响应 b.u 用钱包自选账户(override)带回,供 OnChina 取 account_id。
+    final responseSignerPublicKeyHex =
+        signerPublicKeyHexOverride ?? requestBody.signerPublicKeyHex;
     return QrEnvelope<SignResponseBody>(
       kind: QrKind.signResponse,
       id: request.id,
       expiresAt: request.expiresAt,
       body: SignResponseBody.fromHex(
-        signerPublicKeyHex: requestBody.signerPublicKeyHex,
+        signerPublicKeyHex: responseSignerPublicKeyHex,
         signatureHex: signatureHex,
       ),
     );
@@ -146,10 +152,25 @@ class QrSigner {
 
   /// Substrate 交易签名必须复刻 SignedPayload::using_encoded:
   /// payload <= 256B 时签原文,>256B 时签 blake2_256(payload)。
-  static Uint8List signingBytesFor(SignRequestBody body) {
+  static Uint8List signingBytesFor(SignRequestBody body,
+      {Uint8List? selfAccountId}) {
     final payload = body.payloadBytes;
     if (body.action == QrActions.citizenIdentity) {
       return _gmbSigningMessage(_opSignCitizenIdentity, payload);
+    }
+    if (QrActions.isSelfAccountDomainAction(body.action)) {
+      // 占号/换绑:payload=append_bounded(cid),追加钱包自选账户32B 后按域 op 哈希;
+      // 与后端 verify_occupy_signature / verify_admin_rebind_signature 逐字节对齐。
+      if (selfAccountId == null || selfAccountId.length != 32) {
+        return Uint8List(0);
+      }
+      final opTag = body.action == QrActions.citizenOccupy
+          ? _opSignCidOccupy
+          : _opSignCidAdminRebind;
+      return _gmbSigningMessage(
+        opTag,
+        Uint8List.fromList([...payload, ...selfAccountId]),
+      );
     }
     if (QrActions.isChainAction(body.action) && payload.length > 256) {
       final digest = Blake2bDigest(digestSize: 32)

@@ -802,19 +802,20 @@ void main() {
       expect(revoke?.fields['actor_cid_number'], registryActorCid);
     });
 
-    test('decodes occupy_cid raw call data (pallet=10 call=6)', () {
-      // 注册局建档占号,逐字节对齐 onchina encode_occupy_cid_call:
-      // [10][6] actor_cid_number cid_number commitment province city。
-      final commitment = List<int>.filled(32, 0xbb);
+    test('decodes occupy_cid raw call data (pallet=10 call=6, 占即绑)', () {
+      // 占即绑,逐字节对齐 onchina encode_occupy_cid_call:
+      // [10][6] actor_cid actor_role cid account_id[32] occupy_signature:Vec(64B)。
+      final accountId = List<int>.filled(32, 0xbb);
+      final signature = List<int>.filled(64, 0xcc);
       final callData = [
         0x0a,
         0x06,
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
-        ...commitment,
-        ...compactVec('43'),
-        ...compactVec('001'),
+        ...accountId,
+        ...compactU32(64),
+        ...signature,
       ];
 
       final decoded = PayloadDecoder.decode(hexOf(callData));
@@ -823,22 +824,23 @@ void main() {
       expect(decoded!.action, 'occupy_cid');
       expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
-      expect(decoded.fields['commitment'], '0x${hexLower(commitment)}');
-      expect(decoded.reviewFields['residence'], '43 / 001');
+      expect(decoded.fields['account_id'], '0x${hexLower(accountId)}');
+      expect(decoded.reviewFields['account_id'], '0x${hexLower(accountId)}');
       expect(decoded.summary, contains('CTZN-430100-0001'));
     });
 
     test('decodes occupy_cid with signing tail (pallet=10 call=6)', () {
-      final commitment = List<int>.filled(32, 0xbb);
+      final accountId = List<int>.filled(32, 0xbb);
+      final signature = List<int>.filled(64, 0xcc);
       final callData = [
         0x0a,
         0x06,
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
-        ...commitment,
-        ...compactVec('43'),
-        ...compactVec('001'),
+        ...accountId,
+        ...compactU32(64),
+        ...signature,
       ];
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
@@ -885,26 +887,29 @@ void main() {
       expect(decoded.reviewFields['cid_number'], 'CTZN-430100-0001');
     });
 
-    test('decodes occupy_cids_batch and rejects CitizenIdentity call 5 hole',
+    test('decodes admin_rebind_cid_account_id (call 7) and rejects self_occupy call 5',
         () {
-      final batchCall = [
+      // 链上 call 7 = admin_rebind_cid_account_id(顶替已删的 occupy_cids_batch),
+      // 布局与 occupy_cid 同构:actor_cid actor_role cid new_account_id[32] rebind_signature:Vec。
+      final accountId = List<int>.filled(32, 0x11);
+      final signature = List<int>.filled(64, 0xdd);
+      final rebindCall = [
         0x0a,
         0x07,
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
-        ...compactU32(2),
         ...compactVec('CTZN-430100-0001'),
-        ...List<int>.filled(32, 0x11),
-        ...compactVec('CTZN-430100-0002'),
-        ...List<int>.filled(32, 0x22),
-        ...compactVec('43'),
-        ...compactVec('001'),
+        ...accountId,
+        ...compactU32(64),
+        ...signature,
       ];
-      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(batchCall)));
-      expect(decoded?.action, 'occupy_cids_batch');
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(rebindCall)));
+      expect(decoded?.action, 'admin_rebind_cid_account_id');
       expect(decoded?.fields['actor_cid_number'], registryActorCid);
-      expect(decoded?.fields['cid_count'], '2');
+      expect(decoded?.fields['cid_number'], 'CTZN-430100-0001');
+      expect(decoded?.fields['account_id'], '0x${hexLower(accountId)}');
 
+      // CitizenIdentity call 5 = self_occupy_cid(自助路径),不在注册局冷签 decoder 覆盖内,须拒。
       final snapshotCall = [
         0x0a,
         0x05,

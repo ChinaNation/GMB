@@ -319,6 +319,64 @@ void main() {
       expect(actual.toList(), expected.toList());
       expect(actual.toList(), isNot(body.payloadBytes.toList()));
     });
+
+    test('注册局占号域签名 = GMB OP_SIGN_CID_OCCUPY(0x12)(bounded_cid ++ 本账户)', () {
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits]; // Compact(26)=0x68
+      final account = List<int>.filled(32, 0xab);
+      final body = SignRequestBody.fromHex(
+        action: QrActions.citizenOccupy,
+        signerPublicKeyHex: testSignerPublicKeyHex, // 占号下 b.u 被忽略
+        payloadHex:
+            '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
+      final input =
+          Uint8List.fromList([0x47, 0x4d, 0x42, 0x12, ...boundedCid, ...account]);
+      final digest = Blake2bDigest(digestSize: 32)
+        ..update(input, 0, input.length);
+      final expected = Uint8List(32);
+      digest.doFinal(expected, 0);
+
+      final actual = QrSigner.signingBytesFor(body,
+          selfAccountId: Uint8List.fromList(account));
+      expect(actual.toList(), expected.toList());
+    });
+
+    test('注册局换绑域签名用 OP_SIGN_CID_ADMIN_REBIND(0x1F)', () {
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits];
+      final account = List<int>.filled(32, 0xcd);
+      final body = SignRequestBody.fromHex(
+        action: QrActions.citizenRebind,
+        signerPublicKeyHex: testSignerPublicKeyHex,
+        payloadHex:
+            '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
+      final input =
+          Uint8List.fromList([0x47, 0x4d, 0x42, 0x1f, ...boundedCid, ...account]);
+      final digest = Blake2bDigest(digestSize: 32)
+        ..update(input, 0, input.length);
+      final expected = Uint8List(32);
+      digest.doFinal(expected, 0);
+
+      expect(
+        QrSigner.signingBytesFor(body, selfAccountId: Uint8List.fromList(account))
+            .toList(),
+        expected.toList(),
+      );
+    });
+
+    test('占号缺少本账户时返回空(不盲签)', () {
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits];
+      final body = SignRequestBody.fromHex(
+        action: QrActions.citizenOccupy,
+        signerPublicKeyHex: testSignerPublicKeyHex,
+        payloadHex:
+            '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
+      expect(QrSigner.signingBytesFor(body).isEmpty, isTrue);
+    });
   });
 
   group('QrSigner.verifySr25519Signature', () {

@@ -3,6 +3,8 @@ import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/identity_gate_test_util.dart';
+
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/chat/chat_page.dart';
 import 'package:citizenapp/chat/chat_flow.dart';
@@ -15,6 +17,7 @@ import 'package:citizenapp/chat/storage/chat_store.dart';
 import 'package:citizenapp/chat/transport/chat_transport.dart';
 
 void main() {
+  useRegisteredIdentityGate();
   testWidgets('聊天标题为账户时改用稳定默认昵称', (tester) async {
     const peer = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
     final store = _FakeChatStore();

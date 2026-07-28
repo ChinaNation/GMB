@@ -5,7 +5,9 @@
 
 mod sign_request;
 
-pub(crate) use sign_request::{build_sign_request, build_sign_request_bytes};
+pub(crate) use sign_request::{
+    build_domain_sign_request_bytes, build_sign_request, build_sign_request_bytes,
+};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -49,6 +51,10 @@ static ACTION_CITIZEN_IDENTITY_CODE: LazyLock<u16> =
     LazyLock::new(|| registry_action_code("citizen_identity"));
 static ACTION_ONCHINA_ADMIN_CODE: LazyLock<u16> =
     LazyLock::new(|| registry_action_code("onchina_admin_action"));
+static ACTION_CITIZEN_OCCUPY_CODE: LazyLock<u16> =
+    LazyLock::new(|| registry_action_code("citizen_occupy"));
+static ACTION_CITIZEN_REBIND_CODE: LazyLock<u16> =
+    LazyLock::new(|| registry_action_code("citizen_rebind"));
 
 pub(crate) fn action_login() -> u16 {
     *ACTION_LOGIN_CODE
@@ -64,6 +70,17 @@ pub(crate) fn action_citizen_identity() -> u16 {
 /// 对应 qr-action-registry.md 非链动作码 a=3。
 pub(crate) fn action_onchina_admin() -> u16 {
     *ACTION_ONCHINA_ADMIN_CODE
+}
+
+/// 注册局代办占号(占即绑)的公民域签名(非链交易,b.d=cid_number 裸字节、b.u 留空),
+/// 公民钱包自填本账户对 `signing_message(OP_SIGN_CID_OCCUPY, scaleString(cid)++account)` 签名。
+pub(crate) fn action_occupy() -> u16 {
+    *ACTION_CITIZEN_OCCUPY_CODE
+}
+
+/// 注册局代办换绑钱包的新账户域签名(非链交易,同上,域 OP_SIGN_CID_ADMIN_REBIND)。
+pub(crate) fn action_rebind() -> u16 {
+    *ACTION_CITIZEN_REBIND_CODE
 }
 // 链交易动作码(机构治理/管理员集合)不在此处发明扁平常量:
 // 统一用 `core::institution_call::chain_action_code(pallet,call)` 派生(b.a 与 b.d 同源),
@@ -385,5 +402,33 @@ mod tests {
             b64_to_prefixed_hex(&body.account_id, 32, "b.u").expect("b.u 应可解码"),
             ACCOUNT_ID
         );
+    }
+
+    #[test]
+    fn domain_sign_request_leaves_account_empty_and_carries_bounded_cid() {
+        // 占号域签名 QR:b.u 留空(钱包自填本账户)、b.d=append_bounded(cid)、b.a=占号动作码。
+        let cid = "CN220-CTZN2-198805200-2026";
+        let json = build_domain_sign_request_bytes(
+            "citizen-occupy-req-1",
+            1_800_000_000,
+            cid,
+            action_occupy(),
+        )
+        .expect("域签名请求应生成");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("生成的应是合法 JSON");
+        assert_eq!(value["p"], QR_V1);
+        assert_eq!(value["k"], 1);
+        assert_eq!(value["b"]["u"], "");
+        assert_eq!(value["b"]["a"].as_u64().expect("动作码"), u64::from(action_occupy()));
+        // b.d = Compact(26)=0x68 ++ cid;钱包 signing_message(0x12, d ++ 本账户32) 与后端对齐。
+        // golden 钉死 URL_SAFE_NO_PAD(append_bounded(cid)):偏离即冷热签名破坏。
+        assert_eq!(value["b"]["d"], "aENOMjIwLUNUWk4yLTE5ODgwNTIwMC0yMDI2");
+    }
+
+    #[test]
+    fn occupy_and_rebind_actions_are_distinct_registered_codes() {
+        assert_ne!(action_occupy(), action_rebind());
+        assert_eq!(action_occupy(), 10);
+        assert_eq!(action_rebind(), 11);
     }
 }

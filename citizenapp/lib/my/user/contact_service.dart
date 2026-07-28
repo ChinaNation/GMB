@@ -237,7 +237,7 @@ class UserContactService {
     return _readContacts(accountId);
   }
 
-  /// 返回通讯录当前所属的默认用户账户，供扫码页做“不能添加自己”校验。
+  /// 返回通讯录当前所属的身份账户，供扫码页做“不能添加自己”校验。
   Future<String> getAccountId() async =>
       await _requireIdentityAccountId();
 
@@ -342,7 +342,7 @@ class UserContactService {
 
   /// 拉云端快照后重放本机待同步操作。损坏或属于其他钱包的密文只被忽略，
   /// 绝不覆盖本机有效缓存；下一次正常写入会修复对应云端记录。
-  /// 同步入口同样只接受默认用户；付款钱包和调用方参数不能改变密文归属。
+  /// 同步入口同样只接受身份账户；付款钱包和调用方参数不能改变密文归属。
   Future<List<UserContact>> sync() async {
     return _syncWallet(await _requireIdentityAccountId());
   }

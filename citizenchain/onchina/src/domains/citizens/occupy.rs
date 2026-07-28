@@ -355,6 +355,8 @@ fn encode_revoke_cid_call(
 pub(crate) struct PrepareCitizenOccupyOutput {
     pub(crate) request_id: String,
     pub(crate) cid_number: String,
+    /// 公民钱包域签名请求二维码(域 OP_SIGN_CID_OCCUPY;b.u 空、b.d=cid,钱包自填本账户)。
+    pub(crate) citizen_sign_request: String,
     pub(crate) expires_at: i64,
 }
 
@@ -388,6 +390,8 @@ pub(crate) struct PrepareCitizenRebindInput {
 pub(crate) struct PrepareCitizenRebindOutput {
     pub(crate) request_id: String,
     pub(crate) cid_number: String,
+    /// 新钱包域签名请求二维码(域 OP_SIGN_CID_ADMIN_REBIND;b.u 空、b.d=cid,钱包自填本账户)。
+    pub(crate) new_wallet_sign_request: String,
     pub(crate) expires_at: i64,
 }
 
@@ -521,6 +525,17 @@ pub(crate) async fn prepare_citizen_occupy(
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "占号会话落库失败");
     }
 
+    // 公民钱包域签名挑战(b.u 空、b.d=cid,钱包扫码自填本账户签 OP_SIGN_CID_OCCUPY)。
+    let citizen_sign_request = match crate::core::qr::build_domain_sign_request_bytes(
+        request_id.as_str(),
+        expires_at.timestamp(),
+        cid_number.as_str(),
+        crate::core::qr::action_occupy(),
+    ) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CITIZEN_OCCUPY_PREPARE",
@@ -539,6 +554,7 @@ pub(crate) async fn prepare_citizen_occupy(
         data: PrepareCitizenOccupyOutput {
             request_id,
             cid_number,
+            citizen_sign_request,
             expires_at: expires_at.timestamp(),
         },
     })
@@ -743,6 +759,16 @@ pub(crate) async fn prepare_citizen_rebind(
         tracing::error!(error = %err, "insert rebind pending session failed");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话落库失败");
     }
+    // 新钱包域签名挑战(b.u 空、b.d=cid,钱包扫码自填本账户签 OP_SIGN_CID_ADMIN_REBIND)。
+    let new_wallet_sign_request = match crate::core::qr::build_domain_sign_request_bytes(
+        request_id.as_str(),
+        expires_at.timestamp(),
+        cid_number.as_str(),
+        crate::core::qr::action_rebind(),
+    ) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     crate::core::runtime_ops::append_audit_log(
         &state,
         "CITIZEN_ADMIN_REBIND_PREPARE",
@@ -760,6 +786,7 @@ pub(crate) async fn prepare_citizen_rebind(
         data: PrepareCitizenRebindOutput {
             request_id,
             cid_number,
+            new_wallet_sign_request,
             expires_at: expires_at.timestamp(),
         },
     })

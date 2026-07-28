@@ -49,6 +49,9 @@ class QrActions {
 
   static const int login = 1;
   static const int citizenIdentity = 2;
+  // 注册局代办占号/换绑域签名(offchain,值对齐 qr-protocol registry)。
+  static const int citizenOccupy = 10;
+  static const int citizenRebind = 11;
   static const int onchinaAdmin = 3;
   static const int activateAdmin = 5;
   static const int decryptAdmin = 6;
@@ -102,6 +105,11 @@ class QrActions {
       ((palletIndex & 0xff) << 8) | (callIndex & 0xff);
 
   static bool isChainAction(int action) => action >= 0x0100;
+
+  /// 注册局代办占号/换绑域签名:b.u 留空、d=append_bounded(cid),
+  /// 钱包扫码自填本账户再 signingMessage(op_tag, d ++ 本账户32)。
+  static bool isSelfAccountDomainAction(int action) =>
+      action == citizenOccupy || action == citizenRebind;
 
   static bool isBinaryRaw(int action) =>
       action == activateAdmin || action == decryptAdmin;

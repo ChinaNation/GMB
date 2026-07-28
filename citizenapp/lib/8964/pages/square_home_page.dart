@@ -17,6 +17,7 @@ import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/widgets/identity_registration_gate.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -90,9 +91,9 @@ class _SquareHomePageState extends State<SquareHomePage> {
     _feedSource = widget.feedSource ?? SquareApiClient();
     _identityFuture = _loadIdentity(readLiveChain: false);
     _feedFuture = _loadFeed();
-    // 本页常驻 IndexedStack；切换默认用户钱包（= 切换身份）后经
+    // 本页常驻 IndexedStack；切换身份账户（CID 换绑 / 切钱包）后经
     // walletsRevision 广播重载身份，保证身份图标与作者点击的 isSelf
-    // 判定始终基于当前默认用户。
+    // 判定始终基于当前身份账户。
     WalletManager.walletsRevision.addListener(_onWalletsChanged);
     _smoldotClientManager.healthStatusListenable
         .addListener(_onChainHealthChanged);
@@ -331,104 +332,110 @@ class _SquareHomePageState extends State<SquareHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // 发布=右下角正圆悬浮 primary FAB（endFloat=底部导航「我的」tab 上方）。
-      floatingActionButton: FloatingActionButton(
-        shape: const CircleBorder(),
-        onPressed: _openCompose,
-        tooltip: '发布动态',
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.edit_rounded),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 头像入口已删（进自己主页只走「我的-背景图」），分类栏上移到顶部省空间。
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: SquareFeedTabs(
-                  selected: _selectedFeed,
-                  followingUnread: _followingUnread,
-                  onChanged: (feed) {
-                    setState(() {
-                      _selectedFeed = feed;
-                      _feedFuture = _loadFeed();
-                    });
-                    // 进关注子 tab → 清关注红点。
-                    if (feed == SquareFeedKind.following) {
-                      unawaited(_onFollowingActivated());
-                    }
-                  },
+    return IdentityRegistrationGate(
+      featureLabel: '广场',
+      child: Scaffold(
+        // 发布=右下角正圆悬浮 primary FAB（endFloat=底部导航「我的」tab 上方）。
+        floatingActionButton: FloatingActionButton(
+          shape: const CircleBorder(),
+          onPressed: _openCompose,
+          tooltip: '发布动态',
+          backgroundColor: AppTheme.primary,
+          foregroundColor: Colors.white,
+          child: const Icon(Icons.edit_rounded),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // 头像入口已删（进自己主页只走「我的-背景图」），分类栏上移到顶部省空间。
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SquareFeedTabs(
+                    selected: _selectedFeed,
+                    followingUnread: _followingUnread,
+                    onChanged: (feed) {
+                      setState(() {
+                        _selectedFeed = feed;
+                        _feedFuture = _loadFeed();
+                      });
+                      // 进关注子 tab → 清关注红点。
+                      if (feed == SquareFeedKind.following) {
+                        unawaited(_onFollowingActivated());
+                      }
+                    },
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: Stack(
-                children: [
-                  // 页面中央若隐若现的坦克水印（= 广场 tab 图标）：常驻背景、不拦触摸，
-                  // 动态卡片浮于其上；无动态时只见水印，取代原空态图标+文字。
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Center(
-                        child: Opacity(
-                          opacity: 0.05,
-                          child: ImageFiltered(
-                            imageFilter:
-                                ui.ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2),
-                            child: SvgPicture.asset(
-                              'assets/icons/tank.svg',
-                              key: const ValueKey<String>(
-                                'square-tank-watermark',
-                              ),
-                              width: 220,
-                              height: 220,
-                              colorFilter: const ColorFilter.mode(
-                                AppTheme.primary,
-                                BlendMode.srcIn,
+              Expanded(
+                child: Stack(
+                  children: [
+                    // 页面中央若隐若现的坦克水印（= 广场 tab 图标）：常驻背景、不拦触摸，
+                    // 动态卡片浮于其上；无动态时只见水印，取代原空态图标+文字。
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Opacity(
+                            opacity: 0.05,
+                            child: ImageFiltered(
+                              imageFilter:
+                                  ui.ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2),
+                              child: SvgPicture.asset(
+                                'assets/icons/tank.svg',
+                                key: const ValueKey<String>(
+                                  'square-tank-watermark',
+                                ),
+                                width: 220,
+                                height: 220,
+                                colorFilter: const ColorFilter.mode(
+                                  AppTheme.primary,
+                                  BlendMode.srcIn,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  FutureBuilder<List<SquarePost>>(
-                    future: _feedFuture,
-                    builder: (context, snapshot) {
-                      final posts = _composeFeed(
-                        snapshot.data ?? const <SquarePost>[],
-                      );
-                      if (snapshot.connectionState != ConnectionState.done &&
-                          posts.isEmpty) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      // Session 已不再以链上账户或余额作门禁；广场加载失败统一按当前
-                      // 接口语义处理，不保留已删除门禁的专用错误分支。
-                      final errorMessage =
-                          snapshot.hasError ? '广场内容加载失败' : null;
-                      return RefreshIndicator(
-                        onRefresh: _refreshFeed,
-                        child: _FeedBody(
-                          posts: posts,
-                          errorMessage: errorMessage,
-                          onOpenPost: (post) => _openDetail(post),
-                          onOpenAuthor: _openAuthor,
-                          mediaUrlOf: _squareApi.mediaUrl,
-                          avatarHeaders: _feedSessionToken == null
-                              ? null
-                              : {'authorization': 'Bearer $_feedSessionToken'},
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                    FutureBuilder<List<SquarePost>>(
+                      future: _feedFuture,
+                      builder: (context, snapshot) {
+                        final posts = _composeFeed(
+                          snapshot.data ?? const <SquarePost>[],
+                        );
+                        if (snapshot.connectionState != ConnectionState.done &&
+                            posts.isEmpty) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+                        // Session 已不再以链上账户或余额作门禁；广场加载失败统一按当前
+                        // 接口语义处理，不保留已删除门禁的专用错误分支。
+                        final errorMessage =
+                            snapshot.hasError ? '广场内容加载失败' : null;
+                        return RefreshIndicator(
+                          onRefresh: _refreshFeed,
+                          child: _FeedBody(
+                            posts: posts,
+                            errorMessage: errorMessage,
+                            onOpenPost: (post) => _openDetail(post),
+                            onOpenAuthor: _openAuthor,
+                            mediaUrlOf: _squareApi.mediaUrl,
+                            avatarHeaders: _feedSessionToken == null
+                                ? null
+                                : {
+                                    'authorization': 'Bearer $_feedSessionToken'
+                                  },
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

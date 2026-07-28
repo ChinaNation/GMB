@@ -240,8 +240,8 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.occupyCidCall) {
           return _decodeOccupyCid(bytes);
         }
-        if (callIndex == PalletRegistry.occupyCidsBatchCall) {
-          return _decodeOccupyCidsBatch(bytes);
+        if (callIndex == PalletRegistry.adminRebindCidAccountIdCall) {
+          return _decodeAdminRebindCidAccountId(bytes);
         }
         if (callIndex == PalletRegistry.revokeCidCall) {
           return _decodeRevokeCid(bytes);
@@ -2570,12 +2570,36 @@ class PayloadDecoder {
     );
   }
 
-  // CitizenIdentity(10) / occupy_cid(6) · 注册局建档占号(注册局签名)。
+  // CitizenIdentity(10) / occupy_cid(6) · 注册局占号(占即绑,注册局签名)。
   // SCALE: [10][6][actor_cid_number:CidNumber][actor_role_code:RoleCode][cid_number:CidNumber]
-  //        [commitment:[u8;32]][residence_province_code:Vec<u8>]
-  //        [residence_city_code:Vec<u8>]
-  // 逐字节对齐 onchina occupy.rs::encode_occupy_cid_call。
+  //        [account_id:[u8;32]][occupy_signature:Vec<u8>(Compact(64)+64B)]
+  // 逐字节对齐 onchina occupy.rs::encode_occupy_cid_call(占即绑)。
   static DecodedPayload? _decodeOccupyCid(Uint8List bytes) {
+    return _decodeOccupyOrRebind(
+      bytes,
+      action: 'occupy_cid',
+      summaryPrefix: '注册局占号绑定',
+    );
+  }
+
+  // CitizenIdentity(10) / admin_rebind_cid_account_id(7) · 注册局代匿名 CID 换绑钱包账户(注册局签名)。
+  // SCALE 与 occupy_cid 同构:…cid + new_account_id[32] + rebind_signature:Vec。
+  // 逐字节对齐 onchina occupy.rs::encode_admin_rebind_cid_account_id_call。
+  static DecodedPayload? _decodeAdminRebindCidAccountId(Uint8List bytes) {
+    return _decodeOccupyOrRebind(
+      bytes,
+      action: 'admin_rebind_cid_account_id',
+      summaryPrefix: '注册局换绑钱包账户',
+    );
+  }
+
+  /// occupy_cid / admin_rebind_cid_account_id 同构占即绑解码:
+  /// actor_cid_number + actor_role_code + cid_number + account_id[32] + signature:Vec(64B)。
+  static DecodedPayload? _decodeOccupyOrRebind(
+    Uint8List bytes, {
+    required String action,
+    required String summaryPrefix,
+  }) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
     if (actorRead == null) return null;
@@ -2589,96 +2613,32 @@ class PayloadDecoder {
     offset = cidRead.$2;
 
     if (offset + 32 > bytes.length) return null;
-    final commitment = bytes.sublist(offset, offset + 32);
+    final accountId = bytes.sublist(offset, offset + 32);
     offset += 32;
 
-    final (provinceCode, afterProvince) = _readUtf8Vec(bytes, offset);
-    if (provinceCode == null ||
-        provinceCode.isEmpty ||
-        provinceCode.length > 16) {
-      return null;
-    }
-    offset = afterProvince;
-    final (cityCode, afterCity) = _readUtf8Vec(bytes, offset);
-    if (cityCode == null || cityCode.isEmpty || cityCode.length > 16) {
-      return null;
-    }
-    offset = afterCity;
+    // occupy_signature / rebind_signature:BoundedVec = Compact(len=64) ++ 64 字节。
+    final (signatureLen, signatureLenSize) = _decodeCompactU32(bytes, offset);
+    if (signatureLenSize == 0 || signatureLen != 64) return null;
+    offset += signatureLenSize;
+    if (offset + signatureLen > bytes.length) return null;
+    offset += signatureLen;
     if (!_hasCallDataEnd(bytes, offset)) return null;
 
+    final accountHex = _bytesToLowerHex(accountId); // 已含 0x 前缀
     return DecodedPayload(
-      action: 'occupy_cid',
-      summary: '注册局占号(登记 CID 号):$cidNumber',
+      action: action,
+      summary: '$summaryPrefix:$cidNumber',
       fields: <String, String>{
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
-        'commitment': _bytesToLowerHex(commitment),
-        'residence_province_code': provinceCode,
-        'residence_city_code': cityCode,
+        'account_id': accountHex,
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
-        'residence': '$provinceCode / $cityCode',
-      },
-    );
-  }
-
-  // CitizenIdentity(10) / occupy_cids_batch(7)
-  // SCALE:actor_cid_number + actor_role_code + Vec<{cid_number, commitment}>
-  // + province_code + city_code。
-  static DecodedPayload? _decodeOccupyCidsBatch(Uint8List bytes) {
-    var offset = 2;
-    final actorRead = _readCidNumber(bytes, offset);
-    if (actorRead == null) return null;
-    offset = actorRead.$2;
-    final roleRead = _readRoleCode(bytes, offset);
-    if (roleRead == null) return null;
-    offset = roleRead.$2;
-    final (itemCount, countSize) = _decodeCompactU32(bytes, offset);
-    if (countSize == 0 || itemCount == 0) return null;
-    offset += countSize;
-    final cidNumbers = <String>[];
-    for (var index = 0; index < itemCount; index++) {
-      final cidRead = _readCidNumber(bytes, offset);
-      if (cidRead == null || cidNumbers.contains(cidRead.$1)) return null;
-      cidNumbers.add(cidRead.$1);
-      offset = cidRead.$2;
-      if (offset + 32 > bytes.length) return null;
-      offset += 32; // commitment
-    }
-    final (provinceCode, afterProvince) = _readUtf8Vec(bytes, offset);
-    if (provinceCode == null ||
-        provinceCode.isEmpty ||
-        provinceCode.length > 16) {
-      return null;
-    }
-    offset = afterProvince;
-    final (cityCode, afterCity) = _readUtf8Vec(bytes, offset);
-    if (cityCode == null || cityCode.isEmpty || cityCode.length > 16) {
-      return null;
-    }
-    offset = afterCity;
-    if (!_hasCallDataEnd(bytes, offset)) return null;
-    return DecodedPayload(
-      action: 'occupy_cids_batch',
-      summary: '注册局批量占用 $itemCount 个 CID',
-      fields: {
-        'actor_cid_number': actorRead.$1,
-        'actor_role_code': roleRead.$1,
-        'cid_number': cidNumbers.join('、'),
-        'cid_count': itemCount.toString(),
-        'residence_province_code': provinceCode,
-        'residence_city_code': cityCode,
-      },
-      reviewFields: {
-        'actor_cid_number': actorRead.$1,
-        'actor_role_code': roleRead.$1,
-        'cid_number': cidNumbers.join('、'),
-        'cid_count': itemCount.toString(),
-        'residence': '$provinceCode / $cityCode',
+        'account_id': accountHex,
       },
     );
   }
@@ -3774,6 +3734,14 @@ class PayloadDecoder {
     } on FormatException {
       return null;
     }
+  }
+
+  /// 读取占号/换绑域签名 QR 的 `d` = `append_bounded(cid)`(Compact(len)+cid),须消费全部字节。
+  /// 供两色展示单独取 CID(占号/换绑 d 只承载 CID,account 由钱包自填)。
+  static String? readBoundedCid(Uint8List bytes) {
+    final read = _readCidNumber(bytes, 0);
+    if (read == null || read.$2 != bytes.length) return null;
+    return read.$1;
   }
 
   /// 解码机构/公民 CID。CID 是最多 32 字节的非空 ASCII，所有机构交易都显式携带，

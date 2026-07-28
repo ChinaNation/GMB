@@ -151,8 +151,6 @@
   field_label_zh: 出生地
 - field_key: chapter_count
   field_label_zh: 章数
-- field_key: cid_count
-  field_label_zh: CID数量
 - field_key: citizen_sex
   field_label_zh: 公民性别
 - field_key: decimals

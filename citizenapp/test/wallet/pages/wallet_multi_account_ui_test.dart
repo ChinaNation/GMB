@@ -134,21 +134,6 @@ void main() {
       expect(find.textContaining('…'), findsOneWidget);
     });
 
-    testWidgets('账户0 渲染「默认用户」徽标', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: WalletAccountTile(
-              account: _makeAccount(index: 0, name: '账户0'),
-              isDefault: true,
-              onTap: () {},
-            ),
-          ),
-        ),
-      );
-      expect(find.text('默认用户'), findsOneWidget);
-    });
-
     testWidgets('点击账户行触发 onTap', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
@@ -174,7 +159,6 @@ void main() {
               children: [
                 WalletAccountTile(
                   account: _makeAccount(index: 0, name: '账户0'),
-                  isDefault: true,
                   onTap: () {},
                 ),
                 WalletListTile(

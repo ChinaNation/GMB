@@ -4,7 +4,8 @@ import 'app_theme.dart';
 
 /// 扫描框布局常量（单源，scan_page 与 offline_sign_page 共用）。
 const double scanBoxSize = 260;
-const double scanBoxOffsetY = -40;
+// 对准框、遮罩挖空区域和下方提示文字共用偏移量，整体上移 24 个逻辑像素。
+const double scanBoxOffsetY = -64;
 
 /// 扫描框半透明遮罩：整屏压暗并挖空中心方框。
 class ScanOverlayPainter extends CustomPainter {

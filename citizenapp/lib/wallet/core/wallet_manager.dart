@@ -93,9 +93,9 @@ class WalletAuthException implements Exception {
   String toString() => 'WalletAuthException: $message';
 }
 
-/// 通讯录专用密钥材料。账户0 的 child mini-secret 只在 [WalletManager] 内参与
-/// HKDF，业务层只能拿到已域隔离的加密钥和索引钥，不能借此签名、恢复钱包或推导
-/// 其他业务密钥。
+/// 通讯录专用密钥材料。**身份账户**(CID 绑定账户,可任意 `//n`)的 child mini-secret
+/// 只在 [WalletManager] 内参与 HKDF,业务层只能拿到已域隔离的加密钥和索引钥,不能借此
+/// 签名、恢复钱包或推导其他业务密钥。
 class ContactKeyMaterial {
   const ContactKeyMaterial({
     required this.encryptionKey,
@@ -149,7 +149,7 @@ class WalletManager {
   /// child，绝不存母种子 / 助记词。
   static SecureSeedStore _store = HardwareBoundSeedVault();
 
-  /// 通讯录专用密钥是从账户0 child 域隔离派生后的 64 字节材料，静默保存在系统
+  /// 通讯录专用密钥是从**身份账户 child** 域隔离派生后的 64 字节材料，静默保存在系统
   /// 安全存储；它不需要每次查看通讯录都重复触发生物识别。
   static VaultBlobStore _contactKeyStore = SecureStorageBlobStore();
 
@@ -250,11 +250,14 @@ class WalletManager {
     return _toProfile(row);
   }
 
-  /// 默认用户钱包：钱包列表中最靠前的**热钱包**。
+  /// 默认热钱包：钱包列表中最靠前的**热钱包**（钱包访问入口，取 walletIndex /
+  /// 钱包元数据用）。
   ///
-  /// 这是公民 App 的统一身份来源，同时用于聊天和发动态。排序沿用
-  /// [getWallets] 的 sortOrder（用户拖拽置顶即改默认），冷钱包永不成为
-  /// 默认。列表中没有任何热钱包时返回 null，由上层给出创建热钱包引导。
+  /// **已退出身份主键角色**：唯一身份主键 = CID 号，身份账户经
+  /// [IdentityAccountResolver] 解析（CID 绑定账户，可为任意 `//n`，见 memory
+  /// `citizenapp-cid-identity-master-key`）。排序沿用 [getWallets] 的 sortOrder
+  /// （用户拖拽置顶即改），冷钱包永不成为默认。列表中没有任何热钱包时返回 null，
+  /// 由上层给出创建热钱包引导。
   Future<WalletProfile?> getDefaultWallet() async {
     final wallets = await getWallets();
     for (final wallet in wallets) {
@@ -265,7 +268,7 @@ class WalletManager {
     return null;
   }
 
-  /// 默认用户钱包的 walletIndex；无热钱包时返回 null。
+  /// 默认热钱包的 walletIndex；无热钱包时返回 null。
   Future<int?> getDefaultWalletIndex() async {
     final wallet = await getDefaultWallet();
     return wallet?.walletIndex;
@@ -598,8 +601,11 @@ class WalletManager {
   /// 用指定 accountId 的私钥对 [payload] 签名(多账户签名入口)。
   ///
   /// 读该账户 child(触发生物识别)→ fromSeed → 校验派生公钥 == accountId → 签名 →
-  /// 清零。默认身份 / 统一签名仍走账户0([signWithWallet]),本方法不改默认身份。
-  Future<Uint8List> signForAccountId(String accountId, Uint8List payload) async {
+  /// 清零。**身份账户维度签名(发布动态 / CID 注册·换绑 / 订阅 / 创作者)走本方法**
+  /// (accountId = CID 绑定账户,可任意 `//n`);转账 / 治理 / 机构等资金动作走
+  /// [signWithWallet](账户0)。
+  Future<Uint8List> signForAccountId(
+      String accountId, Uint8List payload) async {
     final account = await getAccountByAccountId(accountId);
     if (account == null) {
       throw const WalletAuthException('未找到指定账户');
@@ -948,9 +954,10 @@ class WalletManager {
 
   /// 用账户0 私钥对 [payload] 签名。
   ///
-  /// 统一签名入口：动钱动权（转账 / 投票 / 切换默认身份 / 发布动态）
-  /// 一律走此方法。读硬件金库 child 时由硬件 + 生物识别原子解锁（一次操作一次
-  /// 验证），派生后用后即弃。广场 / Chat 后台握手统一使用 P-256 设备子钥。
+  /// 资金 / 治理 / 机构类动钱动权（转账 / 投票 / 多签 / 立法表决）走此方法（账户0）;
+  /// **身份账户维度签名（发布动态 / CID 注册·换绑 / 订阅 / 创作者）走 [signForAccountId]**
+  /// （CID 绑定账户,非恒账户0）。读硬件金库 child 时由硬件 + 生物识别原子解锁（一次操作
+  /// 一次验证），派生后用后即弃。广场 / Chat 后台握手统一使用 P-256 设备子钥。
   Future<Uint8List> signWithWallet(
     int walletIndex,
     Uint8List payload,
@@ -959,8 +966,8 @@ class WalletManager {
     return Uint8List.fromList(pair.sign(payload));
   }
 
-  /// 校验用户身份（弹一次生物识别）并确认能解锁指定热钱包，供「切换默认
-  /// 身份」等无签名负载、但属动权、需先验证的场景。验证失败上抛，成功即返回。
+  /// 校验用户身份（弹一次生物识别）并确认能解锁指定热钱包，供无签名负载、但属动权、
+  /// 需先验证的场景（如敏感设置前置校验）。验证失败上抛，成功即返回。
   Future<void> verifyWalletAccess(int walletIndex) async {
     // 读硬件金库 child 即触发一次生物识别；成功解锁即视为通过。
     await _loadSigningKey(walletIndex);
@@ -1012,7 +1019,8 @@ class WalletManager {
     await _writeContactKeys(accountId, material);
   }
 
-  /// 从账户0 的 child mini-secret 域隔离派生通讯录加密钥 / 索引钥（HKDF）。
+  /// 从**指定账户**（[accountSecret] = 该账户 child mini-secret）域隔离派生通讯录
+  /// 加密钥 / 索引钥（HKDF）。创建期喂账户0、换绑后喂身份账户 child,非恒账户0。
   static Future<ContactKeyMaterial> _deriveContactKeys(
     String accountId,
     List<int> accountSecret,

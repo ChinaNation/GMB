@@ -59,20 +59,16 @@ export type PageResult<T> = {
   has_more: boolean;
 };
 
-/** 建档占号请求 DTO,字段与后端 validate_citizen_input 对齐。 */
+/** 人主体类型:CTZN(公民)/ NATP(居民)。 */
+export type CitizenType = 'CTZN' | 'NATP';
+
+/**
+ * 占号 prepare 请求 DTO。占即绑:仅岗位码 + 人主体类型必填,居住省市由办理注册局 scope 派生,
+ * 姓名/性别/出生/护照等档案占号后为空、后续经「编辑资料」补齐(与后端 AdminCreateCitizenInput 对齐)。
+ */
 export type CreateCitizenInput = {
   actor_role_code: string;
-  family_name: string;
-  given_name: string;
-  citizen_sex: CitizenSex;
-  citizen_birth_date: string;
-  province_name: string;
-  city_name: string;
-  town_code: string;
-  birth_province_code: string;
-  birth_city_code: string;
-  birth_town_code: string;
-  voting_eligible: boolean;
+  cid_type: CitizenType;
 };
 
 /** 直接录入公民返回 DTO。 */
@@ -224,8 +220,35 @@ export async function searchLegalRepresentativeCitizens(
   });
 }
 
-/** 占号 prepare 返回:冷签 QR + 待占号(此时尚未建档,ADR-031 占号先行)。 */
+/**
+ * 占号 prepare 返回(段1):发号 + **公民钱包域签名 QR**(占即绑,b.u 空、钱包自填本账户)。
+ * 此步不落任何档案 —— 公民占号签名回来 → 段2 组装 occupy_cid → 管理员冷签进块后才建档。
+ */
 export type PrepareCitizenOccupyResult = {
+  request_id: string;
+  cid_number: string;
+  citizen_sign_request: string;
+  expires_at: number;
+};
+
+/** 占号 submit(段2)返回:管理员冷签 QR(段3 chain/submit 用)。 */
+export type SubmitCitizenOccupyResult = {
+  request_id: string;
+  cid_number: string;
+  sign_request: string;
+  expires_at: number;
+};
+
+/** 换绑 prepare(段1)返回:**新钱包域签名 QR**(b.u 空、钱包自填本账户)。 */
+export type PrepareCitizenRebindResult = {
+  request_id: string;
+  cid_number: string;
+  new_wallet_sign_request: string;
+  expires_at: number;
+};
+
+/** 换绑 submit(段2)返回:管理员冷签 QR。 */
+export type SubmitCitizenRebindResult = {
   request_id: string;
   cid_number: string;
   sign_request: string;
@@ -241,8 +264,8 @@ export type PrepareCitizenRevokeResult = {
 };
 
 /**
- * 建档占号 prepare:后端校验档案并生成号，返回管理员 CitizenWallet 签名的占号 QR。
- * 此步不落任何档案 —— 占号交易经 core 统一提交入口进块后才建档。
+ * 占号段1 prepare:后端发号,返回给公民本人钱包/公民App 的域签名占号 QR(占即绑)。
+ * 此步不落任何档案 —— 公民签名回来后走段2、段3 进块才建匿名记录。
  */
 export async function prepareCitizenOccupy(
   auth: AdminAuth,
@@ -255,6 +278,56 @@ export async function prepareCitizenOccupy(
       ...adminHeaders(auth),
     },
     body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * 占号段2 submit:回传公民钱包的占号签名(account_id + occupy_signature),
+ * 后端验签 → 组装 occupy_cid 占即绑交易 → 返回管理员冷签 QR(段3 用)。
+ */
+export async function submitCitizenOccupy(
+  auth: AdminAuth,
+  requestId: string,
+  account_id: string,
+  occupy_signature: string,
+): Promise<SubmitCitizenOccupyResult> {
+  return request<SubmitCitizenOccupyResult>('/api/v1/admin/citizens/occupy/submit', {
+    method: 'POST',
+    headers: jsonAdminHeaders(auth),
+    body: JSON.stringify({ request_id: requestId, account_id, occupy_signature }),
+  });
+}
+
+/**
+ * 换绑段1 prepare:注册局对本局某匿名 CID 发起换绑钱包账户,返回给**新钱包**的域签名 QR。
+ * 限本局已有此 CID 记录(跨注册局换绑后期)。
+ */
+export async function prepareCitizenRebind(
+  auth: AdminAuth,
+  cidNumber: string,
+  actorRoleCode: string,
+): Promise<PrepareCitizenRebindResult> {
+  return request<PrepareCitizenRebindResult>('/api/v1/admin/citizens/rebind/prepare', {
+    method: 'POST',
+    headers: jsonAdminHeaders(auth),
+    body: JSON.stringify({ actor_role_code: actorRoleCode, cid_number: cidNumber }),
+  });
+}
+
+/**
+ * 换绑段2 submit:回传新钱包的换绑签名(account_id + rebind_signature),
+ * 后端验签 → 组装 admin_rebind_cid_account_id → 返回管理员冷签 QR(段3 用)。
+ */
+export async function submitCitizenRebind(
+  auth: AdminAuth,
+  requestId: string,
+  account_id: string,
+  rebind_signature: string,
+): Promise<SubmitCitizenRebindResult> {
+  return request<SubmitCitizenRebindResult>('/api/v1/admin/citizens/rebind/submit', {
+    method: 'POST',
+    headers: jsonAdminHeaders(auth),
+    body: JSON.stringify({ request_id: requestId, account_id, rebind_signature }),
   });
 }
 

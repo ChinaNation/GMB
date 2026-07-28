@@ -83,6 +83,7 @@ class QrSigner {
   SignResponseEnvelope buildResponse({
     required SignRequestEnvelope request,
     required String signatureHex,
+    String? signerPublicKeyHexOverride,
   }) {
     _validateHexField(signatureHex, 'signature');
     return QrEnvelope<SignResponseBody>(
@@ -91,7 +92,9 @@ class QrSigner {
       issuedAt: request.issuedAt,
       expiresAt: request.expiresAt,
       body: SignResponseBody.fromHex(
-        signerPublicKeyHex: request.body.signerPublicKeyHex,
+        // 占号/换绑:请求 b.u 留空,响应 b.u 用钱包自选账户带回,供 OnChina 取 account_id。
+        signerPublicKeyHex:
+            signerPublicKeyHexOverride ?? request.body.signerPublicKeyHex,
         signatureHex: signatureHex,
       ),
     );
@@ -220,12 +223,27 @@ class QrSigner {
   static Uint8List signingBytesForHex({
     required String payloadHex,
     required int action,
+    Uint8List? selfAccountId,
   }) {
     final payload = Uint8List.fromList(_hexToBytes(payloadHex));
     if (action == QrActions.citizenIdentity) {
       return signingMessage(
         opTag: kOpSignCitizenIdentity,
         scalePayload: payload,
+      );
+    }
+    if (QrActions.isSelfAccountDomainAction(action)) {
+      // 占号/换绑:payload=append_bounded(cid),追加钱包自选账户32B 后按域 op 哈希;
+      // 与 citizenwallet signingBytesFor 及后端 verify_*_signature 逐字节对齐。
+      if (selfAccountId == null || selfAccountId.length != 32) {
+        return Uint8List(0);
+      }
+      final opTag = action == QrActions.citizenOccupy
+          ? kOpSignCidOccupy
+          : kOpSignCidAdminRebind;
+      return signingMessage(
+        opTag: opTag,
+        scalePayload: Uint8List.fromList([...payload, ...selfAccountId]),
       );
     }
     if (action == QrActions.squareAccountAction) {

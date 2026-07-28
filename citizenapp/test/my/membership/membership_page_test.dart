@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/identity_gate_test_util.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -197,6 +199,7 @@ Finder _frontButton(String label) => find.descendant(
     );
 
 void main() {
+  useRegisteredIdentityGate();
   test('平台 finalized 镜像回执不再产生设备签名', () async {
     var deviceSignCount = 0;
     final api = SquareApiClient(

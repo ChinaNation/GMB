@@ -57,12 +57,13 @@ class PalletRegistry {
 
   // call_index 5 永久留洞：人口快照仅由 votingengine 内联生成。
 
-  /// `occupy_cid(actor_cid_number, cid_number, commitment, province_code, city_code)`
-  /// — 注册局建档「占号」:链上原子验格式+查重+登记 CID 号(注册局签名)。
+  /// `occupy_cid(actor_cid_number, actor_role_code, cid_number, account_id, occupy_signature)`
+  /// — 注册局「占即绑」:占号即绑定公民钱包账户(注册局签名)。
   static const int occupyCidCall = 6;
 
-  /// `occupy_cids_batch(actor_cid_number, items, province_code, city_code)`。
-  static const int occupyCidsBatchCall = 7;
+  /// `admin_rebind_cid_account_id(actor_cid_number, actor_role_code, cid_number, new_account_id, rebind_signature)`
+  /// — 注册局代匿名 CID 换绑钱包账户(注册局签名)。链上 call 7 由已删的 occupy_cids_batch 顶替。
+  static const int adminRebindCidAccountIdCall = 7;
 
   /// `revoke_cid(actor_cid_number, cid_number)`
   /// — 注册局吊销 CID 号(墓碑,永不复用;注册局签名)。

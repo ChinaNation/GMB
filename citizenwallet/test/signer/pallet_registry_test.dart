@@ -90,7 +90,7 @@ void main() {
       expect(PalletRegistry.updateCandidateIdentityCall, 3);
       expect(PalletRegistry.revokeIdentityCall, 4);
       expect(PalletRegistry.occupyCidCall, 6);
-      expect(PalletRegistry.occupyCidsBatchCall, 7);
+      expect(PalletRegistry.adminRebindCidAccountIdCall, 7);
       expect(PalletRegistry.revokeCidCall, 8);
     });
 

@@ -8,6 +8,7 @@ import 'package:citizenapp/my/creator/widgets/creator_gate_view.dart';
 import 'package:citizenapp/my/creator/widgets/creator_overview_card.dart';
 import 'package:citizenapp/my/creator/widgets/creator_tier_card.dart';
 import 'package:citizenapp/my/membership/membership_page.dart';
+import 'package:citizenapp/my/myid/widgets/identity_registration_gate.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 「我的 → 创作者」：管理自己的创作者会员（档位 / 收入概览）。
@@ -66,7 +67,10 @@ class _CreatorPageState extends State<CreatorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('创作者')),
-      body: _body(),
+      body: IdentityRegistrationGate(
+        featureLabel: '创作者',
+        child: _body(),
+      ),
     );
   }
 

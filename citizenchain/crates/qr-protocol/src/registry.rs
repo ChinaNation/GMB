@@ -43,6 +43,8 @@ pub enum SigningCategory {
     AdminDecrypt,
     RuntimeUpgrade,
     SquareAccount,
+    CitizenOccupy,
+    CitizenRebind,
 }
 
 /// 单个 QR action 登记项。

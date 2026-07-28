@@ -14,7 +14,8 @@ import 'package:citizenapp/my/user/contact_service.dart';
 
 import 'identity_account_resolver.dart';
 import 'identity_badge_snapshot_store.dart';
-import 'identity_rebind_pending_store.dart';
+import 'identity_rebind_revoker.dart';
+import 'identity_synced_account_store.dart';
 
 /// 身份页身份档。
 ///
@@ -110,7 +111,8 @@ class MyIdService {
     IdentityAccountResolver? identityResolver,
     CitizenIdentityRpc? identityRpc,
     UserContactService? contactService,
-    IdentityRebindPendingStore? rebindPendingStore,
+    IdentitySyncedAccountStore? syncedAccountStore,
+    IdentityRebindRevoker? rebindRevoker,
     DateTime Function()? nowProvider,
     int Function()? cidYearProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
@@ -119,8 +121,10 @@ class MyIdService {
             badgeSnapshotStore ?? IdentityBadgeSnapshotStore(),
         _contactService =
             contactService ?? UserContactService(walletManager: walletManager),
-        _rebindPendingStore =
-            rebindPendingStore ?? IdentityRebindPendingStore(),
+        _syncedAccountStore =
+            syncedAccountStore ?? IdentitySyncedAccountStore(),
+        _rebindRevoker = rebindRevoker ??
+            IdentityRebindRevoker(walletManager: walletManager),
         _identityResolver = identityResolver ??
             IdentityAccountResolver(
               walletManager: walletManager,
@@ -140,7 +144,13 @@ class MyIdService {
   final IdentityAccountResolver _identityResolver;
   final CitizenIdentityRpc _identityRpc;
   final UserContactService _contactService;
-  final IdentityRebindPendingStore _rebindPendingStore;
+  final IdentitySyncedAccountStore _syncedAccountStore;
+  final IdentityRebindRevoker _rebindRevoker;
+
+  /// 换绑本地重建的并发去重:同一时刻只允许一次真正执行,其余调用等待同一 Future
+  /// (rebindCidTo 直触发与 getState 对账触发可能并发,防重复触发互相 409 伪失败)。
+  Future<void>? _migrationInflight;
+
   final DateTime Function() _nowProvider;
   final int Function() _cidYearProvider;
 
@@ -158,8 +168,6 @@ class MyIdService {
   /// (优先账户0,未命中查子账户,全未命中回退账户0=未注册),再取其链上 finalized
   /// 身份闭环:CID Active、CID↔账户双向绑定、`VotingIdentityByCid`(+`Candidate` 才竞选)。
   Future<MyIdState> getState() async {
-    // 进身份页先续跑未完成的换绑本地重建(死契约:换绑后凭证必自动更换到新账户)。
-    await resumePendingIdentityRebind();
     ResolvedIdentity? resolved;
     try {
       resolved = await _identityResolver.resolve();
@@ -176,6 +184,10 @@ class MyIdService {
       // 无热钱包 → 无身份账户 → 访客(引导创建钱包)。
       return const MyIdState(tier: MyIdTier.visitor, errorMessage: '请先创建钱包');
     }
+
+    // 对账式换绑重建:链上身份账户与「本地已同步账户」标记不一致即补齐迁移(死契约
+    // [[cid-rebind-subkeys-must-auto-migrate]],替代脆弱的一次性意图,消除崩溃窗口)。
+    await _reconcileIdentityRebuild(resolved);
 
     final identityAccountId = resolved.accountId;
     final chainIdentity = resolved.snapshot;
@@ -319,46 +331,98 @@ class MyIdService {
       oldAccountId: oldAccountId,
       newFromSs58Address: newAccount.ss58Address,
     );
-    // 链上换绑已 Finalized:先落续跑意图,再把设备子钥/会话/通讯录**自动更换到新账户**
-    // (死契约 [[cid-rebind-subkeys-must-auto-migrate]])。全部成功才清意图;中途失败则
-    // 意图留存,下次进身份页 [getState] 自动续跑,直到成功——「不允许不更换或失败」。
-    await _rebindPendingStore.write(
-      oldAccountId: oldAccountId,
-      newAccountId: newAccount.accountId,
-    );
+    // 链上换绑已 Finalized:把设备子钥/会话/通讯录**自动更换到新账户**(死契约
+    // [[cid-rebind-subkeys-must-auto-migrate]])。不写一次性意图——即便此刻崩溃,下次
+    // getState 会以「链上真值(new) != 已同步标记(old)」对账发现并补齐,无崩溃窗口。
     await _runRebindMigration(oldAccountId, newAccount.accountId);
   }
 
-  /// 执行换绑后的本地重建(全步幂等,重复调用安全):
-  /// 1. 设备子钥归属切新账户(新账户云会话登录的**硬前置**,须最先且必成功);
-  /// 2. 失效身份缓存,`resolve` / `ensureSession` 转指新账户;
-  /// 3. 通讯录迁到新账户并用新账户 child 密钥重加密上云(上云失败落待办,不阻断)。
+  /// 对账式换绑重建触发:比较链上身份账户 [resolved] 与「本地已同步账户」标记,不一致即
+  /// 补齐迁移。首个基线(标记为空)只登记不迁移(账户0 的凭证在钱包创建时已就绪)。
   ///
-  /// 全部成功后清除续跑意图。任一步抛出则意图留存,交 [resumePendingIdentityRebind] 续跑。
-  Future<void> _runRebindMigration(
+  /// 覆盖两类情形:①换绑 Finalized 后本地重建曾中断(含 Finalized 与本地写入间崩溃);
+  /// ②注册时把 CID 绑到非账户0 的 `//n`(身份账户 != 基线账户0),据此补齐 `//n` 凭证。
+  Future<void> _reconcileIdentityRebuild(ResolvedIdentity resolved) async {
+    final current = resolved.accountId;
+    final String? synced;
+    try {
+      synced = await _syncedAccountStore.read();
+    } catch (e) {
+      AppLog.d('identity synced marker read failed: $e');
+      return;
+    }
+    if (synced == null) {
+      // 首次:以当前身份账户为基线,不迁移。
+      await _writeSyncedMarker(current);
+      return;
+    }
+    if (synced == current) return; // 稳态,凭证已在位。
+    try {
+      await _runRebindMigration(synced, current);
+    } catch (e) {
+      // 仍失败(网络等)则保留旧标记,下次 getState 再对账补齐,绝不阻断身份页展示。
+      AppLog.d('identity rebind reconcile deferred: $e');
+    }
+  }
+
+  /// 供 App 生命周期 / 测试显式触发一次对账;自行解析当前身份账户。
+  Future<void> reconcileIdentityRebuild() async {
+    final ResolvedIdentity? resolved;
+    try {
+      resolved = await _identityResolver.resolve();
+    } catch (e) {
+      AppLog.d('identity reconcile resolve failed: $e');
+      return;
+    }
+    if (resolved == null) return;
+    await _reconcileIdentityRebuild(resolved);
+  }
+
+  /// 执行换绑后的本地重建(全步幂等,重复调用安全,并发去重)。
+  ///
+  /// rebindCidTo 直触发与 getState 对账触发可能并发,用 [_migrationInflight] 去重,
+  /// 同一时刻只真正执行一次,其余等待同一 Future(防重复触发互相 409 伪失败)。
+  Future<void> _runRebindMigration(String oldAccountId, String newAccountId) {
+    final inflight = _migrationInflight;
+    if (inflight != null) return inflight;
+    final future = _doRunRebindMigration(oldAccountId, newAccountId)
+        .whenComplete(() => _migrationInflight = null);
+    _migrationInflight = future;
+    return future;
+  }
+
+  /// 本地重建实体步骤:
+  /// 1. 设备子钥归属切新账户(新账户云会话登录的**硬前置**,须最先且必成功);
+  /// 2. 通讯录迁到新账户并用新账户 child 密钥重加密上云(上云失败落待办,不阻断);
+  /// 3. 广播身份绑定变化——**在通讯录迁移完成之后**:避免其它页在 `contacts:new` 尚空/
+  ///    迁移进行中就翻到新账户,读到空/错乱,或与迁移的整份快照发生读-改-写覆盖丢数据;
+  /// 4. 更新「已同步账户」标记为新账户(对账基线推进,标志本次重建完成)。
+  Future<void> _doRunRebindMigration(
     String oldAccountId,
     String newAccountId,
   ) async {
     await _walletManager.rebindDeviceSubkeyToAccountId(newAccountId);
-    WalletManager.notifyIdentityBindingChanged();
     await _contactService.migrateContactsToNewIdentity(
       oldAccountId,
       newAccountId,
     );
-    await _rebindPendingStore.clear();
+    // 吊销旧账户云端隐私/鉴权数据(换绑「私钥泄漏止损」安全侧):best-effort——功能重建
+    // 以「已同步标记」为准,吊销失败仅记录不阻断(避免安全加固失败拖住主键功能重建);
+    // 旧账户数据随 CID 已迁到新账户,删旧云端副本堵住旧私钥重建旧会话解密旧通讯录。
+    try {
+      await _rebindRevoker.revokeOldAccount(oldAccountId);
+    } catch (e) {
+      AppLog.d('identity rebind revoke old account deferred: $e');
+    }
+    WalletManager.notifyIdentityBindingChanged();
+    await _writeSyncedMarker(newAccountId);
   }
 
-  /// 续跑上次未完成的 CID 换绑本地重建(死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
-  ///
-  /// 换绑链上已 Finalized 但本地重建曾中断(网络抖动等)时,进身份页即自动补齐。全步幂等,
-  /// 无进行中换绑则立即返回;仍失败则保留意图下次再续,绝不阻断身份页展示。
-  Future<void> resumePendingIdentityRebind() async {
-    final pending = await _rebindPendingStore.read();
-    if (pending == null) return;
+  Future<void> _writeSyncedMarker(String accountId) async {
     try {
-      await _runRebindMigration(pending.oldAccountId, pending.newAccountId);
+      await _syncedAccountStore.write(accountId);
     } catch (e) {
-      AppLog.d('identity rebind resume deferred: $e');
+      AppLog.d('identity synced marker write failed: $e');
     }
   }
 

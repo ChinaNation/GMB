@@ -32,6 +32,10 @@ const int kOpSignCitizenIdentity = 0x10;
 /// (对齐 OP_SIGN_CID_REBIND;哈希域,与占号域 0x12 分离防重放)。
 const int kOpSignCidRebind = 0x11;
 
+/// 注册局代办占号(占即绑):公民钱包对 `(cid_number, account_id)` 的授权签名
+/// (对齐 OP_SIGN_CID_OCCUPY;哈希域)。
+const int kOpSignCidOccupy = 0x12;
+
 /// 机构登记(对齐 OP_SIGN_INST)。
 const int kOpSignInst = 0x13;
 
@@ -64,6 +68,10 @@ const int kOpSignSquareDeviceBind = 0x1C;
 
 /// 广场 BFF 账户敏感动作:注销/退订(对齐 OP_SIGN_SQUARE_ACTION;链下 Worker 验签,sr25519 主钥签)。
 const int kOpSignSquareAction = 0x1D;
+
+/// 注册局代办换绑:新钱包对 `(cid_number, new_account_id)` 的授权签名
+/// (对齐 OP_SIGN_CID_ADMIN_REBIND;哈希域,与自助换绑 0x11、占号 0x12 分离防重放)。
+const int kOpSignCidAdminRebind = 0x1F;
 
 // ── 二进制前缀域(0x18/0x19)──
 //

@@ -332,8 +332,11 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
             children: [
               _detailRow('请求 ID', request.id ?? ''),
               _detailRow(
-                '签名公钥',
-                _truncate(request.body.signerPublicKeyHex),
+                '签名账户',
+                // 占号/换绑:请求 b.u 留空,展示用户自选的绑定账户。
+                _truncate(request.body.signerPublicKeyHex == '0x'
+                    ? widget.account.accountId
+                    : request.body.signerPublicKeyHex),
               ),
             ],
           ),

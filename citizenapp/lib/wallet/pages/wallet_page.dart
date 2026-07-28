@@ -60,18 +60,6 @@ List<WalletProfile> reorderWalletProfiles(
   return next;
 }
 
-/// 默认用户钱包 = 列表中最靠前的**热钱包**的 walletIndex；无热钱包返回 null。
-/// 与 [WalletManager.getDefaultWallet] 判定一致，UI 仅用来渲染「默认用户」徽标。
-@visibleForTesting
-int? defaultUserWalletIndex(List<WalletProfile> wallets) {
-  for (final wallet in wallets) {
-    if (wallet.isHotWallet) {
-      return wallet.walletIndex;
-    }
-  }
-  return null;
-}
-
 /// 导入冷钱包扫码只提取 SS58 展示地址；
 /// 不在这里触发导入，避免用户还没确认就写入本地钱包库。
 @visibleForTesting
@@ -237,7 +225,7 @@ class _WalletTabState extends State<WalletTab> {
           await MyIdService(walletManager: _walletService).getState();
       if (!mounted) return;
       setState(() {
-        // 纯默认用户模型:身份钱包 = 默认用户(若为公民),标记该钱包。
+        // 身份钱包标记 = CID 绑定账户(公民档取 votingAccountId);非公民不标记。
         _identityAccountId =
             identity.isCitizen ? identity.votingAccountId : null;
       });
@@ -535,7 +523,6 @@ class _WalletTabState extends State<WalletTab> {
         child: _buildEmptyWalletChoices(),
       );
     }
-    final defaultWalletIndex = defaultUserWalletIndex(wallets);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       itemCount: wallets.length,
@@ -548,7 +535,6 @@ class _WalletTabState extends State<WalletTab> {
           child: WalletListTile(
             wallet: wallet,
             showActions: false,
-            isDefault: wallet.walletIndex == defaultWalletIndex,
             isIdentityWallet:
                 !isBroken && wallet.accountId == _identityAccountId,
             isBroken: isBroken,
@@ -564,7 +550,7 @@ class _WalletTabState extends State<WalletTab> {
 
   /// 「我的钱包」正常态：唯一热钱包的 `//index` 账户逐行 + 冷钱包行并列展示。
   ///
-  /// - 账户行（含账户0）点击进 [AccountDetailPage]；账户0 是全 App 默认用户身份。
+  /// - 账户行（含账户0）点击进 [AccountDetailPage]；身份账户 = CID 绑定的那个账户。
   /// - 冷钱包行沿用旧 [WalletListTile] 详情 / 重命名 / 删除行为，不受多账户改动影响。
   /// - 身份字段损坏的钱包既不入账户列表也不算冷钱包，单列出来保留删除出路。
   Widget _buildMyWalletList(List<WalletProfile> wallets) {
@@ -584,7 +570,6 @@ class _WalletTabState extends State<WalletTab> {
           padding: const EdgeInsets.only(bottom: 8),
           child: WalletAccountTile(
             account: account,
-            isDefault: account.accountIndex == 0,
             isIdentity: account.accountId == _identityAccountId,
             onTap: () => _openAccountDetail(account, hotName),
           ),
@@ -752,7 +737,6 @@ class WalletListTile extends StatelessWidget {
     required this.onTap,
     required this.onRename,
     required this.onDelete,
-    this.isDefault = false,
     this.isIdentityWallet = false,
     this.isBroken = false,
   });
@@ -764,10 +748,6 @@ class WalletListTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onDelete;
-
-  /// 是否为默认用户钱包（列表中最靠前的热钱包）。默认卡片在三点菜单
-  /// 左侧展示「默认用户」徽标，代表该钱包用于聊天与发动态的身份。
-  final bool isDefault;
 
   /// 是否为链上唯一公民身份绑定的钱包。
   final bool isIdentityWallet;
@@ -845,20 +825,11 @@ class WalletListTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isIdentityWallet || isDefault) ...[
+              if (isIdentityWallet) ...[
                 const SizedBox(width: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    if (isIdentityWallet)
-                      const _WalletBadge(
-                        label: '身份钱包',
-                        icon: Icons.verified,
-                      ),
-                    if (isDefault) const _WalletBadge(label: '默认用户'),
-                  ],
+                const _WalletBadge(
+                  label: '身份钱包',
+                  icon: Icons.verified,
                 ),
               ],
               // 右：三点菜单（仅非选择模式）
@@ -938,7 +909,7 @@ class _WalletBadge extends StatelessWidget {
 
 /// 单行账户卡片：唯一热钱包下某个 `//index` 账户。
 ///
-/// 左侧 46×46 序号徽标（#0、#1…）→ 中间账户名 + 短 SS58 → 右侧默认/身份徽标 + 箭头。
+/// 左侧 46×46 序号徽标（#0、#1…）→ 中间账户名 + 短 SS58 → 右侧身份徽标 + 箭头。
 /// 整卡 InkWell 点击进入 [AccountDetailPage]。账户没有独立的重命名/删除三点菜单，
 /// 这些操作收在账户详情页里（与冷钱包行的三点菜单区分开）。
 ///
@@ -949,15 +920,11 @@ class WalletAccountTile extends StatelessWidget {
     super.key,
     required this.account,
     required this.onTap,
-    this.isDefault = false,
     this.isIdentity = false,
   });
 
   final Account account;
   final VoidCallback onTap;
-
-  /// 账户0（默认用户身份）。
-  final bool isDefault;
 
   /// 链上唯一公民身份绑定的账户。
   final bool isIdentity;
@@ -1024,18 +991,9 @@ class WalletAccountTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isIdentity || isDefault) ...[
+              if (isIdentity) ...[
                 const SizedBox(width: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    if (isIdentity)
-                      const _WalletBadge(label: '身份钱包', icon: Icons.verified),
-                    if (isDefault) const _WalletBadge(label: '默认用户'),
-                  ],
-                ),
+                const _WalletBadge(label: '身份钱包', icon: Icons.verified),
               ],
               const SizedBox(width: 4),
               const Icon(Icons.chevron_right,

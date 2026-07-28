@@ -486,6 +486,17 @@ class SquareApiClient
   }
 
   /// 注销账户：硬删除该用户在 Cloudflare 的全部数据（链上数据不受影响）。
+  /// 换绑吊销:删除旧身份账户在服务端的隐私/鉴权云端数据(通讯录密文 / Chat 材料 /
+  /// 设备子钥 / 会话)。鉴权 = 旧账户会话 [session](P-256 设备子钥静默登录);服务端只
+  /// 吊销该会话所属账户,无法吊销他人。幂等。
+  Future<void> revokeRebindOldAccount({required SquareSession session}) async {
+    await _postJson(
+      '/v1/square/rebind/revoke',
+      const <String, dynamic>{},
+      session: session,
+    );
+  }
+
   Future<void> deleteAccount({
     required String accountId,
     required SquareActionSigner signAction,

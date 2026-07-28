@@ -31,6 +31,35 @@
     - citizen_status
     - residence
 
+# 注册局代办占号(占即绑)—— 公民钱包扫码产出内层域签名(OP_SIGN_CID_OCCUPY=0x12)。
+# QR 只携 cid_number,account_id 由钱包扫码时自填本账户;非链调用,占用小号段。
+- action_key: citizen_occupy
+  action_code: 10
+  action_label_zh: 注册局占号绑定确认
+  kind: offchain_sign
+  qr_kind: sign_request
+  pallet:
+  call:
+  decoder: citizen_occupy
+  hash_only_allowed: false
+  signing_category: citizen_occupy
+  required_fields:
+    - cid_number
+
+# 注册局代办换绑钱包 —— 新钱包扫码产出内层域签名(OP_SIGN_CID_ADMIN_REBIND=0x1F)。
+- action_key: citizen_rebind
+  action_code: 11
+  action_label_zh: 注册局换绑账户确认
+  kind: offchain_sign
+  qr_kind: sign_request
+  pallet:
+  call:
+  decoder: citizen_rebind
+  hash_only_allowed: false
+  signing_category: citizen_rebind
+  required_fields:
+    - cid_number
+
 - action_key: onchina_admin_action
   action_code: 3
   action_label_zh: 链上中国管理员确认
@@ -885,25 +914,24 @@
     - actor_cid_number
     - actor_role_code
     - cid_number
-    - province_code
-    - city_code
+    - account_id
 
-- action_key: occupy_cids_batch
+# 链上 call 7 由已删除的 occupy_cids_batch 改为 admin_rebind_cid_account_id(占即绑换绑,④b)。
+- action_key: admin_rebind_cid_account_id
   action_code: 0x0a07
-  action_label_zh: 注册局批量占用CID
+  action_label_zh: 注册局换绑CID钱包账户
   kind: chain_call
   qr_kind: sign_request
   pallet: CitizenIdentity
-  call: occupy_cids_batch
-  decoder: occupy_cids_batch
+  call: admin_rebind_cid_account_id
+  decoder: admin_rebind_cid_account_id
   hash_only_allowed: false
   signing_category: chain_tx
   required_fields:
     - actor_cid_number
     - actor_role_code
-    - cid_count
-    - province_code
-    - city_code
+    - cid_number
+    - account_id
 
 - action_key: revoke_cid
   action_code: 0x0a08

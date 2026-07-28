@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/identity_gate_test_util.dart';
+
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
@@ -137,6 +139,7 @@ class _NullIdentityCache extends IdentityAccountCache {
 }
 
 void main() {
+  useRegisteredIdentityGate();
   setUp(() {
     IdentityAccountCache.debugInstance = _NullIdentityCache();
   });

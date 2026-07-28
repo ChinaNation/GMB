@@ -126,9 +126,9 @@ class _ProfilePageState extends State<MyTab> {
         );
     _smoldotClientManager =
         widget.smoldotClientManager ?? SmoldotClientManager.instance;
-    // 本页常驻 IndexedStack，initState 只跑一次；默认用户钱包在「我的钱包」
-    // 里被切换（拖拽置顶）/增删/改名时经 walletsRevision 广播，这里重读身份，
-    // 保证昵称、地址、认证勾和「我的主页」入参始终是当前默认用户。
+    // 本页常驻 IndexedStack，initState 只跑一次；身份账户（CID 绑定账户）在
+    // 「我的钱包」被切换 / CID 换绑 / 增删改名时经 walletsRevision 广播，这里重读身份，
+    // 保证昵称、地址、认证勾和「我的主页」入参始终是当前身份账户。
     WalletManager.walletsRevision.addListener(_onWalletsChanged);
     _smoldotClientManager.healthStatusListenable
         .addListener(_onChainHealthChanged);
@@ -232,7 +232,7 @@ class _ProfilePageState extends State<MyTab> {
             state.identityLevel == 'candidate')) {
       refreshedLevel = state.identityLevel;
     } else if (state.status == MyIdStatus.queryFailed) {
-      // 纯默认用户模型下不再有多身份冲突;仅链读失败时回落徽章快照。
+      // 链上一人一 CID 一账户一身份,故无多身份冲突;仅链读失败时回落徽章快照。
       final snapshot = await _badgeSnapshotStore.read(identityAccountId);
       refreshedLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,

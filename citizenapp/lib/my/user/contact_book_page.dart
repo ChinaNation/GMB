@@ -15,6 +15,7 @@ import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
+import 'package:citizenapp/my/myid/widgets/identity_registration_gate.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 通讯录页使用模式。
@@ -44,7 +45,7 @@ class ContactBookPage extends StatefulWidget {
     this.transferOpener,
   });
 
-  /// 页面模式:浏览 / 选收款人 / 选私信对象;不改变通讯录所属默认用户。
+  /// 页面模式:浏览 / 选收款人 / 选私信对象;不改变通讯录所属身份账户。
   final ContactPickMode mode;
   final UserContactService? service;
   final CitizenProfileApi? profileApi;
@@ -312,95 +313,102 @@ class _ContactBookPageState extends State<ContactBookPage> {
   @override
   Widget build(BuildContext context) {
     final visible = _visibleContacts;
-    return Scaffold(
-      backgroundColor: AppTheme.scaffoldBg,
-      appBar: AppBar(
-        title: Text(
+    // 整个 Scaffold 交给 gate 包裹:未注册时连 AppBar 的「扫码添加联系人」入口也一并
+    // 被挡在门后(fail-closed,不留 AppBar 动作绕过);gate 未放行态自带标题栏 + 返回键。
+    return IdentityRegistrationGate(
+      featureLabel: '通讯录',
+      scaffoldTitle:
           widget.mode == ContactPickMode.pickForMessage ? '选择联系人' : '我的通讯录',
-        ),
-        centerTitle: true,
-        actions: [
-          // 纯选人(发私信)模式只保留选择,不提供扫码加联系人入口。
-          if (widget.mode != ContactPickMode.pickForMessage)
-            IconButton(
-              tooltip: '扫码添加联系人',
-              onPressed: _scanContactQr,
-              icon: SvgPicture.asset(
-                'assets/icons/scan-line.svg',
-                width: 20,
-                height: 20,
+      child: Scaffold(
+        backgroundColor: AppTheme.scaffoldBg,
+        appBar: AppBar(
+          title: Text(
+            widget.mode == ContactPickMode.pickForMessage ? '选择联系人' : '我的通讯录',
+          ),
+          centerTitle: true,
+          actions: [
+            // 纯选人(发私信)模式只保留选择,不提供扫码加联系人入口。
+            if (widget.mode != ContactPickMode.pickForMessage)
+              IconButton(
+                tooltip: '扫码添加联系人',
+                onPressed: _scanContactQr,
+                icon: SvgPicture.asset(
+                  'assets/icons/scan-line.svg',
+                  width: 20,
+                  height: 20,
+                ),
               ),
-            ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _sync,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
-                children: [
-                  _SyncBanner(state: _syncState, onRetry: _sync),
-                  const SizedBox(height: 10),
-                  TextField(
-                    key: const ValueKey('contact-search'),
-                    controller: _searchController,
-                    onChanged: (value) => setState(() => _query = value),
-                    decoration: InputDecoration(
-                      hintText: '搜索姓名、昵称或钱包账户',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _query = '');
-                              },
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                      filled: true,
-                      fillColor: AppTheme.surfaceCard,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
+          ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _sync,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
+                  children: [
+                    _SyncBanner(state: _syncState, onRetry: _sync),
+                    const SizedBox(height: 10),
+                    TextField(
+                      key: const ValueKey('contact-search'),
+                      controller: _searchController,
+                      onChanged: (value) => setState(() => _query = value),
+                      decoration: InputDecoration(
+                        hintText: '搜索姓名、昵称或钱包账户',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _query = '');
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                        filled: true,
+                        fillColor: AppTheme.surfaceCard,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_contacts.isEmpty)
-                    const _EmptyContacts()
-                  else if (visible.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 56),
-                      child: Center(child: Text('没有匹配的联系人')),
-                    )
-                  else
-                    for (final contact in visible) ...[
-                      _ContactCard(
-                        contact: contact,
-                        profile: _profiles[contact.accountId],
-                        avatarUrl: _avatarUrl(_profiles[contact.accountId]),
-                        avatarHeaders: _session == null
-                            ? null
-                            : <String, String>{
-                                'authorization':
-                                    'Bearer ${_session!.sessionToken}',
-                              },
-                        // 纯选私信模式只允许点选,不显示逐项操作菜单。
-                        showActions:
-                            widget.mode != ContactPickMode.pickForMessage,
-                        onTap: () => _open(contact),
-                        onTransfer: () => _transfer(contact),
-                        onMessage: () => _message(contact),
-                        onRename: () => _rename(contact),
-                        onDelete: () => _delete(contact),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                ],
+                    const SizedBox(height: 12),
+                    if (_contacts.isEmpty)
+                      const _EmptyContacts()
+                    else if (visible.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 56),
+                        child: Center(child: Text('没有匹配的联系人')),
+                      )
+                    else
+                      for (final contact in visible) ...[
+                        _ContactCard(
+                          contact: contact,
+                          profile: _profiles[contact.accountId],
+                          avatarUrl: _avatarUrl(_profiles[contact.accountId]),
+                          avatarHeaders: _session == null
+                              ? null
+                              : <String, String>{
+                                  'authorization':
+                                      'Bearer ${_session!.sessionToken}',
+                                },
+                          // 纯选私信模式只允许点选,不显示逐项操作菜单。
+                          showActions:
+                              widget.mode != ContactPickMode.pickForMessage,
+                          onTap: () => _open(contact),
+                          onTransfer: () => _transfer(contact),
+                          onMessage: () => _message(contact),
+                          onRename: () => _rename(contact),
+                          onDelete: () => _delete(contact),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                  ],
+                ),
               ),
-            ),
+      ),
     );
   }
 

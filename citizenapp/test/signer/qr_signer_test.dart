@@ -228,6 +228,63 @@ void main() {
       expect(actual.toList(), isNot([1, 2, 3, 4]));
     });
 
+    // 冷热逐字节一致:与 citizenwallet qr_signer_test 同 CN220 向量。
+    test('occupy uses GMB 0x12 over bounded_cid ++ self account', () {
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits]; // Compact(26)=0x68
+      final account = List<int>.filled(32, 0xab);
+      final payloadHex =
+          '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+
+      final actual = QrSigner.signingBytesForHex(
+        payloadHex: payloadHex,
+        action: QrActions.citizenOccupy,
+        selfAccountId: Uint8List.fromList(account),
+      );
+      final expected = Hasher.blake2b256.hash(
+        Uint8List.fromList([0x47, 0x4d, 0x42, 0x12, ...boundedCid, ...account]),
+      );
+      final viaPrimitive = signingMessage(
+        opTag: kOpSignCidOccupy,
+        scalePayload: Uint8List.fromList([...boundedCid, ...account]),
+      );
+
+      expect(actual, expected);
+      expect(actual, viaPrimitive);
+    });
+
+    test('admin rebind uses GMB 0x1F over bounded_cid ++ self account', () {
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits];
+      final account = List<int>.filled(32, 0xcd);
+      final payloadHex =
+          '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+
+      final actual = QrSigner.signingBytesForHex(
+        payloadHex: payloadHex,
+        action: QrActions.citizenRebind,
+        selfAccountId: Uint8List.fromList(account),
+      );
+      final viaPrimitive = signingMessage(
+        opTag: kOpSignCidAdminRebind,
+        scalePayload: Uint8List.fromList([...boundedCid, ...account]),
+      );
+
+      expect(actual, viaPrimitive);
+    });
+
+    test('occupy without self account returns empty (no blind sign)', () {
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits];
+      final payloadHex =
+          '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final actual = QrSigner.signingBytesForHex(
+        payloadHex: payloadHex,
+        action: QrActions.citizenOccupy,
+      );
+      expect(actual.isEmpty, isTrue);
+    });
+
     test('action registry mirror returns Chinese label or null', () {
       expect(
         QrActions.actionLabelForCode(QrActions.squareAccountAction),

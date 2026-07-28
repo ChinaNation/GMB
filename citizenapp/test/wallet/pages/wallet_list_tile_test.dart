@@ -62,7 +62,6 @@ void main() {
     WidgetTester tester, {
     required WalletProfile wallet,
     bool showActions = true,
-    bool isDefault = false,
     bool isBroken = false,
     VoidCallback? onTap,
     VoidCallback? onRename,
@@ -74,7 +73,6 @@ void main() {
           body: WalletListTile(
             wallet: wallet,
             showActions: showActions,
-            isDefault: isDefault,
             isBroken: isBroken,
             onTap: onTap ?? () {},
             onRename: onRename ?? () {},
@@ -189,49 +187,6 @@ void main() {
 
     expect(reordered.map((wallet) => wallet.walletIndex), [2, 3, 1]);
     expect(source.map((wallet) => wallet.walletIndex), [1, 2, 3]);
-  });
-
-  group('defaultUserWalletIndex', () {
-    test('空列表返回 null', () {
-      expect(defaultUserWalletIndex(const []), isNull);
-    });
-
-    test('全冷钱包返回 null(冷钱包永不为默认)', () {
-      final wallets = [
-        makeWallet(signMode: 'external', walletIndex: 1),
-        makeWallet(signMode: 'external', walletIndex: 2),
-      ];
-      expect(defaultUserWalletIndex(wallets), isNull);
-    });
-
-    test('取列表中最靠前的热钱包', () {
-      final wallets = [
-        makeWallet(signMode: 'local', walletIndex: 5),
-        makeWallet(signMode: 'local', walletIndex: 6),
-      ];
-      expect(defaultUserWalletIndex(wallets), 5);
-    });
-
-    test('冷钱包排在最前时,默认落到最靠前的热钱包', () {
-      final wallets = [
-        makeWallet(signMode: 'external', walletIndex: 9),
-        makeWallet(signMode: 'local', walletIndex: 3),
-        makeWallet(signMode: 'local', walletIndex: 4),
-      ];
-      expect(defaultUserWalletIndex(wallets), 3);
-    });
-  });
-
-  testWidgets('默认钱包渲染「默认用户」徽标', (tester) async {
-    await pumpTile(tester,
-        wallet: makeWallet(signMode: 'local'), isDefault: true);
-    expect(find.text('默认用户'), findsOneWidget);
-  });
-
-  testWidgets('非默认钱包不渲染「默认用户」徽标', (tester) async {
-    await pumpTile(tester,
-        wallet: makeWallet(signMode: 'local'), isDefault: false);
-    expect(find.text('默认用户'), findsNothing);
   });
 
   testWidgets('身份损坏的钱包改显警示、不显余额', (tester) async {

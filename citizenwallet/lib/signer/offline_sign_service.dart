@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../qr/qr_protocols.dart';
 import '../isar/wallet_isar.dart';
 import '../wallet/wallet_manager.dart';
@@ -89,6 +91,34 @@ class OfflineSignService {
         status: SignDecisionStatus.reject,
         actionLabel: qrActionLabel,
         rejectReason: 'Runtime 升级签名载荷必须是 32 字节哈希，已拒绝签名',
+      );
+    }
+
+    // 注册局占号/换绑域签名:d=append_bounded(cid),按 body.action 区分(两者 d 同构、
+    // 不能靠解码区分),钱包扫码自填本账户。仅展示 CID,绿色态放行。
+    if (QrActions.isSelfAccountDomainAction(body.action)) {
+      final cid = PayloadDecoder.readBoundedCid(body.payloadBytes);
+      if (cid == null) {
+        return OfflineSignVerification(
+          decoded: null,
+          status: SignDecisionStatus.reject,
+          actionLabel: qrActionLabel,
+          rejectReason: '占号/换绑签名载荷无法解码，已拒绝签名',
+        );
+      }
+      final isOccupy = body.action == QrActions.citizenOccupy;
+      final decodedDomain = DecodedPayload(
+        action: isOccupy ? 'citizen_occupy' : 'citizen_rebind',
+        summary: isOccupy
+            ? '注册局占号绑定,把 CID $cid 绑定到你的账户'
+            : '注册局换绑,把 CID $cid 绑定到你的新账户',
+        fields: {'cid_number': cid},
+        reviewFields: {'cid_number': cid},
+      );
+      return OfflineSignVerification(
+        decoded: decodedDomain,
+        status: SignDecisionStatus.normal,
+        actionLabel: qrActionLabel,
       );
     }
 
@@ -189,9 +219,10 @@ class OfflineSignService {
       );
     }
 
-    // 当前 sr25519 的 AccountId32 与 signer public key 字节相同；请求 getter
-    // 已输出规范 AccountId 文本，因此这里只允许完全相等，不做兼容归一化。
-    if (account.accountId != body.signerPublicKeyHex) {
+    // 占号/换绑:b.u 留空,账户由用户自选(传入的 accountId 即选定绑定账户),跳过 b.u 相等校验。
+    // 其余动作:当前 sr25519 的 AccountId32 与 signer public key 字节相同,只允许完全相等,不做归一化。
+    if (!QrActions.isSelfAccountDomainAction(body.action) &&
+        account.accountId != body.signerPublicKeyHex) {
       throw const OfflineSignException(
         OfflineSignErrorCode.accountMismatch,
         '签名请求中的公钥与所选账户不一致',
@@ -210,7 +241,11 @@ class OfflineSignService {
         );
     }
 
-    final payloadBytes = QrSigner.signingBytesFor(body);
+    final selfAccountId = QrActions.isSelfAccountDomainAction(body.action)
+        ? _accountIdBytes(account.accountId)
+        : null;
+    final payloadBytes =
+        QrSigner.signingBytesFor(body, selfAccountId: selfAccountId);
     if (payloadBytes.isEmpty) {
       throw const OfflineSignException(
         OfflineSignErrorCode.invalidPayload,
@@ -244,7 +279,23 @@ class OfflineSignService {
     return _signer.buildResponse(
       request: request,
       signatureHex: '0x${_toHex(signature)}',
+      // 占号/换绑:请求 b.u 空,响应 b.u 用钱包自选账户带回,供 OnChina 取 account_id。
+      signerPublicKeyHexOverride: QrActions.isSelfAccountDomainAction(body.action)
+          ? account.accountId
+          : null,
     );
+  }
+
+  /// 把规范 AccountId 文本(0x + 64 hex)转成 32 字节,占号/换绑签名时追加进 payload。
+  Uint8List _accountIdBytes(String accountIdHex) {
+    final hex = accountIdHex.startsWith('0x')
+        ? accountIdHex.substring(2)
+        : accountIdHex;
+    final out = Uint8List(hex.length ~/ 2);
+    for (var i = 0; i < out.length; i++) {
+      out[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return out;
   }
 
   String _toHex(List<int> bytes) {

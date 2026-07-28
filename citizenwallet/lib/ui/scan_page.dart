@@ -101,34 +101,87 @@ class _ScanPageState extends State<ScanPage> {
       return;
     }
 
-    final account =
-        await _walletManager.getAccountByAccountId(body.signerPublicKeyHex);
-    if (!mounted) return;
-    if (account == null) {
-      await _showErrorAndResume('本设备没有该签名请求指定的账户，无法签名');
-      return;
-    }
-    if (!accountBelongsToWallet(account.masterId, widget.wallet.masterId)) {
-      await _showErrorAndResume(
-          '该签名请求的账户不属于「${widget.wallet.walletName}」，无法在此钱包签名');
-      return;
+    final Account? account;
+    if (QrActions.isSelfAccountDomainAction(body.action)) {
+      // 注册局占号/换绑:b.u 留空,由用户从本钱包账户中自选一个绑定到该 CID。
+      account = await _pickBindingAccount();
+      if (!mounted) return;
+      if (account == null) {
+        // 用户取消选择,恢复扫描。
+        _handled = false;
+        await _controller.start();
+        return;
+      }
+    } else {
+      account =
+          await _walletManager.getAccountByAccountId(body.signerPublicKeyHex);
+      if (!mounted) return;
+      if (account == null) {
+        await _showErrorAndResume('本设备没有该签名请求指定的账户，无法签名');
+        return;
+      }
+      if (!accountBelongsToWallet(account.masterId, widget.wallet.masterId)) {
+        await _showErrorAndResume(
+            '该签名请求的账户不属于「${widget.wallet.walletName}」，无法在此钱包签名');
+        return;
+      }
     }
 
     final walletName = widget.wallet.walletName;
+    final signingAccount = account; // 上方两支均已对 null 提前 return,此处必非空。
 
     final isLogin = body.action == QrActions.login;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => isLogin
-            ? LoginSignPage(account: account, walletName: walletName, raw: raw)
+            ? LoginSignPage(
+                account: signingAccount, walletName: walletName, raw: raw)
             : OfflineSignPage(
-                account: account, walletName: walletName, raw: raw),
+                account: signingAccount, walletName: walletName, raw: raw),
       ),
     );
 
     if (!mounted) return;
     Navigator.of(context).pop();
   }
+
+  /// 占号/换绑:从本钱包账户中选一个绑定到该 CID(占即绑一账户)。返回 null=取消。
+  Future<Account?> _pickBindingAccount() async {
+    final accounts = await _walletManager.getAccounts(widget.wallet.masterId);
+    if (!mounted) return null;
+    if (accounts.isEmpty) {
+      await _showErrorAndResume('本钱包没有可绑定的账户');
+      return null;
+    }
+    return showModalBottomSheet<Account>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '选择要绑定到该 CID 的账户',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+            for (final account in accounts)
+              ListTile(
+                title: Text(account.accountName),
+                subtitle: Text(_shortAccountId(account.accountId)),
+                onTap: () => Navigator.of(sheetContext).pop(account),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _shortAccountId(String accountId) => accountId.length <= 14
+      ? accountId
+      : '${accountId.substring(0, 8)}…${accountId.substring(accountId.length - 6)}';
 
   Future<void> _showErrorAndResume(String message) async {
     await showDialog<void>(

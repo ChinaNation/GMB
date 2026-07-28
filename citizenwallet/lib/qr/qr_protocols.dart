@@ -53,6 +53,8 @@ class QrActions {
 
   static int get login => _code('login');
   static int get citizenIdentity => _code('citizen_identity');
+  static int get citizenOccupy => _code('citizen_occupy');
+  static int get citizenRebind => _code('citizen_rebind');
   static int get onchinaAdmin => _code('onchina_admin_action');
   static int get activateAdmin => _code('activate_admin_account');
   static int get decryptAdmin => _code('decrypt_admin');
@@ -78,7 +80,7 @@ class QrActions {
   static int get updateCandidateIdentity => _code('update_candidate_identity');
   static int get revokeIdentity => _code('revoke_identity');
   static int get occupyCid => _code('occupy_cid');
-  static int get occupyCidsBatch => _code('occupy_cids_batch');
+  static int get adminRebindCidAccountId => _code('admin_rebind_cid_account_id');
   static int get revokeCid => _code('revoke_cid');
   static int get proposeRuntimeUpgrade => _code('propose_runtime_upgrade');
   static int get developerDirectUpgrade => _code('developer_direct_upgrade');
@@ -166,6 +168,11 @@ class QrActions {
       ((palletIndex & 0xff) << 8) | (callIndex & 0xff);
 
   static bool isChainAction(int action) => action >= 0x0100;
+
+  /// 注册局代办占号/换绑的域签名:b.u 留空、d=append_bounded(cid),
+  /// 钱包扫码自填本账户再 signing_message(op_tag, d ++ 本账户32)。
+  static bool isSelfAccountDomainAction(int action) =>
+      action == citizenOccupy || action == citizenRebind;
 
   static bool isBinaryRaw(int action) =>
       action == activateAdmin || action == decryptAdmin;

@@ -1,5 +1,5 @@
 {
-  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 覆盖 10 个哈希域 op_tag(0x10/0x13-0x17/0x1A/0x1B-0x1D), 即真正经 signing_message = blake2_256(GMB || op_tag || scale_payload) 的域. 0x1B-0x1D 为广场 BFF 登录/设备绑定/账户动作, 仅链下 Worker+App 验签(链上 pallet 不引用). 域 domain=GMB. 所有 message_hex 任何时候不得变化(改调原语前后字节一致). 二进制前缀域 0x18(ACTIVATE_ADMIN)/0x19(DECRYPT) 签原始可解析字节非 hash, 不在此金标. scale_payload_hex 为调用方对业务字段做 SCALE 编码后的固定示例字节, 仅用于跨语言金标对齐, 非真实业务数据. 重生方式: SIGN_GOLDEN_UPDATE=1 cargo test -p primitives --test sign_golden.",
+  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 覆盖哈希域 op_tag(0x10/0x12/0x13-0x17/0x1A-0x1D/0x1F);message_hex 逐字节取自 runtime/primitives/tests/fixtures/signing_domain_vectors.json,与冷钱包/链端一致。",
   "domain": "GMB",
   "vectors": [
     {
@@ -61,6 +61,18 @@
       "name": "OP_SIGN_SQUARE_ACTION",
       "op_tag": "0x1d",
       "scale_payload_hex": "73712d616374696f6e"
+    },
+    {
+      "message_hex": "6611a18d502a601be15c46ae57d88d364901d4f8836dca6912c21e6234614a3e",
+      "name": "OP_SIGN_CID_OCCUPY",
+      "op_tag": "0x12",
+      "scale_payload_hex": "8899aabbccddeeff"
+    },
+    {
+      "message_hex": "c8d1bf2d1f5a3c4e36aaa7d40eecaede9831639ce042f070ec0c27dd5342fc0c",
+      "name": "OP_SIGN_CID_ADMIN_REBIND",
+      "op_tag": "0x1f",
+      "scale_payload_hex": "c0ffee00c0ffee11"
     }
   ]
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/identity_gate_test_util.dart';
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/pages/square_home_page.dart';
@@ -137,6 +139,7 @@ Widget _wrap(Widget child) {
 }
 
 void main() {
+  useRegisteredIdentityGate();
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     IdentityAccountCache.debugInstance = _NullIdentityCache();
@@ -169,7 +172,7 @@ void main() {
     expect(find.text('暂无关注动态'), findsNothing);
     expect(find.text('暂无竞选动态'), findsNothing);
 
-    // 中央坦克水印 + 左上默认用户头像 + 保留的发布按钮。
+    // 中央坦克水印 + 保留的发布按钮（顶部头像入口已删）。
     expect(find.byKey(const ValueKey<String>('square-tank-watermark')),
         findsOneWidget);
     // 顶部头像入口已删除；发布改为右下角悬浮 FAB（仍带「发布动态」tooltip）。

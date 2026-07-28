@@ -224,7 +224,7 @@ void main() {
     expect(find.text('公民身份 · 竞选'), findsOneWidget);
   });
 
-  testWidgets('默认用户身份变化后重新排序且只保留一个当前标记', (tester) async {
+  testWidgets('身份账户变化后重新排序且只保留一个当前标记', (tester) async {
     final service = _MutableMyIdService(
       const MyIdState(tier: MyIdTier.visitor),
     );

@@ -10,7 +10,7 @@ import {
   issueActionChallenge,
   releaseActionChallenge
 } from '../src/account/action_challenge';
-import { purgeAccount } from '../src/account/purge';
+import { purgeAccount, revokeRebindOldAccount } from '../src/account/purge';
 import { routeRequest } from '../src/routes';
 import type { Env, MediaAssetRow } from '../src/types';
 
@@ -352,5 +352,39 @@ describe('注销入口默认拒（不再匿名对任意账户发起挑战）', (
         env
       )
     ).rejects.toMatchObject({ code: 'missing_session' });
+  });
+});
+
+describe('revokeRebindOldAccount', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('只删旧账户隐私/鉴权数据(通讯录/Chat/设备子钥/挑战/会话),不碰迁移数据(动态/会员/关注)', async () => {
+    const db = new PurgeDb();
+    const kv = new FakeKv();
+    kv.store.set(`square_identity:${ACCOUNT_ID}`, '{"identity_level":"voting"}');
+    kv.store.set(`square_sessions_by_account_id:${ACCOUNT_ID}`, JSON.stringify(['tok1']));
+    kv.store.set('square_session:tok1', '{}');
+    const env = { DB: db, SQUARE_CACHE: kv } as unknown as Env;
+
+    const result = await revokeRebindOldAccount(env, ACCOUNT_ID);
+
+    const joined = db.deletes.join('\n');
+    // 隐私/鉴权敏感数据全删。
+    expect(joined).toContain('DELETE FROM square_contacts WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM chat_keypackages WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM chat_devices WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_login_challenges WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_device_subkeys WHERE account_id = ?');
+    // 迁移数据(随 CID 迁到新账户,永不丢失)绝不删。
+    expect(joined).not.toContain('square_posts');
+    expect(joined).not.toContain('square_memberships');
+    expect(joined).not.toContain('square_follows');
+    expect(joined).not.toContain('square_media_assets');
+    // 身份缓存清除 + 会话清空(旧私钥泄漏也无法重建旧会话)。
+    expect(kv.store.has(`square_identity:${ACCOUNT_ID}`)).toBe(false);
+    expect(kv.store.has(`square_sessions_by_account_id:${ACCOUNT_ID}`)).toBe(false);
+    expect(kv.store.has('square_session:tok1')).toBe(false);
+    expect(result.deleted_rows).toBeGreaterThan(0);
   });
 });

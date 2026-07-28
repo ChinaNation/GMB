@@ -42,6 +42,8 @@ import {
   CITIZEN_DOCUMENT_TYPES,
   completeCitizenOnchainSignature,
   prepareCitizenRevoke,
+  prepareCitizenRebind,
+  submitCitizenRebind,
   deleteCitizenDocument,
   downloadCitizenDocument,
   listCitizenDocuments,
@@ -157,6 +159,12 @@ export function CitizenDetailPage({
   const [selectedDocumentType, setSelectedDocumentType] = useState<CitizenDocumentType>('其他材料');
   const { signChain, chainSignModal } = useChainSign('注册局链交易签名');
   const [chainSubmitting, setChainSubmitting] = useState(false);
+  // 换绑钱包:新钱包本人扫「换绑签名」,再由管理员冷签(复用上面的 signChain)。
+  const { signChain: signNewWallet, chainSignModal: newWalletSignModal } = useChainSign(
+    '请新钱包本人用公民钱包 / 公民App 扫码换绑',
+  );
+  const [rebindRoleCode, setRebindRoleCode] = useState('');
+  const [rebinding, setRebinding] = useState(false);
 
   const ageYears = useMemo(() => calculateAgeYears(current.citizen_birth_date), [current.citizen_birth_date]);
   const canPushOnchain =
@@ -292,6 +300,43 @@ export function CitizenDetailPage({
       notice.error(err, '公民身份吊销失败');
     } finally {
       setChainSubmitting(false);
+    }
+  };
+
+  const rebindWallet = async () => {
+    const roleCode = rebindRoleCode.trim();
+    if (!roleCode) {
+      notice.warning('请先填写当前任职岗位码');
+      return;
+    }
+    setRebinding(true);
+    try {
+      // 段1:发起换绑,返回给新钱包的域签名 QR。
+      const prep = await prepareCitizenRebind(auth, current.cid_number, roleCode);
+      // 段1→2:新钱包本人扫码换绑(占即绑,自填本账户)。
+      const newWalletSigned = await signNewWallet(prep.request_id, prep.new_wallet_sign_request);
+      const admin = await submitCitizenRebind(
+        auth,
+        prep.request_id,
+        newWalletSigned.account_id,
+        newWalletSigned.signature,
+      );
+      // 段2→3:注册局管理员冷签换绑 extrinsic。
+      const adminSigned = await signChain(admin.request_id, admin.sign_request);
+      const submitted = await submitChainSign(
+        auth,
+        admin.request_id,
+        adminSigned.account_id,
+        adminSigned.signature,
+      );
+      notice.success(`换绑上链成功,交易哈希：${submitted.tx_hash}`);
+      // 绑定账户以链上确认为准;ss58 待列表刷新回填,先更新 account_id。
+      updateCitizenAccount(newWalletSigned.account_id, '');
+      setRebindRoleCode('');
+    } catch (err) {
+      notice.error(err, '换绑钱包失败');
+    } finally {
+      setRebinding(false);
     }
   };
 
@@ -476,6 +521,44 @@ export function CitizenDetailPage({
             </Form.Item>
           </Form>
         </div>
+
+        <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 18 }}>
+          <Typography.Title level={5} style={{ marginTop: 0 }}>
+            换绑钱包账户
+          </Typography.Title>
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="匿名 CID 换绑:填岗位码 → 新钱包本人扫码换绑 → 管理员冷签上链。已具投票身份的 CID 换绑由链上拒绝,请走正式流程。"
+          />
+          <Space wrap>
+            <Input
+              placeholder="注册局岗位码"
+              value={rebindRoleCode}
+              onChange={(event) => setRebindRoleCode(event.target.value)}
+              disabled={!canWrite || rebinding}
+              style={{ width: 260 }}
+              allowClear
+            />
+            <Popconfirm
+              title={`确认换绑 ${current.cid_number} 的钱包账户?`}
+              okText="换绑"
+              cancelText="取消"
+              disabled={!canWrite || rebinding}
+              onConfirm={rebindWallet}
+            >
+              <Button
+                type="primary"
+                icon={<WalletOutlined />}
+                loading={rebinding}
+                disabled={!canWrite}
+              >
+                换绑钱包
+              </Button>
+            </Popconfirm>
+          </Space>
+        </div>
       </Card>
 
       <Card
@@ -605,6 +688,7 @@ export function CitizenDetailPage({
       />
 
       {chainSignModal}
+      {newWalletSignModal}
     </>
   );
 }
