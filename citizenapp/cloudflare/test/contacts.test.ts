@@ -48,10 +48,10 @@ describe('端到端加密通讯录 API', () => {
     ).rejects.toMatchObject({ code: 'device_time_invalid' });
   });
 
-  it('按 Session accountId 隔离 CRUD，且 D1 不出现联系人账户或名称明文', async () => {
+  it('按 Session CID 隔离 CRUD，且 D1 不出现联系人账户或私人备注明文', async () => {
     const context = await buildContext();
     const secretContactAccount = '5ContactAccountMustNeverEnterCloudflare';
-    const secretContactName = '绝不能进入 Cloudflare 的私人名称';
+    const secretContactRemark = '绝不能进入 Cloudflare 的私人备注';
     const aPayload = cipherPayload('accountId-a', 300);
     const bPayload = cipherPayload('accountId-b', 400);
 
@@ -59,7 +59,7 @@ describe('端到端加密通讯录 API', () => {
       call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, {
         ...aPayload,
         contact_account_id: secretContactAccount,
-        contact_name: secretContactName
+        contact_remark: secretContactRemark
       })
     ).rejects.toMatchObject({ code: 'invalid_contact_request' });
 
@@ -79,7 +79,7 @@ describe('端到端加密通讯录 API', () => {
       'cid_number', 'ciphertext', 'contact_id', 'mac', 'nonce', 'updated_at'
     ]);
     expect(JSON.stringify(stored)).not.toContain(secretContactAccount);
-    expect(JSON.stringify(stored)).not.toContain(secretContactName);
+    expect(JSON.stringify(stored)).not.toContain(secretContactRemark);
 
     const deleted = await json(
       await call(context, context.accountA, 'DELETE', `/v1/square/contacts/${CONTACT_A}`)

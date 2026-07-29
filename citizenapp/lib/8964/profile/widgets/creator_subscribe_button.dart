@@ -15,7 +15,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 class CreatorSubscribeButton extends StatefulWidget {
   const CreatorSubscribeButton({
     super.key,
-    required this.creatorAccountId,
+    required this.creatorCidNumber,
     this.enabled = true,
     CreatorApi? api,
     CreatorSubscribeService? service,
@@ -24,7 +24,7 @@ class CreatorSubscribeButton extends StatefulWidget {
         _service = service,
         _sessionProvider = sessionProvider;
 
-  final String creatorAccountId;
+  final String creatorCidNumber;
 
   /// false=置灰不可点（以他人视角看自己时，订阅自己无意义）。
   final bool enabled;
@@ -68,24 +68,22 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
       final results = await Future.wait<Object?>([
         // Cloudflare 只补档位名称；不可用时仍按 finalized 链上档位订阅。
         _api
-            .fetchPlanOf(session, widget.creatorAccountId)
+            .fetchPlanOf(session, widget.creatorCidNumber)
             .catchError((_) => null),
-        _service.fetchCreatorPlans(widget.creatorAccountId),
+        _service.fetchCreatorPlans(widget.creatorCidNumber),
         _service.fetchFinalizedState(
-          subscriberAccountId: session.accountId,
-          creatorAccountId: widget.creatorAccountId,
+          subscriberCidNumber: session.cidNumber,
+          creatorCidNumber: widget.creatorCidNumber,
         ),
         // 被查看创作者本人平台会员真态：读失败 → 整个 _load 落 catch → 按钮隐藏（fail-closed）。
-        _service.fetchPlatformSnapshot(widget.creatorAccountId),
+        _service.fetchPlatformSnapshot(widget.creatorCidNumber),
       ]);
       final displayPlan = results[0] as CreatorPlan?;
       final chainTiers = results[1] as List<ChainCreatorTier>;
       if (!mounted) return;
       setState(() {
-        // widget.creatorAccountId 是被查看创作者的钱包账户（非 cid）；创作者身份主键取
-        // worker 计划镜像的 creator_cid_number，worker 不可用时留空，不塞 account_id。
         _plan = mergeCreatorPlanWithChain(
-          creatorCidNumber: displayPlan?.creatorCidNumber ?? '',
+          creatorCidNumber: widget.creatorCidNumber,
           displayPlan: displayPlan,
           chainTiers: chainTiers,
         );
@@ -155,13 +153,13 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
     await _run(
       () => shouldChange
           ? _service.changePlan(
-              creatorAccountId: widget.creatorAccountId,
+              creatorCidNumber: widget.creatorCidNumber,
               tierId: selection.tierId,
               period: selection.period.key,
               priceFen: selection.priceFen,
             )
           : _service.subscribe(
-              creatorAccountId: widget.creatorAccountId,
+              creatorCidNumber: widget.creatorCidNumber,
               tierId: selection.tierId,
               period: selection.period.key,
               priceFen: selection.priceFen,
@@ -190,7 +188,7 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
     );
     if (confirmed != true || !mounted) return;
     await _run(
-        () => _service.cancel(creatorAccountId: widget.creatorAccountId));
+        () => _service.cancel(creatorCidNumber: widget.creatorCidNumber));
   }
 
   Future<void> _run(Future<void> Function() action) async {

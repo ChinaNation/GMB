@@ -75,7 +75,7 @@ export function LoginView() {
   const { auth, setAuth } = useAuth();
   const [pendingQrLogin, setPendingQrLogin] = useState<AdminQrSignRequestResult | null>(null);
   const [pendingBinding, setPendingBinding] = useState<NodeBindingRequired | null>(null);
-  const [contactName, setContactName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
@@ -102,7 +102,7 @@ export function LoginView() {
     setPendingQrLogin(null);
     setPendingBinding(null);
     setSelectedCandidateId('');
-    setContactName('');
+    setDisplayName('');
     notice.success('登录成功');
   }, [setAuth]);
 
@@ -121,12 +121,12 @@ export function LoginView() {
         origin,
         session_id: sessionId,
       });
-      setContactName(body.contact_name);
+      setDisplayName(body.display_name);
       setPendingQrLogin(challenge);
       notice.success('已生成该管理员专用登录二维码');
     } catch (err) {
       notice.error(err, '用户码读取失败');
-      setContactName('');
+      setDisplayName('');
       setPendingQrLogin(null);
     } finally {
       setChallengeLoading(false);
@@ -135,7 +135,7 @@ export function LoginView() {
 
   const resetIdentityScan = () => {
     setPendingQrLogin(null);
-    setContactName('');
+    setDisplayName('');
   };
 
   const onCompleteSignedLogin = useCallback(async (raw: string) => {
@@ -212,7 +212,7 @@ export function LoginView() {
         if (status.status === 'EXPIRED') {
           notice.warning('二维码已过期，请重新扫描管理员用户码');
           setPendingQrLogin(null);
-          setContactName('');
+          setDisplayName('');
           return;
         }
         if (status.status === 'SUCCESS' && status.access_token && status.admin) {
@@ -284,14 +284,14 @@ export function LoginView() {
           qrPlaceholderValue="ONCHINA_LOGIN_PENDING"
           qrHint={
             pendingQrLogin
-              ? `${contactName} · 有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
+              ? `${displayName} · 有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
               : '扫描管理员用户码后生成，仅对应钱包可以签名'
           }
           scannerTitle={pendingQrLogin ? '签名响应' : '管理员用户码'}
           scannerHint={
             pendingQrLogin
               ? '扫描公民钱包生成的签名响应二维码'
-              : '只读取 QR_V1 用户码中的钱包地址；联系人名称仅用于本页显示'
+              : '读取 QR_V1 用户码中的 CID 与钱包地址；公开昵称仅用于本页显示'
           }
           primaryActionText={pendingQrLogin ? '重新扫描用户码' : undefined}
           primaryActionLoading={challengeLoading}

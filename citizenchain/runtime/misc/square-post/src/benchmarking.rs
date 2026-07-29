@@ -3,8 +3,12 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use crate::{
-    pallet::{Call, Config, Pallet, PlatformPrice, RenewalIndex, RenewalSchedule, Subscriptions},
-    IssuerKey, MembershipLevel, SubscriptionPlan, SubscriptionState, SubscriptionStatus,
+    pallet::{
+        Call, CidNumberOf, Config, Pallet, PlatformPrice, RenewalIndex, RenewalSchedule,
+        Subscriptions,
+    },
+    IssuerKey, MembershipLevel, SquarePostCitizenIdentityProvider, SubscriptionPlan,
+    SubscriptionState, SubscriptionStatus,
 };
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
@@ -28,10 +32,18 @@ mod benchmarks {
         }
     }
 
+    fn benchmark_cid<T: Config>(account_id: &T::AccountId) -> CidNumberOf<T> {
+        T::CitizenIdentity::benchmark_seed_identity(account_id)
+            .try_into()
+            .ok()
+            .expect("benchmark CID must fit SquarePost bounds")
+    }
+
     #[benchmark]
     fn cancel() {
         let caller: T::AccountId = whitelisted_caller();
-        let key = (caller.clone(), IssuerKey::Platform);
+        let caller_cid_number = benchmark_cid::<T>(&caller);
+        let key = (caller_cid_number.clone(), IssuerKey::Platform);
         Subscriptions::<T>::insert(&key, active_platform_state::<T>());
         RenewalSchedule::<T>::insert(2u64.to_be_bytes(), &key, ());
         RenewalIndex::<T>::insert(&key, 2u64);
@@ -40,7 +52,7 @@ mod benchmarks {
         _(RawOrigin::Signed(caller.clone()), IssuerKey::Platform);
 
         assert_eq!(
-            Subscriptions::<T>::get((caller, IssuerKey::Platform))
+            Subscriptions::<T>::get((caller_cid_number, IssuerKey::Platform))
                 .expect("benchmark state exists")
                 .subscription_status,
             SubscriptionStatus::Cancelled
@@ -51,7 +63,8 @@ mod benchmarks {
     #[benchmark]
     fn process_one_due() {
         let subscriber_account_id: T::AccountId = whitelisted_caller();
-        let key = (subscriber_account_id.clone(), IssuerKey::Platform);
+        let subscriber_cid_number = benchmark_cid::<T>(&subscriber_account_id);
+        let key = (subscriber_cid_number, IssuerKey::Platform);
         PlatformPrice::<T>::insert(MembershipLevel::Freedom, 199_900u128);
         Subscriptions::<T>::insert(&key, active_platform_state::<T>());
         RenewalSchedule::<T>::insert(2u64.to_be_bytes(), &key, ());

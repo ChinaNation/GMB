@@ -45,13 +45,13 @@ lib/
     │   ├── attestation_service.dart
     │   └── wallet_type_service.dart
     ├── pages/
+    │   ├── account_detail_page.dart
     │   ├── wallet_page.dart
     │   └── transaction_history_page.dart
     └── widgets/
         ├── wallet_action_card.dart
         ├── wallet_identity_card.dart
-        ├── wallet_onchain_balance_card.dart
-        └── wallet_qr_dialog.dart
+        └── wallet_onchain_balance_card.dart
 ```
 
 `wallet/` 目录只允许一层子目录；不得再出现 `ui/cards/` 这类二级业务目录。
@@ -74,6 +74,19 @@ lib/
 - `hardware_bound_seed_vault.dart`
   - 账户 child 私钥按 `account_id` 分密文保存；同钱包账户共享 Android Keystore KEK
   - 私钥明文只在生物识别成功后的解密与签名期间短暂进入内存
+- `lib/security/secure_storage.dart`
+  - CitizenApp 通用安全存储唯一入口为 `appSecureStorage`；业务代码不得各自创建
+    `FlutterSecureStorage()`，避免 Android/iOS 选项漂移
+  - Android 使用插件 10.x 默认 RSA-OAEP + AES-GCM，开启
+    `migrateOnAlgorithmChange` 与 `migrateWithBackup`，算法升级时先备份再迁移
+  - iOS 使用 `first_unlock_this_device` 且禁止同步，只允许本机首次解锁后读取，
+    不随 iCloud 或换机迁移
+  - 通用安全存储不得开启统一生物门禁：PIN 哈希、设备锁状态和短期令牌需要静默读取；
+    seed 的生物认证只归 `HardwareBoundSeedVault` 原生硬件金库
+  - 当前 iOS 仅完成 Dart Keychain 选项收口；Secure Enclave seed 金库、P-256
+    设备子钥及真实 iPhone 验收归
+    `20260728-citizenapp-ios-vault-secure-storage` 任务，未验收前不得宣称 iOS
+    已具备 Android 对等硬件金库
 
 ### 3.2 `capabilities`
 
@@ -112,8 +125,9 @@ lib/
     零钱包余额来自该 `account_id` 绑定的清算行，两者不得混用
 - `wallet_onchain_balance_card.dart`
   - 链上余额卡：展示链上 finalized total 余额
-- `wallet_qr_dialog.dart`
-  - 钱包二维码弹窗：生成 `QR_V1 kind=user_contact`
+- `wallet_identity_card.dart` / `pages/account_detail_page.dart`
+  - 统一调用 `openAccountQrPage()`：身份账户生成固定 `k=3`，其它账户生成五分钟
+    `k=4`；链上身份读取失败时从严拒绝
 
 ## 4. 关键流程
 
@@ -195,6 +209,8 @@ lib/
    查看页面不得要求输入助记词，也不得静默生成新 KEK 冒充恢复。
 5. App 不保存助记词或母种子。KEK 缺失后，现有账户私钥密文无法在本机反解，必须
    fail-closed；任何重新导入属于独立的钱包生命周期操作，不能嵌入查看私钥流程。
+6. 硬件金库生成的账户密文 blob、通讯录域隔离密钥、PIN 哈希、设备锁设置与短期
+   attestation token 均通过 `appSecureStorage` 静默持久化；新增调用不得绕开该单源。
 
 ### 4.5.3 账户卡片扫码签名
 
@@ -295,8 +311,10 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 页面元素（自上而下）：
 
 1. 余额卡片：左上角钱包名称（可点击编辑），居中余额数字+元+GMB
-2. 二维码：`QR_V1 kind=user_contact`，`body.ss58_address` 为当前钱包 SS58 地址，
-   下载按钮浮在二维码正中间（半透明圆形背景）
+2. 二维码：当前账户命中链上 CID 身份闭环时生成固定
+   `QR_V1 kind=user_contact`；未注册账户或其它钱包子账户生成五分钟
+   `kind=user_transfer` 临时收款码。链上身份读取失败时不生成二维码，不把钱包名
+   伪装成公开昵称
 3. 冷钱包离线签名入口由 CitizenWallet 承担；CitizenApp 钱包详情页不承载 `QrOfflineSignPage`
 4. 地址+复制：地址居中两行显示，复制图标在右侧
 5. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
@@ -325,11 +343,14 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 
 - seed 不写入 Isar/Postgres/日志
 - **seed 不出 WalletManager**：所有签名操作通过 `signWithWallet()` / `signUtf8WithWallet()` 完成，seed 仅在方法内短暂存在，签名后立即清零
-- 通讯录只从热钱包 seed 派生 `citizenapp.contacts.v1/encryption` 与
-  `citizenapp.contacts.v1/index` 两把 32 字节 HKDF-SHA256 域隔离密钥；salt 固定为
-  `SHA256(account_id)`。业务层只能读取派生后的 `ContactKeyMaterial`，不能接触 seed，
+- 通讯录只从 CID 当前绑定的身份账户 child 派生 `citizenapp.contacts/encryption` 与
+  `citizenapp.contacts/index` 两把 32 字节 HKDF-SHA256 域隔离密钥；salt 固定为
+  `SHA256(account_id)`。业务层只能读取派生后的 `ContactKeyMaterial`，不能接触 child，
   也不能用通讯录密钥签名或恢复钱包。
-- 新建/导入热钱包时预派生通讯录密钥并写入系统安全存储；历史热钱包首次进入通讯录时读取一次硬件金库并派生。删除钱包必须同时删除派生密钥及该 `account_id` 的联系人缓存、待同步操作和同步状态。
+- 身份账户首次进入通讯录时读取一次硬件金库 child、派生密钥并以
+  `citizenapp_contacts_key_<account_id>` 写入系统安全存储；旧
+  `wallet_contacts_key_v1_` 条目只删不读。删除钱包必须同时删除派生密钥及该账户的
+  联系人缓存、待同步操作、同步状态和云重建标记。
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
@@ -349,8 +370,8 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
   - `deleteWallet / setActiveWallet`
   - `signWithWallet(walletIndex, payload)` — 热钱包 sr25519 签名（seed 不出类）
   - `signUtf8WithWallet(walletIndex, message)` — 热钱包 UTF-8 签名（返回 `WalletSignResult`）
-  - `ensureContactKeyMaterial(walletIndex, accountId)` — 返回通讯录域隔离加密钥和索引钥，
-    必要时从硬件金库一次性派生
+  - `ensureContactKeyMaterialForAccountId(accountId)` — 返回身份账户 child 域隔离的
+    通讯录加密钥和索引钥，必要时从硬件金库一次性派生
   - ~~`getLatestWalletSecret / getWalletSecretByIndex`~~ — 已弃用
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchFinalizedBalance` / `fetchFinalizedBalances` / `fetchFinalizedTotalBalance` — 直连节点查询 finalized 链上余额

@@ -5,8 +5,8 @@
 
 use crate::{
     pallet::{
-        BalanceOf, Config, CreatorPlans, Error, Event, Pallet, RenewalIndex, RenewalSchedule,
-        SubKeyOf, Subscriptions,
+        BalanceOf, CidNumberOf, Config, CreatorPlans, Error, Event, IssuerKeyOf, Pallet,
+        RenewalIndex, RenewalSchedule, SubKeyOf, Subscriptions,
     },
     subscription::{
         add_calendar_period, CreatorTier, CreatorTiers, IssuerKey, SubscriptionPlan,
@@ -25,18 +25,19 @@ impl<T: Config> Pallet<T> {
     /// 订阅并立即完成首次扣款。已有 Active 同计划幂等；已取消但尚未到期时恢复调度且不重扣。
     pub(crate) fn do_subscribe(
         subscriber_account_id: T::AccountId,
-        issuer: IssuerKey<T::AccountId>,
+        issuer: IssuerKeyOf<T>,
         plan: SubscriptionPlan,
         expected_price_fen: u128,
     ) -> DispatchResult {
-        if let IssuerKey::Creator(creator_account_id) = &issuer {
+        let subscriber_cid_number = Self::active_cid_number_for_account(&subscriber_account_id)?;
+        if let IssuerKey::Creator(creator_cid_number) = &issuer {
             ensure!(
-                creator_account_id != &subscriber_account_id,
+                creator_cid_number != &subscriber_cid_number,
                 Error::<T>::CannotSubscribeSelf
             );
         }
         let now = Self::now_ms();
-        let key = (subscriber_account_id.clone(), issuer.clone());
+        let key = (subscriber_cid_number.clone(), issuer.clone());
         if let Some(mut state) = Subscriptions::<T>::get(&key) {
             if state.subscription_status == SubscriptionStatus::Active {
                 ensure!(state.plan == plan, Error::<T>::TermsLocked);
@@ -51,7 +52,7 @@ impl<T: Config> Pallet<T> {
                         state.authorized_price_fen = current_price;
                         Subscriptions::<T>::insert(&key, state);
                         Self::deposit_event(Event::SubscriptionReconsented {
-                            subscriber_account_id,
+                            subscriber_cid_number,
                             issuer,
                             authorized_price_fen: current_price,
                         });
@@ -68,7 +69,7 @@ impl<T: Config> Pallet<T> {
                 Subscriptions::<T>::insert(&key, state.clone());
                 Self::schedule_renewal(&key, state.paid_until);
                 Self::deposit_event(Event::SubscriptionResumed {
-                    subscriber_account_id,
+                    subscriber_cid_number,
                     issuer,
                     paid_until: state.paid_until,
                 });
@@ -76,6 +77,7 @@ impl<T: Config> Pallet<T> {
             }
         }
         Self::charge_and_schedule(
+            subscriber_cid_number,
             subscriber_account_id,
             issuer,
             plan,
@@ -85,8 +87,9 @@ impl<T: Config> Pallet<T> {
 
     /// 首次订阅或挂起后再签名恢复的原子扣款路径；新周期从现在起算。
     fn charge_and_schedule(
+        subscriber_cid_number: CidNumberOf<T>,
         subscriber_account_id: T::AccountId,
-        issuer: IssuerKey<T::AccountId>,
+        issuer: IssuerKeyOf<T>,
         plan: SubscriptionPlan,
         expected_price_fen: Option<u128>,
     ) -> DispatchResult {
@@ -106,7 +109,7 @@ impl<T: Config> Pallet<T> {
                 ExistenceRequirement::KeepAlive,
             )?;
 
-            let key = (subscriber_account_id.clone(), issuer.clone());
+            let key = (subscriber_cid_number.clone(), issuer.clone());
             Self::unschedule_renewal(&key);
             let started_at = now;
             Subscriptions::<T>::insert(
@@ -124,7 +127,8 @@ impl<T: Config> Pallet<T> {
             );
             Self::schedule_renewal(&key, paid_until);
             Self::deposit_event(Event::SubscriptionCharged {
-                subscriber_account_id,
+                subscriber_cid_number,
+                payer_account_id: subscriber_account_id,
                 issuer,
                 plan,
                 price_fen,
@@ -165,8 +169,22 @@ impl<T: Config> Pallet<T> {
         ) {
             return;
         }
-        let (subscriber_account_id, issuer) = key.clone();
+        let (subscriber_cid_number, issuer) = key.clone();
         let plan = state.plan.clone();
+        let subscriber_account_id = match Self::current_account_id_for_cid(&subscriber_cid_number) {
+            Ok(account_id) => account_id,
+            Err(_) => {
+                Self::suspend_subscription(
+                    &key,
+                    state,
+                    subscriber_cid_number,
+                    issuer,
+                    SuspendReason::IdentityBindingUnavailable,
+                    now,
+                );
+                return;
+            }
+        };
         let (price_fen, payee) = match Self::current_price_and_payee(&issuer, &plan, now) {
             Ok(value) => value,
             // 创作者删了该档/周期 → 挂起待再签名，保留粉丝关系。
@@ -174,7 +192,7 @@ impl<T: Config> Pallet<T> {
                 Self::suspend_subscription(
                     &key,
                     state,
-                    subscriber_account_id,
+                    subscriber_cid_number,
                     issuer,
                     SuspendReason::NeedReconsent,
                     now,
@@ -191,10 +209,22 @@ impl<T: Config> Pallet<T> {
                     Self::schedule_renewal(&key, retry_at);
                 }
                 Self::deposit_event(Event::SubscriptionCreatorPaused {
-                    subscriber_account_id,
+                    subscriber_cid_number,
                     issuer,
                     paused_at: now,
                 });
+                return;
+            }
+            // 创作者 CID 当前没有完整 active 绑定，禁止向历史账户付款。
+            Err(e) if e == Error::<T>::CitizenIdentityUnavailable.into() => {
+                Self::suspend_subscription(
+                    &key,
+                    state,
+                    subscriber_cid_number,
+                    issuer,
+                    SuspendReason::IdentityBindingUnavailable,
+                    now,
+                );
                 return;
             }
             // 公历换算等真实失效 → 终止。
@@ -203,7 +233,7 @@ impl<T: Config> Pallet<T> {
                 state.suspend_reason = None;
                 Subscriptions::<T>::insert(&key, state);
                 Self::deposit_event(Event::SubscriptionRenewalStopped {
-                    subscriber_account_id,
+                    subscriber_cid_number,
                     issuer,
                     stopped_at: now,
                 });
@@ -215,7 +245,7 @@ impl<T: Config> Pallet<T> {
             Self::suspend_subscription(
                 &key,
                 state,
-                subscriber_account_id,
+                subscriber_cid_number,
                 issuer,
                 SuspendReason::NeedReconsent,
                 now,
@@ -227,7 +257,7 @@ impl<T: Config> Pallet<T> {
             state.suspend_reason = None;
             Subscriptions::<T>::insert(&key, state);
             Self::deposit_event(Event::SubscriptionRenewalStopped {
-                subscriber_account_id,
+                subscriber_cid_number,
                 issuer,
                 stopped_at: now,
             });
@@ -246,7 +276,7 @@ impl<T: Config> Pallet<T> {
             Self::suspend_subscription(
                 &key,
                 state,
-                subscriber_account_id,
+                subscriber_cid_number,
                 issuer,
                 SuspendReason::InsufficientBalance,
                 now,
@@ -264,7 +294,8 @@ impl<T: Config> Pallet<T> {
         Subscriptions::<T>::insert(&key, state);
         Self::schedule_renewal(&key, paid_until);
         Self::deposit_event(Event::SubscriptionCharged {
-            subscriber_account_id,
+            subscriber_cid_number,
+            payer_account_id: subscriber_account_id,
             issuer,
             plan,
             price_fen,
@@ -289,8 +320,8 @@ impl<T: Config> Pallet<T> {
     fn suspend_subscription(
         key: &SubKeyOf<T>,
         mut state: SubscriptionState,
-        subscriber_account_id: T::AccountId,
-        issuer: IssuerKey<T::AccountId>,
+        subscriber_cid_number: CidNumberOf<T>,
+        issuer: IssuerKeyOf<T>,
         reason: SuspendReason,
         now: u64,
     ) {
@@ -298,7 +329,7 @@ impl<T: Config> Pallet<T> {
         state.suspend_reason = Some(reason);
         Subscriptions::<T>::insert(key, state);
         Self::deposit_event(Event::SubscriptionSuspended {
-            subscriber_account_id,
+            subscriber_cid_number,
             issuer,
             reason,
             suspended_at: now,
@@ -308,9 +339,10 @@ impl<T: Config> Pallet<T> {
     /// 签名取消是撤销自动扣款授权的唯一方式；当前已付款权益不缩短。
     pub(crate) fn do_cancel(
         subscriber_account_id: T::AccountId,
-        issuer: IssuerKey<T::AccountId>,
+        issuer: IssuerKeyOf<T>,
     ) -> DispatchResult {
-        let key = (subscriber_account_id.clone(), issuer.clone());
+        let subscriber_cid_number = Self::active_cid_number_for_account(&subscriber_account_id)?;
+        let key = (subscriber_cid_number.clone(), issuer.clone());
         let paid_until = Subscriptions::<T>::try_mutate(&key, |slot| {
             let state = slot.as_mut().ok_or(Error::<T>::SubscriptionNotFound)?;
             state.subscription_status = SubscriptionStatus::Cancelled;
@@ -319,7 +351,7 @@ impl<T: Config> Pallet<T> {
         })?;
         Self::unschedule_renewal(&key);
         Self::deposit_event(Event::SubscriptionCancelled {
-            subscriber_account_id,
+            subscriber_cid_number,
             issuer,
             paid_until,
         });
@@ -329,12 +361,14 @@ impl<T: Config> Pallet<T> {
     /// 换挡立即生效并折算：升档补扣「新价 − 剩余权益折算」，降档不扣、余额折算成延长时长。
     pub(crate) fn do_change_subscription_plan(
         subscriber_account_id: T::AccountId,
-        issuer: IssuerKey<T::AccountId>,
+        issuer: IssuerKeyOf<T>,
         new_plan: SubscriptionPlan,
         expected_price_fen: u128,
     ) -> DispatchResult {
         with_storage_layer(|| -> DispatchResult {
-            let key = (subscriber_account_id.clone(), issuer.clone());
+            let subscriber_cid_number =
+                Self::active_cid_number_for_account(&subscriber_account_id)?;
+            let key = (subscriber_cid_number.clone(), issuer.clone());
             let mut state =
                 Subscriptions::<T>::get(&key).ok_or(Error::<T>::SubscriptionNotFound)?;
             let now = Self::now_ms();
@@ -395,7 +429,8 @@ impl<T: Config> Pallet<T> {
             Subscriptions::<T>::insert(&key, state);
             Self::schedule_renewal(&key, paid_until);
             Self::deposit_event(Event::SubscriptionPlanChanged {
-                subscriber_account_id,
+                subscriber_cid_number,
+                payer_account_id: subscriber_account_id,
                 issuer,
                 new_plan,
                 charged_now,
@@ -425,15 +460,17 @@ impl<T: Config> Pallet<T> {
         creator_account_id: T::AccountId,
         tiers: Vec<CreatorTier>,
     ) -> DispatchResult {
+        let creator_cid_number = Self::active_cid_number_for_account(&creator_account_id)?;
         ensure!(
-            Self::has_effective_platform_subscription(&creator_account_id, Self::now_ms()),
+            Self::has_effective_platform_subscription(&creator_cid_number, Self::now_ms()),
             Error::<T>::CreatorNotPlatformMember
         );
         Self::validate_creator_tiers(&tiers)?;
         let bounded = CreatorTiers::try_from(tiers).map_err(|_| Error::<T>::TooManyCreatorTiers)?;
-        CreatorPlans::<T>::insert(&creator_account_id, bounded.clone());
+        CreatorPlans::<T>::insert(&creator_cid_number, bounded.clone());
         Self::deposit_event(Event::CreatorPlansSet {
-            creator_account_id,
+            creator_cid_number,
+            signer_account_id: creator_account_id,
             tier_count: bounded.len() as u32,
         });
         Ok(())

@@ -146,10 +146,10 @@ B 必须先走完步骤 4 的链上清算行绑定。收款码中的 `bank` 必�
 - 页面顶部显示 `收款地址`(B 的 SS58)与 `清算行`(B 的 `cid_number`)
 - 输入金额 `10`(元)
 - QR 码即时渲染,扫出来是 JSON,含:
-  - `proto=QR_V1`, `kind=user_transfer`
-  - `body.address` = B 的 SS58
-  - `body.bank` = B 绑定的清算行 `cid_number`
-  - `body.amount` = `"10"`
+  - `p=QR_V1`, `k=4`
+  - `b.ss58_address` = B 的 SS58
+  - `b.bank` = B 绑定的清算行 `cid_number`
+  - `b.amount` = `"10"`
 - 页面底部 `可用余额(清算行,每 5s 刷新)` 显示 `0.00 元`(B 还没被转过钱)
 
 ---

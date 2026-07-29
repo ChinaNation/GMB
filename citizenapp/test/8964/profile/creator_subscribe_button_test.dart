@@ -22,19 +22,19 @@ class _FakeSubscribeService extends CreatorSubscribeService {
 
   @override
   Future<List<ChainCreatorTier>> fetchCreatorPlans(
-          String creatorAccountId) async =>
+          String creatorCidNumber) async =>
       tiers;
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState({
-    required String subscriberAccountId,
-    required String creatorAccountId,
+    required String subscriberCidNumber,
+    required String creatorCidNumber,
   }) async =>
       _snapshot(state: null); // 访客尚未订阅该创作者 → 按钮呈「订阅 TA」
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchPlatformSnapshot(
-      String accountId) async {
+      String cidNumber) async {
     // 真实 fetchSubscriptionSnapshot 在链读/解码失败时抛 FormatException（Exception）。
     if (throwCreatorPlatform) throw const FormatException('chain read failed');
     return creatorPlatform;
@@ -78,7 +78,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: CreatorSubscribeButton(
-            creatorAccountId: kOwner,
+            creatorCidNumber: 'CN001-CTZN-000000001-2026',
             service: _FakeSubscribeService(
               tiers: tiers ?? _tiers,
               creatorPlatform: _platform(active: creatorActive),

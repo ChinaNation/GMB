@@ -14,63 +14,66 @@ import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 通讯录唯一业务模型。公开昵称、头像和签名属于用户公开资料，不复制进通讯录；
-/// 本模型只保存联系人账户与当前用户自己的私人联系人名称。
+/// 通讯录唯一业务模型。
+///
+/// `cid_number` 是联系人关系的永久主键；`account_id` / `ss58_address` 是该 CID
+/// 当前绑定的签名账户与展示地址，换绑后允许更新。公开昵称、头像和签名属于用户公开
+/// 资料，不复制进通讯录；`contact_remark` 只保存当前用户自己的私人备注。
 class UserContact {
   const UserContact({
+    required this.cidNumber,
     required this.accountId,
     required this.ss58Address,
-    required this.contactName,
+    required this.contactRemark,
     required this.createdAt,
     required this.updatedAt,
-    this.cidNumber,
   });
 
+  final String cidNumber;
   final String accountId;
   final String ss58Address;
-  final String contactName;
+  final String contactRemark;
   final int createdAt;
   final int updatedAt;
 
-  /// 联系人身份主键 CID 号（链读 [readByAccountId] 缓存）。null = 尚未解析；
-  /// account_id 仍是通讯录/收款寻址主键，cid_number 仅供聊天路由与资料页免再链读。
-  final String? cidNumber;
-
   UserContact copyWith({
+    String? cidNumber,
     String? accountId,
     String? ss58Address,
-    String? contactName,
+    String? contactRemark,
     int? createdAt,
     int? updatedAt,
-    String? cidNumber,
   }) {
     return UserContact(
+      cidNumber: cidNumber ?? this.cidNumber,
       accountId: accountId ?? this.accountId,
       ss58Address: ss58Address ?? this.ss58Address,
-      contactName: contactName ?? this.contactName,
+      contactRemark: contactRemark ?? this.contactRemark,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      cidNumber: cidNumber ?? this.cidNumber,
     );
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'cid_number': cidNumber,
         'account_id': accountId,
         'ss58_address': ss58Address,
-        'contact_name': contactName,
+        'contact_remark': contactRemark,
         'created_at': createdAt,
         'updated_at': updatedAt,
-        if (cidNumber != null && cidNumber!.isNotEmpty) 'cid_number': cidNumber,
       };
 
   factory UserContact.fromJson(Map<String, dynamic> json) {
+    final cidNumber = UserContactService.requireCidNumber(
+      json['cid_number']?.toString() ?? '',
+    );
     final accountId = json['account_id']?.toString() ?? '';
     final ss58Address = json['ss58_address']?.toString().trim() ?? '';
-    final contactName = json['contact_name']?.toString().trim() ?? '';
+    final contactRemark = json['contact_remark'];
     if (!isAccountIdText(accountId) ||
         ss58Address.isEmpty ||
-        contactName.isEmpty) {
-      throw const FormatException('通讯录地址或联系人名称为空');
+        contactRemark is! String) {
+      throw const FormatException('通讯录 CID、账户、地址或私人备注不合法');
     }
     if (UserContactService.accountIdFromSs58(ss58Address) != accountId) {
       throw const FormatException('通讯录 account_id 与 ss58_address 不匹配');
@@ -80,14 +83,15 @@ class UserContact {
     if (createdAt <= 0 || updatedAt <= 0) {
       throw const FormatException('通讯录时间戳不合法');
     }
-    final cidNumber = json['cid_number']?.toString().trim();
+    final normalizedRemark =
+        UserContactService.normalizeContactRemark(contactRemark);
     return UserContact(
+      cidNumber: cidNumber,
       accountId: accountId,
       ss58Address: UserContactService.normalizeSs58Address(ss58Address),
-      contactName: contactName,
+      contactRemark: normalizedRemark,
       createdAt: createdAt,
       updatedAt: updatedAt,
-      cidNumber: (cidNumber == null || cidNumber.isEmpty) ? null : cidNumber,
     );
   }
 }
@@ -125,30 +129,33 @@ class ContactSyncState {
 /// 联系人端到端加密器。AES-GCM 保护内容与完整性，HMAC 生成不透明 contact_id；
 /// 两把钥匙均由 WalletManager 从 seed 域隔离派生，本类永远接触不到 seed。
 class ContactCryptor {
-  ContactCryptor({required this.accountId, required this.keys});
+  ContactCryptor({
+    required String ownerCidNumber,
+    required this.keys,
+  }) : ownerCidNumber = UserContactService.requireCidNumber(ownerCidNumber);
 
-  static const String schema = 'citizenapp.contacts.v1';
-  final String accountId;
+  static const String _domain = 'citizenapp.contacts';
+  final String ownerCidNumber;
   final ContactKeyMaterial keys;
   final AesGcm _aes = AesGcm.with256bits();
   final Hmac _hmac = Hmac.sha256();
 
-  Future<String> contactId(String accountId) async {
+  Future<String> contactId(String cidNumber) async {
     final mac = await _hmac.calculateMac(
-      utf8.encode(UserContactService.requireAccountId(accountId)),
+      utf8.encode(UserContactService.requireCidNumber(cidNumber)),
       secretKey: SecretKey(keys.indexKey),
     );
     return _hex(mac.bytes);
   }
 
   Future<SquareEncryptedContact> encrypt(UserContact contact) async {
-    final id = await contactId(contact.accountId);
+    final id = await contactId(contact.cidNumber);
     final clear = utf8.encode(jsonEncode(<String, Object?>{
-      'schema': schema,
-      'account_id': accountId,
-      'contact_account_id': contact.accountId,
+      'owner_cid_number': ownerCidNumber,
+      'cid_number': contact.cidNumber,
+      'account_id': contact.accountId,
       'ss58_address': contact.ss58Address,
-      'contact_name': contact.contactName,
+      'contact_remark': contact.contactRemark,
       'created_at': contact.createdAt,
       'updated_at': contact.updatedAt,
     }));
@@ -181,15 +188,18 @@ class ContactCryptor {
       );
       final decoded = jsonDecode(utf8.decode(clear));
       if (decoded is! Map<String, dynamic> ||
-          decoded['schema'] != schema ||
-          decoded['account_id'] != accountId) {
-        throw const FormatException('通讯录密文归属或版本不匹配');
+          decoded['owner_cid_number'] != ownerCidNumber) {
+        throw const FormatException('通讯录密文归属不匹配');
       }
       final contact = UserContact.fromJson(<String, dynamic>{
-        ...decoded,
-        'account_id': decoded['contact_account_id'],
+        'cid_number': decoded['cid_number'],
+        'account_id': decoded['account_id'],
+        'ss58_address': decoded['ss58_address'],
+        'contact_remark': decoded['contact_remark'],
+        'created_at': decoded['created_at'],
+        'updated_at': decoded['updated_at'],
       });
-      if (await contactId(contact.accountId) != record.contactId) {
+      if (await contactId(contact.cidNumber) != record.contactId) {
         throw const FormatException('通讯录密文索引不匹配');
       }
       return contact;
@@ -198,7 +208,7 @@ class ContactCryptor {
     }
   }
 
-  List<int> _aad(String id) => utf8.encode('$schema|$accountId|$id');
+  List<int> _aad(String id) => utf8.encode('$_domain|$ownerCidNumber|$id');
 }
 
 /// 本地优先的加密通讯录服务。Isar 保存按 accountId 隔离的可用缓存与待同步操作；
@@ -217,9 +227,10 @@ class UserContactService {
         _autoSync = autoSync;
 
   static const int _ss58Prefix = 2027;
-  static const String _contactsPrefix = 'contacts:';
-  static const String _pendingPrefix = 'contact_pending_ops:';
-  static const String _syncPrefix = 'contact_sync_state:';
+  static const String _contactsPrefix = 'contact_book_by_account:';
+  static const String _pendingPrefix = 'contact_pending_by_account:';
+  static const String _syncPrefix = 'contact_sync_by_account:';
+  static const String _cloudResetPrefix = 'contact_cloud_reset_by_account:';
 
   final WalletManager _walletManager;
   final SquareSessionProvider _sessionProvider;
@@ -237,7 +248,7 @@ class UserContactService {
     const ContactSyncState(phase: ContactSyncPhase.idle),
   );
 
-  /// 通讯录只属于“我的钱包”中的默认热钱包，调用方不得用交易付款钱包覆盖。
+  /// 通讯录只属于当前 CID 身份，调用方不得用交易付款钱包覆盖其身份账户。
   Future<List<UserContact>> getContacts() async {
     final accountId = await _requireIdentityAccountId();
     return _getContacts(accountId);
@@ -248,125 +259,110 @@ class UserContactService {
   }
 
   /// 返回通讯录当前所属的身份账户，供扫码页做“不能添加自己”校验。
-  Future<String> getAccountId() async =>
-      await _requireIdentityAccountId();
-
-  /// 把链读得到的 [cidNumber] 缓存进对应联系人的 `cid_number`（本地派生缓存，
-  /// **不产生待同步/上云**：cid_number 是从链上派生的缓存，非用户编辑数据）。
-  ///
-  /// 联系人不存在、无身份账户或值未变时安静返回。供 [PeerCidResolver] 回写。
-  Future<void> cacheContactCidNumber(
-    String contactAccountId,
-    String cidNumber,
-  ) async {
-    if (cidNumber.trim().isEmpty || !isAccountIdText(contactAccountId)) {
-      return;
-    }
-    final accountId = await _identityCache.accountId();
-    if (accountId == null || accountId.isEmpty) return;
-    final contacts = (await _readContacts(accountId)).toList(growable: true);
-    final index =
-        contacts.indexWhere((item) => item.accountId == contactAccountId);
-    if (index < 0 || contacts[index].cidNumber == cidNumber) return;
-    contacts[index] = contacts[index].copyWith(cidNumber: cidNumber);
-    await _writeContacts(accountId, contacts);
-  }
+  Future<String> getAccountId() async => await _requireIdentityAccountId();
 
   Future<ContactImportResult> addContact({
+    required String cidNumber,
     required String ss58Address,
-    required String contactName,
+    required String contactRemark,
   }) async {
-    final currentAccountId = await _requireIdentityAccountId();
+    final ownerAccountId = await _requireIdentityAccountId();
+    final normalizedCidNumber = requireCidNumber(cidNumber);
     final normalizedSs58Address = normalizeSs58Address(ss58Address);
-    final accountId = accountIdFromSs58(normalizedSs58Address);
-    final normalizedName = contactName.trim();
-    if (normalizedName.isEmpty) {
-      throw const FormatException('联系人名称为空');
-    }
-    if (accountId == currentAccountId) {
+    final contactAccountId = accountIdFromSs58(normalizedSs58Address);
+    final normalizedRemark = normalizeContactRemark(contactRemark);
+    if (contactAccountId == ownerAccountId) {
       throw const FormatException('不能把自己加入通讯录');
     }
 
     final contacts =
-        (await _readContacts(currentAccountId)).toList(growable: true);
-    final index = contacts.indexWhere((item) => item.accountId == accountId);
+        (await _readContacts(ownerAccountId)).toList(growable: true);
+    final index =
+        contacts.indexWhere((item) => item.cidNumber == normalizedCidNumber);
     final created = index < 0;
     final now = _nextTimestamp(created ? 0 : contacts[index].updatedAt);
     final contact = created
         ? UserContact(
-            accountId: accountId,
+            cidNumber: normalizedCidNumber,
+            accountId: contactAccountId,
             ss58Address: normalizedSs58Address,
-            contactName: normalizedName,
+            contactRemark: normalizedRemark,
             createdAt: now,
             updatedAt: now,
           )
-        : contacts[index].copyWith(contactName: normalizedName, updatedAt: now);
+        : contacts[index].copyWith(
+            accountId: contactAccountId,
+            ss58Address: normalizedSs58Address,
+            // 扫码得到的空备注不得抹掉用户已经填写的私人备注。
+            contactRemark: normalizedRemark.isEmpty
+                ? contacts[index].contactRemark
+                : normalizedRemark,
+            updatedAt: now,
+          );
     if (created) {
       contacts.add(contact);
     } else {
       contacts[index] = contact;
     }
     await _writeContactsAndPending(
-      currentAccountId,
+      ownerAccountId,
       contacts,
-      _PendingContactOp.upsert(contact.accountId, contact.updatedAt),
+      _PendingContactOp.upsert(contact.cidNumber, contact.updatedAt),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(accountId));
+      unawaited(_syncWallet(ownerAccountId));
     }
     return ContactImportResult(contact: contact, created: created);
   }
 
   Future<List<UserContact>> renameContact(
-    String contactAccountId,
-    String contactName,
+    String contactCidNumber,
+    String contactRemark,
   ) async {
-    final accountId = await _requireIdentityAccountId();
-    final normalizedContactAccountId = requireAccountId(contactAccountId);
-    final normalizedName = contactName.trim();
-    if (normalizedName.isEmpty) {
-      throw const FormatException('联系人名称不能为空');
-    }
-    final contacts = (await _getContacts(accountId)).toList(growable: true);
+    final ownerAccountId = await _requireIdentityAccountId();
+    final normalizedContactCidNumber = requireCidNumber(contactCidNumber);
+    final normalizedRemark = normalizeContactRemark(contactRemark);
+    final contacts =
+        (await _getContacts(ownerAccountId)).toList(growable: true);
     final index = contacts
-        .indexWhere((item) => item.accountId == normalizedContactAccountId);
+        .indexWhere((item) => item.cidNumber == normalizedContactCidNumber);
     if (index < 0) {
       throw Exception('未找到联系人');
     }
     contacts[index] = contacts[index].copyWith(
-      contactName: normalizedName,
+      contactRemark: normalizedRemark,
       updatedAt: _nextTimestamp(contacts[index].updatedAt),
     );
     await _writeContactsAndPending(
-      accountId,
+      ownerAccountId,
       contacts,
       _PendingContactOp.upsert(
-        contacts[index].accountId,
+        contacts[index].cidNumber,
         contacts[index].updatedAt,
       ),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(accountId));
+      unawaited(_syncWallet(ownerAccountId));
     }
     return _sorted(contacts);
   }
 
-  Future<List<UserContact>> deleteContact(String contactAccountId) async {
-    final accountId = await _requireIdentityAccountId();
-    final normalizedContactAccountId = requireAccountId(contactAccountId);
-    final contacts = (await _getContacts(accountId))
-        .where((item) => item.accountId != normalizedContactAccountId)
+  Future<List<UserContact>> deleteContact(String contactCidNumber) async {
+    final ownerAccountId = await _requireIdentityAccountId();
+    final normalizedContactCidNumber = requireCidNumber(contactCidNumber);
+    final contacts = (await _getContacts(ownerAccountId))
+        .where((item) => item.cidNumber != normalizedContactCidNumber)
         .toList(growable: false);
     await _writeContactsAndPending(
-      accountId,
+      ownerAccountId,
       contacts,
       _PendingContactOp.delete(
-        normalizedContactAccountId,
+        normalizedContactCidNumber,
         _nextTimestamp(),
       ),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(accountId));
+      unawaited(_syncWallet(ownerAccountId));
     }
     return _sorted(contacts);
   }
@@ -385,9 +381,12 @@ class UserContactService {
           await _walletManager.ensureContactKeyMaterialForAccountId(accountId);
       final session = await _sessionProvider.ensureSession();
       if (session == null || session.accountId != accountId) {
-        throw const SquareApiException('通讯录云同步需要默认热钱包会话');
+        throw const SquareApiException('通讯录云同步需要当前 CID 身份账户会话');
       }
-      final cryptor = ContactCryptor(accountId: accountId, keys: keys);
+      final cryptor = ContactCryptor(
+        ownerCidNumber: requireCidNumber(session.cidNumber),
+        keys: keys,
+      );
       final cloudRecords = <SquareEncryptedContact>[];
       String? cursor;
       do {
@@ -399,29 +398,45 @@ class UserContactService {
         cursor = page.nextCursor;
       } while (cursor != null);
 
+      // CID 换绑会更换端到端密钥。旧密文无法用新密钥识别，必须先按属主 CID
+      // 清空旧不透明记录，再用本地明文权威副本重建。标记在全量删除成功前不移除，
+      // 中途断网后下次同步会继续删除剩余记录。
+      final resetCloud =
+          await _readKv('$_cloudResetPrefix$accountId') == 'true';
+      if (resetCloud) {
+        for (final record in cloudRecords) {
+          await _apiClient.deleteEncryptedContact(
+            session: session,
+            contactId: record.contactId,
+          );
+        }
+        cloudRecords.clear();
+        await _deleteKvKeys(<String>['$_cloudResetPrefix$accountId']);
+      }
+
       final pending = await _readPending(accountId);
-      final pendingAccountIds = pending.map((item) => item.accountId).toSet();
+      final pendingCidNumbers = pending.map((item) => item.cidNumber).toSet();
       final local = await _readContacts(accountId);
       final merged = <String, UserContact>{};
       final localByContactId = <String, UserContact>{};
       for (final contact in local) {
-        localByContactId[await cryptor.contactId(contact.accountId)] = contact;
+        localByContactId[await cryptor.contactId(contact.cidNumber)] = contact;
       }
       for (final record in cloudRecords) {
         try {
           final contact = await cryptor.decrypt(record);
-          if (!pendingAccountIds.contains(contact.accountId)) {
-            merged[contact.accountId] = contact;
+          if (!pendingCidNumbers.contains(contact.cidNumber)) {
+            merged[contact.cidNumber] = contact;
           }
         } on FormatException {
           // 单条损坏不应让整个通讯录不可用，也不能覆盖同 ID 的本地有效缓存。
           final cached = localByContactId[record.contactId];
-          if (cached != null) merged[cached.accountId] = cached;
+          if (cached != null) merged[cached.cidNumber] = cached;
         }
       }
       for (final contact in local) {
-        if (pendingAccountIds.contains(contact.accountId)) {
-          merged[contact.accountId] = contact;
+        if (pendingCidNumbers.contains(contact.cidNumber)) {
+          merged[contact.cidNumber] = contact;
         }
       }
       await _writeContacts(accountId, merged.values.toList(growable: false));
@@ -430,10 +445,10 @@ class UserContactService {
         if (op.action == _PendingAction.delete) {
           await _apiClient.deleteEncryptedContact(
             session: session,
-            contactId: await cryptor.contactId(op.accountId),
+            contactId: await cryptor.contactId(op.cidNumber),
           );
         } else {
-          final contact = merged[op.accountId];
+          final contact = merged[op.cidNumber];
           if (contact == null) continue;
           await _apiClient.putEncryptedContact(
             session: session,
@@ -470,28 +485,34 @@ class UserContactService {
     if (oldNorm == newNorm) return;
 
     final oldContacts = await _readContacts(oldNorm);
-    if (oldContacts.isNotEmpty) {
-      // 新账户换绑前非身份账户,通常无通讯录;稳妥并入其已有缓存,同 ID 以旧账户为准。
-      final merged = <String, UserContact>{};
-      for (final contact in await _readContacts(newNorm)) {
-        merged[contact.accountId] = contact;
-      }
-      for (final contact in oldContacts) {
-        merged[contact.accountId] = contact;
-      }
-      final contacts = merged.values.toList(growable: false);
+    // 新账户换绑前通常无通讯录；按永久 CID 合并，同 CID 以旧身份本地副本为准。
+    // 即使旧账户本地为空，也要把新账户已有缓存全部置为待上传，避免云快照清空后
+    // 非 pending 的本地记录在合并阶段被误删。
+    final merged = <String, UserContact>{};
+    for (final contact in await _readContacts(newNorm)) {
+      merged[contact.cidNumber] = contact;
+    }
+    for (final contact in oldContacts) {
+      merged[contact.cidNumber] = contact;
+    }
+    final contacts = merged.values.toList(growable: false);
+    if (contacts.isNotEmpty) {
       // 全量 upsert 待办:强制用新账户 child 密钥重新加密上云。
       final pending = contacts
           .map((contact) =>
-              _PendingContactOp.upsert(contact.accountId, contact.updatedAt))
+              _PendingContactOp.upsert(contact.cidNumber, contact.updatedAt))
           .toList(growable: false);
       await _writeSnapshot(newNorm, contacts, pending);
     }
+    // 云端记录属于永久 CID，但旧记录的 contact_id 与密文均由旧账户 child 密钥生成。
+    // 持久化重建标记，确保删除旧快照成功后才上传新密文。
+    await _writeKv('$_cloudResetPrefix$newNorm', 'true');
     // 清旧账户本地缓存(明文/待办/同步态)与通讯录密钥,杜绝残留。
     await _deleteKvKeys(<String>[
       '$_contactsPrefix$oldNorm',
       '$_pendingPrefix$oldNorm',
       '$_syncPrefix$oldNorm',
+      '$_cloudResetPrefix$oldNorm',
     ]);
     await _walletManager.deleteContactKeysForAccountId(oldNorm);
     // 触发新账户云重建(内部吞异常并落待办,不阻断换绑重建主流程)。
@@ -567,7 +588,7 @@ class UserContactService {
     _PendingContactOp next,
   ) async {
     final pending = (await _readPending(accountId)).toList(growable: true)
-      ..removeWhere((item) => item.accountId == next.accountId)
+      ..removeWhere((item) => item.cidNumber == next.cidNumber)
       ..add(next);
     await _writeSnapshot(accountId, contacts, pending);
     await _setSyncState(accountId, ContactSyncPhase.pending);
@@ -577,7 +598,7 @@ class UserContactService {
       String accountId, _PendingContactOp completed) async {
     final pending = (await _readPending(accountId))
         .where((item) =>
-            item.accountId != completed.accountId ||
+            item.cidNumber != completed.cidNumber ||
             item.updatedAt > completed.updatedAt)
         .toList(growable: false);
     await _writePending(accountId, pending);
@@ -687,6 +708,22 @@ class UserContactService {
     }
     return accountId;
   }
+
+  static String requireCidNumber(String cidNumber) {
+    final normalized = cidNumber.trim();
+    if (normalized.isEmpty || utf8.encode(normalized).length > 32) {
+      throw const FormatException('cid_number 必须为 1 到 32 字节');
+    }
+    return normalized;
+  }
+
+  static String normalizeContactRemark(String contactRemark) {
+    final normalized = contactRemark.trim();
+    if (normalized.runes.length > 40) {
+      throw const FormatException('联系人私人备注不能超过 40 个字符');
+    }
+    return normalized;
+  }
 }
 
 enum _PendingAction { upsert, delete }
@@ -694,31 +731,31 @@ enum _PendingAction { upsert, delete }
 class _PendingContactOp {
   const _PendingContactOp({
     required this.action,
-    required this.accountId,
+    required this.cidNumber,
     required this.updatedAt,
   });
 
-  factory _PendingContactOp.upsert(String accountId, int updatedAt) =>
+  factory _PendingContactOp.upsert(String cidNumber, int updatedAt) =>
       _PendingContactOp(
         action: _PendingAction.upsert,
-        accountId: accountId,
+        cidNumber: cidNumber,
         updatedAt: updatedAt,
       );
 
-  factory _PendingContactOp.delete(String accountId, int updatedAt) =>
+  factory _PendingContactOp.delete(String cidNumber, int updatedAt) =>
       _PendingContactOp(
         action: _PendingAction.delete,
-        accountId: accountId,
+        cidNumber: cidNumber,
         updatedAt: updatedAt,
       );
 
   final _PendingAction action;
-  final String accountId;
+  final String cidNumber;
   final int updatedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
         'action': action.name,
-        'account_id': accountId,
+        'cid_number': cidNumber,
         'updated_at': updatedAt,
       };
 
@@ -728,8 +765,8 @@ class _PendingContactOp {
         : _PendingAction.upsert;
     return _PendingContactOp(
       action: action,
-      accountId: UserContactService.requireAccountId(
-        json['account_id']?.toString() ?? '',
+      cidNumber: UserContactService.requireCidNumber(
+        json['cid_number']?.toString() ?? '',
       ),
       updatedAt: _asInt(json['updated_at']),
     );

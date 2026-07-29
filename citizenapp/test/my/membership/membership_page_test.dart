@@ -586,12 +586,11 @@ void main() {
     expect(noWindow.hasSubscriptionWindow, isFalse);
   });
 
-  test('会员动态展示快照按账户持久化且不包含静态套餐', () async {
+  test('会员动态展示快照按 CID 持久化且不包含静态套餐', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final service = SubscriptionService(preferences: preferences);
-    const accountId =
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const cidNumber = 'CN220-CTZN2-100000001-2026';
     const snapshot = MembershipDisplaySnapshot(
       state: SquareMembershipState(
         active: true,
@@ -606,8 +605,8 @@ void main() {
       pricesFetchedAtMs: 4000,
     );
 
-    await service.writeDisplaySnapshot(accountId, snapshot);
-    final restored = await service.readDisplaySnapshot(accountId);
+    await service.writeDisplaySnapshot(cidNumber, snapshot);
+    final restored = await service.readDisplaySnapshot(cidNumber);
 
     expect(restored, isNotNull);
     expect(restored!.state.membershipLevel, 'democracy');

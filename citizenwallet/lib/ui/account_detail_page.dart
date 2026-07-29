@@ -1,13 +1,45 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../qr/qr_protocols.dart';
 import '../qr/envelope.dart';
-import '../qr/bodies/user_contact_body.dart';
+import '../qr/bodies/user_transfer_body.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
+
+/// 为离线账户生成五分钟有效的临时收款码。
+///
+/// 公民钱包没有 CID↔AccountId 链上真源，因此这里只能签发 `k=4`，不得伪造
+/// `k=3 user_contact` 身份二维码。
+String buildOfflineReceiveQr({
+  required String ss58Address,
+  required String recipientName,
+  required int nowEpochSeconds,
+  String? requestId,
+}) {
+  final random = Random.secure();
+  final randomId = base64UrlEncode(
+    List<int>.generate(16, (_) => random.nextInt(256)),
+  ).replaceAll('=', '');
+  return QrEnvelope<UserTransferBody>(
+    kind: QrKind.userTransfer,
+    id: requestId ?? 'pay_$randomId',
+    expiresAt: nowEpochSeconds + 300,
+    body: UserTransferBody(
+      ss58Address: ss58Address,
+      recipientName: recipientName,
+      amount: '',
+      symbol: 'GMB',
+      memo: '',
+      bank: '',
+    ),
+  ).toRawJson();
+}
 
 /// Lv3 账户详情：某钱包(master)下单个账户的公钥、ss58、私钥（账户名可点击改名）。
 ///
@@ -192,15 +224,12 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   }
 
   void _showReceiveQr() {
-    final qrData = QrEnvelope<UserContactBody>(
-      kind: QrKind.userContact,
-      id: null,
-      expiresAt: null,
-      body: UserContactBody(
-        ss58Address: widget.account.ss58Address,
-        contactName: '${widget.walletName} · $_accountName',
-      ),
-    ).toRawJson();
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final qrData = buildOfflineReceiveQr(
+      ss58Address: widget.account.ss58Address,
+      recipientName: '${widget.walletName} · $_accountName',
+      nowEpochSeconds: now,
+    );
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -238,6 +267,14 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 ),
               ),
               const SizedBox(height: 12),
+              const Text(
+                '临时收款码，5 分钟内有效',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
               SelectableText(
                 widget.account.ss58Address,
                 style: const TextStyle(

@@ -6,6 +6,7 @@ import { bytesToHex, hexToBytes, signingMessage } from '../src/shared/signing_me
 // 任一漂移即 worker 与链端签名消息不一致 —— 必须与该 fixture 同步更新。
 const GOLDEN_VECTORS: Array<{ op_tag: number; scale_payload_hex: string; message_hex: string }> = [
   { op_tag: 0x10, scale_payload_hex: '0102030405060708', message_hex: '19e050b3476dfd7db0aae9d527e205da44b8f9d00e5ddf4f81f4830ab0c00568' },
+  { op_tag: 0x11, scale_payload_hex: '0011223344556677', message_hex: 'd477515eb1cb4ec972e7a3635f895ecd7f12e34b525cfdcc283fbd3a0f8f3270' },
   { op_tag: 0x13, scale_payload_hex: '3132333435363738', message_hex: 'd33919e352038d7bd62172b0530362fb6ef0da3990e27b56ea9325195fc6b1a6' },
   { op_tag: 0x14, scale_payload_hex: '4142434445464748', message_hex: '501d0b85cf1ac826d58c974337b824b202d105dd9928a79c423052b8bd976274' },
   { op_tag: 0x15, scale_payload_hex: '5152535455565758', message_hex: '4e4aece62f76d1e6e198cb6382f6bbe49d3d858d9c263d96662bf064c6fc36f0' },

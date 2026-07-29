@@ -115,7 +115,9 @@ export async function relayChatPayload(env: Env, payload: ChatRelayPayload): Pro
   return ((await response.json()) as { sent?: number }).sent ?? 0;
 }
 
-/// 关闭某身份主键 cid_number 的实时信箱(注销/换绑吊销时断开旧连接);DO 按 cid 命名。
+/// 关闭某身份主键 cid_number 的实时信箱，仅供整身份注销使用。
+///
+/// 换绑时新旧账户共享同一 CID/DO，严禁调用本函数，否则会把新账户连接一并踢下线。
 export async function closeChatRealtime(env: Env, cidNumber: string): Promise<number> {
   const namespace = env.CHAT_REALTIME;
   if (!namespace) return 0;

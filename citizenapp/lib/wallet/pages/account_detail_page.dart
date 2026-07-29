@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:citizenapp/8964/profile/user_qr_page.dart';
+import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
@@ -25,9 +27,13 @@ class AccountDetailPage extends StatefulWidget {
   const AccountDetailPage({
     super.key,
     required this.account,
+    this.identityResolver,
+    this.profileCache = const CitizenProfileCache(),
   });
 
   final Account account;
+  final IdentityAccountResolver? identityResolver;
+  final CitizenProfileCache profileCache;
 
   @override
   State<AccountDetailPage> createState() => _AccountDetailPageState();
@@ -206,15 +212,14 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     await _actionCardKey.currentState?.refresh();
   }
 
-  /// 账户卡右上角二维码复用全 App 唯一用户码，不另造钱包码或协议。
+  /// 身份账户出固定用户码；普通子账户出五分钟临时收款码。
   Future<void> _openUserQr() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => UserQrPage(
-          contactName: widget.account.accountName,
-          accountId: widget.account.accountId,
-        ),
-      ),
+    await openAccountQrPage(
+      context,
+      accountId: widget.account.accountId,
+      paymentDisplayName: widget.account.accountName,
+      identityResolver: widget.identityResolver,
+      profileCache: widget.profileCache,
     );
   }
 

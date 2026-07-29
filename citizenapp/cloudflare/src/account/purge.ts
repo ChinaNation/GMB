@@ -129,33 +129,22 @@ export async function purgeAccount(
 /// cid 归属、AEAD 密文本身对旧账户已无解密价值,随 CID 迁到新账户,不在吊销删除范围。
 ///
 /// **不删** posts / media / memberships / follows / 通讯录 —— 这些随 CID 迁到新账户(「永不丢失」),
-/// 由身份迁移单独处理,不属吊销范围。幂等:重复调用为安全空操作。设备子钥/会话放最后删,
-/// 中途失败仍可用旧会话重试;删后旧账户彻底无法再登录。
+/// 由身份迁移单独处理,不属吊销范围。也不关闭按 CID 命名的实时 DO、不删 CID 级
+/// `chat_device_binding_nonces`,否则会误伤换绑后的新账户连接和设备状态。幂等:重复调用为
+/// 安全空操作。调用方使用新账户会话重试，因此旧账户设备子钥删除后仍可继续完成幂等清理。
 export async function revokeRebindOldAccount(
   env: Env,
   accountId: string
 ): Promise<{ deleted_rows: number }> {
-  // Chat 实时信箱按身份主键 cid 命名(DO),吊销旧账户时断开其当前连接。
-  const identity = await fetchChainIdentityStateCached(env, accountId);
-  const cidNumber = identity.cid_number;
-  if (cidNumber) {
-    await closeChatRealtime(env, cidNumber);
-  }
-  // 通讯录密文按身份主键 cid 归属,换绑后随身份保留给新账户(数据随 CID 迁移不丢),
-  // 故换绑吊销不删 square_contacts;只删旧账户的 chat 端到端材料(设备/密钥属账户按 account_id;
-  // 绑定 nonce 按 cid)/登录挑战/设备子钥(账户级)。
+  // 通讯录密文、实时 DO 与绑定 nonce 均按 cid_number 归属，换绑后继续由新账户使用；
+  // 本函数只按 old account_id 删除账户级材料，禁止通过当前 CID 扩大清理范围。
   const statements = [
     env.DB.prepare(`DELETE FROM chat_keypackages WHERE account_id = ?`).bind(accountId),
     env.DB.prepare(`DELETE FROM chat_devices WHERE account_id = ?`).bind(accountId),
     env.DB.prepare(`DELETE FROM square_login_challenges WHERE account_id = ?`).bind(accountId),
-    // 设备子钥放最后：删前若中途失败，旧会话仍可重试；删后旧账户彻底无法再登录。
+    // 设备子钥放最后；调用端使用新账户会话，任一步失败都可携同一换绑授权幂等重试。
     env.DB.prepare(`DELETE FROM square_device_subkeys WHERE account_id = ?`).bind(accountId)
   ];
-  if (cidNumber) {
-    statements.push(
-      env.DB.prepare(`DELETE FROM chat_device_binding_nonces WHERE cid_number = ?`).bind(cidNumber)
-    );
-  }
   const results = await env.DB.batch(statements);
   const deletedRows = results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);
   await env.SQUARE_CACHE.delete(`square_identity:${accountId}`);

@@ -76,20 +76,20 @@ class SubscriptionService {
 
   /// 会员页只以 finalized 链状态和同区块共识时间戳决定当前档位与权益。
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState(
-      String accountId) async {
+      String cidNumber) async {
     // Cloudflare 只是 finalized 回执镜像；历史回执重试不得阻塞会员页链上真态读取。
-    unawaited(_retryPendingMirrors(accountId));
-    return _rpc.fetchSubscriptionSnapshot(subscriberAccountId: accountId);
+    unawaited(_retryPendingMirrorsForCurrentSession());
+    return _rpc.fetchSubscriptionSnapshot(subscriberCidNumber: cidNumber);
   }
 
-  String _displaySnapshotKey(String accountId) =>
-      'platform_membership_display_snapshot_v1:$accountId';
+  String _displaySnapshotKey(String cidNumber) =>
+      'platform_membership_display_snapshot:$cidNumber';
 
   /// 读取当前账户上一次成功同步的展示快照；损坏缓存直接丢弃，绝不阻塞静态卡片。
   Future<MembershipDisplaySnapshot?> readDisplaySnapshot(
-      String accountId) async {
+      String cidNumber) async {
     final preferences = await _prefs;
-    final key = _displaySnapshotKey(accountId);
+    final key = _displaySnapshotKey(cidNumber);
     final raw = preferences.getString(key);
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -134,11 +134,11 @@ class SubscriptionService {
 
   /// 原子覆盖当前账户展示快照；调用方只在对应链读成功后推进该部分时间戳。
   Future<void> writeDisplaySnapshot(
-    String accountId,
+    String cidNumber,
     MembershipDisplaySnapshot snapshot,
   ) async {
     await (await _prefs).setString(
-      _displaySnapshotKey(accountId),
+      _displaySnapshotKey(cidNumber),
       jsonEncode({
         'active': snapshot.state.active,
         'paid_until': snapshot.state.paidUntil,
@@ -167,7 +167,8 @@ class SubscriptionService {
         signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         level: level,
         expectedPriceFen: BigInt.from(expectedPriceFen),
-        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
+        sign: (payload) =>
+            _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
@@ -195,7 +196,8 @@ class SubscriptionService {
       final result = await _rpc.cancelPlatform(
         fromSs58Address: identity.ss58Address,
         signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
-        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
+        sign: (payload) =>
+            _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
@@ -228,7 +230,8 @@ class SubscriptionService {
         signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
         level: level,
         expectedPriceFen: BigInt.from(expectedPriceFen),
-        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
+        sign: (payload) =>
+            _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
@@ -314,10 +317,11 @@ class SubscriptionService {
     }
   }
 
-  Future<void> _retryPendingMirrors(String accountId) async {
+  Future<void> _retryPendingMirrorsForCurrentSession() async {
     try {
       final session = await _session.ensureSession();
-      if (session == null || session.accountId != accountId) return;
+      if (session == null) return;
+      final accountId = session.accountId;
       final pending = await _readList(_pendingKey(accountId));
       for (final proof in List<Map<String, dynamic>>.from(pending)) {
         final txHash = proof['tx_hash'];

@@ -79,8 +79,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 顶部头图高度（不含状态栏）。
   static const double _bannerHeight = 128;
 
-  /// 头部展开总高（头图 + 白底资料区），不含状态栏。
-  static const double _expandedHeight = 348;
+  /// 头部展开总高（头图 + 白底资料区），不含状态栏。资料区为昵称、SS58、
+  /// CID、签名与计数预留独立行，避免窄屏时与分类标签重叠。
+  static const double _expandedHeight = 372;
 
   late final CitizenProfileApi _api;
   late final CitizenProfileCache _cache;
@@ -89,10 +90,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
   CitizenProfile? _profile;
   SquareSession? _session;
   int _postsRevision = 0;
-
-  /// 本机钱包名称 = 昵称，作为展示名兜底（本人主页）。他人主页无本机钱包，
-  /// 留空 → 由后端 display_name 兜底。
-  String _walletName = '';
 
   /// 「他人视角」下看的是不是自己账户；true → 关注/私信/通知/订阅按钮置灰不可点。
   bool _isOwnAccount = false;
@@ -105,27 +102,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _sessionProvider = widget.sessionProvider ?? SquareSessionProvider.instance;
     _directChat = widget.onOpenDirectChat ?? openDirectChat;
     _profile = widget.initialProfile;
-    _loadWalletName();
     // 「他人视角看的其实是自己」判定需要目标当前绑定账户（profile.account_id），
     // 故在资料加载后（_load）再算；注入了初始资料时先算一次。
     if (_profile != null) {
       _resolveOwnAccount(_profile!.accountId);
     }
     _load();
-  }
-
-  /// 加载本机钱包名称作为昵称兜底（本人主页 = 默认身份钱包）。
-  Future<void> _loadWalletName() async {
-    if (!widget.isSelf) return;
-    try {
-      final wallet = await WalletManager().getDefaultWallet();
-      final name = wallet?.walletName.trim() ?? '';
-      if (name.isNotEmpty && mounted) {
-        setState(() => _walletName = name);
-      }
-    } on Exception {
-      // 钱包名兜底失败不影响主页展示，静默忽略。
-    }
   }
 
   /// 判定「他人视角看的其实是自己账户」：浏览者身份账户 == 目标当前绑定钱包账户
@@ -353,8 +335,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => UserQrPage(
-          contactName: _displayName,
+        builder: (_) => UserQrPage.userContact(
+          cidNumber: widget.cidNumber,
+          displayName: _displayName,
           accountId: accountId,
         ),
       ),
@@ -399,11 +382,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  /// 本人钱包名是昵称真源，后端 display_name 是公开镜像；均缺失时使用
-  /// 按账户稳定选择的本地昵称，账户本身永远不会出现在昵称位置。
+  /// 公开昵称只取后端 `display_name`；缺失时按 CID 稳定生成本地占位昵称。
   String get _displayName {
-    return ProfilePresentation.forAccountId(widget.cidNumber).resolveDisplayName(
-      walletName: widget.isSelf ? _walletName : null,
+    return ProfilePresentation.forAccountId(widget.cidNumber)
+        .resolveDisplayName(
       publicName: _profile?.displayName,
     );
   }
@@ -434,16 +416,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  /// 他人主页的「订阅 TA」按钮：链上订阅需要创作者钱包账户 account_id，从已拉取的
-  /// profile.account_id（当前绑定账户）取。本人主页、资料未就绪或目标未绑定账户时不显示。
-  /// 用绑定账户做 ValueKey，账户变化时重建 State 触发重新加载订阅态。
+  /// 他人主页的「订阅 TA」按钮：SquarePost 以公民 CID 为创作者唯一主键。
+  /// 本人主页不显示；CID 不因换绑改变，因此换绑不会重建或丢失订阅态。
   Widget? _creatorSubscribeButton() {
     if (widget.isSelf) return null;
-    final creatorAccountId = _profile?.accountId.trim() ?? '';
-    if (creatorAccountId.isEmpty) return null;
+    final creatorCidNumber = widget.cidNumber.trim();
+    if (creatorCidNumber.isEmpty) return null;
     return CreatorSubscribeButton(
-      key: ValueKey<String>('creator-subscribe:$creatorAccountId'),
-      creatorAccountId: creatorAccountId,
+      key: ValueKey<String>('creator-subscribe:$creatorCidNumber'),
+      creatorCidNumber: creatorCidNumber,
       enabled: !_isOwnAccount,
     );
   }
@@ -577,7 +558,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     foreground: ProfileHeaderCard(
                       cidNumber: widget.cidNumber,
                       profile: _profile,
-                      fallbackName: _walletName,
                       avatarUrl: _mediaUrl(_profile?.avatarObjectKey),
                       avatarHeaders: _mediaHeaders,
                       onFollowing: () => _openFollows(FollowsType.following),

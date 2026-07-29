@@ -1,11 +1,16 @@
-// 通用“扫码识别账户”弹窗。扫描 QR_V1 用户码后把 body.address(SS58)
+// 通用“扫码识别账户”弹窗。扫描 QR_V1 用户码后把 body.ss58_address
 // 立即转换成规范 account_id，再回填给业务表单。
 // 使用统一的 BarcodeDetector 方案(cameraScanner.ts),与登录和扫码签名场景一致。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Modal, Typography } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
-import { parseQrEnvelope, QrParseError } from './citizenQr';
+import {
+  parseQrEnvelope,
+  QrParseError,
+  type UserContactBody,
+  type UserTransferBody,
+} from './citizenQr';
 import { startCameraScanner } from '../utils/cameraScanner';
 import { CID_MODAL_Z_INDEX } from './modalStack';
 
@@ -45,9 +50,11 @@ export function ScanAccountModal(props: {
             setError('不是用户码二维码');
             return;
           }
-          const addr = String((env.body as { address?: string }).address || '').trim();
+          const addr = (
+            env.body as UserContactBody | UserTransferBody
+          ).ss58_address.trim();
           if (!addr) {
-            setError('用户码未携带 address 字段');
+            setError('用户码未携带 ss58_address 字段');
             return;
           }
           let account_id: string;

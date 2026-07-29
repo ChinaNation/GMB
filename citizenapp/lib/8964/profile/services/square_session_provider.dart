@@ -36,8 +36,7 @@ class SquareSessionProvider {
   ///
   /// **身份主键 = CID 号**:会话 `accountId` 取 CID 绑定的身份账户([IdentityAccountCache]),
   /// 而设备子钥签名仍用钱包 `walletIndex`(P-256 子钥按 walletIndex 存,与 accountId
-  /// **解耦**)。这不是复用 [ensureSessionFor]——那条是钱包级(钱包名同步),accountId
-  /// 用钱包自己的;本方法是身份级,不走账户0 兼容路径。
+  /// **解耦**)。会话只有这一条身份级入口，不再存在钱包名同步专用会话。
   Future<SquareSession?> ensureSession() async {
     final wallet = await _walletManager.getDefaultWallet();
     if (wallet == null || !wallet.isHotWallet) {
@@ -49,32 +48,6 @@ class SquareSessionProvider {
       accountId: identityAccountId,
       signLoginPayload: (loginMessage) async {
         // 会话握手 = 非用户动权 → P-256 硬件子钥静默签名(后端 ES256 验,不读 seed)。
-        final raw =
-            await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
-        return '0x$raw';
-      },
-    );
-  }
-
-  /// 返回**指定钱包**账户的可用 session。
-  ///
-  /// 钱包名同步需要把每个钱包的名字推到**它自己 accountId** 的 display_name
-  /// （只推默认钱包会让云端存不全），故需按钱包换会话，而非固定默认钱包。
-  ///
-  /// 冷钱包没有设备子钥、云端也无其资料，直接返回 null。
-  ///
-  /// 与 [ensureSession] 同一条死契约：**绝不懒注册、绝不弹 Turnstile、绝不读 seed**。
-  /// 未注册设备子钥的钱包在此直接失败按不可用处理，注册只在 WalletManager
-  /// 创建 / 导入钱包时静默完成（`subkeyRegistrar`）。冷启动广场并发拉
-  /// feed/membership/identity 都走这里，越界懒注册会把主线程顶死成 ANR。
-  Future<SquareSession?> ensureSessionFor(WalletProfile wallet) async {
-    if (!wallet.isHotWallet) {
-      return null;
-    }
-    return _client.ensureSession(
-      accountId: wallet.accountId,
-      signLoginPayload: (loginMessage) async {
-        // 会话握手 = 非用户动权 → P-256 硬件子钥静默签名 signing_message 摘要（后端 ES256 验，不读 seed）。
         final raw =
             await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
         return '0x$raw';

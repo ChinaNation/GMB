@@ -23,9 +23,9 @@
       "note": "IssuerKey::Platform"
     },
     {
-      "hex": "010202020202020202020202020202020202020202020202020202020202020202",
+      "hex": "016847443030312d43545a4e312d3030303030303030362d32303236",
       "name": "issuer_creator",
-      "note": "IssuerKey::Creator(0x02*32)"
+      "note": "IssuerKey::Creator(GD001-CTZN1-000000006-2026)，创作者以 CID 为唯一主键"
     },
     {
       "hex": "0002",
@@ -71,6 +71,11 @@
       "hex": "01",
       "name": "suspend_reason_insufficient_balance",
       "note": "SuspendReason::InsufficientBalance（续费余额不足）"
+    },
+    {
+      "hex": "02",
+      "name": "suspend_reason_identity_binding_unavailable",
+      "note": "SuspendReason::IdentityBindingUnavailable（CID 当前无完整 active 双向账户绑定）"
     },
     {
       "hex": "00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000001c8d5b0000000000000000000000000000",

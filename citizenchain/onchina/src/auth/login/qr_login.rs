@@ -41,7 +41,7 @@ pub(crate) async fn admin_auth_qr_sign_request(
     if derived_domain.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "domain is required");
     }
-    let account_id = match crate::core::qr::parse_user_contact_account_id(&input.identity_qr) {
+    let identity = match crate::core::qr::parse_user_contact_identity(&input.identity_qr) {
         Ok(value) => value,
         Err(error) => {
             let message =
@@ -49,10 +49,15 @@ pub(crate) async fn admin_auth_qr_sign_request(
             return api_error(StatusCode::BAD_REQUEST, 1001, &message);
         }
     };
-    let account_id = match onchain_gate::validate_login_account(&account_id).await {
-        Ok(value) => value,
-        Err(error) => return onchain_gate::gate_error_response(error),
-    };
+    // 公开昵称不参与授权；CID 与 AccountId 必须作为同一链上管理员记录闭环命中。
+    let _display_name = identity.display_name;
+    let account_id =
+        match onchain_gate::validate_login_identity(&identity.cid_number, &identity.account_id)
+            .await
+        {
+            Ok(value) => value,
+            Err(error) => return onchain_gate::gate_error_response(error),
+        };
 
     let now = Utc::now();
     let expire_at = now + Duration::seconds(LOGIN_SIGN_REQUEST_TTL_SECONDS);
@@ -142,8 +147,7 @@ pub(crate) async fn admin_auth_qr_complete(
     let now = Utc::now();
     let challenge_id = input.challenge_id.trim().to_string();
     let client_session_id = input.session_id.clone();
-    let Some(account_id) =
-        crate::crypto::pubkey::normalize_account_id(input.account_id.as_str())
+    let Some(account_id) = crate::crypto::pubkey::normalize_account_id(input.account_id.as_str())
     else {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -173,9 +177,7 @@ pub(crate) async fn admin_auth_qr_complete(
         let challenge_expire_at = challenge.expire_at.timestamp();
         let verify_public_key = account_id.clone();
         if !same_account_id(challenge.account_id.as_str(), verify_public_key.as_str()) {
-            return Err(
-                "http:forbidden:account_id must match targeted account_id".to_string(),
-            );
+            return Err("http:forbidden:account_id must match targeted account_id".to_string());
         }
         // 重建完整签名原文,与 CitizenWallet 端 k=2 登录签名响应规则一致。
         let verify_message = crate::core::qr::build_signature_message(

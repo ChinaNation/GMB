@@ -1090,9 +1090,18 @@ class WalletManager {
   }
 
   static String _contactKeyName(String accountId) =>
+      'citizenapp_contacts_key_$accountId';
+
+  /// 仅用于彻底清除旧密钥名；目标态读写绝不回退旧密钥。
+  static String _legacyContactKeyName(String accountId) =>
       'wallet_contacts_key_v1_$accountId';
 
   static List<String> _contactCacheKeys(String accountId) => <String>[
+        'contact_book_by_account:$accountId',
+        'contact_pending_by_account:$accountId',
+        'contact_sync_by_account:$accountId',
+        'contact_cloud_reset_by_account:$accountId',
+        // 旧缓存只删不读，避免已废弃的 account_id 关系索引重新进入目标态。
         'contacts:$accountId',
         'contact_pending_ops:$accountId',
         'contact_sync_state:$accountId',
@@ -1127,14 +1136,16 @@ class WalletManager {
     }
 
     return ContactKeyMaterial(
-      encryptionKey: await derive('citizenapp.contacts.v1/encryption'),
-      indexKey: await derive('citizenapp.contacts.v1/index'),
+      encryptionKey: await derive('citizenapp.contacts/encryption'),
+      indexKey: await derive('citizenapp.contacts/index'),
     );
   }
 
   static Future<ContactKeyMaterial?> _readContactKeys(
     String accountId,
   ) async {
+    // 旧派生域密钥不可用于新 CID 密文契约，发现即删除，不做兼容读取。
+    await _contactKeyStore.delete(_legacyContactKeyName(accountId));
     final raw = await _contactKeyStore.read(_contactKeyName(accountId));
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -1152,18 +1163,21 @@ class WalletManager {
   static Future<void> _writeContactKeys(
     String accountId,
     ContactKeyMaterial material,
-  ) {
+  ) async {
+    await _contactKeyStore.delete(_legacyContactKeyName(accountId));
     final bytes = Uint8List(64)
       ..setAll(0, material.encryptionKey)
       ..setAll(32, material.indexKey);
-    return _contactKeyStore.write(
+    await _contactKeyStore.write(
       _contactKeyName(accountId),
       base64Encode(bytes),
     );
   }
 
-  static Future<void> _deleteContactKeys(String accountId) =>
-      _contactKeyStore.delete(_contactKeyName(accountId));
+  static Future<void> _deleteContactKeys(String accountId) async {
+    await _contactKeyStore.delete(_contactKeyName(accountId));
+    await _contactKeyStore.delete(_legacyContactKeyName(accountId));
+  }
 
   /// 读严档账户0 child → 派生并校验 sr25519 密钥对。
   Future<KeyPair> _loadSigningKey(int walletIndex) async {

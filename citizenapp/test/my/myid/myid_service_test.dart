@@ -321,6 +321,44 @@ void main() {
     expect(await IdentitySyncedAccountStore().read(), newAccount.accountId);
   });
 
+  test('吊销网络失败不丢 outbox:同步标记已推进仍由后续对账独立重试', () async {
+    final newAccount = Account(
+      masterId: _validAccountId,
+      accountIndex: 5,
+      accountId: '0x${'11' * 32}',
+      ss58Address: 'new-ss58',
+      accountName: '账户5',
+    );
+    final resolver = _MutableResolver(_validAccountId);
+    final revoker = _FakeRebindRevoker(failFirstRevoke: true);
+    await IdentitySyncedAccountStore().write(_validAccountId);
+    final service = MyIdService(
+      walletManager:
+          _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]),
+      chainRpc: _FakeChainRpc(),
+      divisionStore: _FakeDivisionStore(),
+      badgeSnapshotStore: _FakeBadgeStore(),
+      identityRpc: _FakeIdentityRpc(),
+      identityResolver: resolver,
+      contactService: _FakeContactService(),
+      rebindRevoker: revoker,
+    );
+
+    await service.rebindCidTo(
+      cidNumber: 'GD-CTZN1-8F3A2B',
+      newAccountId: newAccount.accountId,
+    );
+    // 链上和功能凭证迁移已经成功；安全清理首次网络失败时记录仍在，不能假装完成。
+    expect(await IdentitySyncedAccountStore().read(), newAccount.accountId);
+    expect(revoker.pending?.oldAccountId, _validAccountId);
+    expect(revoker.revoked, isEmpty);
+
+    resolver.setAccountId(newAccount.accountId);
+    await service.reconcileIdentityRebuild();
+    expect(revoker.revoked, [_validAccountId]);
+    expect(revoker.pending, isNull);
+  });
+
   test('换绑目标 == 当前身份账户时拒', () async {
     const self = Account(
       masterId: _validAccountId,
@@ -588,10 +626,49 @@ class _MutableResolver extends IdentityAccountResolver {
 
 /// 记录旧账户云端吊销调用的假 revoker(不触网 / 不触碰设备子钥)。
 class _FakeRebindRevoker extends IdentityRebindRevoker {
+  _FakeRebindRevoker({this.failFirstRevoke = false});
+
+  final bool failFirstRevoke;
+  int revokeCalls = 0;
   final List<String> revoked = <String>[];
+  PendingRebindCleanup? pending;
+
   @override
-  Future<void> revokeOldAccount(String oldAccountId) async {
-    revoked.add(oldAccountId);
+  Future<void> stagePendingCleanup({
+    required String cidNumber,
+    required String oldAccountId,
+    required String newAccountId,
+    required String oldAccountSignature,
+  }) async {
+    pending = PendingRebindCleanup(
+      cidNumber: cidNumber,
+      oldAccountId: oldAccountId,
+      newAccountId: newAccountId,
+      oldAccountSignature: oldAccountSignature,
+    );
+  }
+
+  @override
+  Future<void> ensureCanStartRebind({
+    required String cidNumber,
+    required String oldAccountId,
+    required String newAccountId,
+  }) async {}
+
+  @override
+  Future<bool> retryPendingCleanup({
+    required String cidNumber,
+    required String currentAccountId,
+  }) async {
+    final record = pending;
+    if (record == null || record.newAccountId != currentAccountId) return false;
+    revokeCalls += 1;
+    if (failFirstRevoke && revokeCalls == 1) {
+      throw StateError('模拟吊销网络失败');
+    }
+    revoked.add(record.oldAccountId);
+    pending = null;
+    return true;
   }
 }
 
@@ -636,10 +713,12 @@ class _FakeIdentityRpc extends CitizenIdentityRpc {
     required String newAccountId,
     required String oldAccountId,
     required String newFromSs58Address,
+    Future<void> Function(String oldAccountSignature)? onOldAuthorizationReady,
   }) async {
     reboundCid = cidNumber;
     reboundNew = newAccountId;
     reboundOld = oldAccountId;
+    await onOldAuthorizationReady?.call('0x${'ab' * 64}');
     return (txHash: '0xtx', usedNonce: 0, blockHashHex: '0xblk');
   }
 }

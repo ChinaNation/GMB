@@ -22,21 +22,22 @@ import {
   requireActiveMembership,
   subscriptionIsActive,
 } from "./service";
-import { fetchChainIdentityStateCached } from "../chain/identity";
+import { fetchChainIdentityStateByCid } from "../chain/identity";
 
 /**
- * 创作者会员 BFF：身份主键 `cid_number` 是唯一归属;account_id 为当前绑定的付款/签名钱包账户。
+ * 创作者会员 BFF：身份主键 `cid_number` 是链上及边缘镜像的唯一业务归属；
+ * account_id 仅保留为 finalized 交易签名/付款审计字段。
  * 档位展示、订阅关系和统计只保存 finalized 镜像。付款字段与订阅有效性来自链上，
- * Cloudflare 不扣款、不续费、不计算订阅公历。链交易验证/读链仍按 account_id(链查入口)。
+ * Cloudflare 不扣款、不续费、不计算订阅公历；所有订阅 storage 读取都直接使用 CID。
  */
 
-/// 把目标钱包账户 resolve 为身份主键 cid_number;未绑定 CID → 404。
-async function resolveBoundCid(env: Env, accountId: string): Promise<string> {
-  const identity = await fetchChainIdentityStateCached(env, accountId);
-  if (!identity.cid_number) {
-    throw new HttpError(404, "cid_not_bound", "目标账户未绑定 CID");
+/// 仅为 D1 审计字段解析 CID 当前绑定账户，不参与订阅定位或授权。
+async function currentAccountId(env: Env, cidNumber: string): Promise<string> {
+  const identity = await fetchChainIdentityStateByCid(env, cidNumber);
+  if (!identity.account_id) {
+    throw new HttpError(409, "cid_binding_unavailable", "创作者 CID 当前无有效绑定账户");
   }
-  return identity.cid_number;
+  return identity.account_id;
 }
 
 const PERIODS = ["monthly", "quarterly", "yearly"] as const;
@@ -66,7 +67,7 @@ interface CreatorConfirmBody {
   block_hash?: unknown;
   signed_extrinsic_hex?: unknown;
   action?: unknown;
-  creator_account_id?: unknown;
+  creator_cid_number?: unknown;
   tier_id?: unknown;
   billing_period?: unknown;
 }
@@ -82,10 +83,11 @@ export interface CreatorSubscriptionConfirmDeps {
   verifyTransaction: typeof verifyFinalizedSubscriptionTransaction;
   readSubscriptionAtBlock: (
     env: Env,
-    subscriberAccountId: string,
-    creatorAccountId: string,
+    subscriberCidNumber: string,
+    creatorCidNumber: string,
     blockHash: string,
   ) => Promise<ChainSubscriptionState | null>;
+  currentCreatorAccountId: (env: Env, creatorCidNumber: string) => Promise<string>;
 }
 
 export interface CreatorPlanSaveDeps {
@@ -93,7 +95,7 @@ export interface CreatorPlanSaveDeps {
   readCreatorPlansAtBlock: typeof readCreatorPlansAtBlock;
   readPlatformSubscriptionAtBlock: (
     env: Env,
-    creatorAccountId: string,
+    creatorCidNumber: string,
     blockHash: string,
   ) => Promise<ChainSubscriptionState | null>;
 }
@@ -101,19 +103,20 @@ export interface CreatorPlanSaveDeps {
 const defaultCreatorPlanSaveDeps: CreatorPlanSaveDeps = {
   verifyTransaction: verifyFinalizedSubscriptionTransaction,
   readCreatorPlansAtBlock,
-  readPlatformSubscriptionAtBlock: (env, creatorAccountId, blockHash) =>
-    readSubscriptionAtBlock(env, creatorAccountId, { kind: "platform" }, blockHash),
+  readPlatformSubscriptionAtBlock: (env, creatorCidNumber, blockHash) =>
+    readSubscriptionAtBlock(env, creatorCidNumber, { kind: "platform" }, blockHash),
 };
 
 const defaultSubscriptionConfirmDeps: CreatorSubscriptionConfirmDeps = {
   verifyTransaction: verifyFinalizedSubscriptionTransaction,
-  readSubscriptionAtBlock: (env, subscriberAccountId, creatorAccountId, blockHash) =>
+  readSubscriptionAtBlock: (env, subscriberCidNumber, creatorCidNumber, blockHash) =>
     readSubscriptionAtBlock(
       env,
-      subscriberAccountId,
-      { kind: "creator", creatorAccountId },
+      subscriberCidNumber,
+      { kind: "creator", creatorCidNumber },
       blockHash,
     ),
+  currentCreatorAccountId: currentAccountId,
 };
 
 /** 严格校验并归一化档位；价格只用于与链上 signed call 和 finalized storage 对照。 */
@@ -216,16 +219,14 @@ export async function creatorPlanRoute(request: Request, env: Env): Promise<Resp
   return jsonResponse({ plan: await readPlan(env, session.cid_number) });
 }
 
-/** GET /v1/square/creator/plan/:account —— 仅返回当前仍具平台订阅资格的创作者档位。 */
+/** GET /v1/square/creator/plan/:cid —— 仅返回当前仍具平台订阅资格的创作者档位。 */
 export async function creatorPlanOfRoute(
   request: Request,
   env: Env,
-  account: string,
+  cid: string,
 ): Promise<Response> {
   await requireSession(request, env);
-  // 路由入参仍为创作者钱包账户,内部 resolve 到身份主键 cid_number 读档位/会员。
-  const creatorAccountId = decodeURIComponent(account);
-  const creatorCidNumber = await resolveBoundCid(env, creatorAccountId);
+  const creatorCidNumber = decodeURIComponent(cid);
   const membership = await getMembership(env, creatorCidNumber);
   if (!membership || !subscriptionIsActive(membership)) return jsonResponse({ plan: null });
   return jsonResponse({ plan: await readPlan(env, creatorCidNumber) });
@@ -282,8 +283,8 @@ export async function creatorPlanSaveRoute(
     proof,
   );
   const [chainTiers, platformState] = await Promise.all([
-    deps.readCreatorPlansAtBlock(env, session.account_id, transaction.blockHash),
-    deps.readPlatformSubscriptionAtBlock(env, session.account_id, transaction.blockHash),
+    deps.readCreatorPlansAtBlock(env, session.cid_number, transaction.blockHash),
+    deps.readPlatformSubscriptionAtBlock(env, session.cid_number, transaction.blockHash),
   ]);
   const tiers = verifiedDisplayTiers(requested, chainTiers);
   if (!subscriptionStateEffective(platformState, transaction.chainTimestamp)) {
@@ -323,10 +324,10 @@ export async function creatorSubscriptionConfirmRoute(
   const session = await requireSession(request, env);
   const body = await readJson<CreatorConfirmBody>(request);
   const action = creatorAction(body.action);
-  const creatorAccountId = requireString(body.creator_account_id, "创作者账户标识缺失");
+  const creatorCidNumber = requireString(body.creator_cid_number, "创作者 CID 号缺失");
   const tierId = action === "cancel" ? null : requireString(body.tier_id, "创作者档位缺失");
   const billingPeriod = action === "cancel" ? null : billingPeriodValue(body.billing_period);
-  const expectedAction = expectedCreatorAction(action, creatorAccountId, tierId, billingPeriod);
+  const expectedAction = expectedCreatorAction(action, creatorCidNumber, tierId, billingPeriod);
   const proof = transactionProof(body);
   const transaction = await deps.verifyTransaction(
     env,
@@ -336,14 +337,14 @@ export async function creatorSubscriptionConfirmRoute(
   );
   const state = await deps.readSubscriptionAtBlock(
     env,
-    session.account_id,
-    creatorAccountId,
+    session.cid_number,
+    creatorCidNumber,
     transaction.blockHash,
   );
   assertCreatorStateMatches(state, action, tierId, billingPeriod);
   const verifiedAt = nowMs();
   const requestHash = await sha256Hex(
-    JSON.stringify({ action, creator_account_id: creatorAccountId, tier_id: tierId, billing_period: billingPeriod }),
+    JSON.stringify({ action, creator_cid_number: creatorCidNumber, tier_id: tierId, billing_period: billingPeriod }),
   );
   await bindFinalizedTransactionConfirmation(
     env,
@@ -358,8 +359,8 @@ export async function creatorSubscriptionConfirmRoute(
     blockHash: transaction.blockHash,
     observedAt: verifiedAt,
   });
-  // 归属按订阅者/创作者身份主键 cid;链验证已按各自当前绑定账户完成。
-  const creatorCidNumber = await resolveBoundCid(env, creatorAccountId);
+  const creatorAccountId =
+    await deps.currentCreatorAccountId(env, creatorCidNumber);
   await mirrorCreatorSubscription(
     env,
     session.cid_number,
@@ -522,15 +523,15 @@ function assertCreatorStateMatches(
 
 function expectedCreatorAction(
   action: CreatorAction,
-  creatorAccountId: string,
+  creatorCidNumber: string,
   tierId: string | null,
   billingPeriod: BillingPeriod | null,
 ): SubscriptionBusinessAction {
-  if (action === "cancel") return { kind: "creator_cancel", creatorAccountId };
+  if (action === "cancel") return { kind: "creator_cancel", creatorCidNumber };
   if (!tierId || !billingPeriod) throw new HttpError(400, "invalid_request", "创作者订阅计划缺失");
   return action === "subscribe"
-    ? { kind: "creator_subscribe", creatorAccountId, tierId, billingPeriod }
-    : { kind: "creator_change", creatorAccountId, tierId, billingPeriod };
+    ? { kind: "creator_subscribe", creatorCidNumber, tierId, billingPeriod }
+    : { kind: "creator_change", creatorCidNumber, tierId, billingPeriod };
 }
 
 function transactionProof(body: CreatorConfirmBody | CreatorPlanBody): FinalizedTransactionProofInput {

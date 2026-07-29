@@ -84,6 +84,7 @@ class CitizenIdentityRpc {
     required String newAccountId,
     required String oldAccountId,
     required String newFromSs58Address,
+    Future<void> Function(String oldAccountSignature)? onOldAuthorizationReady,
   }) async {
     // 旧账户对 (cid ‖ 新账户) 的授权:sr25519 签 32 字节 signing_message 摘要。
     final digest = buildRebindSigningDigest(
@@ -91,6 +92,16 @@ class CitizenIdentityRpc {
       newAccountId: newAccountId,
     );
     final oldSignature = await _wallet.signForAccountId(oldAccountId, digest);
+    if (oldSignature.length != _signatureBytes) {
+      throw StateError(
+        '旧账户换绑授权签名长度必须为 $_signatureBytes 字节,当前 ${oldSignature.length}',
+      );
+    }
+    // 授权签名本身不是私钥，可在提交交易前作为安全 outbox 持久化；这样即便交易
+    // finalized 后进程立即退出，新账户仍能重放同一授权完成旧账户材料清理。
+    await onOldAuthorizationReady?.call(
+      '0x${SignedExtrinsicBuilder.hexEncode(oldSignature)}',
+    );
     final callData = buildSelfRebindCidAccountCall(cidNumber, oldSignature);
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,

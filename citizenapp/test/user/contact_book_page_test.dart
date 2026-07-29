@@ -22,16 +22,15 @@ const _contactAddress = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
 const _contactAccountId =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
 
-/// 联系人身份主键 CID 号。通讯录已缓存 cid_number 时页面直接用它索引公开资料，
-/// 不再回退链读（account_id 仍是通讯录/收款寻址主键，二者语义分离）。
+/// 联系人身份主键 CID 号。通讯录关系按 cid_number 建立，页面直接用它索引公开资料。
 const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 const _contact = UserContact(
+  cidNumber: _contactCidNumber,
   accountId: _contactAccountId,
   ss58Address: _contactAddress,
-  contactName: '张三',
+  contactRemark: '张三',
   createdAt: 1,
   updatedAt: 2,
-  cidNumber: _contactCidNumber,
 );
 const _profile = CitizenProfile(
   accountId: _contactAccountId,
@@ -75,17 +74,17 @@ class _FakeContacts extends UserContactService {
 
   @override
   Future<List<UserContact>> renameContact(
-    String address,
-    String contactName,
+    String cidNumber,
+    String contactRemark,
   ) async {
     contacts = <UserContact>[
-      _contact.copyWith(contactName: contactName, updatedAt: 3),
+      _contact.copyWith(contactRemark: contactRemark, updatedAt: 3),
     ];
     return contacts;
   }
 
   @override
-  Future<List<UserContact>> deleteContact(String address) async {
+  Future<List<UserContact>> deleteContact(String cidNumber) async {
     contacts = const <UserContact>[];
     return contacts;
   }
@@ -152,15 +151,23 @@ void main() {
 
   tearDown(IdentityAccountCache.resetDebugInstance);
 
-  testWidgets('联系人卡展示私人名称、公开资料、身份头像和同步状态', (tester) async {
+  testWidgets('联系人卡以公开昵称为主并分别展示备注、CID、SS58', (tester) async {
     await tester.pumpWidget(_page());
     await tester.pumpAndSettle();
 
     expect(find.text('云端已同步'), findsOneWidget);
-    expect(find.text('张三'), findsOneWidget);
-    expect(find.textContaining('Rhett · w5Bc7m'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('contact-card-$_contactCidNumber')),
+        matching: find.text('Rhett'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('备注：张三'), findsOneWidget);
+    expect(find.text('CID：$_contactCidNumber'), findsOneWidget);
+    expect(find.text('SS58：$_contactAddress'), findsOneWidget);
     expect(find.text('建设一个可信、自由的社会'), findsOneWidget);
-    expect(find.byKey(const ValueKey('contact-card-$_contactAccountId')),
+    expect(find.byKey(const ValueKey('contact-card-$_contactCidNumber')),
         findsOneWidget);
   });
 
@@ -173,7 +180,13 @@ void main() {
       'Rhett',
     );
     await tester.pump();
-    expect(find.text('张三'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('contact-card-$_contactCidNumber')),
+        matching: find.text('Rhett'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.enterText(
       find.byKey(const ValueKey('contact-search')),
@@ -190,15 +203,15 @@ void main() {
 
     final fallback =
         ProfilePresentation.forAccountId(_contactAccountId).fallbackName;
-    expect(find.textContaining('$fallback · w5Bc7m'), findsOneWidget);
-    expect(find.text(_contactAddress), findsNothing);
+    expect(find.text(fallback), findsOneWidget);
+    expect(find.text('SS58：$_contactAddress'), findsOneWidget);
   });
 
   testWidgets('普通点击进入唯一 UserProfilePage', (tester) async {
     await tester.pumpWidget(_page());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('张三'));
+    await tester.tap(find.text('Rhett'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
@@ -212,7 +225,7 @@ void main() {
     await tester.tap(find.byTooltip('联系人操作'));
     await tester.pumpAndSettle();
 
-    final labels = <String>['转账', '私信', '修改名称', '删除联系人'];
+    final labels = <String>['转账', '私信', '修改备注', '删除联系人'];
     for (final label in labels) {
       expect(find.text(label), findsOneWidget);
     }
@@ -220,28 +233,28 @@ void main() {
     expect(deleteText.style?.color, AppTheme.danger);
   });
 
-  testWidgets('修改名称取消和保存中文内容均无异常渲染', (tester) async {
+  testWidgets('修改私人备注可取消、保存中文或清空', (tester) async {
     await tester.pumpWidget(_page());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('联系人操作'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('修改名称'));
+    await tester.tap(find.text('修改备注'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '李四');
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
-    expect(find.text('张三'), findsOneWidget);
+    expect(find.text('备注：张三'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byTooltip('联系人操作'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('修改名称'));
+    await tester.tap(find.text('修改备注'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '李四');
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
-    expect(find.text('李四'), findsOneWidget);
+    expect(find.text('备注：李四'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -309,7 +322,7 @@ void main() {
 
     // 选私信模式:不显示逐项操作菜单,点联系人卡即开私聊。
     expect(find.byTooltip('联系人操作'), findsNothing);
-    await tester.tap(find.text('张三'));
+    await tester.tap(find.text('Rhett'));
     await tester.pump();
 
     expect(openedPeerAccountId, _contactAccountId);

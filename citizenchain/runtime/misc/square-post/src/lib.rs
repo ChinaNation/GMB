@@ -47,9 +47,9 @@ pub const MODULE_TAG: &[u8] = b"sqr-sub";
 )]
 #[repr(u8)]
 pub enum SquarePostCategory {
-    /// 普通动态，所有账户都可以发布。
+    /// 普通动态，所有 active CID 都可以发布。
     Normal = 0,
-    /// 竞选动态，必须是已绑定 CID 的认证公民账户。
+    /// 竞选动态，必须是 active CID 当前绑定且具有有效投票身份的账户。
     Campaign = 1,
 }
 
@@ -67,8 +67,10 @@ pub enum SquarePostCategory {
 )]
 pub struct SquarePost<AccountId, BlockNumber, PostId, CidNumber, StorageReceiptId> {
     pub post_id: PostId,
-    pub owner_account_id: AccountId,
-    pub cid_number: Option<CidNumber>,
+    /// 帖子唯一用户归属；CID 换绑不得改变历史帖子归属。
+    pub cid_number: CidNumber,
+    /// 本次发布交易的实际签名账户，仅作链上审计证据。
+    pub signer_account_id: AccountId,
     pub post_category: SquarePostCategory,
     pub content_hash: [u8; 32],
     pub storage_receipt_id: StorageReceiptId,
@@ -80,12 +82,33 @@ pub struct SquarePost<AccountId, BlockNumber, PostId, CidNumber, StorageReceiptI
 ///
 /// runtime 负责把它接到 citizen-identity；本 pallet 不直接依赖具体身份 pallet。
 pub trait SquarePostCitizenIdentityProvider<AccountId> {
-    fn cid_number(owner_account_id: &AccountId) -> Option<Vec<u8>>;
+    /// 从当前签名账户解析 active CID，并完成正反绑定闭环校验。
+    fn active_cid_number(account_id: &AccountId) -> Option<Vec<u8>>;
+    /// 从 active CID 解析当前绑定账户，并完成正反绑定闭环校验。
+    fn current_account_id(cid_number: &[u8]) -> Option<AccountId>;
+    /// Campaign 在 active CID 基础上额外要求有效投票身份。
+    fn is_campaign_eligible(cid_number: &[u8], account_id: &AccountId) -> bool;
+    /// benchmark externalities 中播种可用身份；生产构建不暴露此入口。
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_seed_identity(account_id: &AccountId) -> Vec<u8>;
 }
 
 impl<AccountId> SquarePostCitizenIdentityProvider<AccountId> for () {
-    fn cid_number(_owner_account: &AccountId) -> Option<Vec<u8>> {
+    fn active_cid_number(_account_id: &AccountId) -> Option<Vec<u8>> {
         None
+    }
+
+    fn current_account_id(_cid_number: &[u8]) -> Option<AccountId> {
+        None
+    }
+
+    fn is_campaign_eligible(_cid_number: &[u8], _account_id: &AccountId) -> bool {
+        false
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_seed_identity(_account_id: &AccountId) -> Vec<u8> {
+        Vec::new()
     }
 }
 
@@ -120,18 +143,17 @@ pub mod pallet {
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
-    /// 订阅关系键：`(订阅者账户, 收款主体)`，单 hasher 元组键（对齐 BFF storageMapKey）。
-    pub type SubKeyOf<T> = (
-        <T as frame_system::Config>::AccountId,
-        IssuerKey<<T as frame_system::Config>::AccountId>,
-    );
+    /// 创作者收款主体以永久 CID 标识，实际收款账户在每次扣款时解析。
+    pub type IssuerKeyOf<T> = IssuerKey<CidNumberOf<T>>;
+    /// 订阅关系键：`(订阅者 CID, 收款主体)`，CID 换绑不改写业务真源。
+    pub type SubKeyOf<T> = (CidNumberOf<T>, IssuerKeyOf<T>);
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// 认证公民身份读取入口。
+        /// 公民身份与当前签名/收付款账户的唯一读取入口。
         type CitizenIdentity: SquarePostCitizenIdentityProvider<Self::AccountId>;
 
         /// 公民币扣款/收款货币。
@@ -172,12 +194,12 @@ pub mod pallet {
     pub type SquarePosts<T: Config> =
         StorageMap<_, Blake2_128Concat, PostIdOf<T>, SquarePostOf<T>, OptionQuery>;
 
-    /// 每个账户累计成功发布数量，供轻量统计和测试校验。
+    /// 每个 CID 累计成功发布数量，换绑账户不得重置。
     #[pallet::storage]
-    pub type PublishedPostCountByAccount<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
+    pub type PublishedPostCountByCid<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumberOf<T>, u64, ValueQuery>;
 
-    /// 订阅关系真源：`(订阅者, 收款主体) -> 订阅状态`。单 hasher 元组键。
+    /// 订阅关系真源：`(订阅者 CID, 收款主体 CID/平台) -> 订阅状态`。单 hasher 元组键。
     #[pallet::storage]
     pub type Subscriptions<T: Config> =
         StorageMap<_, Blake2_128Concat, SubKeyOf<T>, SubscriptionState, OptionQuery>;
@@ -200,7 +222,7 @@ pub mod pallet {
     /// 创作者链上付款套餐；名称、说明、权益和媒体仍只保存在 Cloudflare/D1。
     #[pallet::storage]
     pub type CreatorPlans<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, CreatorTiers, ValueQuery>;
+        StorageMap<_, Blake2_128Concat, CidNumberOf<T>, CreatorTiers, ValueQuery>;
 
     /// 平台三档价创世播种：重新创世时无条件写入默认价，之后仅经统一内部投票调整。
     #[pallet::genesis_config]
@@ -231,8 +253,8 @@ pub mod pallet {
         /// 广场动态发布交易已入块。
         SquarePostPublished {
             post_id: PostIdOf<T>,
-            owner_account_id: T::AccountId,
-            cid_number: Option<CidNumberOf<T>>,
+            cid_number: CidNumberOf<T>,
+            signer_account_id: T::AccountId,
             post_category: SquarePostCategory,
             content_hash: [u8; 32],
             storage_receipt_id: StorageReceiptIdOf<T>,
@@ -241,8 +263,9 @@ pub mod pallet {
         },
         /// 首扣或 runtime 自动续费已经完成，并登记下一次真实公历扣款时间。
         SubscriptionCharged {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            payer_account_id: T::AccountId,
+            issuer: IssuerKeyOf<T>,
             plan: SubscriptionPlan,
             price_fen: u128,
             charged_at: u64,
@@ -250,52 +273,54 @@ pub mod pallet {
         },
         /// 已取消但尚未到期的相同计划恢复，当前已付周期不重复扣款。
         SubscriptionResumed {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            issuer: IssuerKeyOf<T>,
             paid_until: u64,
         },
         /// 续费被挂起（创作者改价待再签名 / 余额不足待充值再签），保留粉丝关系、退出续费调度。
         SubscriptionSuspended {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            issuer: IssuerKeyOf<T>,
             reason: SuspendReason,
             suspended_at: u64,
         },
         /// 创作者改价后订阅者到期前再签名，已授权价更新为当前价、当前周期不重复扣款。
         SubscriptionReconsented {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            issuer: IssuerKeyOf<T>,
             authorized_price_fen: u128,
         },
         /// 创作者掉平台会员，其粉丝订阅暂停扣费但保留、仍留调度，创作者恢复即自动续。
         SubscriptionCreatorPaused {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            issuer: IssuerKeyOf<T>,
             paused_at: u64,
         },
         /// 公历换算失效等真实失败，自动扣款已经终止。
         SubscriptionRenewalStopped {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            issuer: IssuerKeyOf<T>,
             stopped_at: u64,
         },
         /// 取消后 `paid_until` 之前的已付权益仍有效。
         SubscriptionCancelled {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            issuer: IssuerKeyOf<T>,
             paid_until: u64,
         },
         /// 换挡立即生效：`charged_now` 为本次折算实际扣款额，`paid_until` 为新到期时间。
         SubscriptionPlanChanged {
-            subscriber_account_id: T::AccountId,
-            issuer: IssuerKey<T::AccountId>,
+            subscriber_cid_number: CidNumberOf<T>,
+            payer_account_id: T::AccountId,
+            issuer: IssuerKeyOf<T>,
             new_plan: SubscriptionPlan,
             charged_now: u128,
             paid_until: u64,
         },
         /// 创作者已经覆盖式更新自己的链上付款套餐。
         CreatorPlansSet {
-            creator_account_id: T::AccountId,
+            creator_cid_number: CidNumberOf<T>,
+            signer_account_id: T::AccountId,
             tier_count: u32,
         },
         /// 平台价格调整提案已交给统一投票引擎。
@@ -322,7 +347,10 @@ pub mod pallet {
         EmptyContentHash,
         EmptyStorageReceiptId,
         EmptyStorageUntil,
-        CampaignRequiresCitizen,
+        /// 当前签名账户没有 active CID 双向绑定。
+        CitizenIdentityUnavailable,
+        /// Campaign 要求当前 active CID 具有有效投票身份。
+        CampaignRequiresVotingIdentity,
         /// 不能订阅自己（创作者订阅）。
         CannotSubscribeSelf,
         /// 订阅记录不存在。
@@ -363,22 +391,17 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        /// 到期续费在 on_idle 按当块剩余权重尽量排空，不静态预留最坏权重。
-        /// Timestamp inherent 已于 on_idle 前写入，`now_ms` 可用。
-        fn on_idle(_n: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+        /// 到期续费必须在 `on_initialize` 完成，使余额变化进入 NodeGuard 的 finalize 前状态。
+        ///
+        /// 此时 Timestamp inherent 尚未执行，故使用上一块已确认时间；正常出块时最多延后
+        /// 一个区块，绝不提前扣款。每块仍受 `MaxSubscriptionRenewalsPerBlock` 硬上限约束。
+        fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
             let per = T::WeightInfo::process_one_due();
-            let cap = u64::from(T::MaxSubscriptionRenewalsPerBlock::get());
-            let per_ref = per.ref_time();
-            // 权重未计量（如测试 `()` 权重）时按 backstop 上限排空；否则按当块剩余权重估算笔数。
-            let limit = if per_ref == 0 {
-                cap
-            } else {
-                core::cmp::min(remaining_weight.ref_time() / per_ref, cap)
-            } as u32;
-            if limit == 0 {
+            let cap = T::MaxSubscriptionRenewalsPerBlock::get();
+            if cap == 0 {
                 return Weight::zero();
             }
-            let processed = Self::process_due_subscriptions(Self::now_ms(), limit);
+            let processed = Self::process_due_subscriptions(Self::now_ms(), cap);
             per.saturating_mul(u64::from(processed))
         }
 
@@ -422,7 +445,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 发布广场动态链上索引。
         ///
-        /// `owner_account_id` 由 signed origin 派生；`cid_number` 由链上公民身份派生。
+        /// `signer_account_id` 由 signed origin 派生；`cid_number` 是唯一用户归属。
         /// 本调用不接收正文、图片或视频内容。
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::publish_post())]
@@ -434,7 +457,7 @@ pub mod pallet {
             storage_receipt_id: Vec<u8>,
             storage_until: u64,
         ) -> DispatchResult {
-            let owner_account_id = ensure_signed(origin)?;
+            let signer_account_id = ensure_signed(origin)?;
             ensure!(!post_id.is_empty(), Error::<T>::EmptyPostId);
             ensure!(
                 content_hash.iter().any(|byte| *byte != 0),
@@ -454,16 +477,22 @@ pub mod pallet {
                 Error::<T>::DuplicatePostId
             );
 
-            let cid_number = Self::cid_number_for_owner(&owner_account_id)?;
+            let cid_number = Self::active_cid_number_for_account(&signer_account_id)?;
             if post_category == SquarePostCategory::Campaign {
-                ensure!(cid_number.is_some(), Error::<T>::CampaignRequiresCitizen);
+                ensure!(
+                    T::CitizenIdentity::is_campaign_eligible(
+                        cid_number.as_slice(),
+                        &signer_account_id
+                    ),
+                    Error::<T>::CampaignRequiresVotingIdentity
+                );
             }
 
             let created_block = frame_system::Pallet::<T>::block_number();
             let square_post = SquarePost {
                 post_id: post_id.clone(),
-                owner_account_id: owner_account_id.clone(),
                 cid_number: cid_number.clone(),
+                signer_account_id: signer_account_id.clone(),
                 post_category,
                 content_hash,
                 storage_receipt_id: storage_receipt_id.clone(),
@@ -472,14 +501,14 @@ pub mod pallet {
             };
 
             SquarePosts::<T>::insert(&post_id, square_post);
-            PublishedPostCountByAccount::<T>::mutate(&owner_account_id, |count| {
+            PublishedPostCountByCid::<T>::mutate(&cid_number, |count| {
                 *count = count.saturating_add(1);
             });
 
             Self::deposit_event(Event::SquarePostPublished {
                 post_id,
-                owner_account_id,
                 cid_number,
+                signer_account_id,
                 post_category,
                 content_hash,
                 storage_receipt_id,
@@ -494,7 +523,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::subscribe())]
         pub fn subscribe(
             origin: OriginFor<T>,
-            issuer: IssuerKey<T::AccountId>,
+            issuer: IssuerKeyOf<T>,
             plan: SubscriptionPlan,
             expected_price_fen: u128,
         ) -> DispatchResult {
@@ -505,7 +534,7 @@ pub mod pallet {
         /// 取消订阅（写 Cancelled 保留记录，停止续扣）。
         #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::cancel())]
-        pub fn cancel(origin: OriginFor<T>, issuer: IssuerKey<T::AccountId>) -> DispatchResult {
+        pub fn cancel(origin: OriginFor<T>, issuer: IssuerKeyOf<T>) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::do_cancel(who, issuer)
         }
@@ -523,7 +552,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::change_subscription_plan())]
         pub fn change_subscription_plan(
             origin: OriginFor<T>,
-            issuer: IssuerKey<T::AccountId>,
+            issuer: IssuerKeyOf<T>,
             new_plan: SubscriptionPlan,
             expected_price_fen: u128,
         ) -> DispatchResult {
@@ -554,13 +583,19 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn cid_number_for_owner(
-            owner_account_id: &T::AccountId,
-        ) -> Result<Option<CidNumberOf<T>>, Error<T>> {
-            T::CitizenIdentity::cid_number(owner_account_id)
-                .map(CidNumberOf::<T>::try_from)
-                .transpose()
-                .map_err(|_| Error::<T>::FieldTooLong)
+        pub(crate) fn active_cid_number_for_account(
+            account_id: &T::AccountId,
+        ) -> Result<CidNumberOf<T>, Error<T>> {
+            let cid_number = T::CitizenIdentity::active_cid_number(account_id)
+                .ok_or(Error::<T>::CitizenIdentityUnavailable)?;
+            CidNumberOf::<T>::try_from(cid_number).map_err(|_| Error::<T>::FieldTooLong)
+        }
+
+        pub(crate) fn current_account_id_for_cid(
+            cid_number: &CidNumberOf<T>,
+        ) -> Result<T::AccountId, Error<T>> {
+            T::CitizenIdentity::current_account_id(cid_number.as_slice())
+                .ok_or(Error::<T>::CitizenIdentityUnavailable)
         }
     }
 }

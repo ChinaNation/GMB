@@ -16,6 +16,7 @@ const _accountId =
 const _peerAccountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
 const _contactAddress = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
+const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 
 final _dmPreview = ChatConversationPreview(
   conversationId: 'dm:me:peer',
@@ -39,9 +40,10 @@ final _groupPreview = ChatConversationPreview(
 );
 
 const _contact = UserContact(
+  cidNumber: _contactCidNumber,
   accountId: _peerAccountId,
   ss58Address: _contactAddress,
-  contactName: '张三',
+  contactRemark: '张三',
   createdAt: 1,
   updatedAt: 2,
 );

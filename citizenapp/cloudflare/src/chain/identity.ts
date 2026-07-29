@@ -159,6 +159,16 @@ export async function fetchChainIdentityState(
   return state;
 }
 
+/// 按 CID 读取最新 finalized 的当前双向绑定；动权或审计落库路径使用，禁止 KV 缓存。
+export async function fetchChainIdentityStateByCid(
+  env: Env,
+  cidNumber: string,
+): Promise<ChainIdentityState> {
+  const finalizedHead = await fetchFinalizedHead(env);
+  return (await readChainIdentityByCid(env, cidNumber, finalizedHead))
+    ?? visitorIdentityStateByCid(cidNumber);
+}
+
 /// 按身份主键 cid_number 读取链上身份(社交面 /users/:cid 用):
 /// 带 KV 短缓存 + 失败/未绑定软降级(account_id 空、visitor),绝不阻塞渲染。
 export async function fetchChainIdentityStateByCidCached(
@@ -175,9 +185,7 @@ export async function fetchChainIdentityStateByCidCached(
     // 缓存读失败忽略，继续读链。
   }
   try {
-    const finalizedHead = await fetchFinalizedHead(env);
-    const state = (await readChainIdentityByCid(env, cidNumber, finalizedHead))
-      ?? visitorIdentityStateByCid(cidNumber);
+    const state = await fetchChainIdentityStateByCid(env, cidNumber);
     try {
       await putKvJson(env, cacheKey, state, "identity_cache", {
         expirationTtl: IDENTITY_CACHE_TTL_SECONDS,

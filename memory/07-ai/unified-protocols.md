@@ -217,9 +217,9 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `memory/01-architecture/qr/qr-protocol-spec.md`
   - `memory/01-architecture/qr/qr-signing-recognition.md`
   - `memory/01-architecture/qr/qr-action-registry.md`
-- 生产者：`citizenapp`、`citizenchain/node`、`citizenchain/onchina`
+- 生产者：`citizenapp`、`citizenwallet`（仅 `k=4` 临时收款码）、`citizenchain/node`、`citizenchain/onchina`
 - 消费者：`citizenwallet`、`citizenapp`、`citizenchain/onchina`
-- 字段：顶层只允许 `p/k/i/e/b`;`k=1/2` 的压缩键 `b.u` 在各端唯一映射为 `signer_public_key`;`k=1` 的 `b.d` 是 `review_payload`,除 Runtime 升级 hash-only 外必须完整可解码和可中文展示;`k=3/4` 的展示地址只允许 `ss58_address`;具体字段以 `qr-protocol-spec.md` 为准
+- 字段：顶层只允许 `p/k/i/e/b`;`k=1/2` 的压缩键 `b.u` 在各端唯一映射为 `signer_public_key`;`k=1` 的 `b.d` 是 `review_payload`,除 Runtime 升级 hash-only 外必须完整可解码和可中文展示;`k=3` body 只允许 `cid_number + ss58_address + display_name`，且仅由 CitizenApp 已绑定 CID 的身份账户生成；`k=4` 的展示地址同样只允许 `ss58_address`;具体字段以 `qr-protocol-spec.md` 为准
 - 编码：紧凑 JSON envelope
 - 签名/验签规则：按 `k` 和 `b.a + b.d(review_payload)` 执行;普通链交易由扫码端按 Substrate 规则从 `review_payload` 计算 `signing_bytes`;签名响应只带 `u/s`
 - 平台调价动作：`propose_set_platform_price`，pallet/call 为 `SquarePost/propose_set_platform_price`；必审字段为 `actor_cid_number`、`membership_level`、`new_price_fen`。CitizenWallet 必须严格中文解码并输出标准签名响应二维码，OnChina 负责回扫提交。
@@ -278,11 +278,11 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `POST /v1/square/auth/challenge` 请求：`account_id`；响应：`challenge_id`、`account_id`、`signing_payload`、`expires_at`
   - `POST /v1/square/auth/session` 请求：`account_id`、`challenge_id`、`signature`；响应：`session_token`、`account_id`、`expires_at`。会话只验证已登记 P-256 设备子钥对挑战的签名及钱包归属，不读取 `System.Account`，不要求链上账户已经存在，也不以余额或存在性存款作为 Cloudflare 登录门禁。挑战必须通过 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期同时命中才允许继续；并发请求只允许一个成功。KV Session 或索引写入失败时挑战保持已消费，并删除可能写入的孤立 Session，不得恢复旧挑战。
   - `POST /v1/square/auth/device/register` 的 `issued_at` 必须是服务端当前时间前后五分钟内的安全整数；同一 `account_id` 的 D1 条件 UPSERT 只接受严格更大的 `issued_at`，重复、旧绑定和并发回滚返回冲突，不得覆盖当前设备子密钥。
-  - `GET /v1/square/membership` 请求：Bearer `session_token`；响应：`plans[]`、`membership`、`subscription_active`、`active`。`plans[]` 只返回权益配额和平台档位标识，不返回价格；平台价格由 CitizenApp 直接读取 finalized `PlatformPrice`。`membership` 镜像字段至少包含 `membership_level`、`subscription_status`、`last_charged_price_fen`、`last_charged_at`、`paid_until`、`pending_plan`、`updated_at`。
-  - `POST /v1/square/membership/confirm` 请求：Bearer `session_token`，`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`action`(`subscribe`/`cancel`/`change`)，订阅或换档时另带 `membership_level`；响应：finalized 链上平台订阅镜像。account_id 只从 session 派生，Worker 必须复算交易哈希、严格解码签名者与调用参数、确认完整 extrinsic 位于指定 finalized 主链区块，并读取同一区块订阅状态；禁止采信请求自报价格、状态或期限。该镜像路由只用 Bearer，不生成第二次账户或设备签名。
-  - `GET /v1/square/creator/plan` 与 `GET /v1/square/creator/plan/{creator_account_id}`：返回创作者展示资料和链上 `tier_id` 引用；名称、说明、权益文案不进入链上，扣款价格不由 D1 返回为真源。
-  - `POST /v1/square/creator/plan`：请求 Bearer `session_token`、`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`tiers[]`；保存一次 `set_creator_plans` 签名交易证明和同一区块 `CreatorPlans` 对应的展示名称。请求中的价格只用于逐字段核对已签 call 与 finalized storage，不能覆盖链上扣款真源；创作者账户只从 session 派生，且 Worker 必须在同一区块确认该账户拥有有效平台订阅。完全相同的 HTTP 重试幂等，不产生第二次签名。
-  - `POST /v1/square/creator/subscription/confirm` 请求：Bearer `session_token`，`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`action`(`subscribe`/`cancel`/`change`)、`creator_account_id`，订阅或换档时另带 `tier_id`、`billing_period`；响应：finalized 链上创作者订阅镜像。subscriber_account_id 只从 session 派生，Worker 必须核对完整签名交易和同一区块 `Subscriptions[(subscriber, Creator(creator_account_id))]`。
+  - `GET /v1/square/membership` 请求：Bearer `session_token`；响应：`plans[]`、`membership`、`subscription_active`、`active`。`plans[]` 只返回权益配额和平台档位标识，不返回价格；平台价格由 CitizenApp 直接读取 finalized `PlatformPrice`。`membership` 镜像字段至少包含 `membership_level`、`subscription_status`、`last_charged_price_fen`、`last_charged_at`、`paid_until`、`updated_at`。
+  - `POST /v1/square/membership/confirm` 请求：Bearer `session_token`，`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`action`(`subscribe`/`cancel`/`change`)，订阅或换档时另带 `membership_level`；响应：finalized 链上平台订阅镜像。Worker 从 session 取 `cid_number` 读取同一区块 `Subscriptions[(cid_number, Platform)]`，同时用 `account_id` 复核完整交易签名者；禁止采信请求自报价格、状态或期限。该镜像路由只用 Bearer，不生成第二次账户或设备签名。
+  - `GET /v1/square/creator/plan` 与 `GET /v1/square/creator/plan/{creator_cid_number}`：返回创作者展示资料和链上 `tier_id` 引用；名称、说明、权益文案不进入链上，扣款价格不由 D1 返回为真源。
+  - `POST /v1/square/creator/plan`：请求 Bearer `session_token`、`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`tiers[]`；保存一次 `set_creator_plans` 签名交易证明和同一区块 `CreatorPlans[session.cid_number]` 对应的展示名称。请求中的价格只用于逐字段核对已签 call 与 finalized storage，不能覆盖链上扣款真源；Worker 同区块确认该 CID 拥有有效平台订阅。完全相同的 HTTP 重试幂等，不产生第二次签名。
+  - `POST /v1/square/creator/subscription/confirm` 请求：Bearer `session_token`，`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`action`(`subscribe`/`cancel`/`change`)、`creator_cid_number`，订阅或换档时另带 `tier_id`、`billing_period`；响应：finalized 链上创作者订阅镜像。Worker 必须核对完整签名交易和同一区块 `Subscriptions[(session.cid_number, Creator(creator_cid_number))]`；`account_id` 只用于该笔 finalized 交易签名审计。
   - 平台和创作者订阅、取消、换套餐以及创作者修改付款套餐均由 CitizenApp 直接提交 P-TX-014 链交易；Worker 不提供支付 checkout、预付、webhook、取消扣款或续费接口。
   - `POST /v1/square/uploads/prepare` 请求：Bearer `session_token`，`post_category`、`content_format`(`normal`/`article`)、`title_length`、`text_length`、`media_items[]`、`manifest_hash`；响应：`upload_id`、`post_id`、`storage_receipt_id`、`expires_at`、`estimated_bytes`、`manifest_object_key`、`manifest_upload_url`、`media_items[]`。Worker 按有效会员强制校验内容权益和统一资源硬上限，并用 D1 单条条件写原子预留活动上传数、订阅周期图片数和视频秒数；图片只返回同域 Worker 上传地址，视频统一签发绑定 `Upload-Length` 与 `maxDurationSeconds` 的 Stream TUS 地址。
   - `media_items[]` 响应字段：`media_kind`、`content_type`、`byte_size`、`provider`(`cloudflare_images`/`cloudflare_stream`)、`provider_asset_id`、`upload_method`(`worker`/`tus`)、`resource_key`、`asset_state`、`upload_url`。
@@ -300,12 +300,12 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `DELETE /v1/square/follows/{followed_cid_number}` 请求：Bearer `session_token`；响应：`followed_cid_number`
   - `PUT /v1/square/follows/{followed_cid_number}/notify` 请求：Bearer `session_token`、`enabled`(bool)；响应：`followed_cid_number`、`notify_enabled`。仅对已存在的关注生效，未关注返回 409 `not_following`。
   - `POST /v1/square/signals` 请求：Bearer `session_token`、`post_id`、`signal_type`
-  - `GET /v1/square/users/{cid_number}` 请求：可选 Bearer `session_token`；响应：`profile`（`cid_number`、`account_id`、`display_name`、`bio`、`avatar_object_key`、`banner_object_key`、`is_certified`、`identity_level`、`membership_level`、`membership_active`、`counts{following,followers,posts}`、`is_following`、`is_notifying`、`updated_at`）。**路由末段是身份主键 `cid_number`，不是钱包账户**；响应里的 `account_id` 是该 CID **当前绑定**的钱包账户（供链上交易入参，未绑定时空串）。身份/认证真源 = 按 CID 读链（`AccountIdByCid` + `CidRegistry` active + 投票/竞选公开字段），不再依赖发帖投影。
+  - `GET /v1/square/users/{cid_number}` 请求：可选 Bearer `session_token`；响应：`profile`（`cid_number`、`account_id`、`display_name`、`bio`、`avatar_object_key`、`banner_object_key`、`is_certified`、`identity_level`、`membership_level`、`membership_active`、`counts{following,followers,posts}`、`is_following`、`is_notifying`、`updated_at`）。**路由末段是身份主键 `cid_number`，不是钱包账户**；响应里的 `account_id` 只是该 CID 当前绑定钱包的展示/审计字段，广场订阅和创作者调用不得把它作为业务键。身份/认证真源 = 按 CID 读链（`AccountIdByCid` + `CidRegistry` active + 投票/竞选公开字段），不再依赖发帖投影。
   - `GET /v1/square/users/{cid_number}/posts` 请求：可选 `category`（all/normal/campaign）、`content_format`（all/normal/article）、`limit`、`cursor`；响应：`cid_number`、`posts[]`、`next_cursor`（按 `created_at` keyset 游标）。帖子 Tab 传 `content_format=normal` 排除文章，文章 Tab 传 `content_format=article`。
   - `GET /v1/square/users/{cid_number}/follows` 请求：`type`（following/followers）、`limit`、`cursor`；响应：`entries[{cid_number,created_at}]`、`next_cursor`
-  - `GET /v1/square/contacts` 请求：Bearer `session_token` + P-256 设备请求证明，可选 `limit`、`cursor`；响应：`items[{contact_id,ciphertext,nonce,mac,updated_at}]`、`next_cursor`。属主 `cid_number` 只从 session 派生，Worker 不接收联系人账户或联系人名称明文。
-  - `PUT /v1/square/contacts/{contact_id}` 请求：Bearer `session_token` + P-256 设备请求证明，`ciphertext`、`nonce`、`mac`、`updated_at`；响应：`contact_id`、`updated_at`、`applied`。`contact_id` 固定为端侧通讯录索引密钥对联系人 `address` 的 HMAC-SHA256 hex，Worker 只校验形状和大小，不持有索引密钥且不能反推出联系人。
-  - `DELETE /v1/square/contacts/{contact_id}` 请求：Bearer `session_token` + P-256 设备请求证明；响应：`contact_id`、`deleted`；只能删除当前 session 所属钱包的对应密文记录。
+  - `GET /v1/square/contacts` 请求：Bearer `session_token` + P-256 设备请求证明，可选 `limit`、`cursor`；响应：`items[{contact_id,ciphertext,nonce,mac,updated_at}]`、`next_cursor`。属主 `cid_number` 只从 session 派生，Worker 不接收联系人 CID、账户、SS58 或私人备注明文。
+  - `PUT /v1/square/contacts/{contact_id}` 请求：Bearer `session_token` + P-256 设备请求证明，`ciphertext`、`nonce`、`mac`、`updated_at`；响应：`contact_id`、`updated_at`、`applied`。`contact_id` 固定为端侧通讯录索引密钥对目标 `cid_number` 的 HMAC-SHA256 hex，Worker 只校验形状和大小，不持有索引密钥且不能反推出联系人。
+  - `DELETE /v1/square/contacts/{contact_id}` 请求：Bearer `session_token` + P-256 设备请求证明；响应：`contact_id`、`deleted`；只能删除当前 session 所属 CID 的对应密文记录。
   - `PUT /v1/square/profile` 请求：Bearer `session_token`，可选 `display_name`(≤40)、`bio`(≤160)、`avatar_object_key`、`avatar_content_hash`、`banner_object_key`、`banner_content_hash`（头像/背景 key 只能分别为本人固定 `profile/{cid_number}/avatar`、`profile/{cid_number}/banner`）；响应：与 GET `users/{cid_number}` 同构的完整 `profile`。身份主键 cid 由 session 派生。
   - `POST /v1/square/profile/assets/prepare` 请求：Bearer `session_token`，`kind`(`avatar`/`banner`)、`content_type`、`byte_size`、`sha256`；头像最多 512KiB/1024×1024，背景最多 1536KiB/1920×720；响应本人 `object_key`、`content_hash` 与同域 Worker `upload_url`。
   - `PUT /v1/square/profile/assets?object_key=...&byte_size=...&sha256=...`：Bearer + P-256 设备请求签名；Worker 校验真实字节、MIME、文件头、尺寸和 sha256 后覆盖固定 R2 对象键。
@@ -408,13 +408,13 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `SquarePostCache`: `post_id`、`account_id`、`cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`manifest_url`、`cover_url`、`cached_at`
   - `SquareFeedCursor`: `account_id`、`feed_kind`、`cursor`、`updated_at`
   - `SquareUserSignalCache`: `account_id`、`post_id`、`signal_type`、`created_at`、`synced`
-  - `ContactCache`: 按 `account_id` 隔离保存解密后的 `address`、`contact_name`、`created_at`、`updated_at`，复用 `AppKvEntity`，不是公开资料真源。
-  - `ContactPendingOps`: 按 `account_id` 隔离保存待同步的添加、改名、删除操作；云端成功后立即移除，不把普通旧缓存当作待上传操作。
+  - `ContactCache`: 以 `contact_book_by_account:<identity_account_id>` 隔离保存解密后的 `cid_number`、`account_id`、`ss58_address`、`contact_remark`、`created_at`、`updated_at`，复用 `AppKvEntity`，不是公开资料真源。
+  - `ContactPendingOps`: 以 `contact_pending_by_account:<identity_account_id>` 隔离、按目标 CID 保存待同步的添加、改备注、删除操作；云端成功后立即移除，不把旧缓存当作待上传操作。
 - 通讯录云端密文契约：
-  - schema 固定为 `citizenapp.contacts.v1`；明文记录只存在 CitizenApp 端，字段固定为 `account_id`、`address`、`contact_name`、`created_at`、`updated_at`。
-  - `encryption_key` 与 `index_key` 必须由同一热钱包 seed 经 HKDF-SHA256 域隔离派生；seed 和派生密钥不得上传 Cloudflare。
-  - 单条记录使用 AES-256-GCM；AAD 必须绑定 schema、`account_id` 与 `contact_id`，防止跨账户或跨联系人替换。
-  - D1 `square_contacts` 只允许保存 `account_id`、`contact_id`、`ciphertext`、`nonce`、`mac`、`updated_at`；禁止保存联系人 `address`、`contact_name`、公开昵称或关系明文。
+  - 明文记录只存在 CitizenApp 端，字段固定为 `owner_cid_number`、联系人 `cid_number`、`account_id`、`ss58_address`、`contact_remark`、`created_at`、`updated_at`；不保留版本化 schema 或旧字段兼容。
+  - `encryption_key` 与 `index_key` 必须由 CID 当前绑定的身份账户 child 经 HKDF-SHA256 的 `citizenapp.contacts/encryption`、`citizenapp.contacts/index` 域隔离派生；child 和派生密钥不得上传 Cloudflare。
+  - 单条记录使用 AES-256-GCM；AAD 必须绑定未版本化通讯录域、属主 `cid_number` 与 `contact_id`，防止跨身份或跨联系人替换。
+  - D1 `square_contacts` 只允许保存属主 `cid_number`、`contact_id`、`ciphertext`、`nonce`、`mac`、`updated_at`；禁止保存联系人 CID、账户、SS58、私人备注、公开昵称或关系明文。
 - 编码：HTTP JSON 字段统一 snake_case；R2 manifest 为 UTF-8 JSON；hash 字段为 sha256 hex；Worker 阶段 3 已落地字段的时间统一使用毫秒时间戳。
 - CitizenApp 阶段 5/6 实现真源：
   - `citizenapp/lib/8964/services/square_api_client.dart`
@@ -437,9 +437,22 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 会员支付只允许在 CitizenApp 内完成；CitizenWeb 不承载会员订阅或钱包签名入口。
 - 签名/验签规则：
   - Worker session 必须由已登记的 P-256 设备子钥对 `signing_payload` 签名获得；设备子钥归属仍由钱包主钥绑定证明建立。会话不得读取链上账户、余额或存在性存款。
+  - CID 换绑后的旧账户止损唯一走 `POST /v1/square/rebind/revoke`：Bearer session
+    必须属于 CID **当前绑定的新账户**，请求只提交 `old_account_id` 与
+    `old_account_signature`。后者固定为旧账户对
+    `signing_message(OP_SIGN_CID_REBIND=0x11, SCALE(cid_number, new_account_id))`
+    的链上换绑授权签名；Worker 必须用 session 的 `cid_number + account_id` 重建摘要并以
+    `old_account_id` 验签。禁止以“旧账户当前未绑定/链上查询为空”作为授权证据。
+  - 换绑授权必须在 extrinsic 提交前写入客户端安全 outbox，Worker 确认幂等清理成功后
+    才删除；网络失败、App 重启以及功能同步标记已经推进时仍须继续重试。存在不同三元组的
+    未完成清理时禁止再次换绑，不得静默吞错或把功能迁移成功冒充安全吊销成功。
+  - 换绑吊销只删除旧 `account_id` 的 `chat_keypackages`、`chat_devices`、
+    `square_login_challenges`、`square_device_subkeys`、Worker 会话与账户身份缓存。
+    `ChatRealtimeObject` 和 `chat_device_binding_nonces` 均按 `cid_number` 归属，换绑时
+    **禁止关闭/删除**；通讯录、动态、媒体、关注、会员等 CID 数据也一律保留。
   - P-256 设备子钥的跨端文本编码统一带 `0x`（ADR-041，§0.3）：`p256_public_key` = `^0x04[0-9a-f]{128}$`，`signature` / `binding_signature` / `x-device-signature` = `^0x[0-9a-f]{128}$`；Worker 边界一次 require 0x + strip，内部 SCALE 签名消息 / D1 存储 / `device_key_hash` preimage 继续裸字节（逐字节不变）。禁止裸或「两端都收」。
   - Worker 只能把钱包签名证明用于登录和上传授权，不得托管钱包私钥。
-  - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由热钱包 seed 域隔离派生；Worker 不得接收、生成、托管或恢复通讯录密钥，也不得记录联系人明文。
+  - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由 CID 当前绑定账户 child 域隔离派生；Worker 不得接收、生成、托管或恢复通讯录密钥，也不得记录联系人明文。
   - manifest 与图片必须经同域 Worker 有界读取并验证 P-256 设备签名；视频 TUS 地址必须绑定 `account_id`、`upload_id`、精确字节和最长时长。
   - CitizenApp 必须先用 finalized 余额确认钱包至少保留 `1.21 元`（ED 1.11 元 + 发布费 0.1 元），余额不足不得进入 Worker prepare 或媒体上传。
   - CitizenApp 必须在链上扣费交易入块后才上传 manifest 与主媒体；链上未入块不得占用 R2 / Images / Stream 存储，只能保存本地草稿。
@@ -676,8 +689,10 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   4. `storage_receipt_id`: `Vec<u8>`，runtime 约束为非空且最多 96 字节。
   5. `storage_until`: `u64`，必须大于 0。
 - 派生字段：
-  - `account_id`：由 signed origin 派生，App 不得作为参数伪造。
-  - `cid_number`：由 runtime 按 `account_id` 读取链上公民身份绑定派生；未认证用户为空。
+  - `signer_account_id`：由 signed origin 派生，仅作为本次发布交易的签名者审计证据，
+    不作为帖子用户归属主键，App 不得作为参数伪造。
+  - `cid_number`：由 runtime 按 `signer_account_id` 读取并双向复核当前 active 公民身份
+    绑定，作为帖子唯一用户归属主键；缺失、inactive 或双向绑定不一致时拒绝发布。
   - `created_block`：由 runtime 当前区块派生。
 - 编码：
   - SCALE call data。
@@ -688,15 +703,20 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `storage_receipt_id` 固定引用 P-API-CITIZENAPP-002 的 Worker 上传回执。
   - CitizenApp 编码实现真源：`citizenapp/lib/8964/chain/square_chain_service.dart`。
 - 链上 storage / event：
-  - `SquarePosts[post_id] -> SquarePost`：保存 `post_id`、`account_id`、可空 `cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`storage_until`、`created_block`。
-  - `PublishedPostCountByAccount[account_id] -> u64`：保存账户累计成功发布数量。
+  - `SquarePosts[post_id] -> SquarePost`：保存 `post_id`、必填 `cid_number`、
+    `signer_account_id`、`post_category`、`content_hash`、`storage_receipt_id`、
+    `storage_until`、`created_block`。
+  - `PublishedPostCountByCid[cid_number] -> u64`：保存同一公民身份累计成功发布数量，
+    CID 换绑不得重置。
   - `SquarePostPublished` 事件：Worker 只能根据入块事件确认发布并写入正式 feed。
 - 签名/验签规则：
   - 外层链交易必须由 `account_id` 对应钱包账户签名。
   - runtime 将 `SquarePost` 路由为 `FeeRoute::Onchain { transaction_amount: 0, payer: signer }`，对每条发布交易按 `ONCHAIN_MIN_FEE` 扣 0.1 元发布费。
   - 发布费按既定 8:1:1 规则支付到矿工、国储会费用账户、安全基金账户。
-  - `post_category = normal` 时所有钱包账户可发布。
-  - `post_category = campaign` 时 runtime 必须通过 `CitizenIdentity::citizen_subject(account_id)` 确认当前钱包与永久 CID 双向绑定完整，且 `VotingIdentityByCid[cid_number]` 的 `citizen_status = Normal`。
+  - `post_category = normal` 时 active 匿名、投票或竞选 CID 均可发布；未绑定 CID 的
+    普通钱包账户不得发布。
+  - `post_category = campaign` 时 runtime 除 active CID 双向绑定外，还必须确认
+    `VotingIdentityByCid[cid_number]` 的 `citizen_status = Normal`。
   - Worker 同步 feed 只能信任已 finalized 或已确认入块的链上事件。
 - 禁止兼容：不兼容任何“媒体内容上链”或“链下假发布成功”的旧流程。
 - 禁止事项：
@@ -738,17 +758,22 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `5`：`propose_set_platform_price(actor_cid_number, membership_level, new_price_fen)`。
 - 类型标签：
   - `IssuerKey::Platform = 0x00`。
-  - `IssuerKey::Creator(AccountId32) = 0x01 || account_id[32]`。
+  - `IssuerKey::Creator(CidNumber) = 0x01 || Compact(cid_number_len) || cid_number`。
   - `MembershipLevel::Freedom/Democracy/Spark = 0x00/0x01/0x02`。
   - `BillingPeriod::Monthly/Quarterly/Yearly = 0x00/0x01/0x02`。
   - `SubscriptionPlan::Platform{membership_level} = 0x00 || membership_level`。
   - `SubscriptionPlan::Creator{tier_id,billing_period} = 0x01 || Compact(tier_id_len) || tier_id || billing_period`。
-  - `SubscriptionStatus::Active/Cancelled/Terminated = 0x00/0x01/0x02`。
+  - `SubscriptionStatus::Active/Cancelled/Terminated/Suspended/CreatorPaused =
+    0x00/0x01/0x02/0x03/0x04`。
+  - `SuspendReason::NeedReconsent/InsufficientBalance/IdentityBindingUnavailable =
+    0x00/0x01/0x02`。
 - call data 顺序：
   - 平台订阅：`22 01 || 00 || 00 || membership_level || expected_price_fen:u128LE`。
-  - 创作者订阅：`22 01 || 01 || creator_account_id[32] || 01 || Compact(tier_id_len) || tier_id || billing_period || expected_price_fen:u128LE`。
+  - 创作者订阅：`22 01 || 01 || Compact(creator_cid_number_len) || creator_cid_number
+    || 01 || Compact(tier_id_len) || tier_id || billing_period || expected_price_fen:u128LE`。
   - 平台取消：`22 02 || 00`。
-  - 创作者取消：`22 02 || 01 || creator_account_id[32]`。
+  - 创作者取消：`22 02 || 01 || Compact(creator_cid_number_len) ||
+    creator_cid_number`。
   - 创作者覆盖套餐：`22 03 || Compact(tier_count) || CreatorTier...`；每个 CreatorTier 为 `Compact(tier_id_len) || tier_id || Compact(period_count) || (billing_period || price_fen:u128LE)...`。
   - 换套餐：`22 04 || issuer || new_plan || expected_price_fen:u128LE`。
   - 平台调价：`22 05 || actor_cid_number:SCALE Vec<u8> || membership_level || new_price_fen:u128LE`。
@@ -758,6 +783,11 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 创作者每次扣款读取当前 `CreatorPlans`。
 - 签名规则：
   - 订阅者只对 `subscribe/cancel/change_subscription_plan` 签名；创作者只对自己的 `set_creator_plans` 管理调用签名。
+  - runtime 必须从 signed origin 解析并双向复核当前 active `subscriber_cid_number` /
+    `creator_cid_number`，调用方不得提交订阅者 CID 冒充归属。
+  - 首次扣款从本次 signed origin 账户支付；自动续费按订阅者 CID 解析当前绑定
+    `account_id` 扣款，创作者收款按创作者 CID 解析当前绑定 `account_id`。绑定缺失、
+    inactive 或双向不一致时 fail-closed，禁止扣取或支付历史账户。
   - `subscribe` 建立持续自动扣款授权，直到订阅者签名取消；续费和周期推进由 runtime 内部执行，不存在外部 call 或再次签名。
   - `propose_set_platform_price` 由 OnChina 生成 QR_V1/k=1 请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后通过统一提交入口上链；业务 pallet 只创建统一内部投票提案。
 - 禁止兼容：
@@ -777,26 +807,30 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 唯一真源：`citizenchain/runtime/misc/square-post/`
 - 详细文档：`memory/01-architecture/gmb/subscription-part1-tech.md`
 - storage：
-  - `Subscriptions<(AccountId, IssuerKey)> -> SubscriptionState`，key hasher 为 `Blake2_128Concat`。
+  - `Subscriptions<(subscriber_cid_number, IssuerKey)> -> SubscriptionState`，key hasher为
+    `Blake2_128Concat`。
   - `PlatformPrice<MembershipLevel> -> u128`，key hasher 为 `Twox64Concat`。
-  - `PlatformCidNumber -> Option<CidNumber>`。
-  - `CreatorPlans<AccountId> -> BoundedVec<CreatorTier>`，key hasher 为 `Blake2_128Concat`。
-  - `RenewalSchedule<(due_at_be, AccountId, IssuerKey)> -> ()`，第一个 key 使用大端时间戳保持到期顺序。
-  - `RenewalIndex<(AccountId, IssuerKey)> -> due_at`，保证每个订阅只有一个当前调度项。
-  - `MigrationBlocked -> bool`，发现旧订阅数据时阻止启用新协议。
+  - `CreatorPlans<creator_cid_number> -> BoundedVec<CreatorTier>`，key hasher 为
+    `Blake2_128Concat`。
+  - `RenewalSchedule<(due_at_be, subscriber_cid_number, IssuerKey)> -> ()`，第一个 key
+    使用大端时间戳保持到期顺序。
+  - `RenewalIndex<(subscriber_cid_number, IssuerKey)> -> due_at`，保证每个订阅只有一个
+    当前调度项。
 - `SubscriptionState` SCALE 字段顺序：
   1. `plan: SubscriptionPlan`。
-  2. `pending_plan: Option<SubscriptionPlan>`。
-  3. `started_at: u64LE`。
-  4. `last_charged_at: u64LE`。
-  5. `last_charged_price_fen: u128LE`。
-  6. `paid_until: u64LE`。
-  7. `subscription_status: SubscriptionStatus`。
+  2. `started_at: u64LE`。
+  3. `last_charged_at: u64LE`。
+  4. `last_charged_price_fen: u128LE`。
+  5. `paid_until: u64LE`。
+  6. `subscription_status: SubscriptionStatus`。
+  7. `authorized_price_fen: u128LE`。
+  8. `suspend_reason: Option<SuspendReason>`。
 - 状态规则：
   - `Active` 必须有对应 `RenewalSchedule` 和 `RenewalIndex`；`current_timestamp < paid_until` 时权益有效。
   - Cancelled 不再续费，但不得缩短 `paid_until`。
   - Terminated 由余额不足、真实转账失败或套餐失效产生，不再调度且不重试。
-  - pending plan 只在下一次成功续费后替换当前 plan。
+  - `Suspended` 保留订阅关系但退出调度，订阅者重新签名后才能恢复。
+  - `CreatorPaused` 保留订阅关系和调度，创作者恢复有效平台会员后自动继续。
 - 生产者：`square-post` subscribe、cancel、change、set plans、runtime 自动续费和平台调价终态回调。
 - 消费者：CitizenApp finalized 链读、Cloudflare finalized 镜像和对账器。
 - 禁止事项：

@@ -1542,6 +1542,42 @@ mod finalize_issuance_tests {
     }
 
     #[test]
+    fn initialize_business_transfer_is_not_misclassified_as_finalize_issuance() {
+        let payer = [3u8; 32];
+        let payee = [4u8; 32];
+        let total_key = fullnode_issuance::storage_key::total_issuance();
+        let payer_key = fullnode_issuance::storage_key::system_account(&payer);
+        let payee_key = fullnode_issuance::storage_key::system_account(&payee);
+        // on_initialize 的零和业务转账在 finalize 前、后读取结果完全相同；NodeGuard
+        // 只应核对 finalize 自身变化，不能把合法订阅续费误判成原生发行。
+        let state = BTreeMap::from([
+            (total_key.clone(), 1_000u128.encode()),
+            (
+                payer_key.clone(),
+                account(900, 1, NEW_BALANCES_FLAGS),
+            ),
+            (
+                payee_key.clone(),
+                account(100, 1, NEW_BALANCES_FLAGS),
+            ),
+        ]);
+        let delta = BTreeMap::from([
+            (payer_key, Some(account(900, 1, NEW_BALANCES_FLAGS))),
+            (payee_key, Some(account(100, 1, NEW_BALANCES_FLAGS))),
+        ]);
+        assert_eq!(
+            verify_finalize_issuance(
+                &delta,
+                &delta,
+                &|key| state.get(key).cloned(),
+                &|key| state.get(key).cloned(),
+                &FinalizeIssuancePlan::default(),
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
     fn new_reward_account_must_match_balances_default_shape() {
         let recipient_account_id = [3u8; 32];
         let total_key = fullnode_issuance::storage_key::total_issuance();

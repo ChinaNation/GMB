@@ -234,7 +234,9 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 允许继续使用 `name` 的例外:
 
 - 账户名称变量或链上 `name` 参数,但对外字段必须是 `account_name` / `accountName`。
-- 钱包名、文件名和自然人姓名；联系人姓名必须使用 `contact_name` / `contactName`。
+- 钱包名、文件名和自然人姓名；用户公开昵称唯一使用
+  `display_name` / `displayName`，私人通讯录备注使用
+  `contact_remark` / `contactRemark`。
 - UI 局部派生展示变量可以使用 `title` / `label`,但不得作为 API、DTO、数据库或持久化字段承载机构名称。
 
 行政区字典记录不得再使用裸 `name` / `code` 承载对外或持久化字段;必须按层级使用
@@ -244,7 +246,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 ## 5.2 非机构姓名与展示字段硬规则
 
-非机构姓名和展示字段必须用具体业务语义命名,不得继续使用能承载任意对象名称的 `display_name` / `displayName` / `orgName`。
+非机构姓名和展示字段必须用具体业务语义命名。`display_name` / `displayName`
+只允许表达用户公开昵称，不得承载机构名、钱包名、私人备注或其它对象名称。
 
 | 含义 | JSON / SQL / Rust | Dart / TypeScript | 使用边界 |
 |---|---|---|---|
@@ -258,7 +261,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 行政区市名称 | `city_name` | `cityName` | OnChina 行政区 API、App/前端市级选择 |
 | App 行政区内部名称 | `division_name` | `divisionName` | App Isar 行政区缓存内部字段 |
 | App 省级展示名称 | `province_display_name` | `provinceDisplayName` | App 省级入口展示 |
-| 用户联系人姓名 | `contact_name` | `contactName` | `QR_V1/k=3` body、通讯录导入服务 |
+| 用户公开昵称 | `display_name` | `displayName` | 用户公开资料与 `QR_V1/k=3` body；只作展示，不参与授权 |
+| 私人联系人备注 | `contact_remark` | `contactRemark` | CitizenApp 本地通讯录及端到端加密载荷 |
 | 转账收款人姓名 | `recipient_name` | `recipientName` | `QR_V1/k=4` body |
 
 管理员姓名不保留合并字段或显示名字段；界面按中文顺序拼接 `family_name + given_name`。缺失值分别使用“管理”“员”。
@@ -332,16 +336,16 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 交易广播分钟限额 | `RELAY_PER_MINUTE` | Worker var | 单 IP 每分钟广播次数上限 |
 | 官网 API 地址 | `VITE_API_URL` | CitizenWeb build var | 官网调用 Worker 的根地址 |
 | App API 地址 | `SQUARE_API_URL` | CitizenApp build var | App 调用广场、聊天和链启动清单 Worker 的根地址 |
-| 创作者档位 ID | `tier_id` | runtime / Dart / TypeScript / SQL / JSON | 创作者账户内稳定唯一的付款档位 ID；不得使用 `tier_code` 或数组下标表达同一语义 |
+| 创作者档位 ID | `tier_id` | runtime / Dart / TypeScript / SQL / JSON | 创作者 CID 内稳定唯一的付款档位 ID；不得使用 `tier_code` 或数组下标表达同一语义 |
 | 周期价格列表 | `prices_fen` | runtime / Dart / TypeScript / JSON | 一个创作者档位支持的周期价格集合 |
 | 计费周期 | `billing_period` | runtime / Dart / TypeScript / SQL / JSON | 统一取值 `monthly` / `quarterly` / `yearly`，链上标签为 0/1/2 |
 | 预期价格（分） | `expected_price_fen` | call data / Dart | 只保护首次扣款或换套餐签名到入块期间的价格，不是续费真源 |
-| 待生效套餐 | `pending_plan` | runtime / Dart / TypeScript / SQL | 用户已签名、下一次成功续费时生效的目标套餐 |
 | 首次扣款时间 | `started_at` | runtime / Dart / TypeScript / SQL | 首次成功扣款所在 finalized 区块的共识 unix 毫秒时间戳 |
 | 最近扣款价格（分） | `last_charged_price_fen` | runtime / Dart / TypeScript / SQL | 最近一次成功扣款审计值，不作为下次扣款依据 |
 | 最近扣款时间 | `last_charged_at` | runtime / Dart / TypeScript / SQL | 最近一次成功扣款的共识 unix 毫秒时间 |
 | 已付权益截止时间 | `paid_until` | runtime / Dart / TypeScript / SQL | runtime 根据共识时间戳和 UTC 真实公历计算的 unix 毫秒独占上界 |
-| 订阅状态 | `subscription_status` | runtime / Dart / TypeScript / SQL | 只允许 `active` / `cancelled` / `terminated` 对应链上枚举 |
+| 订阅状态 | `subscription_status` | runtime / Dart / TypeScript / SQL | 只允许 `active` / `cancelled` / `terminated` / `suspended` / `creatorPaused` 对应链上枚举 |
+| 订阅挂起原因 | `suspend_reason` | runtime / Dart / TypeScript | 只允许 `needReconsent` / `insufficientBalance` / `identityBindingUnavailable` |
 
 ## 6. 新命名登记模板
 
@@ -656,23 +660,24 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 钱包标签 | `wallet_label` | node frontend wallet selector | 钱包候选展示标签,不作为机构名称真源 |
 | 权威节点标签 | `authority_node_label` | node settings bootnode / GRANDPA | 节点身份或 GRANDPA 私钥匹配到的权威节点标签,不作为机构名称真源 |
 | Chat 路由显示名 | `route_display_name` | Chat protobuf / local cache | 通信路由列表展示,不作为联系人或机构名称真源 |
-| 联系人姓名 | `contact_name` | QR body / Dart service | 用户联系方式二维码和通讯录导入服务中的联系人姓名 |
-| 加密联系人 ID | `contact_id` | CitizenApp 联系人同步 / Cloudflare D1 | 端侧以通讯录索引密钥对联系人 `address` 做 HMAC-SHA256 得到的 64 位 hex；只用于密文 CRUD，不能替代联系人钱包账户 |
+| 用户公开昵称 | `display_name` | 公开资料 / `k=3` QR body | 用户公开展示唯一真源，不承载钱包名或私人备注 |
+| 私人联系人备注 | `contact_remark` | CitizenApp 联系人服务 | 当前用户私有备注，允许空值，不进入公开二维码 |
+| 加密联系人 ID | `contact_id` | CitizenApp 联系人同步 / Cloudflare D1 | 端侧以通讯录索引密钥对目标 `cid_number` 做 HMAC-SHA256 得到的 64 位 hex；只用于密文 CRUD，不能替代联系人永久 CID |
 | 收款人姓名 | `recipient_name` | QR body | 用户转账二维码中的收款人姓名 |
 | 操作机构 CID 号 | `actor_cid_number` | credential / call data | 当前操作机构唯一主键；目标授权必须继续携带/解析 `role_code` 并形成完整 `RoleSubject`，不得仅凭该 CID 的 admins 授权 |
 | 业务作用域省名称 | `scope_province_name` | OnChina auth API / frontend auth state | 注册局管理员登录态的省级授权作用域 |
 | 业务作用域市名称 | `scope_city_name` | OnChina auth API / frontend auth state | 注册局管理员登录态的市级授权作用域，可为空 |
 | 平台会员等级 | `membership_level` | subscription call / storage / API / SQL | 平台会员档位，统一为 `freedom` / `democracy` / `spark` |
-| 创作者档位 ID | `tier_id` | subscription call / storage / API / SQL | 创作者账户内稳定唯一的付款档位 ID |
+| 创作者档位 ID | `tier_id` | subscription call / storage / API / SQL | 创作者 CID 内稳定唯一的付款档位 ID |
 | 周期价格列表 | `prices_fen` | subscription storage / API / JSON | 每个档位的计费周期和分单位价格集合 |
 | 计费周期 | `billing_period` | subscription call / storage / API / SQL | `monthly` / `quarterly` / `yearly` |
 | 预期价格（分） | `expected_price_fen` | subscription call data | 首扣和换套餐入块价格保护，不作为续费价格真源 |
-| 待生效套餐 | `pending_plan` | subscription storage / API / SQL | 下一次成功续费时原子替换当前套餐 |
 | 首次扣款时间 | `started_at` | subscription storage / API / SQL | 首次成功扣款所在 finalized 区块的共识 unix 毫秒时间戳 |
 | 最近扣款价格（分） | `last_charged_price_fen` | subscription storage / API / SQL | 最近成功扣款审计值 |
 | 最近扣款时间 | `last_charged_at` | subscription storage / API / SQL | 最近成功扣款的共识 unix 毫秒时间 |
 | 已付权益截止时间 | `paid_until` | subscription storage / API / SQL | runtime 按 UTC 真实公历计算的 unix 毫秒独占上界 |
-| 订阅状态 | `subscription_status` | subscription storage / API / SQL | `active` / `cancelled` / `terminated` |
+| 订阅状态 | `subscription_status` | subscription storage / API / SQL | `active` / `cancelled` / `terminated` / `suspended` / `creatorPaused` |
+| 订阅挂起原因 | `suspend_reason` | subscription storage / API | `needReconsent` / `insufficientBalance` / `identityBindingUnavailable` |
 | 签名 | `signature` | credential / call data | 凭证签名 |
 | 主体 ID | `account_id` | call data / storage key | 管理员主体统一 ID |
 | QR 协议版本 | `p` | QR envelope | 固定 `QR_V1` |
@@ -702,8 +707,9 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 公钥 | `u` | `k=1/2` body | 32B 公钥 base64url |
 | Payload | `d` | `k=1` body | 待签 payload bytes base64url |
 | 签名 | `s` | `k=2` body | 64B 签名 base64url |
-| 钱包地址 | `address` | `k=3/4` body | SS58 钱包地址 |
-| 联系人姓名 | `contact_name` | `k=3` body | 联系人名 |
+| 公民身份号 | `cid_number` | `k=3` body | 永久 CID；与 SS58 派生 AccountId 闭环核验 |
+| SS58 地址 | `ss58_address` | `k=3/4` body | prefix 2027 展示地址，只用于边界输入输出 |
+| 公开昵称 | `display_name` | `k=3` body | 用户公开昵称，只作展示 |
 | 收款人姓名 | `recipient_name` | `k=4` body | 收款人名 |
 | 收款金额 | `amount` | `k=4` body | 字符串金额 |
 | 币种 | `symbol` | `k=4` body | 当前 `GMB` |

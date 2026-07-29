@@ -157,7 +157,8 @@ function assertContactRequest(value: unknown): ContactCiphertextRequest {
   }
   const fields = Object.keys(value);
   if (fields.some((field) => !CONTACT_BODY_FIELDS.has(field))) {
-    // 明文账户、名称以及客户端自报属主键一律拒绝，避免它们进入 Worker 业务处理链。
+    // 联系人 CID、账户、SS58、私人备注及客户端自报属主键一律拒绝，
+    // 避免任何关系明文进入 Worker 业务处理链。
     throw new HttpError(400, 'invalid_contact_request', '通讯录接口只接受密文字段');
   }
   return value as ContactCiphertextRequest;

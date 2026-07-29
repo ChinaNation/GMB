@@ -40,15 +40,15 @@ export interface PlatformSubscriptionConfirmDeps {
   ) => Promise<VerifiedFinalizedTransaction>;
   readSubscriptionAtBlock: (
     env: Env,
-    accountId: string,
+    cidNumber: string,
     blockHash: string,
   ) => Promise<ChainSubscriptionState | null>;
 }
 
 const defaultConfirmDeps: PlatformSubscriptionConfirmDeps = {
   verifyTransaction: verifyFinalizedSubscriptionTransaction,
-  readSubscriptionAtBlock: (env, accountId, blockHash) =>
-    readSubscriptionAtBlock(env, accountId, { kind: "platform" }, blockHash),
+  readSubscriptionAtBlock: (env, cidNumber, blockHash) =>
+    readSubscriptionAtBlock(env, cidNumber, { kind: "platform" }, blockHash),
 };
 
 /** POST /v1/square/membership/confirm —— finalized 平台订阅镜像（严格幂等）。 */
@@ -72,7 +72,7 @@ export async function platformSubscriptionConfirmRoute(
   );
   const state = await deps.readSubscriptionAtBlock(
     env,
-    session.account_id,
+    session.cid_number,
     transaction.blockHash,
   );
   assertPlatformStateMatches(state, action, membershipLevel);

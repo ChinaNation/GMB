@@ -101,12 +101,8 @@ class SquareChainService implements SquarePostChainPublisher {
 
   Future<String?> fetchNormalCitizenCidNumber(String accountId) async {
     final identity = await _identityChainReader.readByAccountId(accountId);
-    // 匿名已注册(votingIdentity == null)不是投票公民,广场身份判定按无有效身份处理。
-    final voting = identity?.votingIdentity;
-    if (voting == null || !votingIdentityIsActive(voting)) {
-      return null;
-    }
-    return identity!.cidNumber;
+    // 广场普通帖子只要求 active CID；匿名已注册同样拥有稳定的 CID 归属。
+    return identity?.cidNumber;
   }
 
   /// 读链上身份档：有效投票身份的 cid + 是否竞选公民。
@@ -115,10 +111,13 @@ class SquareChainService implements SquarePostChainPublisher {
     String accountId,
   ) async {
     final identity = await _identityChainReader.readByAccountId(accountId);
-    // 匿名已注册(votingIdentity == null)在广场身份判定里仍归 visitor(不升级徽章)。
+    // 匿名已注册仍暴露 CID 作为帖子归属，但不升级投票/竞选身份徽章。
     final voting = identity?.votingIdentity;
     if (voting == null || !votingIdentityIsActive(voting)) {
-      return (cidNumber: null, identityLevel: 'visitor');
+      return (
+        cidNumber: identity?.cidNumber,
+        identityLevel: 'visitor',
+      );
     }
     return (
       cidNumber: identity!.cidNumber,

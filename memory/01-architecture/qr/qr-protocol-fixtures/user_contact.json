@@ -2,7 +2,8 @@
   "p": "QR_V1",
   "k": 3,
   "b": {
-    "ss58_address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-    "contact_name": "张三"
+    "cid_number": "CN001-CTZN-000000001-2026",
+    "ss58_address": "w5FhUDLW4BxsE1QXK4sNjPZ8rqSnK2QeVpUfXzqczpWdxChxV",
+    "display_name": "晨光寻路者"
   }
 }

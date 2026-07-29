@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
@@ -7,12 +8,15 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/user_qr_page.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 
 import 'fake_profile.dart';
+
+const String _profileCidNumber = 'CN001-CTZN-000000001-2026';
 
 /// 身份账户缓存 fake：resolve/accountId 返回 null，让 _resolveOwnAccount 回退成
 /// 「非本人」（行为与迁移前一致）；避免 instance 触发真链读/真 Isar。
@@ -31,7 +35,7 @@ Widget _wrap({
 }) {
   return MaterialApp(
     home: UserProfilePage(
-      cidNumber: kOwner,
+      cidNumber: _profileCidNumber,
       isSelf: isSelf,
       api: api,
       cache: cache ?? FakeProfileCache(),
@@ -41,14 +45,28 @@ Widget _wrap({
 }
 
 void main() {
+  String? copiedText;
+
   setUp(() {
+    copiedText = null;
     IdentityAccountCache.debugInstance = _NullIdentityCache();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copiedText =
+            (call.arguments as Map<Object?, Object?>)['text'] as String?;
+      }
+      return null;
+    });
   });
 
-  tearDown(IdentityAccountCache.resetDebugInstance);
+  tearDown(() {
+    IdentityAccountCache.resetDebugInstance();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
+  });
 
-  testWidgets('missing public name uses local nickname and keeps account below',
-      (tester) async {
+  testWidgets('公开昵称、SS58、CID 与三项计数按身份语义展示', (tester) async {
     await tester.pumpWidget(
       _wrap(
         isSelf: false,
@@ -57,10 +75,45 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final fallback = ProfilePresentation.forAccountId(kOwner).fallbackName;
+    final fallback =
+        ProfilePresentation.forAccountId(_profileCidNumber).fallbackName;
+    final ss58Address = ss58FromAccountIdText(kOwner);
     expect(find.text(fallback), findsWidgets);
-    expect(find.textContaining(kOwner.substring(0, 6)), findsOneWidget);
+    expect(find.text('SS58：$ss58Address'), findsOneWidget);
+    expect(find.text('CID：$_profileCidNumber'), findsOneWidget);
     expect(find.text(kOwner), findsNothing);
+    expect(find.textContaining('2 关注'), findsOneWidget);
+    expect(find.textContaining('128 关注者'), findsOneWidget);
+    expect(find.textContaining('36 帖子'), findsOneWidget);
+    // CID 没有复制入口，整张资料卡只允许复制 SS58。
+    expect(find.byTooltip('复制 SS58 地址'), findsOneWidget);
+    expect(find.byIcon(Icons.copy), findsOneWidget);
+
+    await tester.tap(find.byTooltip('复制 SS58 地址'));
+    await tester.pump();
+    expect(copiedText, ss58Address);
+    expect(find.text('SS58 地址已复制'), findsOneWidget);
+  });
+
+  testWidgets('非法账户从严隐藏复制入口且窄屏不溢出', (tester) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _wrap(
+        isSelf: false,
+        api: FakeProfileApi(sampleProfile(accountId: 'invalid-account-id')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('SS58：暂不可用'), findsOneWidget);
+    expect(find.text('CID：$_profileCidNumber'), findsOneWidget);
+    expect(find.byTooltip('复制 SS58 地址'), findsNothing);
+    expect(copiedText, isNull);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -263,7 +316,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UserProfilePage(
-          cidNumber: kOwner,
+          cidNumber: _profileCidNumber,
           isSelf: false,
           api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
           cache: FakeProfileCache(),
@@ -291,7 +344,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UserProfilePage(
-          cidNumber: kOwner,
+          cidNumber: _profileCidNumber,
           isSelf: false,
           api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
           cache: FakeProfileCache(),

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart'
+    show SquareSession;
 import 'package:citizenapp/my/creator/creator_api.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart'
@@ -46,28 +48,28 @@ class CreatorSubscribeService {
   final SharedPreferences? _preferences;
 
   Future<FinalizedSubscriptionSnapshot> fetchFinalizedState({
-    required String subscriberAccountId,
-    required String creatorAccountId,
+    required String subscriberCidNumber,
+    required String creatorCidNumber,
   }) async {
-    await _retryPendingMirrors(subscriberAccountId);
+    await _retryPendingMirrors();
     return _rpc.fetchSubscriptionSnapshot(
-      subscriberAccountId: subscriberAccountId,
-      creatorAccountId: creatorAccountId,
+      subscriberCidNumber: subscriberCidNumber,
+      creatorCidNumber: creatorCidNumber,
     );
   }
 
-  Future<List<ChainCreatorTier>> fetchCreatorPlans(String creatorAccountId) =>
-      _rpc.fetchCreatorPlans(creatorAccountId);
+  Future<List<ChainCreatorTier>> fetchCreatorPlans(String creatorCidNumber) =>
+      _rpc.fetchCreatorPlans(creatorCidNumber);
 
-  /// 读某账户的平台会员 finalized 快照（不传创作者主体即平台 IssuerKey）。
+  /// 读某 CID 的平台会员 finalized 快照（不传创作者主体即平台 IssuerKey）。
   /// 供他人主页订阅按钮判定被查看创作者本人平台会员是否仍有效（订阅按钮门禁）。
   Future<FinalizedSubscriptionSnapshot> fetchPlatformSnapshot(
-          String accountId) =>
-      _rpc.fetchSubscriptionSnapshot(subscriberAccountId: accountId);
+          String cidNumber) =>
+      _rpc.fetchSubscriptionSnapshot(subscriberCidNumber: cidNumber);
 
   /// 订阅创作者某档某周期（priceFen=该档该周期价，分）。
   Future<void> subscribe({
-    required String creatorAccountId,
+    required String creatorCidNumber,
     required String tierId,
     required String period,
     required int priceFen,
@@ -75,18 +77,20 @@ class CreatorSubscribeService {
   }) async {
     await _requireHotWallet();
     final identity = await _requireIdentity();
-    if (identity.accountId == creatorAccountId) {
+    final session = await _requireCurrentSession(identity.accountId);
+    if (session.cidNumber == creatorCidNumber) {
       throw const CreatorSubscribeException('不能订阅自己');
     }
     try {
       final result = await _rpc.subscribeCreator(
         fromSs58Address: identity.ss58Address,
         signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
-        creatorAccountId: creatorAccountId,
+        creatorCidNumber: creatorCidNumber,
         tierId: tierId,
         billingPeriod: period,
         expectedPriceFen: BigInt.from(priceFen),
-        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
+        sign: (payload) =>
+            _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
@@ -95,7 +99,7 @@ class CreatorSubscribeService {
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
         action: 'subscribe',
-        creatorAccountId: creatorAccountId,
+        creatorCidNumber: creatorCidNumber,
         tierId: tierId,
         billingPeriod: period,
       );
@@ -110,7 +114,7 @@ class CreatorSubscribeService {
 
   /// 取消对某创作者的订阅（撤销按月扣款授权）。
   Future<void> cancel({
-    required String creatorAccountId,
+    required String creatorCidNumber,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     await _requireHotWallet();
@@ -119,8 +123,9 @@ class CreatorSubscribeService {
       final result = await _rpc.cancelCreator(
         fromSs58Address: identity.ss58Address,
         signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
-        creatorAccountId: creatorAccountId,
-        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
+        creatorCidNumber: creatorCidNumber,
+        sign: (payload) =>
+            _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
@@ -129,7 +134,7 @@ class CreatorSubscribeService {
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
         action: 'cancel',
-        creatorAccountId: creatorAccountId,
+        creatorCidNumber: creatorCidNumber,
       );
     } on SecureSeedException catch (e) {
       throw CreatorSubscribeException(seedSignErrorMessage(e));
@@ -142,7 +147,7 @@ class CreatorSubscribeService {
 
   /// 更换创作者档位或周期；同一换档业务只提交这一笔账户签名交易。
   Future<void> changePlan({
-    required String creatorAccountId,
+    required String creatorCidNumber,
     required String tierId,
     required String period,
     required int priceFen,
@@ -150,18 +155,20 @@ class CreatorSubscribeService {
   }) async {
     await _requireHotWallet();
     final identity = await _requireIdentity();
-    if (identity.accountId == creatorAccountId) {
+    final session = await _requireCurrentSession(identity.accountId);
+    if (session.cidNumber == creatorCidNumber) {
       throw const CreatorSubscribeException('不能订阅自己');
     }
     try {
       final result = await _rpc.changeCreatorPlan(
         fromSs58Address: identity.ss58Address,
         signerPublicKey: Uint8List.fromList(hexToBytes(identity.accountId)),
-        creatorAccountId: creatorAccountId,
+        creatorCidNumber: creatorCidNumber,
         tierId: tierId,
         billingPeriod: period,
         expectedPriceFen: BigInt.from(priceFen),
-        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
+        sign: (payload) =>
+            _wallet.signForAccountId(identity.accountId, payload),
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
@@ -170,7 +177,7 @@ class CreatorSubscribeService {
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
         action: 'change',
-        creatorAccountId: creatorAccountId,
+        creatorCidNumber: creatorCidNumber,
         tierId: tierId,
         billingPeriod: period,
       );
@@ -193,13 +200,21 @@ class CreatorSubscribeService {
 
   /// 身份账户（CID 绑定账户，单源 [IdentityAccountCache]）：创作者订阅交易的唯一签名者。
   /// 与 [SquareSessionProvider.ensureSession] 同口径，`_confirm` 的证明键与
-  /// `session.accountId` 校验天然一致；自订阅拦截也据身份账户比对。
+  /// `session.accountId` 校验天然一致；自订阅拦截按不可换绑的 CID 比对。
   Future<ResolvedIdentity> _requireIdentity() async {
     final identity = await IdentityAccountCache.instance.resolve();
     if (identity == null) {
       throw const CreatorSubscribeException('请先在「我的 → 我的钱包」创建热钱包');
     }
     return identity;
+  }
+
+  Future<SquareSession> _requireCurrentSession(String accountId) async {
+    final session = await _session.ensureSession();
+    if (session == null || session.accountId != accountId) {
+      throw const CreatorSubscribeException('当前会话与默认热钱包不一致，请重新登录');
+    }
+    return session;
   }
 
   Future<SharedPreferences> get _prefs async {
@@ -218,7 +233,7 @@ class CreatorSubscribeService {
     required String blockHashHex,
     required String signedExtrinsicHex,
     required String action,
-    required String creatorAccountId,
+    required String creatorCidNumber,
     String? tierId,
     String? billingPeriod,
   }) async {
@@ -227,7 +242,7 @@ class CreatorSubscribeService {
       'block_hash': blockHashHex,
       'signed_extrinsic_hex': signedExtrinsicHex,
       'action': action,
-      'creator_account_id': creatorAccountId,
+      'creator_cid_number': creatorCidNumber,
       if (tierId != null) 'tier_id': tierId,
       if (billingPeriod != null) 'billing_period': billingPeriod,
     };
@@ -245,7 +260,7 @@ class CreatorSubscribeService {
         blockHashHex: blockHashHex,
         signedExtrinsicHex: signedExtrinsicHex,
         action: action,
-        creatorAccountId: creatorAccountId,
+        creatorCidNumber: creatorCidNumber,
         tierId: tierId,
         billingPeriod: billingPeriod,
       );
@@ -255,22 +270,23 @@ class CreatorSubscribeService {
     }
   }
 
-  Future<void> _retryPendingMirrors(String accountId) async {
+  Future<void> _retryPendingMirrors() async {
     try {
       final session = await _session.ensureSession();
-      if (session == null || session.accountId != accountId) return;
+      if (session == null) return;
+      final accountId = session.accountId;
       final pending = await _readList(_pendingKey(accountId));
       for (final proof in List<Map<String, dynamic>>.from(pending)) {
         final txHash = proof['tx_hash'];
         final blockHashHex = proof['block_hash'];
         final signedExtrinsicHex = proof['signed_extrinsic_hex'];
         final action = proof['action'];
-        final creatorAccountId = proof['creator_account_id'];
+        final creatorCidNumber = proof['creator_cid_number'];
         if (txHash is! String ||
             blockHashHex is! String ||
             signedExtrinsicHex is! String ||
             action is! String ||
-            creatorAccountId is! String) {
+            creatorCidNumber is! String) {
           continue;
         }
         await _api.confirmCreatorSubscription(
@@ -279,7 +295,7 @@ class CreatorSubscribeService {
           blockHashHex: blockHashHex,
           signedExtrinsicHex: signedExtrinsicHex,
           action: action,
-          creatorAccountId: creatorAccountId,
+          creatorCidNumber: creatorCidNumber,
           tierId: proof['tier_id'] as String?,
           billingPeriod: proof['billing_period'] as String?,
         );

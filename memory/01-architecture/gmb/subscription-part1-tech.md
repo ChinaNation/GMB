@@ -8,7 +8,8 @@
 
 平台订阅和创作者订阅统一使用公民币付款，并复用现有 `SquarePost` pallet。订阅期限和自动扣款都以区块唯一的共识 unix 毫秒时间戳为依据；runtime 使用确定性的 UTC 公历算法计算月、季、年，绝不使用区块高度、固定天数或固定毫秒替代真实日期。
 
-现有链和全部无关状态必须保留。禁止重新创世、替换 chainspec、清空链数据库、恢复旧订阅格式或建立双轨兼容。
+当前处于开发期零用户阶段，本契约随全网重新创世直接启用。禁止 storage migration、
+旧键读取、旧订阅格式和任何双轨兼容。
 
 ## 2. 系统边界
 
@@ -29,7 +30,7 @@ CitizenApp 对订阅、取消、换套餐以及创作者覆盖设置自己的套
 - 路径：`citizenchain/runtime/misc/square-post/`
 - pallet：`SquarePost`
 - pallet index：`34 / 0x22`
-- 发帖和订阅共享 pallet，但类型、storage、扣款、迁移和治理代码分文件维护。
+- 发帖和订阅共享 pallet，但类型、storage、扣款和治理代码分文件维护。
 - 不新建订阅 pallet；使用有界到期索引和确定性整数公历算法，不引入外部日历服务。
 
 ## 4. 类型与 SCALE 契约
@@ -38,7 +39,7 @@ CitizenApp 对订阅、取消、换套餐以及创作者覆盖设置自己的套
 
 ```rust
 enum MembershipLevel { Freedom = 0, Democracy = 1, Spark = 2 }
-enum IssuerKey<AccountId> { Platform = 0, Creator(AccountId) = 1 }
+enum IssuerKey<CidNumber> { Platform = 0, Creator(CidNumber) = 1 }
 enum BillingPeriod { Monthly = 0, Quarterly = 1, Yearly = 2 }
 ```
 
@@ -83,6 +84,7 @@ enum SubscriptionStatus {
 enum SuspendReason {
     NeedReconsent = 0,
     InsufficientBalance = 1,
+    IdentityBindingUnavailable = 2,
 }
 
 struct SubscriptionState {
@@ -101,7 +103,8 @@ struct SubscriptionState {
 
 - `Active`：授权有效且在续费调度内。
 - `Cancelled`：用户签名取消，保留当前已付权益至 `paid_until`。
-- `Suspended`：暂停续扣、保留粉丝关系、退出调度，等用户动作恢复；`suspend_reason` 说明原因（创作者改价待再签名 / 余额不足待充值再签）。
+- `Suspended`：暂停续扣、保留粉丝关系、退出调度，等用户动作恢复；`suspend_reason`
+  说明原因（创作者改价待再签名 / 余额不足待充值再签 / CID 当前双向绑定不可用）。
 - `CreatorPaused`：创作者掉平台会员，粉丝暂停扣费但**仍留调度**，创作者恢复即自动续。
 - `Terminated`：仅显式关闭/清档，不由余额不足或掉会员自动进入。
 - `authorized_price_fen`：订阅者已授权用于自动续费的价格（创作者改价重签检测与换挡折算基准）。
@@ -109,11 +112,11 @@ struct SubscriptionState {
 ## 5. Storage
 
 ```rust
-Subscriptions<(AccountId, IssuerKey)> -> SubscriptionState
+Subscriptions<(SubscriberCidNumber, IssuerKey<CidNumber>)> -> SubscriptionState
 PlatformPrice<MembershipLevel> -> u128        // 创世 genesis_build 播种，仅内部投票可改
-CreatorPlans<AccountId> -> CreatorTiers
-RenewalSchedule<(due_at_be, AccountId, IssuerKey)> -> ()
-RenewalIndex<(AccountId, IssuerKey)> -> due_at
+CreatorPlans<CreatorCidNumber> -> CreatorTiers
+RenewalSchedule<(due_at_be, SubscriberCidNumber, IssuerKey<CidNumber>)> -> ()
+RenewalIndex<(SubscriberCidNumber, IssuerKey<CidNumber>)> -> due_at
 ```
 
 平台机构 CID 永久固定为**创世常量**（公民链基金会 `CITIZENCHAIN_FOUNDATION`），不是可写存储；无 `PlatformCidNumber` 存储、无迁移（开发期零用户、重新创世）。`RenewalSchedule` 用大端时间戳键保持到期顺序，`RenewalIndex` 保证每个订阅只有一个当前到期项。不保存下次扣款区块、外部续费账户、设备状态、链下扣款密钥或第二份展示套餐。
@@ -134,19 +137,26 @@ RenewalIndex<(AccountId, IssuerKey)> -> due_at
 
 1. CitizenApp 从 finalized storage 读取当前价格。
 2. CitizenApp 提交 `subscribe`；runtime 重新读取当前价格并校验 `expected_price_fen`。
-3. runtime 在同一 storage layer 完成转账，以当前区块唯一 `Timestamp.Now` 写入 `started_at`、`last_charged_at` 和审计价格。
+3. runtime 从 signed origin 解析 active `subscriber_cid_number`，以 CID 写订阅键，并在同一
+   storage layer 从该笔交易签名账户首扣；以当前区块唯一 `Timestamp.Now` 写入
+   `started_at`、`last_charged_at` 和审计价格。
 4. runtime 按 UTC 真实公历计算 `paid_until`，写入 `Active`，并把该到期时间登记到调度索引。
 5. CitizenApp 等待交易 finalized 后读取并显示链上 `started_at` 与 `paid_until`；不再提交第二笔确认交易。
 
-平台收款账户从**创世常量** CID + `RESERVED_NAME_FEE` 派生（公民链基金会费用账户，创世已播种）。创作者订阅款全额进入创作者钱包，不能订阅自己，且创作者必须在扣款时拥有有效平台订阅。
+平台收款账户从**创世常量** CID + `RESERVED_NAME_FEE` 派生（公民链基金会费用账户，
+创世已播种）。创作者以 `creator_cid_number` 定位，扣款时解析其当前双向绑定账户并全额
+收款；自订阅按 CID 拒绝，且创作者必须拥有有效平台订阅。
 
 ## 8. runtime 自动续费
 
 1. 续费在 `on_idle(remaining_weight)` 执行（Timestamp inherent 已于其前写入，可读本块共识时间戳）；不再用 `on_finalize` 固定处理量，也不静态预留最坏权重。
 2. runtime 从最早到期项开始处理 `due_at <= now`，单块处理量按**当块剩余权重**动态排空（`limit = min(remaining/单笔权重, MaxSubscriptionRenewalsPerBlock backstop)`）；超大同刻促发多块分摊。
-3. 每个周期扣款均读取当时最新链上价格；平台治理改价自动按新价续。创作者改价（当前价 ≠ `authorized_price_fen`）则**不自动续**，转 `Suspended(NeedReconsent)` 待订阅者再签名。
-4. 停链期间无法发生状态变更；恢复出块后按到期顺序补扣所有已到期周期，未完成部分在后续区块继续。
-5. 续费失败按原因分流（不再一律 `Terminated`）：余额不足 → `Suspended(InsufficientBalance)`（离调度）；创作者掉平台会员 → `CreatorPaused`（留调度、下周期重试、恢复即续）；档位/周期删除 → `Suspended(NeedReconsent)`；公历换算失效等 → `Terminated`。
+3. 每次续费先由 `subscriber_cid_number` 解析并复核当前双向绑定账户，只能从当前账户
+   扣款；绑定缺失、CID inactive 或双向不一致时转
+   `Suspended(IdentityBindingUnavailable)`，绝不回退扣历史账户。
+4. 每个周期扣款均读取当时最新链上价格；平台治理改价自动按新价续。创作者改价（当前价 ≠ `authorized_price_fen`）则**不自动续**，转 `Suspended(NeedReconsent)` 待订阅者再签名。
+5. 停链期间无法发生状态变更；恢复出块后按到期顺序补扣所有已到期周期，未完成部分在后续区块继续。
+6. 续费失败按原因分流（不再一律 `Terminated`）：余额不足 → `Suspended(InsufficientBalance)`（离调度）；创作者掉平台会员 → `CreatorPaused`（留调度、下周期重试、恢复即续）；档位/周期删除 → `Suspended(NeedReconsent)`；公历换算失效等 → `Terminated`。
 
 续费不需要账户再次签名，不依赖 CitizenApp、设备或 Cloudflare 在线，也不存在任何外部续费提交者。
 
@@ -163,7 +173,9 @@ RenewalIndex<(AccountId, IssuerKey)> -> due_at
 - `set_creator_plans` 覆盖式写入创作者自己的链上付款字段。
 - 新订阅和下一次真实续费读取最新价格；当前已付周期不变。
 - 创作者在 CitizenApp 同一次业务提交中填写档位标识、名称和周期价格，并只签名一次 `set_creator_plans` 交易；finalized 后 App 把交易哈希、区块哈希和完整已签名 extrinsic 连同展示资料提交给 Cloudflare，Worker 严格复核交易包含关系和同一区块链上状态后保存镜像。
-- Cloudflare 展示资料必须引用 finalized 的 `creator_account_id + tier_id`，不得保存第二份扣款真源价格；finalized 后的镜像只用 Bearer 会话和链读复核，不生成设备请求签名。边缘保存失败只能重试镜像 HTTP，不得再次签名或重复提交链上交易。
+- Cloudflare 展示资料必须引用 finalized 的 `creator_cid_number + tier_id`；`creator_account_id`
+  仅可作为该笔交易或当前收款账户的审计字段，不参与业务定位。边缘不得保存第二份扣款真源
+  价格；finalized 后的镜像只用 Bearer 会话和链读复核，不生成设备请求签名。
 - `propose_set_platform_price` 只调用统一内部投票引擎；人口快照、资格、计票和状态推进不进入业务 pallet。
 
 ## 11. 信任边界
@@ -172,8 +184,12 @@ RenewalIndex<(AccountId, IssuerKey)> -> due_at
 
 ## 12. Cloudflare/D1
 
-- 钱包账户是所有镜像的业务主键；平台订阅主键为 `account_id`，创作者档位主键为 `(creator_account_id, tier_id)`，创作者订阅主键为 `(subscriber_account_id, creator_account_id)`。
-- confirm 请求固定携带 `tx_hash`、`block_hash`、`signed_extrinsic_hex` 和业务动作；订阅或换档携带目标档位，创作者订阅同时携带 `creator_account_id`、`tier_id`、`billing_period`，创作者套餐保存同时携带展示档位数组。
+- CID 是所有用户订阅镜像的业务主键：平台订阅主键为 `cid_number`，创作者档位主键为
+  `(creator_cid_number, tier_id)`，创作者订阅主键为
+  `(subscriber_cid_number, creator_cid_number)`。
+- confirm 请求固定携带 `tx_hash`、`block_hash`、`signed_extrinsic_hex` 和业务动作；订阅或换档
+  携带目标档位，创作者订阅同时携带 `creator_cid_number`、`tier_id`、
+  `billing_period`，创作者套餐保存同时携带展示档位数组。
 - Worker 重新计算 extrinsic 哈希，严格解码签名者、pallet/call index 与 SCALE 参数，校验签名者等于 Bearer 会话钱包、指定区块属于 finalized 主链且确实包含该完整 extrinsic，再读取同一区块 `Timestamp.Now`、`Subscriptions` 或 `CreatorPlans`。请求中的价格、状态和期限从不作为真源。
 - `chain_transaction_confirmations` 将一笔 finalized 交易首次绑定到钱包、区块、extrinsic 序号、动作和规范化请求哈希；完全相同的 HTTP 重试幂等成功，同一交易换钱包、换动作或换展示资料一律冲突拒绝。
 - `square_memberships` 和 `square_creator_subscriptions` 镜像完整链上状态、finalized 锚点及最近一次交易哈希；`last_charged_price_fen` 只是已发生扣款的审计镜像，不能作为下一次扣款价格真源。
@@ -184,30 +200,13 @@ RenewalIndex<(AccountId, IssuerKey)> -> due_at
 - CitizenApp 按钱包保存最近 finalized 证明和有界镜像待重试队列；App 再次运行时只重试 Bearer HTTP，不再次签名或提交链上交易。Cloudflare 不可用不阻断链上订阅操作。
 - 直接端到端 P2P 媒体不占用 Cloudflare 存储或中转，App 的发送端与接收端仍执行本地大小门禁；这类端到端数据不应被表述为 Cloudflare 可集中强制的订阅权益。Cloudflare 承载的上传、存储、中转和签名 URL 则全部由服务端门禁强制执行。
 
-## 13. 原地 runtime 升级
+## 13. 重新创世
 
-### pre-upgrade
-
-- 在正式链数据库副本读取当前 runtime 和 SquarePost StorageVersion。
-- 断言旧 `Subscriptions`、退役到期索引和相关订阅前缀为空。
-- 快照帖子、发布计数、账户、余额、总发行量、平台价格和平台 CID。
-- 发现任何旧订阅数据即阻断，不转换、不删除。
-
-### on-runtime-upgrade
-
-- 仅在旧订阅相关前缀全部为空时执行。
-- 精确清理退役 keeper 单值。
-- 仅对缺失的平台价格做缺省回填，已有值不覆盖。
-- 保留平台 CID；缺失时继续 fail-closed。
-- 写入目标 StorageVersion，并清除迁移阻断标志。
-
-### post-upgrade
-
-- 校验目标 StorageVersion、空订阅状态和未阻断状态。
-- 校验帖子、发布计数、账户、总发行量、平台 CID 与升级前一致。
-- 校验平台价格仅按“缺失回填、已有保留”变化。
-
-正式升级前必须在链数据库副本完成 TryRuntime pre/post；不得把编译通过等同于升级验收。
+- 开发期全网重新创世直接生成 CID 键布局，不读取、转换或保留任何 AccountId 旧键。
+- SquarePost 不提供 storage migration、兼容枚举、旧 call 或双轨查询。
+- 同批重建 Worker D1 与 KV；边缘镜像全部由新链 finalized 状态重新生成。
+- 创世后必须以真实本地链验证：CID A 绑定账户 1 完成订阅，换绑到账户 2 后关系不变，
+  自动续费只扣账户 2；CID 或双向绑定不可用时不得扣账户 1。
 
 ## 14. CitizenApp 与签名体验
 
@@ -236,7 +235,7 @@ RenewalIndex<(AccountId, IssuerKey)> -> due_at
 ## 15. 真实验收
 
 - runtime 单元测试、金标 SCALE、benchmark 编译、完整 runtime 测试和 WASM 构建通过。
-- 在真实链数据库副本确认旧 StorageVersion、订阅相关前缀为空及迁移 pre/post 不变量。
+- 在全新本地链确认 SquarePost 只生成 CID 键，不存在 AccountId 旧键或迁移入口。
 - runtime 覆盖月末、闰年、跨年、季和年周期计算、自动续费、停链后补扣和余额不足终止。
 - Cloudflare 严格解码新状态，拒绝尾随字节和非法标签，且不包含任何日期计算。
 - Cloudflare 必须验证 finalized 主链中完整已签名 extrinsic、同一区块状态和首次请求绑定；旧区块证明不能刷新链时钟。

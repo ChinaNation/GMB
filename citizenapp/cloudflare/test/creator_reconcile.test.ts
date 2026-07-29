@@ -10,7 +10,7 @@ const POINT = {
   observedAt: 10_000,
 };
 
-// 复合主键落在身份 cid 上;回链读订阅仍按各自绑定账户 account_id。两套键分离。
+// 复合主键与链上读取都只使用 CID；account 仅模拟 D1 里的历史审计字段。
 interface Party {
   cid: string;
   account: string;
@@ -46,9 +46,7 @@ interface Row {
   verified_at: number;
 }
 
-// 行主键 = 双 cid;链读键 = 双 account。
 const rowKey = (subscriberCid: string, creatorCid: string) => `${subscriberCid}|${creatorCid}`;
-const acctKey = (subscriberAccount: string, creatorAccount: string) => `${subscriberAccount}|${creatorAccount}`;
 
 class FakeDb {
   rows = new Map<string, Row>();
@@ -74,7 +72,7 @@ class FakeStmt {
   bind(...args: unknown[]): FakeStmt { this.args = args; return this; }
 
   async all<T>(): Promise<{ results: T[] }> {
-    if (this.sql.includes("SELECT subscriber_cid_number, creator_cid_number, subscriber_account_id, creator_account_id")) {
+    if (this.sql.includes("SELECT subscriber_cid_number, creator_cid_number")) {
       const [chainTimestamp, limit] = this.args as [number, number];
       const results = [...this.db.rows.values()]
         .filter((row) => row.subscription_status === "active" && row.paid_until <= chainTimestamp)
@@ -83,8 +81,6 @@ class FakeStmt {
         .map((row) => ({
           subscriber_cid_number: row.subscriber_cid_number,
           creator_cid_number: row.creator_cid_number,
-          subscriber_account_id: row.subscriber_account_id,
-          creator_account_id: row.creator_account_id,
         }));
       return { results: results as unknown as T[] };
     }
@@ -138,9 +134,10 @@ function deps(
 ): ReconcileDeps {
   return {
     finalizedPoint: async () => POINT,
-    readSubscriptionAtBlock: async (_env, subscriberAccount, issuer) => {
-      const creatorAccount = issuer.kind === "creator" ? issuer.creatorAccountId : "";
-      const key = acctKey(subscriberAccount, creatorAccount);
+    readSubscriptionAtBlock: async (_env, subscriberCidNumber, issuer) => {
+      const creatorCidNumber =
+        issuer.kind === "creator" ? issuer.creatorCidNumber : "";
+      const key = rowKey(subscriberCidNumber, creatorCidNumber);
       if (fail.has(key)) throw new Error("chain failed");
       return states[key] ?? null;
     },
@@ -166,8 +163,8 @@ describe("创作者订阅复合主键到期对账", () => {
     db.seed(S1, CREATOR, 7_000);
     db.seed(S2, CREATOR, 8_000);
     await reconcileCreatorSubscriptions(env(db), deps({
-      [acctKey(S1.account, CREATOR.account)]: active(),
-      [acctKey(S2.account, CREATOR.account)]: null,
+      [rowKey(S1.cid, CREATOR.cid)]: active(),
+      [rowKey(S2.cid, CREATOR.cid)]: null,
     }));
     expect(db.rows.get(rowKey(S1.cid, CREATOR.cid))?.tier_id).toBe("gold");
     expect(db.rows.get(rowKey(S1.cid, CREATOR.cid))?.billing_period).toBe("yearly");
@@ -182,8 +179,8 @@ describe("创作者订阅复合主键到期对账", () => {
     const result = await reconcileCreatorSubscriptions(
       env(db),
       deps(
-        { [acctKey(GOOD.account, CREATOR.account)]: active() },
-        new Set([acctKey(BAD.account, CREATOR.account)]),
+        { [rowKey(GOOD.cid, CREATOR.cid)]: active() },
+        new Set([rowKey(BAD.cid, CREATOR.cid)]),
       ),
     );
     expect(result).toEqual({ scanned: 2, updated: 1, failed: 1 });

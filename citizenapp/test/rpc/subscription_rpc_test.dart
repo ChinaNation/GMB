@@ -12,35 +12,11 @@ Uint8List _bytes(String hex) => Uint8List.fromList([
     ]);
 
 void main() {
-  final creator = Uint8List(32)..fillRange(0, 32, 2);
-  const creatorAccountHex =
-      '0202020202020202020202020202020202020202020202020202020202020202';
+  const creatorCidNumber = 'CN220-CTZN2-900000001-2026';
+  const creatorCidScale =
+      '68434e3232302d43545a4e322d3930303030303030312d32303236';
 
   group('SquarePost 订阅 SCALE', () {
-    test('AccountId 文本只接受小写 0x + 64 位十六进制', () {
-      const accountId = '0x$creatorAccountHex';
-      expect(
-        _hex(SubscriptionRpc.accountIdBytes(accountId)),
-        creatorAccountHex,
-      );
-      expect(
-        () => SubscriptionRpc.accountIdBytes(creatorAccountHex),
-        throwsArgumentError,
-      );
-      expect(
-        () => SubscriptionRpc.accountIdBytes(
-          '0xABABABABABABABABABABABABABABABAB'
-          'ABABABABABABABABABABABABABABABAB',
-        ),
-        throwsArgumentError,
-      );
-      expect(
-        () => SubscriptionRpc.accountIdBytes(
-            '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'),
-        throwsArgumentError,
-      );
-    });
-
     test('平台订阅携带当前签名价', () {
       final call = SubscriptionRpc.buildSubscribePlatformCall(
         SubscriptionRpc.membershipLevelByte('spark'),
@@ -52,16 +28,16 @@ void main() {
       );
     });
 
-    test('创作者订阅只携带账户、tier_id、自然周期和当前签名价', () {
+    test('创作者订阅只携带 CID、tier_id、自然周期和当前签名价', () {
       final call = SubscriptionRpc.buildSubscribeCreatorCall(
-        creator,
+        creatorCidNumber,
         'supporter',
         'monthly',
         BigInt.from(50),
       );
       expect(
         _hex(call),
-        '220101${creatorAccountHex}0124737570706f7274657200'
+        '220101${creatorCidScale}0124737570706f7274657200'
         '32000000000000000000000000000000',
       );
     });
@@ -96,12 +72,12 @@ void main() {
       );
       expect(
         _hex(SubscriptionRpc.buildChangeCreatorPlanCall(
-          creator,
+          creatorCidNumber,
           'supporter',
           'yearly',
           BigInt.from(500),
         )),
-        '220401${creatorAccountHex}0124737570706f7274657202'
+        '220401${creatorCidScale}0124737570706f7274657202'
         'f4010000000000000000000000000000',
       );
     });
@@ -111,7 +87,7 @@ void main() {
           throwsArgumentError);
       expect(
         () => SubscriptionRpc.buildSubscribeCreatorCall(
-          creator,
+          creatorCidNumber,
           '',
           'monthly',
           BigInt.one,
@@ -127,7 +103,7 @@ void main() {
 
   group('SquarePost finalized storage 解码', () {
     test('严格解码平台订阅真态与时间戳', () {
-      // 与 runtime 金标 state_platform 逐字节一致（新布局：无 pending_plan，
+      // 与 runtime 金标 state_platform 逐字节一致（无延迟生效套餐字段，
       // 末尾含 authorized_price_fen + suspend_reason）。
       const stateHex =
           '00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000001c8d5b0000000000000000000000000000';
@@ -152,6 +128,15 @@ void main() {
       expect(suspended.status, 'suspended');
       expect(suspended.suspendReason, 'needReconsent');
       expect(suspended.isEffectiveAt(1701000000000), isFalse);
+
+      const identityUnavailableHex =
+          '00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000031c8d5b000000000000000000000000000102';
+      expect(
+        SubscriptionRpc.decodeSubscriptionState(
+          _bytes(identityUnavailableHex),
+        ).suspendReason,
+        'identityBindingUnavailable',
+      );
 
       // status 字节 00→04（CreatorPaused），suspend_reason 仍 00（None）。
       const creatorPausedHex =
@@ -190,11 +175,11 @@ void main() {
 
     test('Subscriptions 与 CreatorPlans storage key 使用不同真源项', () {
       final subscriptionKey =
-          SubscriptionRpc.buildSubscriptionStorageKey(creator, null);
+          SubscriptionRpc.buildSubscriptionStorageKey(creatorCidNumber, null);
       final creatorPlansKey =
-          SubscriptionRpc.buildCreatorPlansStorageKey(creator);
-      expect(subscriptionKey.length, 81);
-      expect(creatorPlansKey.length, 80);
+          SubscriptionRpc.buildCreatorPlansStorageKey(creatorCidNumber);
+      expect(subscriptionKey.length, 76);
+      expect(creatorPlansKey.length, 75);
       expect(_hex(subscriptionKey), isNot(_hex(creatorPlansKey)));
     });
   });

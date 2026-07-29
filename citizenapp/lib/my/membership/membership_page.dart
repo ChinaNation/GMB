@@ -61,6 +61,7 @@ class _MembershipPageState extends State<MembershipPage>
   bool _busy = false;
   _MembershipViewData _data = const _MembershipViewData(
     accountId: '',
+    cidNumber: '',
     state: _staticMembershipState,
     prices: <String, int>{},
     subscriptionReady: false,
@@ -102,11 +103,13 @@ class _MembershipPageState extends State<MembershipPage>
       }
 
       final accountId = session.accountId;
-      final cached = await _subscriptionService.readDisplaySnapshot(accountId);
+      final cidNumber = session.cidNumber;
+      final cached = await _subscriptionService.readDisplaySnapshot(cidNumber);
       if (cached != null && mounted) {
         _applyViewData(
           _MembershipViewData(
             accountId: accountId,
+            cidNumber: cidNumber,
             state: _withStaticPlans(cached.state),
             prices: cached.prices,
             subscriptionReady: cached.subscriptionFetchedAtMs > 0,
@@ -116,6 +119,7 @@ class _MembershipPageState extends State<MembershipPage>
         _applyViewData(
           _MembershipViewData(
             accountId: accountId,
+            cidNumber: cidNumber,
             state: _staticMembershipState,
             prices: const <String, int>{},
             subscriptionReady: false,
@@ -139,7 +143,7 @@ class _MembershipPageState extends State<MembershipPage>
         refreshes.add(() async {
           try {
             final snapshot =
-                await _subscriptionService.fetchFinalizedState(accountId);
+                await _subscriptionService.fetchFinalizedState(cidNumber);
             refreshedState =
                 _stateFromFinalized(_staticMembershipState, snapshot);
           } on Object catch (error) {
@@ -174,7 +178,7 @@ class _MembershipPageState extends State<MembershipPage>
       );
       if (refreshedState != null || refreshedPrices != null) {
         try {
-          await _subscriptionService.writeDisplaySnapshot(accountId, updated);
+          await _subscriptionService.writeDisplaySnapshot(cidNumber, updated);
         } on Object {
           // 本地缓存失败不影响当前内存态，也不能让静态首屏退回加载页。
         }
@@ -183,6 +187,7 @@ class _MembershipPageState extends State<MembershipPage>
       _applyViewData(
         _MembershipViewData(
           accountId: accountId,
+          cidNumber: cidNumber,
           state: _withStaticPlans(state),
           prices: prices,
           subscriptionReady: updated.subscriptionFetchedAtMs > 0,
@@ -228,7 +233,7 @@ class _MembershipPageState extends State<MembershipPage>
     try {
       // 动权前绕过展示缓存，重新核验 finalized 订阅态和链上价格。
       final snapshot =
-          await _subscriptionService.fetchFinalizedState(_data.accountId);
+          await _subscriptionService.fetchFinalizedState(_data.cidNumber);
       final state = _stateFromFinalized(_staticMembershipState, snapshot);
       final action = _actionFor(state, level);
       final prices = action == _SubscribeAction.cancel
@@ -477,12 +482,14 @@ class _MembershipPageState extends State<MembershipPage>
 class _MembershipViewData {
   const _MembershipViewData({
     required this.accountId,
+    required this.cidNumber,
     required this.state,
     required this.prices,
     required this.subscriptionReady,
   });
 
   final String accountId;
+  final String cidNumber;
   final SquareMembershipState state;
 
   /// 各档链上月价（分，公民币）；缺档表示链上未设该档价，卡片显示占位「—」。

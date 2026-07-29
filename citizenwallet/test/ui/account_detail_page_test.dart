@@ -2,6 +2,9 @@
 // model B 后 C-1 反转:每账户私钥独立隔离,展示单账户私钥安全(默认隐藏,验证后显示)。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenwallet/qr/bodies/user_transfer_body.dart';
+import 'package:citizenwallet/qr/envelope.dart';
+import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/ui/account_detail_page.dart';
 import 'package:citizenwallet/wallet/wallet_manager.dart';
 
@@ -58,5 +61,34 @@ void main() {
     // 取消后弹窗消失,私钥仍隐藏(未展开、未触发 getAccountPrivateKey)。
     expect(find.text('查看私钥'), findsNothing);
     expect(find.text('点击查看私钥'), findsOneWidget);
+  });
+
+  testWidgets('离线账户只生成五分钟 k=4 临时收款码', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: AccountDetailPage(account: account, walletName: '钱包1'),
+    ));
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('显示收款二维码'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('临时收款码，5 分钟内有效'), findsOneWidget);
+  });
+
+  test('离线账户收款载荷严格为五分钟 k=4', () {
+    final qrData = buildOfflineReceiveQr(
+      ss58Address: account.ss58Address,
+      recipientName: '钱包1 · 账户1',
+      nowEpochSeconds: 1000,
+      requestId: 'pay_test',
+    );
+    final envelope = QrEnvelope.parse(qrData);
+    final body = envelope.body as UserTransferBody;
+    expect(envelope.kind, QrKind.userTransfer);
+    expect(envelope.id, 'pay_test');
+    expect(envelope.expiresAt, 1300);
+    expect(body.ss58Address, account.ss58Address);
+    expect(body.recipientName, '钱包1 · 账户1');
+    expect(qrData, isNot(contains('contact_name')));
   });
 }

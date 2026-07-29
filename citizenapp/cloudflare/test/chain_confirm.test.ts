@@ -144,7 +144,7 @@ describe("square chain confirmation", () => {
           jsonrpc: "2.0",
           id: 1,
           result: buildEventsHex({
-            cidNumber: authorCid,
+            cidNumber: sessionCid,
             postCategory: "normal",
           }),
         }),
@@ -157,7 +157,7 @@ describe("square chain confirmation", () => {
     });
 
     expect(post.text).toBe("普通动态");
-    expect(post.cid_number).toBe(authorCid);
+    expect(post.cid_number).toBe(sessionCid);
     expect(post.media_items?.[0]).toMatchObject({
       provider: "cloudflare_images",
       provider_asset_id: "img_test",
@@ -386,7 +386,7 @@ function imageAsset(uploadId: string): MediaAssetRow {
 }
 
 function buildEventsHex(input: {
-  cidNumber: string | null;
+  cidNumber: string;
   postCategory?: "normal" | "campaign";
 }): string {
   const chunks = [
@@ -394,10 +394,8 @@ function buildEventsHex(input: {
     u32Le(0),
     Uint8Array.of(34, 0),
     compactBytes(postId),
+    compactBytes(input.cidNumber),
     accountIdBytes,
-    input.cidNumber === null
-      ? Uint8Array.of(0)
-      : concat([Uint8Array.of(1), compactBytes(input.cidNumber)]),
     Uint8Array.of(input.postCategory === "normal" ? 0 : 1),
     bytes(contentHash),
     compactBytes(storageReceiptId),

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:local_auth/local_auth.dart';
@@ -14,6 +13,7 @@ import 'package:citizenapp/chat/chat_tab.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/security/app_lock_service.dart';
 import 'package:citizenapp/security/pin_input_page.dart';
+import 'package:citizenapp/security/secure_storage.dart';
 import 'package:citizenapp/transaction/transaction_tab_page.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/my/user/user.dart';
@@ -163,8 +163,8 @@ class _AppLockGateState extends State<_AppLockGate>
     }
 
     // 2. 检查设备锁（存储在 SecureStorage，防 root 篡改）
-    const secure = FlutterSecureStorage();
-    final deviceLockStr = await secure.read(key: 'device_lock_enabled');
+    final deviceLockStr =
+        await appSecureStorage.read(key: 'device_lock_enabled');
     final deviceLockEnabled = deviceLockStr == 'true';
     if (deviceLockEnabled) {
       if (!mounted) return;

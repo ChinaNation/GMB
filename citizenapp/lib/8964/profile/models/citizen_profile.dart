@@ -51,11 +51,11 @@ class CitizenProfile {
   final bool isNotifying;
   final int updatedAt;
 
-  /// 本人钱包名是昵称真源，`display_name` 是公开镜像；均缺失时使用本地
-  /// 稳定默认昵称，绝不把完整或截断账户当昵称。
-  String resolvedDisplayName(String fallback) {
-    return ProfilePresentation.forAccountId(accountId).resolveDisplayName(
-      walletName: fallback,
+  /// `display_name` 是公开昵称唯一真源；缺失时按 CID（无 CID 才按账户）
+  /// 生成稳定默认昵称，绝不把钱包名、完整账户或截断账户当昵称。
+  String get resolvedDisplayName {
+    return ProfilePresentation.forAccountId(cidNumber ?? accountId)
+        .resolveDisplayName(
       publicName: displayName,
     );
   }

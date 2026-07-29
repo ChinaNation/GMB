@@ -1,7 +1,7 @@
 # QR_V1 统一二维码协议规范
 
 - 版本:`QR_V1`
-- 更新日期:2026-07-23
+- 更新日期:2026-07-28
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有“生成二维码 -> 扫码识别 -> 签名/确认 -> 签名响应验签”的二维码流程
 
@@ -46,7 +46,7 @@
 |---:|---|---|---|---|---|
 | 1 | `sign_request` | 临时 | CitizenApp / CitizenWallet / CID / citizenchain node | 签名方 | 请求扫码方签名 `b.d` |
 | 2 | `sign_response` | 临时 | 签名方 | 请求生成方 | 回传签名结果 |
-| 3 | `user_contact` | 固定 | CitizenApp / CitizenWallet | 需要地址的一方 | 展示钱包地址和联系人名 |
+| 3 | `user_contact` | 固定 | CitizenApp 已绑定 CID 的身份账户 | CitizenApp / CitizenWallet / OnChina | 声明永久 CID、当前绑定地址和公开昵称 |
 | 4 | `user_transfer` | 临时 | 收款方 | 付款方 | 收款码,可带金额和备注 |
 
 登录、公民签名确认、管理员确认、交易签名、运行时升级等都不新增 `k`;它们统一是 `k=1` 签名请求,具体业务由 `b.a` 区分。
@@ -96,10 +96,11 @@
 | Runtime 升级哈希签名 | `a = 7` 或已登记 RuntimeUpgrade hash-only action | `d` 允许是 32B signing bytes,签该 32B;这是 QR_V1 唯一 hash-only 例外 |
 
 OnChina 登录生成 `a=1` 前必须先扫描完整 `k=3 user_contact` 用户码，从
-`b.ss58_address` 派生唯一目标 `account_id` 并通过链上管理员前置校验。随后 `k=1`
-请求的 `b.u` 必须编码该账户的 32 字节公钥，`b.d` 固定为 UTF-8 `onchina`；不得生成
-空 `b.u`，不得允许扫码钱包自行选择其它账户。登录响应仍使用 `k=2`，其 `b.u` 必须与
-请求目标和数据库目标账户一致。
+`b.ss58_address` 派生唯一目标 `account_id`，并要求 `b.cid_number + account_id`
+同时命中链上同一条 Active 管理员记录。`b.display_name` 只用于页面展示，不参与授权。
+随后 `k=1` 请求的 `b.u` 必须编码该账户的 32 字节公钥，`b.d` 固定为 UTF-8
+`onchina`；不得生成空 `b.u`，不得允许扫码钱包自行选择其它账户。登录响应仍使用
+`k=2`，其 `b.u` 必须与请求目标和数据库目标账户一致。
 
 链交易生成方不得手写拼接 `call_data/era/nonce/tip/additional_signed` 或 signed extrinsic。citizenchain node、CitizenApp 热钱包、OnChina 和其它链交易生成方必须统一使用当前 runtime 类型构造 `TxExtension`、`SignedPayload` 和 `UncheckedExtrinsic`；QR `b.d` 放入完整 `review_payload`，实际签名输入单独按 `SignedPayload::using_encoded` 计算。
 
@@ -146,16 +147,24 @@ OnChina 登录生成 `a=1` 前必须先扫描完整 `k=3 user_contact` 用户码
   "p": "QR_V1",
   "k": 3,
   "b": {
-    "ss58_address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-    "contact_name": "张三"
+    "cid_number": "CN001-CTZN-000000001-2026",
+    "ss58_address": "w5FhUDLW4BxsE1QXK4sNjPZ8rqSnK2QeVpUfXzqczpWdxChxV",
+    "display_name": "晨光寻路者"
   }
 }
 ```
 
 | 字段 | 类型 | 必填 | 注释 |
 |---|---|---|---|
-| `ss58_address` | string | 是 | 仅用于展示和扫码输入的 SS58 地址，不作为授权主键 |
-| `contact_name` | string | 是 | 联系人名,允许空串仅在 UI 层兜底 |
+| `cid_number` | string | 是 | 永久公民身份号；无首尾空格，UTF-8 长度 1–32 字节 |
+| `ss58_address` | string | 是 | 当前 CID 绑定账户的本链规范 SS58 地址，prefix 固定 2027；只用于展示和边界输入输出 |
+| `display_name` | string | 是 | 公开昵称；无首尾空格、1–40 个 Unicode 字符，只作展示 |
+
+`k=3` 只能由 CitizenApp 在链上 CID↔AccountId 闭环命中的身份账户生成。未注册账户、
+其它钱包子账户以及无法读取链上身份时不得伪造身份码：前两者生成五分钟 `k=4`
+临时收款码，链读失败则从严拒绝生成。CitizenWallet 是离线钱包，没有 CID 真源，只
+解析 `k=3`，账户详情收款统一生成五分钟 `k=4`。解析器必须拒绝旧
+`contact_name`、缺失字段、未知字段、非 2027 SS58 及非规范 CID/昵称。
 
 ## 7. k=4 user_transfer
 

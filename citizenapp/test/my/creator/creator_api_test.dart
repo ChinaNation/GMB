@@ -52,8 +52,7 @@ void main() {
     );
 
     expect(api.lastSaveTxHash, '0x${List.filled(64, 'a').join()}');
-    // 离线 fake 无 cid 来源，身份主键字段留空（不塞会话钱包账户）。
-    expect(plan.creatorCidNumber, isEmpty);
+    expect(plan.creatorCidNumber, session.cidNumber);
     expect(plan.tiers, hasLength(1));
     expect(await api.fetchMyPlan(session), isNotNull);
   });
@@ -78,8 +77,7 @@ void main() {
         return http.Response.bytes(
           utf8.encode(jsonEncode({
             'plan': {
-              'creator_cid_number':
-                  '0x7777777777777777777777777777777777777777777777777777777777777777',
+              'creator_cid_number': 'CN220-CTZN2-198805200-2026',
               'tiers': [tier.toJson()],
               'updated_at': 1,
             },
@@ -113,11 +111,36 @@ void main() {
     expect(deviceSignCount, 0, reason: 'finalized 后的 Cloudflare 镜像不得产生第二次签名');
   });
 
+  test('创作者订阅镜像只传 creator_cid_number', () async {
+    final api = CreatorApiHttp(
+      baseUrl: 'https://creator.test',
+      httpClient: MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['creator_cid_number'], 'CN001-CTZN-000000001-2026');
+        expect(body, isNot(contains('creator_account_id')));
+        return http.Response(
+          jsonEncode({'ok': true}),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    await api.confirmCreatorSubscription(
+      session: session,
+      txHash: '0x${List.filled(64, 'a').join()}',
+      blockHashHex: '0x${List.filled(64, 'b').join()}',
+      signedExtrinsicHex: '0x0102',
+      action: 'subscribe',
+      creatorCidNumber: 'CN001-CTZN-000000001-2026',
+      tierId: 't1',
+      billingPeriod: 'monthly',
+    );
+  });
+
   test('FakeCreatorApi 概览默认按档位数', () async {
     final api = FakeCreatorApi(
       initialPlan: const CreatorPlan(
-        creatorCidNumber:
-            '0x7777777777777777777777777777777777777777777777777777777777777777',
+        creatorCidNumber: 'CN220-CTZN2-198805200-2026',
         tiers: [tier],
         updatedAt: 0,
       ),
@@ -219,8 +242,8 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
 
   @override
   Future<FinalizedSubscriptionSnapshot> fetchSubscriptionSnapshot({
-    required String subscriberAccountId,
-    String? creatorAccountId,
+    required String subscriberCidNumber,
+    String? creatorCidNumber,
   }) async =>
       FinalizedSubscriptionSnapshot(
         state: ChainSubscriptionState(
@@ -258,7 +281,7 @@ class _FakeSubscriptionRpc extends SubscriptionRpc {
 
   @override
   Future<List<ChainCreatorTier>> fetchCreatorPlans(
-          String creatorAccountId) async =>
+          String creatorCidNumber) async =>
       [
         ChainCreatorTier(
           tierId: 't1',

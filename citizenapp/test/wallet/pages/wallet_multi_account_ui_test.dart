@@ -7,6 +7,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/account_detail_page.dart';
 import 'package:citizenapp/wallet/pages/wallet_page.dart';
 import 'package:citizenapp/wallet/widgets/add_account_sheet.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 
 import '../../support/fake_secure_seed_store.dart';
 import '../../support/isar_test_env.dart';
@@ -367,11 +368,13 @@ void main() {
       expect(find.text('重命名'), findsNothing);
     });
 
-    testWidgets('账户卡右上角二维码进入现有用户二维码页', (tester) async {
+    testWidgets('普通账户右上角二维码进入五分钟临时收款码页', (tester) async {
+      final account = _makeAccount(index: 5, name: '日常账户');
       await tester.pumpWidget(
         MaterialApp(
           home: AccountDetailPage(
-            account: _makeAccount(index: 5, name: '日常账户'),
+            account: account,
+            identityResolver: _UnregisteredIdentityResolver(account),
           ),
         ),
       );
@@ -380,7 +383,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('二维码'), findsOneWidget);
       expect(find.text('日常账户'), findsOneWidget);
-      expect(find.text('扫描此二维码可加为联系人，或向其转账'), findsOneWidget);
+      expect(find.text('临时收款码，5 分钟内有效'), findsOneWidget);
+      expect(find.text('扫描此二维码可加为联系人，或向其转账'), findsNothing);
     });
   });
 
@@ -440,4 +444,20 @@ void main() {
       expect(find.text('确认添加'), findsOneWidget);
     });
   });
+}
+
+class _UnregisteredIdentityResolver extends IdentityAccountResolver {
+  _UnregisteredIdentityResolver(this.account);
+
+  final Account account;
+
+  @override
+  Future<ResolvedIdentity?> resolve() async {
+    return ResolvedIdentity(
+      accountId: account.accountId,
+      ss58Address: account.ss58Address,
+      accountIndex: account.accountIndex,
+      snapshot: null,
+    );
+  }
 }

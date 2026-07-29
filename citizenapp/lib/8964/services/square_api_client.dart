@@ -278,7 +278,7 @@ class SquareBrowseState {
   final int? browseLeft;
 }
 
-/// Cloudflare 只可见的单条通讯录密文信封。联系人账户和私人名称只存在于
+/// Cloudflare 只可见的单条通讯录密文信封。联系人 CID、账户、SS58 和私人备注只存在于
 /// [ciphertext] 内，Worker 不参与解密。
 class SquareEncryptedContact {
   const SquareEncryptedContact({
@@ -475,8 +475,10 @@ class SquareApiClient
     // 身份主键由 Worker 按链上绑定解析后随登录响应下发；缺失即会话不完整（未绑定 CID
     // 的账户在 Worker 侧已被拒绝建会话）。
     final cidNumber = session['cid_number'];
-    if (token is! String || expiresAt is! int ||
-        cidNumber is! String || cidNumber.isEmpty) {
+    if (token is! String ||
+        expiresAt is! int ||
+        cidNumber is! String ||
+        cidNumber.isEmpty) {
       throw const SquareApiException('广场登录态响应不完整');
     }
 
@@ -497,15 +499,27 @@ class SquareApiClient
   }
 
   /// 注销账户：硬删除该用户在 Cloudflare 的全部数据（链上数据不受影响）。
-  /// 换绑吊销:删除旧身份账户在服务端的隐私/鉴权云端数据(通讯录密文 / Chat 材料 /
-  /// 设备子钥 / 会话)。鉴权 = 旧账户会话 [session](P-256 设备子钥静默登录);服务端只
-  /// 吊销该会话所属账户,无法吊销他人。幂等。
-  Future<void> revokeRebindOldAccount({required SquareSession session}) async {
+  /// 换绑吊销:由**当前新账户**会话 [session] 代删 [oldAccountId] 的账户级鉴权材料。
+  ///
+  /// [oldAccountSignature] 是旧账户已经为本次
+  /// `signing_message(OP_SIGN_CID_REBIND, SCALE(cid_number, new_account_id))`
+  /// 签出的授权；Worker 会把它与会话 CID/新账户精确绑定验签，不能仅凭“旧账户已解绑”
+  /// 删除任意账户。调用幂等，同一授权可在网络失败或 App 重启后安全重试。
+  Future<void> revokeRebindOldAccount({
+    required SquareSession session,
+    required String oldAccountId,
+    required String oldAccountSignature,
+  }) async {
     await _postJson(
       '/v1/square/rebind/revoke',
-      const <String, dynamic>{},
+      <String, dynamic>{
+        'old_account_id': oldAccountId,
+        'old_account_signature': oldAccountSignature,
+      },
       session: session,
     );
+    // Worker 已使旧账户全部会话失效；同步清除内存缓存，禁止后续误复用旧 token。
+    clearSession(oldAccountId);
   }
 
   Future<void> deleteAccount({
@@ -638,7 +652,7 @@ class SquareApiClient
     );
   }
 
-  /// 分页拉取当前 session 所属账户的通讯录密文。
+  /// 分页拉取当前 session 所属永久 CID 的通讯录密文。
   Future<({List<SquareEncryptedContact> items, String? nextCursor})>
       fetchEncryptedContacts({
     required SquareSession session,
@@ -667,7 +681,7 @@ class SquareApiClient
     );
   }
 
-  /// 幂等写入一条通讯录密文；accountId 只能由 Worker 从 session 派生。
+  /// 幂等写入一条通讯录密文；属主 CID 只能由 Worker 从 session 派生。
   Future<void> putEncryptedContact({
     required SquareSession session,
     required SquareEncryptedContact contact,
@@ -684,7 +698,7 @@ class SquareApiClient
     );
   }
 
-  /// 删除当前 session 所属账户的一条通讯录密文。
+  /// 删除当前 session 所属永久 CID 的一条通讯录密文。
   Future<void> deleteEncryptedContact({
     required SquareSession session,
     required String contactId,

@@ -9,7 +9,7 @@
 - 创世没有真实法定代表人资料时不得填充假数据，不得把首位管理员默认为法定代表人；依赖法定代表人的业务在任命完成前必须拒绝执行
 - permit 必须短期有效
 - CitizenApp 私密聊天消息、会话和附件只能保存在通信双方设备，禁止写入 Cloudflare D1、R2、KV 或 Durable Object Storage。
-- CitizenApp 通讯录明文只能保存在用户设备；为实现同一钱包跨设备恢复，Cloudflare D1 只允许保存由热钱包 seed 域隔离密钥在端侧生成的单联系人 AES-256-GCM 密文、HMAC 联系人 ID、nonce、MAC 和更新时间。联系人钱包账户、私人联系人名称、公开昵称、关系明文及解密密钥禁止进入 Cloudflare；账户注销必须立即硬删除全部通讯录密文。
+- CitizenApp 通讯录明文只能保存在用户设备；为实现同一身份跨设备恢复，Cloudflare D1 只允许保存由 CID 当前绑定账户 child 域隔离密钥在端侧生成的单联系人 AES-256-GCM 密文、以目标 `cid_number` 计算的 HMAC `contact_id`、nonce、MAC 和更新时间。密文载荷必须包含属主 CID、联系人 CID、当前 `account_id`、对应 `ss58_address`、私人 `contact_remark` 与时间戳；属主 CID 同时进入 AAD。联系人 CID、钱包账户、SS58、私人备注、公开昵称、关系明文及解密密钥禁止以明文进入 Cloudflare；身份换绑必须先删除属主 CID 下的旧密文快照，再以新绑定账户密钥重建；账户注销必须立即硬删除全部通讯录密文。
 - Chat 推送只能发送固定唤醒类型和发送方钱包账户，禁止携带明文、密文、附件地址、会话摘要或通知预览
 - 用户注销时必须先关闭实时连接、撤销短期凭证，再立即硬删除 Cloudflare 中的设备公钥、推送 Token、一次性 KeyPackage、防重放摘要和其他账户引用；不得软删除、延期删除或保留恢复副本
 

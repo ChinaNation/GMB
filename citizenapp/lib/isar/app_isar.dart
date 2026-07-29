@@ -1027,7 +1027,7 @@ class WalletIsar {
         existing.chatConversationEntitys;
         existing.chatRouteCacheEntitys;
         existing.accountEntitys;
-        return existing;
+        return _prepareOpened(existing);
       } catch (_) {
         // schema 不完整，关闭旧实例后重新打开
         await existing.close();
@@ -1060,14 +1060,40 @@ class WalletIsar {
       WalletTxSyncCursorEntitySchema,
     ];
     final isar = await Isar.open(schemas, name: 'citizenapp', directory: dir);
+    return _prepareOpened(isar);
+  }
+
+  /// 完成数据库打开后的目标态清理。
+  ///
+  /// 钱包名与公开昵称已彻底解耦，旧同步队列和云端版本游标不得继续重放。
+  /// 通讯录已改为 CID 关系主键，旧 account_id 索引缓存/待办/同步态也必须整批清除，
+  /// 不能让旧 JSON 形状被兼容读取。清理对已注册实例和新打开实例同样执行。
+  Future<Isar> _prepareOpened(Isar isar) async {
     final settings = await isar.walletSettingsEntitys.get(0);
-    if (settings == null) {
+    final kvRows = await isar.appKvEntitys.where().findAll();
+    final removedLegacyKvIds = kvRows
+        .where(
+          (row) =>
+              row.key.startsWith('wallet_name_pending:') ||
+              row.key.startsWith('wallet_name_synced_at:') ||
+              row.key.startsWith('contacts:') ||
+              row.key.startsWith('contact_pending_ops:') ||
+              row.key.startsWith('contact_sync_state:'),
+        )
+        .map((row) => row.id)
+        .toList(growable: false);
+    if (settings == null || removedLegacyKvIds.isNotEmpty) {
       await isar.writeTxn(() async {
-        await isar.walletSettingsEntitys.put(
-          WalletSettingsEntity()
-            ..id = 0
-            ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch,
-        );
+        if (settings == null) {
+          await isar.walletSettingsEntitys.put(
+            WalletSettingsEntity()
+              ..id = 0
+              ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch,
+          );
+        }
+        if (removedLegacyKvIds.isNotEmpty) {
+          await isar.appKvEntitys.deleteAll(removedLegacyKvIds);
+        }
       });
     }
     return isar;

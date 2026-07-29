@@ -73,6 +73,7 @@ void main() {
   useIsolatedIsar();
 
   late FakeSecureSeedStore fakeStore;
+  late _MemoryBlobStore contactBlobStore;
 
   // 动钱动权验证已上移到 WalletManager 的硬件金库读 child；单测里把 local_auth
   // channel 打桩为「验证通过」，让纯 Dart 环境不因缺插件而抛。
@@ -82,7 +83,8 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     fakeStore = FakeSecureSeedStore();
     WalletManager.debugSeedStore = fakeStore;
-    WalletManager.debugContactKeyStore = _MemoryBlobStore();
+    contactBlobStore = _MemoryBlobStore();
+    WalletManager.debugContactKeyStore = contactBlobStore;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(localAuthChannel, (call) async {
       switch (call.method) {
@@ -106,6 +108,23 @@ void main() {
   });
 
   group('WalletManager — 热钱包创建/导入/删除（ROOTLESS）', () {
+    test('通讯录密钥只读写新域并主动删除旧命名残留', () async {
+      final manager = WalletManager();
+      final created = await manager.importWallet(_mnemonicA);
+      final accountId = created.accountId;
+      final legacyKey = 'wallet_contacts_key_v1_$accountId';
+      final currentKey = 'citizenapp_contacts_key_$accountId';
+      contactBlobStore.values[legacyKey] = '旧派生密钥';
+
+      final material =
+          await manager.ensureContactKeyMaterialForAccountId(accountId);
+
+      expect(material.encryptionKey, hasLength(32));
+      expect(material.indexKey, hasLength(32));
+      expect(contactBlobStore.values, isNot(contains(legacyKey)));
+      expect(contactBlobStore.values, contains(currentKey));
+    });
+
     test('create/import/delete 只存账户0 child，不存种子/助记词', () async {
       final manager = WalletManager();
 

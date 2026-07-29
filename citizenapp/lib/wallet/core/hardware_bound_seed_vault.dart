@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:citizenapp/security/secure_storage.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
 /// 密文 blob 的持久化抽象（与硬件金库解耦，便于单测）。
@@ -15,7 +16,7 @@ abstract interface class VaultBlobStore {
 /// [VaultBlobStore] 的 flutter_secure_storage 实现（静默读写）。
 class SecureStorageBlobStore implements VaultBlobStore {
   SecureStorageBlobStore([FlutterSecureStorage? storage])
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ?? appSecureStorage;
 
   final FlutterSecureStorage _storage;
 

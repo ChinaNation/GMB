@@ -356,7 +356,7 @@ class _TypeBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final options = SquareComposeType.optionsFor(canCampaign: canCampaign);
-    final name = identity.walletName ?? '我';
+    final name = identity.resolvedDisplayName;
     final initial = name.isEmpty ? '我' : name.substring(0, 1);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),

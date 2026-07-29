@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -6,54 +8,156 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 
-import 'package:citizenapp/qr/bodies/user_contact_body.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
+import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
+import 'package:citizenapp/qr/bodies/user_contact_body.dart';
+import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
-/// 全 App 唯一用户二维码：同一张 `QR_V1 k=3`（userContact）名片码 = 钱包账户 + 昵称。
+/// 当前账户二维码入口。
 ///
-/// 扫码结果由**扫描模式**决定：contact 模式 = 加入通讯录；transfer / dispatch 模式 =
-/// 按收款人进入转账。因此全 App 不再生成第二份二维码。
-/// 入口：主页 ⋮ 菜单「二维码」（本人或他人）、钱包身份卡 QR 图标、聊天页「收付款」。
-class UserQrPage extends StatefulWidget {
-  const UserQrPage({
-    super.key,
-    required this.contactName,
-    required this.accountId,
-  });
+/// 只有链上 CID↔AccountId 闭环命中的身份账户才能生成 `k=3 user_contact`；
+/// 未注册账户或其它钱包子账户只生成 `k=4 user_transfer`，避免把本机钱包标签伪装成
+/// 公开昵称或给无 CID 账户伪造用户身份。
+Future<void> openAccountQrPage(
+  BuildContext context, {
+  required String accountId,
+  required String paymentDisplayName,
+  IdentityAccountResolver? identityResolver,
+  CitizenProfileCache profileCache = const CitizenProfileCache(),
+}) async {
+  final normalizedAccountId = accountId.trim();
+  if (!isAccountIdText(normalizedAccountId)) {
+    _showQrMessage(context, '账户标识无效，无法生成二维码');
+    return;
+  }
+  try {
+    final identity =
+        await (identityResolver ?? IdentityAccountResolver()).resolve();
+    if (!context.mounted) return;
+    final cidNumber = identity?.snapshot?.cidNumber.trim() ?? '';
+    if (identity != null &&
+        identity.accountId == normalizedAccountId &&
+        cidNumber.isNotEmpty) {
+      final cached = await profileCache.read(cidNumber);
+      if (!context.mounted) return;
+      final displayName =
+          ProfilePresentation.forAccountId(cidNumber).resolveDisplayName(
+        publicName: cached?.displayName,
+      );
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => UserQrPage.userContact(
+            cidNumber: cidNumber,
+            displayName: displayName,
+            accountId: normalizedAccountId,
+          ),
+        ),
+      );
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => UserQrPage.userTransfer(
+          displayName: paymentDisplayName,
+          accountId: normalizedAccountId,
+        ),
+      ),
+    );
+  } on Exception {
+    if (context.mounted) {
+      _showQrMessage(context, '身份读取失败，请稍后重试');
+    }
+  }
+}
 
-  final String contactName;
+void _showQrMessage(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(message)),
+  );
+}
+
+/// 二维码展示页：身份账户使用固定 `k=3`，普通收款账户使用五分钟 `k=4`。
+class UserQrPage extends StatefulWidget {
+  const UserQrPage.userContact({
+    super.key,
+    required this.cidNumber,
+    required this.displayName,
+    required this.accountId,
+  }) : userContact = true;
+
+  const UserQrPage.userTransfer({
+    super.key,
+    required this.displayName,
+    required this.accountId,
+  })  : cidNumber = null,
+        userContact = false;
+
+  final String? cidNumber;
+  final String displayName;
   final String accountId;
+  final bool userContact;
 
   @override
   State<UserQrPage> createState() => _UserQrPageState();
 }
 
 class _UserQrPageState extends State<UserQrPage> {
+  static const int _transferTtlSeconds = 300;
+
   final GlobalKey _qrKey = GlobalKey();
   bool _saving = false;
+  late final String _qrData = _buildQrData();
 
   /// 展示态 SS58 地址（accountId 为授权真源，ss58 仅用于展示与二维码载荷）。
   String get _ss58Address => ss58FromAccountIdText(widget.accountId);
 
-  String get _qrData => QrEnvelope<UserContactBody>(
+  String _buildQrData() {
+    if (widget.userContact) {
+      return QrEnvelope<UserContactBody>(
         kind: QrKind.userContact,
         id: null,
         issuedAt: null,
         expiresAt: null,
         body: UserContactBody(
+          cidNumber: widget.cidNumber!,
           ss58Address: _ss58Address,
-          contactName: widget.contactName,
+          displayName: widget.displayName,
         ),
       ).toRawJson();
+    }
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return QrEnvelope<UserTransferBody>(
+      kind: QrKind.userTransfer,
+      id: _newTransferRequestId(),
+      issuedAt: now,
+      expiresAt: now + _transferTtlSeconds,
+      body: UserTransferBody(
+        ss58Address: _ss58Address,
+        recipientName: widget.displayName,
+        amount: '',
+        symbol: 'GMB',
+        memo: '',
+        bank: '',
+      ),
+    ).toRawJson();
+  }
+
+  String _newTransferRequestId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return 'pay_${base64UrlEncode(bytes).replaceAll('=', '')}';
+  }
 
   /// 复制地址到剪贴板（并入原钱包收款弹窗的能力）。
   void _copyAddress() {
     Clipboard.setData(ClipboardData(text: _ss58Address));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('钱包地址已复制')),
+      const SnackBar(content: Text('SS58 地址已复制')),
     );
   }
 
@@ -98,7 +202,7 @@ class _UserQrPageState extends State<UserQrPage> {
         children: [
           const Spacer(),
           Text(
-            widget.contactName,
+            widget.displayName,
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -184,11 +288,14 @@ class _UserQrPageState extends State<UserQrPage> {
             ],
           ),
           const Spacer(),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 32),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 32),
             child: Text(
-              '扫描此二维码可加为联系人，或向其转账',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+              widget.userContact ? '扫描此二维码可加为联系人，或向其转账' : '临时收款码，5 分钟内有效',
+              style: const TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 12,
+              ),
             ),
           ),
         ],

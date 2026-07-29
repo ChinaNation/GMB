@@ -11,7 +11,6 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
-import 'package:citizenapp/chat/identity/peer_cid_resolver.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
@@ -76,21 +75,16 @@ class _ContactBookPageState extends State<ContactBookPage> {
       widget.sessionProvider ?? SquareSessionProvider.instance;
   final TextEditingController _searchController = TextEditingController();
 
-  late final PeerCidResolver _cidResolver = PeerCidResolver();
-
   List<UserContact> _contacts = const <UserContact>[];
 
   /// 公开资料按身份主键 CID 号缓存（键 = cid_number，与资料接口寻址一致）。
   final Map<String, CitizenProfile> _profiles = <String, CitizenProfile>{};
 
-  /// 联系人钱包账户 account_id → 身份主键 cid_number（链读结果的页内映射）。
-  final Map<String, String> _cidByAccountId = <String, String>{};
   SquareSession? _session;
   ContactSyncState _syncState =
       const ContactSyncState(phase: ContactSyncPhase.idle);
   bool _loading = true;
   String _query = '';
-  String _accountId = '';
 
   @override
   void initState() {
@@ -113,12 +107,10 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Future<void> _load() async {
     try {
-      final accountId = await _service.getAccountId();
       final contacts = await _service.getContacts();
       final syncState = await _service.readSyncState();
       if (!mounted) return;
       setState(() {
-        _accountId = accountId;
         _contacts = contacts;
         _syncState = syncState;
         _loading = false;
@@ -144,60 +136,29 @@ class _ContactBookPageState extends State<ContactBookPage> {
     await _loadProfiles(contacts);
   }
 
-  /// 取联系人的公开资料（按其身份主键 cid_number 索引；未解析出 CID 时为 null）。
-  CitizenProfile? _profileOf(UserContact contact) {
-    final cidNumber = contact.cidNumber?.isNotEmpty == true
-        ? contact.cidNumber
-        : _cidByAccountId[contact.accountId];
-    if (cidNumber == null || cidNumber.isEmpty) return null;
-    return _profiles[cidNumber];
-  }
-
-  /// 解析联系人身份主键 CID 号：优先用通讯录已缓存的 `cid_number`，缺失则链读并回写。
-  /// 对方未绑定 CID 时返回 null（资料页/主页按 CID 寻址，无 CID 即无公开资料）。
-  Future<String?> _contactCidNumber(UserContact contact) async {
-    final cached = contact.cidNumber;
-    if (cached != null && cached.isNotEmpty) return cached;
-    try {
-      return await _cidResolver.resolve(contact.accountId);
-    } on Exception {
-      return null;
-    } on StateError {
-      // 未绑定 CID：保持默认展示，不阻塞通讯录。
-      return null;
-    }
-  }
+  /// 联系人关系已强制携带永久 CID，公开资料无需再按 account_id 临时链读。
+  CitizenProfile? _profileOf(UserContact contact) =>
+      _profiles[contact.cidNumber];
 
   /// 先读公开资料缓存，再以四个一组有界刷新，避免大通讯录产生瞬时请求尖峰。
   /// 资料按身份主键 CID 号寻址（[_profiles] / 资料缓存均以 cid_number 为键）。
   Future<void> _loadProfiles(List<UserContact> contacts) async {
-    final cidByAccountId = <String, String>{};
     for (final contact in contacts) {
-      final cidNumber = await _contactCidNumber(contact);
-      if (cidNumber == null) continue;
-      cidByAccountId[contact.accountId] = cidNumber;
+      final cidNumber = contact.cidNumber;
       if (_profiles.containsKey(cidNumber)) continue;
       final cached = await _profileCache.read(cidNumber);
       if (cached != null) _profiles[cidNumber] = cached;
-    }
-    if (mounted) {
-      setState(() => _cidByAccountId.addAll(cidByAccountId));
-    } else {
-      _cidByAccountId.addAll(cidByAccountId);
     }
     try {
       _session ??= await _sessionProvider.ensureSession();
     } on Exception {
       return;
     }
-    final resolved = contacts
-        .where((contact) => cidByAccountId.containsKey(contact.accountId))
-        .toList(growable: false);
-    for (var offset = 0; offset < resolved.length; offset += 4) {
-      final end = offset + 4 < resolved.length ? offset + 4 : resolved.length;
-      final batch = resolved.sublist(offset, end);
+    for (var offset = 0; offset < contacts.length; offset += 4) {
+      final end = offset + 4 < contacts.length ? offset + 4 : contacts.length;
+      final batch = contacts.sublist(offset, end);
       await Future.wait(batch.map((contact) async {
-        final cidNumber = cidByAccountId[contact.accountId]!;
+        final cidNumber = contact.cidNumber;
         try {
           final profile = await _profileApi.fetchProfile(
             cidNumber,
@@ -215,7 +176,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Future<void> _scanContactQr() async {
     // 复用统一「扫码加好友」收口(写库与提示在扫码页内完成),扫毕本地刷新。
-    await scanAndAddContact(context, selfAccountId: _accountId);
+    await scanAndAddContact(context);
     if (!mounted) return;
     final contacts = await _service.getContacts();
     if (!mounted) return;
@@ -225,21 +186,19 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Future<void> _rename(UserContact contact) async {
     final formKey = GlobalKey<FormState>();
-    var draftName = contact.contactName;
-    final name = await showDialog<String>(
+    var draftRemark = contact.contactRemark;
+    final remark = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('修改名称'),
+        title: const Text('修改私人备注'),
         content: Form(
           key: formKey,
           child: TextFormField(
-            initialValue: contact.contactName,
+            initialValue: contact.contactRemark,
             autofocus: true,
             maxLength: 40,
-            decoration: const InputDecoration(hintText: '名称'),
-            onChanged: (value) => draftName = value,
-            validator: (value) =>
-                value == null || value.trim().isEmpty ? '名称不能为空' : null,
+            decoration: const InputDecoration(hintText: '可留空'),
+            onChanged: (value) => draftRemark = value,
           ),
         ),
         actions: [
@@ -250,15 +209,15 @@ class _ContactBookPageState extends State<ContactBookPage> {
           FilledButton(
             onPressed: () {
               if (formKey.currentState?.validate() != true) return;
-              Navigator.of(dialogContext).pop(draftName.trim());
+              Navigator.of(dialogContext).pop(draftRemark.trim());
             },
             child: const Text('保存'),
           ),
         ],
       ),
     );
-    if (name == null) return;
-    final contacts = await _service.renameContact(contact.accountId, name);
+    if (remark == null) return;
+    final contacts = await _service.renameContact(contact.cidNumber, remark);
     if (mounted) setState(() => _contacts = contacts);
   }
 
@@ -298,7 +257,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('删除联系人'),
-        content: Text('确定从通讯录删除“${contact.contactName}”？'),
+        content: Text('确定从通讯录删除“${_contactDisplayName(contact)}”？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -313,7 +272,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
       ),
     );
     if (confirmed != true) return;
-    final contacts = await _service.deleteContact(contact.accountId);
+    final contacts = await _service.deleteContact(contact.cidNumber);
     if (mounted) setState(() => _contacts = contacts);
   }
 
@@ -326,23 +285,14 @@ class _ContactBookPageState extends State<ContactBookPage> {
         // 发私信:点联系人直接打开与其的一对一聊天(复用统一私信收口)。
         unawaited(_message(contact));
       case ContactPickMode.browse:
-        // 资料页按身份主键 cid_number 寻址：用已解析的 cid（通讯录缓存或链读）。
+        // 资料页按通讯录关系主键 cid_number 直接寻址。
         unawaited(_openProfile(contact));
     }
   }
 
-  /// 打开联系人主页：资料页以身份主键 cid_number 寻址；对方未绑定 CID 时提示而不进入。
+  /// 打开联系人主页：通讯录只接受已经完成双向绑定解析的永久 CID。
   Future<void> _openProfile(UserContact contact) async {
-    final cidNumber =
-        _cidByAccountId[contact.accountId] ?? await _contactCidNumber(contact);
-    if (!mounted) return;
-    if (cidNumber == null || cidNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('对方尚未绑定身份（CID），暂无公开主页')),
-      );
-      return;
-    }
-    _cidByAccountId[contact.accountId] = cidNumber;
+    final cidNumber = contact.cidNumber;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => UserProfilePage(
@@ -362,12 +312,14 @@ class _ContactBookPageState extends State<ContactBookPage> {
       final publicName = ProfilePresentation.forAccountId(contact.accountId)
           .resolveDisplayName(publicName: profile?.displayName)
           .toLowerCase();
-      return contact.contactName.toLowerCase().contains(query) ||
+      return contact.contactRemark.toLowerCase().contains(query) ||
+          contact.cidNumber.toLowerCase().contains(query) ||
           contact.accountId.toLowerCase().contains(query) ||
+          contact.ss58Address.toLowerCase().contains(query) ||
           publicName.contains(query);
     }).toList(growable: false)
-      ..sort((a, b) =>
-          a.contactName.toLowerCase().compareTo(b.contactName.toLowerCase()));
+      ..sort(
+          (a, b) => _contactDisplayName(a).compareTo(_contactDisplayName(b)));
     return visible;
   }
 
@@ -416,7 +368,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
                       controller: _searchController,
                       onChanged: (value) => setState(() => _query = value),
                       decoration: InputDecoration(
-                        hintText: '搜索姓名、昵称或钱包账户',
+                        hintText: '搜索昵称、备注、CID 或钱包账户',
                         prefixIcon: const Icon(Icons.search_rounded),
                         suffixIcon: _query.isEmpty
                             ? null
@@ -477,6 +429,12 @@ class _ContactBookPageState extends State<ContactBookPage> {
     final key = profile?.avatarObjectKey;
     return key == null ? null : _profileApi.mediaUrl(key);
   }
+
+  String _contactDisplayName(UserContact contact) {
+    final profile = _profileOf(contact);
+    return ProfilePresentation.forAccountId(contact.accountId)
+        .resolveDisplayName(publicName: profile?.displayName);
+  }
 }
 
 class _ContactCard extends StatelessWidget {
@@ -511,9 +469,9 @@ class _ContactCard extends StatelessWidget {
     final publicName = ProfilePresentation.forAccountId(contact.accountId)
         .resolveDisplayName(publicName: profile?.displayName);
     final bio = profile?.bio.trim() ?? '';
-    final secondary = '$publicName · ${_shortAddress(contact.ss58Address)}';
+    final remark = contact.contactRemark;
     return Material(
-      key: ValueKey('contact-card-${contact.accountId}'),
+      key: ValueKey('contact-card-${contact.cidNumber}'),
       color: AppTheme.surfaceCard,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
@@ -542,7 +500,7 @@ class _ContactCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        contact.contactName,
+                        publicName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -551,9 +509,31 @@ class _ContactCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      if (remark.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          '备注：$remark',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 3),
                       Text(
-                        secondary,
+                        'CID：${contact.cidNumber}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'SS58：${contact.ss58Address}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -596,7 +576,7 @@ class _ContactCard extends StatelessWidget {
                       ),
                       PopupMenuItem(
                         value: _ContactMenuAction.rename,
-                        child: Text('修改名称'),
+                        child: Text('修改备注'),
                       ),
                       PopupMenuItem(
                         value: _ContactMenuAction.delete,
@@ -690,26 +670,14 @@ class _EmptyContacts extends StatelessWidget {
   }
 }
 
-String _shortAddress(String address) {
-  if (address.length <= 14) return address;
-  return '${address.substring(0, 6)}...${address.substring(address.length - 5)}';
-}
-
 /// 通讯录 / 聊天页共用的「扫码加好友」收口。
 ///
 /// 打开 contact 模式扫码页,扫到用户名片码即写入本人密文通讯录
-/// (写库与「已加入/已更新通讯录」提示均在扫码页内完成)。[selfAccountId]
-/// 传本人账户,供扫码页拒绝把自己加为联系人。调用方在返回后自行刷新列表。
-Future<void> scanAndAddContact(
-  BuildContext context, {
-  required String selfAccountId,
-}) async {
+/// (写库与「已加入/已更新通讯录」提示均在扫码页内完成)。调用方返回后自行刷新列表。
+Future<void> scanAndAddContact(BuildContext context) async {
   await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
-      builder: (_) => QrScanPage(
-        mode: QrScanMode.contact,
-        selfAddress: selfAccountId,
-      ),
+      builder: (_) => const QrScanPage(mode: QrScanMode.contact),
     ),
   );
 }

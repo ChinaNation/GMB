@@ -335,13 +335,10 @@ class _WalletIdentityCardState extends State<WalletIdentityCard> {
             borderRadius: BorderRadius.circular(AppTheme.radiusSm),
             child: InkWell(
               borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-              onTap: () => Navigator.of(context).push<void>(
-                MaterialPageRoute<void>(
-                  builder: (_) => UserQrPage(
-                    accountId: widget.wallet.accountId,
-                    contactName: _walletName,
-                  ),
-                ),
+              onTap: () => openAccountQrPage(
+                context,
+                accountId: widget.wallet.accountId,
+                paymentDisplayName: _walletName,
               ),
               child: const SizedBox(
                 width: 48,

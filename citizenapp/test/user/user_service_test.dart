@@ -6,10 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/chat/identity/peer_cid_resolver.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/my/user/user_service.dart';
+import 'package:citizenapp/qr/bodies/user_contact_body.dart';
+import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import '../support/isar_test_env.dart';
@@ -17,6 +21,8 @@ import '../support/isar_test_env.dart';
 const _owner = 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E';
 final _accountId = UserContactService.accountIdFromSs58(_owner);
 const _contactA = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
+const _ownerCidNumber = 'CN220-CTZN2-198805200-2026';
+const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 
 class _FakeWalletManager extends WalletManager {
   @override
@@ -63,7 +69,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'token',
-        cidNumber: "CN220-CTZN2-198805200-2026",
+        cidNumber: _ownerCidNumber,
         accountId: _accountId,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       );
@@ -122,7 +128,7 @@ class _AccountSession extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'token',
-        cidNumber: "CN220-CTZN2-198805200-2026",
+        cidNumber: _ownerCidNumber,
         accountId: _id,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       );
@@ -156,6 +162,19 @@ class _RecordingWallet extends WalletManager {
   @override
   Future<void> deleteContactKeysForAccountId(String accountId) async {
     deletedContactKeys.add(accountId);
+  }
+}
+
+class _FixedPeerCidResolver extends PeerCidResolver {
+  _FixedPeerCidResolver(this.cidNumber);
+
+  final String cidNumber;
+  String? resolvedAccountId;
+
+  @override
+  Future<String> resolve(String accountId) async {
+    resolvedAccountId = accountId;
+    return cidNumber;
   }
 }
 
@@ -196,33 +215,41 @@ void main() {
           autoSync: false,
         );
 
-    test('字段收口后支持添加与修改名称', () async {
+    test('CID 真源字段支持添加与修改空值合法的私人备注', () async {
       final service = createService();
       final created = await service.addContact(
+        cidNumber: _contactCidNumber,
         ss58Address: _contactA,
-        contactName: '轻节点A',
+        contactRemark: '',
       );
       expect(created.created, isTrue);
-      expect(created.contact.contactName, '轻节点A');
+      expect(created.contact.cidNumber, _contactCidNumber);
+      expect(created.contact.contactRemark, isEmpty);
 
       final renamed =
-          await service.renameContact(created.contact.accountId, '张三');
-      expect(renamed.single.contactName, '张三');
+          await service.renameContact(created.contact.cidNumber, '张三');
+      expect(renamed.single.contactRemark, '张三');
       expect(renamed.single.toJson().keys.toSet(), <String>{
+        'cid_number',
         'account_id',
         'ss58_address',
-        'contact_name',
+        'contact_remark',
         'created_at',
         'updated_at',
       });
+
+      final cleared =
+          await service.renameContact(created.contact.cidNumber, '');
+      expect(cleared.single.contactRemark, isEmpty);
     });
 
     test('拒绝把默认钱包自己加入通讯录', () async {
       final service = createService();
       await expectLater(
         service.addContact(
+          cidNumber: _ownerCidNumber,
           ss58Address: _owner,
-          contactName: '自己',
+          contactRemark: '',
         ),
         throwsA(isA<FormatException>()),
       );
@@ -231,18 +258,23 @@ void main() {
     test('AES-GCM 可跨设备解密且篡改 MAC 后失败', () async {
       final keys = await _FakeWalletManager()
           .ensureContactKeyMaterialForAccountId(_accountId);
-      final deviceA = ContactCryptor(accountId: _accountId, keys: keys);
-      final deviceB = ContactCryptor(accountId: _accountId, keys: keys);
+      final deviceA =
+          ContactCryptor(ownerCidNumber: _ownerCidNumber, keys: keys);
+      final deviceB =
+          ContactCryptor(ownerCidNumber: _ownerCidNumber, keys: keys);
       final contact = UserContact(
+        cidNumber: _contactCidNumber,
         accountId: UserContactService.accountIdFromSs58(_contactA),
         ss58Address: _contactA,
-        contactName: '张三',
+        contactRemark: '张三',
         createdAt: 1,
         updatedAt: 2,
       );
 
       final encrypted = await deviceA.encrypt(contact);
-      expect((await deviceB.decrypt(encrypted)).contactName, '张三');
+      final decrypted = await deviceB.decrypt(encrypted);
+      expect(decrypted.cidNumber, _contactCidNumber);
+      expect(decrypted.contactRemark, '张三');
       final broken = SquareEncryptedContact(
         contactId: encrypted.contactId,
         ciphertext: encrypted.ciphertext,
@@ -253,6 +285,32 @@ void main() {
       await expectLater(deviceB.decrypt(broken), throwsFormatException);
     });
 
+    test('contact_id 只由永久 CID 和索引钥决定，不随账户换绑改变', () async {
+      final keys = await _FakeWalletManager()
+          .ensureContactKeyMaterialForAccountId(_accountId);
+      final cryptor =
+          ContactCryptor(ownerCidNumber: _ownerCidNumber, keys: keys);
+
+      final before = await cryptor.contactId(_contactCidNumber);
+      final after = await cryptor.contactId(_contactCidNumber);
+
+      expect(before, after);
+      expect(before, matches(RegExp(r'^[a-f0-9]{64}$')));
+    });
+
+    test('旧 contact_name JSON 缺少 CID 与 contact_remark 时被拒绝', () {
+      expect(
+        () => UserContact.fromJson(<String, dynamic>{
+          'account_id': UserContactService.accountIdFromSs58(_contactA),
+          'ss58_address': _contactA,
+          'contact_name': '旧名称',
+          'created_at': 1,
+          'updated_at': 2,
+        }),
+        throwsFormatException,
+      );
+    });
+
     test('同步到云端的记录不含联系人明文', () async {
       final api = _FakeApi();
       final service = UserContactService(
@@ -261,7 +319,11 @@ void main() {
         apiClient: api,
         autoSync: false,
       );
-      await service.addContact(ss58Address: _contactA, contactName: '张三');
+      await service.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '张三',
+      );
       await service.sync();
 
       final envelope = api.cloud.values.single;
@@ -278,13 +340,53 @@ void main() {
       expect(serialized, isNot(contains(_contactA)));
       expect(serialized, isNot(contains('张三')));
     });
+
+    test('用户名片码校验声明 CID，且公开昵称不写入私人备注', () async {
+      final resolver = _FixedPeerCidResolver(_contactCidNumber);
+      final service = createService();
+
+      final result = await addUserQrContact(
+        body: const UserContactBody(
+          cidNumber: _contactCidNumber,
+          ss58Address: _contactA,
+          displayName: '对方公开昵称',
+        ),
+        cidResolver: resolver,
+        contactService: service,
+      );
+
+      expect(
+        resolver.resolvedAccountId,
+        UserContactService.accountIdFromSs58(_contactA),
+      );
+      expect(result.contact.cidNumber, _contactCidNumber);
+      expect(result.contact.contactRemark, isEmpty);
+    });
+
+    test('用户名片码声明 CID 与 SS58 链上解析不一致时拒绝', () async {
+      final resolver = _FixedPeerCidResolver('CN001-CTZN-999999999-2026');
+      final service = createService();
+
+      await expectLater(
+        addUserQrContact(
+          body: const UserContactBody(
+            cidNumber: _contactCidNumber,
+            ss58Address: _contactA,
+            displayName: '对方公开昵称',
+          ),
+          cidResolver: resolver,
+          contactService: service,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(await service.getContacts(), isEmpty);
+    });
   });
 
   group('通讯录换绑迁移', () {
     final newId = '0x${'a1' * 32}';
 
-    test('migrateContactsToNewIdentity 搬本地明文+清旧账户密钥+新账户重加密上云',
-        () async {
+    test('migrateContactsToNewIdentity 搬本地明文+清旧账户密钥+新账户重加密上云', () async {
       final wallet = _RecordingWallet();
       final api = _FakeApi();
 
@@ -296,7 +398,20 @@ void main() {
         apiClient: api,
         autoSync: false,
       );
-      await oldService.addContact(ss58Address: _contactA, contactName: '轻节点A');
+      await oldService.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '轻节点A',
+      );
+      const legacyContactId =
+          'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+      api.cloud[legacyContactId] = const SquareEncryptedContact(
+        contactId: legacyContactId,
+        ciphertext: 'b2xk',
+        nonce: 'AAAAAAAAAAAAAAAA',
+        mac: 'AAAAAAAAAAAAAAAAAAAAAA',
+        updatedAt: 1,
+      );
 
       // 2. 换绑迁移 old→new(新身份 + 新会话)。
       IdentityAccountCache.debugInstance = _AccountCache(newId);
@@ -310,11 +425,12 @@ void main() {
 
       // 3a. 新身份读到迁来的联系人(本地明文搬迁成功)。
       final migrated = await newService.getContacts();
-      expect(migrated.single.contactName, '轻节点A');
+      expect(migrated.single.contactRemark, '轻节点A');
       // 3b. 旧账户通讯录密钥已删(杜绝残留)。
       expect(wallet.deletedContactKeys, contains(_accountId));
       // 3c. 用新账户会话重加密上云(云端非空且密文不含明文)。
       expect(api.cloud, isNotEmpty);
+      expect(api.cloud, isNot(contains(legacyContactId)));
       final serialized = jsonEncode(
         api.cloud.values.map((e) => e.ciphertext).toList(),
       );
@@ -336,5 +452,54 @@ void main() {
       await service.migrateContactsToNewIdentity(_accountId, _accountId);
       expect(wallet.deletedContactKeys, isEmpty);
     });
+
+    test('旧账户本地为空时也保留新账户已有 CID 联系人并重建云端', () async {
+      final wallet = _RecordingWallet();
+      final api = _FakeApi();
+      IdentityAccountCache.debugInstance = _AccountCache(newId);
+      final service = UserContactService(
+        walletManager: wallet,
+        sessionProvider: _AccountSession(newId),
+        apiClient: api,
+        autoSync: false,
+      );
+      await service.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '新账户本地备注',
+      );
+
+      await service.migrateContactsToNewIdentity(_accountId, newId);
+
+      expect((await service.getContacts()).single.contactRemark, '新账户本地备注');
+      expect(api.cloud, hasLength(1));
+    });
+  });
+
+  test('数据库重开时彻底清除旧通讯录缓存、待办与同步态', () async {
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      for (final key in <String>[
+        'contacts:$_accountId',
+        'contact_pending_ops:$_accountId',
+        'contact_sync_state:$_accountId',
+      ]) {
+        await isar.appKvEntitys.put(
+          AppKvEntity()
+            ..key = key
+            ..stringValue = '旧数据',
+        );
+      }
+    });
+    await isar.close();
+
+    final reopened = await WalletIsar.instance.db();
+    for (final key in <String>[
+      'contacts:$_accountId',
+      'contact_pending_ops:$_accountId',
+      'contact_sync_state:$_accountId',
+    ]) {
+      expect(await reopened.appKvEntitys.getByKey(key), isNull);
+    }
   });
 }

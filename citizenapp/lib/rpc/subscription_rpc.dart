@@ -8,7 +8,6 @@ import 'package:polkadart/scale_codec.dart' show ByteOutput;
 import 'chain_rpc.dart';
 import 'pallet_registry.dart';
 import 'signed_extrinsic_builder.dart';
-import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 创作者链上付款档位中的周期价格。
 class CreatorPeriodPriceInput {
@@ -69,7 +68,8 @@ class ChainSubscriptionState {
   /// 订阅者已授权用于自动续费的价格；创作者改价后据此提示重新签名。
   final BigInt authorizedPriceFen;
 
-  /// 挂起原因：`needReconsent` / `insufficientBalance` / `null`（非挂起态）。
+  /// 挂起原因：`needReconsent` / `insufficientBalance` /
+  /// `identityBindingUnavailable` / `null`（非挂起态）。
   final String? suspendReason;
 
   /// Active 与已签名取消但仍在已付周期内的 Cancelled 都继续提供权益；
@@ -119,8 +119,10 @@ class SubscriptionRpc {
   static const int _squarePostPalletIndex = PalletRegistry.squarePostPallet;
   static const int _subscribeCallIndex = PalletRegistry.subscribeCall;
   static const int _cancelCallIndex = PalletRegistry.cancelSubscriptionCall;
-  static const int _setCreatorPlansCallIndex = PalletRegistry.setCreatorPlansCall;
-  static const int _changePlanCallIndex = PalletRegistry.changeSubscriptionPlanCall;
+  static const int _setCreatorPlansCallIndex =
+      PalletRegistry.setCreatorPlansCall;
+  static const int _changePlanCallIndex =
+      PalletRegistry.changeSubscriptionPlanCall;
 
   static const int _issuerPlatformTag = 0;
   static const int _issuerCreatorTag = 1;
@@ -163,7 +165,7 @@ class SubscriptionRpc {
   Future<FinalizedSubscriptionTransaction> subscribeCreator({
     required String fromSs58Address,
     required Uint8List signerPublicKey,
-    required String creatorAccountId,
+    required String creatorCidNumber,
     required String tierId,
     required String billingPeriod,
     required BigInt expectedPriceFen,
@@ -172,7 +174,7 @@ class SubscriptionRpc {
   }) =>
       _submitFinalized(
         callData: buildSubscribeCreatorCall(
-          accountIdBytes(creatorAccountId),
+          creatorCidNumber,
           tierId,
           billingPeriod,
           expectedPriceFen,
@@ -200,13 +202,13 @@ class SubscriptionRpc {
   Future<FinalizedSubscriptionTransaction> cancelCreator({
     required String fromSs58Address,
     required Uint8List signerPublicKey,
-    required String creatorAccountId,
+    required String creatorCidNumber,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) =>
       _submitFinalized(
         callData: buildCancelCreatorCall(
-          accountIdBytes(creatorAccountId),
+          creatorCidNumber,
         ),
         fromSs58Address: fromSs58Address,
         signerPublicKey: signerPublicKey,
@@ -236,7 +238,7 @@ class SubscriptionRpc {
   Future<FinalizedSubscriptionTransaction> changeCreatorPlan({
     required String fromSs58Address,
     required Uint8List signerPublicKey,
-    required String creatorAccountId,
+    required String creatorCidNumber,
     required String tierId,
     required String billingPeriod,
     required BigInt expectedPriceFen,
@@ -245,7 +247,7 @@ class SubscriptionRpc {
   }) =>
       _submitFinalized(
         callData: buildChangeCreatorPlanCall(
-          accountIdBytes(creatorAccountId),
+          creatorCidNumber,
           tierId,
           billingPeriod,
           expectedPriceFen,
@@ -274,14 +276,14 @@ class SubscriptionRpc {
 
   /// 在同一个 finalized 区块读取订阅真态与 `Timestamp.Now`。
   Future<FinalizedSubscriptionSnapshot> fetchSubscriptionSnapshot({
-    required String subscriberAccountId,
-    String? creatorAccountId,
+    required String subscriberCidNumber,
+    String? creatorCidNumber,
   }) async {
     final block = await _rpc.fetchFinalizedBlock();
     final blockHashHex = '0x${_hex(block.blockHash)}';
     final subscriptionKey = buildSubscriptionStorageKey(
-      accountIdBytes(subscriberAccountId),
-      creatorAccountId == null ? null : accountIdBytes(creatorAccountId),
+      subscriberCidNumber,
+      creatorCidNumber,
     );
     final timestampKey = buildStorageValueKey('Timestamp', 'Now');
     final values = await Future.wait([
@@ -301,9 +303,8 @@ class SubscriptionRpc {
 
   /// 读取创作者 finalized 链上付款档位；名称等展示字段不在这里出现。
   Future<List<ChainCreatorTier>> fetchCreatorPlans(
-      String creatorAccountId) async {
-    final account = accountIdBytes(creatorAccountId);
-    final key = buildCreatorPlansStorageKey(account);
+      String creatorCidNumber) async {
+    final key = buildCreatorPlansStorageKey(creatorCidNumber);
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     return data == null ? const <ChainCreatorTier>[] : decodeCreatorPlans(data);
   }
@@ -353,7 +354,7 @@ class SubscriptionRpc {
   }
 
   static Uint8List buildSubscribeCreatorCall(
-    Uint8List creatorAccountId,
+    String creatorCidNumber,
     String tierId,
     String billingPeriod,
     BigInt expectedPriceFen,
@@ -361,7 +362,7 @@ class SubscriptionRpc {
     final output = _call(_subscribeCallIndex);
     _writeCreatorIssuerAndPlan(
       output,
-      creatorAccountId,
+      creatorCidNumber,
       tierId,
       billingPeriod,
     );
@@ -372,11 +373,11 @@ class SubscriptionRpc {
   static Uint8List buildCancelPlatformCall() =>
       (_call(_cancelCallIndex)..pushByte(_issuerPlatformTag)).toBytes();
 
-  static Uint8List buildCancelCreatorCall(Uint8List creatorAccountId) =>
-      (_call(_cancelCallIndex)
-            ..pushByte(_issuerCreatorTag)
-            ..write(_account32(creatorAccountId)))
-          .toBytes();
+  static Uint8List buildCancelCreatorCall(String creatorCidNumber) {
+    final output = _call(_cancelCallIndex)..pushByte(_issuerCreatorTag);
+    _writeCidNumber(output, creatorCidNumber);
+    return output.toBytes();
+  }
 
   static Uint8List buildChangePlatformPlanCall(
     int levelByte,
@@ -390,7 +391,7 @@ class SubscriptionRpc {
           .toBytes();
 
   static Uint8List buildChangeCreatorPlanCall(
-    Uint8List creatorAccountId,
+    String creatorCidNumber,
     String tierId,
     String billingPeriod,
     BigInt expectedPriceFen,
@@ -398,7 +399,7 @@ class SubscriptionRpc {
     final output = _call(_changePlanCallIndex);
     _writeCreatorIssuerAndPlan(
       output,
-      creatorAccountId,
+      creatorCidNumber,
       tierId,
       billingPeriod,
     );
@@ -426,33 +427,30 @@ class SubscriptionRpc {
 
   static void _writeCreatorIssuerAndPlan(
     ByteOutput output,
-    Uint8List creatorAccountId,
+    String creatorCidNumber,
     String tierId,
     String billingPeriod,
   ) {
-    output
-      ..pushByte(_issuerCreatorTag)
-      ..write(_account32(creatorAccountId))
-      ..pushByte(_planCreatorTag);
+    output.pushByte(_issuerCreatorTag);
+    _writeCidNumber(output, creatorCidNumber);
+    output.pushByte(_planCreatorTag);
     _writeBytes(output, Uint8List.fromList(tierId.codeUnits));
     output.pushByte(billingPeriodByte(billingPeriod));
   }
 
-  static Uint8List _account32(Uint8List value) {
-    if (value.length != 32) throw ArgumentError('AccountId 必须为 32 字节');
-    return value;
+  static void _writeCidNumber(ByteOutput output, String cidNumber) {
+    final bytes = Uint8List.fromList(utf8.encode(cidNumber));
+    if (bytes.isEmpty || bytes.length > 32) {
+      throw ArgumentError('cid_number 的 UTF-8 长度必须为 1-32 字节');
+    }
+    _writeCompactLength(output, bytes.length);
+    output.write(bytes);
   }
 
-  /// 链账户只接受 ADR-040 的规范文本，不在授权或 storage key 路径兼容 SS58。
-  @visibleForTesting
-  static Uint8List accountIdBytes(String accountId) {
-    if (!isAccountIdText(accountId)) {
-      throw ArgumentError('account_id 必须为小写 0x + 64 位十六进制');
-    }
-    return Uint8List.fromList([
-      for (var index = 2; index < accountId.length; index += 2)
-        int.parse(accountId.substring(index, index + 2), radix: 16),
-    ]);
+  static Uint8List _encodedCidNumber(String cidNumber) {
+    final output = ByteOutput();
+    _writeCidNumber(output, cidNumber);
+    return output.toBytes();
   }
 
   static void _writeBytes(ByteOutput output, Uint8List value) {
@@ -487,22 +485,27 @@ class SubscriptionRpc {
   /// `Subscriptions[(subscriber, issuer)]` 的 Blake2_128Concat 单键布局。
   @visibleForTesting
   static Uint8List buildSubscriptionStorageKey(
-    Uint8List subscriberAccountId,
-    Uint8List? creatorAccountId,
+    String subscriberCidNumber,
+    String? creatorCidNumber,
   ) {
     final raw = BytesBuilder(copy: false)
-      ..add(_account32(subscriberAccountId))
+      ..add(_encodedCidNumber(subscriberCidNumber))
       ..addByte(
-          creatorAccountId == null ? _issuerPlatformTag : _issuerCreatorTag);
-    if (creatorAccountId != null) raw.add(_account32(creatorAccountId));
+          creatorCidNumber == null ? _issuerPlatformTag : _issuerCreatorTag);
+    if (creatorCidNumber != null) {
+      raw.add(_encodedCidNumber(creatorCidNumber));
+    }
     return _storageMapKey('SquarePost', 'Subscriptions', raw.takeBytes());
   }
 
-  /// `CreatorPlans[creator]` 的 Blake2_128Concat 单键布局。
+  /// `CreatorPlans[creator_cid_number]` 的 Blake2_128Concat 单键布局。
   @visibleForTesting
-  static Uint8List buildCreatorPlansStorageKey(Uint8List creatorAccountId) =>
+  static Uint8List buildCreatorPlansStorageKey(String creatorCidNumber) =>
       _storageMapKey(
-          'SquarePost', 'CreatorPlans', _account32(creatorAccountId));
+        'SquarePost',
+        'CreatorPlans',
+        _encodedCidNumber(creatorCidNumber),
+      );
 
   @visibleForTesting
   static Uint8List buildStorageValueKey(String pallet, String storage) =>
@@ -548,6 +551,7 @@ class SubscriptionRpc {
       suspendReason = switch (reader.byte()) {
         0 => 'needReconsent',
         1 => 'insufficientBalance',
+        2 => 'identityBindingUnavailable',
         _ => throw const FormatException('suspend_reason 枚举不合法'),
       };
     } else {

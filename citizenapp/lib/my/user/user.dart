@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
+import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
+import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/widgets/local_identity_avatar.dart';
@@ -21,6 +23,7 @@ import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/security/app_lock_service.dart';
 import 'package:citizenapp/security/pin_input_page.dart';
+import 'package:citizenapp/security/secure_storage.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -37,6 +40,10 @@ class MyTab extends StatefulWidget {
     this.myIdService,
     this.badgeSnapshotStore,
     this.smoldotClientManager,
+    this.profileApi,
+    this.profileCache,
+    this.sessionProvider,
+    this.squareApi,
   });
 
   final bool showSettingsUpdateDot;
@@ -44,6 +51,10 @@ class MyTab extends StatefulWidget {
   final MyIdService? myIdService;
   final IdentityBadgeSnapshotStore? badgeSnapshotStore;
   final SmoldotClientManager? smoldotClientManager;
+  final CitizenProfileApi? profileApi;
+  final CitizenProfileCache? profileCache;
+  final SquareSessionProvider? sessionProvider;
+  final SquareApiClient? squareApi;
 
   @override
   State<MyTab> createState() => _ProfilePageState();
@@ -55,13 +66,20 @@ class _ProfilePageState extends State<MyTab> {
   late final IdentityBadgeSnapshotStore _badgeSnapshotStore;
   late final MyIdService _myIdService;
   late final SmoldotClientManager _smoldotClientManager;
+  late final CitizenProfileApi _profileApi;
+  late final CitizenProfileCache _profileCache;
+  late final SquareSessionProvider _sessionProvider;
 
   UserProfileState _userProfile = const UserProfileState();
   WalletProfile? _defaultWallet;
   String? _defaultWalletIdentityLevel;
+  CitizenProfile? _publicProfile;
+
+  /// 每个 MyTab 生命周期同一 CID 最多后台刷新一次；反复进入页面只读缓存。
+  String? _profileRefreshCid;
 
   /// 默认钱包的会员购买态（徽章「勾」）；best-effort，读失败为 null。
-  final SquareApiClient _squareApi = SquareApiClient();
+  late final SquareApiClient _squareApi;
   SquareMembershipState? _membership;
 
   /// _loadState 世代号：本地钱包、资料和徽章快照并发重载时，旧结果
@@ -79,11 +97,11 @@ class _ProfilePageState extends State<MyTab> {
   /// 用户身份账户 ID（展示口径）= 当前身份账户（CID 绑定账户，非恒账户0）。
   String get _communicationAccountId => _identityAccountId;
 
-  /// 用户昵称 = 默认钱包名称；钱包名称异常缺失时使用与统一主页一致的本地昵称，
-  /// 绝不把钱包账户放进昵称位置。
+  /// 公开昵称唯一真源是 CID 资料的 display_name；资料尚未缓存时稳定兜底。
+  /// 本机 walletName 只用于钱包列表，绝不进入此展示链路。
   String get _nickname => ProfilePresentation.forAccountId(
-        _communicationAccountId,
-      ).resolveDisplayName(walletName: _defaultWallet?.walletName);
+        _publicProfile?.cidNumber ?? _communicationAccountId,
+      ).resolveDisplayName(publicName: _publicProfile?.displayName);
 
   /// 默认钱包徽章信号：颜色只来自账户级链上身份快照，勾来自会员匹配。
   String? get _defaultWalletMembershipLevel => _membership?.membershipLevel;
@@ -126,6 +144,10 @@ class _ProfilePageState extends State<MyTab> {
         );
     _smoldotClientManager =
         widget.smoldotClientManager ?? SmoldotClientManager.instance;
+    _profileApi = widget.profileApi ?? CitizenProfileApi();
+    _profileCache = widget.profileCache ?? const CitizenProfileCache();
+    _sessionProvider = widget.sessionProvider ?? SquareSessionProvider.instance;
+    _squareApi = widget.squareApi ?? SquareApiClient();
     // 本页常驻 IndexedStack，initState 只跑一次；身份账户（CID 绑定账户）在
     // 「我的钱包」被切换 / CID 换绑 / 增删改名时经 walletsRevision 广播，这里重读身份，
     // 保证昵称、地址、认证勾和「我的主页」入参始终是当前身份账户。
@@ -144,12 +166,11 @@ class _ProfilePageState extends State<MyTab> {
   }
 
   Future<void> _onWalletsChanged() async {
-    // 先廉价比对(纯 Isar 读):默认钱包地址与昵称都没变的操作
-    // (如重命名冷钱包、导入新钱包未置顶)不触发链查询,避免无谓刷新。
+    // 先廉价比对（纯 Isar 读）：默认钱包账户没变的操作不触发链查询。
+    // walletName 是本机标签，改名不得刷新公开昵称或身份。
     final wallet = await _walletManager.getDefaultWallet();
     if (!mounted) return;
-    if (wallet?.accountId == _defaultWallet?.accountId &&
-        wallet?.walletName == _defaultWallet?.walletName) {
+    if (wallet?.accountId == _defaultWallet?.accountId) {
       return;
     }
     _operationalIdentityAccount = null;
@@ -181,15 +202,20 @@ class _ProfilePageState extends State<MyTab> {
     if (!mounted || generation != _loadGeneration) {
       return;
     }
+    final identityChanged = identityAccountId != _identityAccountId;
     setState(() {
       _userProfile = profile;
       _defaultWallet = defaultWallet;
       _identityAccountId = identityAccountId;
       _defaultWalletIdentityLevel = identityLevel;
+      if (identityChanged) {
+        _publicProfile = null;
+        _profileRefreshCid = null;
+      }
       _localStateLoaded = true;
     });
-    // 会员购买态（徽章勾）非阻塞加载：昵称/头像先渲染，勾稍后补上。
-    unawaited(_refreshMembership(generation));
+    // 公开资料与会员态均非阻塞加载：昵称/头像先用缓存或稳定占位渲染。
+    unawaited(_refreshRemoteState(generation));
     _onChainHealthChanged();
   }
 
@@ -243,15 +269,55 @@ class _ProfilePageState extends State<MyTab> {
     setState(() => _defaultWalletIdentityLevel = refreshedLevel);
   }
 
-  Future<void> _refreshMembership(int generation) async {
+  Future<void> _refreshRemoteState(int generation) async {
+    final SquareSession? session;
     try {
-      final session = await SquareSessionProvider.instance.ensureSession();
-      final membership =
-          session != null ? await _squareApi.fetchMembership(session) : null;
+      session = await _sessionProvider.ensureSession();
+    } on Exception catch (e) {
+      AppLog.d('profile session load failed: $e');
+      return;
+    }
+    if (session == null) return;
+
+    await _loadPublicProfile(session, generation);
+
+    try {
+      final membership = await _squareApi.fetchMembership(session);
       if (!mounted || generation != _loadGeneration) return;
       setState(() => _membership = membership);
     } on Exception catch (e) {
       AppLog.d('profile membership load failed: $e');
+    }
+  }
+
+  /// 缓存立即回刷；同一页面生命周期、同一 CID 只后台请求一次。
+  Future<void> _loadPublicProfile(
+    SquareSession session,
+    int generation,
+  ) async {
+    final cidNumber = session.cidNumber.trim();
+    if (cidNumber.isEmpty) return;
+    try {
+      final cached = await _profileCache.read(cidNumber);
+      if (cached != null && mounted && generation == _loadGeneration) {
+        setState(() => _publicProfile = cached);
+      }
+    } on Exception catch (e) {
+      AppLog.d('public profile cache load failed: $e');
+    }
+
+    if (_profileRefreshCid == cidNumber) return;
+    _profileRefreshCid = cidNumber;
+    try {
+      final fresh = await _profileApi.fetchProfile(
+        cidNumber,
+        session: session,
+      );
+      await _profileCache.write(fresh);
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _publicProfile = fresh);
+    } on Exception catch (e) {
+      AppLog.d('public profile refresh failed: $e');
     }
   }
 
@@ -743,7 +809,6 @@ class _SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<_SettingsPage> {
   static const String _deviceLockKey = 'device_lock_enabled';
-  static const FlutterSecureStorage _secure = FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
   final AppUpdateController _updateController = AppUpdateController.instance;
   bool _deviceLockEnabled = false;
@@ -770,7 +835,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final deviceLockStr = await _secure.read(key: _deviceLockKey);
+    final deviceLockStr = await appSecureStorage.read(key: _deviceLockKey);
     final pinSet = await AppLockService.isPinSet();
     if (!mounted) return;
     setState(() {
@@ -810,7 +875,7 @@ class _SettingsPageState extends State<_SettingsPage> {
       }
     }
 
-    await _secure.write(
+    await appSecureStorage.write(
       key: _deviceLockKey,
       value: value.toString(),
     );

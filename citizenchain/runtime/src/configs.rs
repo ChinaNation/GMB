@@ -1620,9 +1620,43 @@ pub struct RuntimeSquarePostCitizenIdentity;
 impl square_post::SquarePostCitizenIdentityProvider<AccountId>
     for RuntimeSquarePostCitizenIdentity
 {
-    fn cid_number(owner_account_id: &AccountId) -> Option<Vec<u8>> {
-        citizen_identity::Pallet::<Runtime>::citizen_subject(owner_account_id)
-            .map(|subject| subject.cid_number.to_vec())
+    fn active_cid_number(account_id: &AccountId) -> Option<Vec<u8>> {
+        let cid_number = citizen_identity::CidByAccountId::<Runtime>::get(account_id)?;
+        if citizen_identity::AccountIdByCid::<Runtime>::get(&cid_number).as_ref()
+            != Some(account_id)
+        {
+            return None;
+        }
+        let record = citizen_identity::CidRegistry::<Runtime>::get(&cid_number)?;
+        (record.status == citizen_identity::CidRecordStatus::Active).then(|| cid_number.to_vec())
+    }
+
+    fn current_account_id(cid_number: &[u8]) -> Option<AccountId> {
+        let cid_number = citizen_identity::CidNumberBound::try_from(cid_number.to_vec()).ok()?;
+        let record = citizen_identity::CidRegistry::<Runtime>::get(&cid_number)?;
+        if record.status != citizen_identity::CidRecordStatus::Active {
+            return None;
+        }
+        let account_id = citizen_identity::AccountIdByCid::<Runtime>::get(&cid_number)?;
+        (citizen_identity::CidByAccountId::<Runtime>::get(&account_id).as_ref()
+            == Some(&cid_number))
+        .then_some(account_id)
+    }
+
+    fn is_campaign_eligible(cid_number: &[u8], account_id: &AccountId) -> bool {
+        citizen_identity::Pallet::<Runtime>::citizen_subject(account_id).is_some_and(|subject| {
+            subject.cid_number.as_slice() == cid_number && subject.account_id == *account_id
+        })
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_seed_identity(account_id: &AccountId) -> Vec<u8> {
+        <RuntimeCitizenIdentityReader as votingengine::CitizenIdentityReader<AccountId>>::benchmark_seed_identity(
+            account_id,
+            &citizen_identity::PopulationScope::Country,
+        );
+        Self::active_cid_number(account_id)
+            .expect("square-post benchmark identity must be active and bidirectionally bound")
     }
 }
 

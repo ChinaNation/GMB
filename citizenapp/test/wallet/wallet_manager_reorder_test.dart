@@ -126,16 +126,16 @@ void main() {
       expect(notified, 1);
     });
 
-    test('renameWallet(昵称=钱包名)自增 walletsRevision', () async {
+    test('renameWallet 更新本机钱包标签并自增 walletsRevision', () async {
       await seedThreeWallets();
       final manager = WalletManager();
 
       final before = WalletManager.walletsRevision.value;
-      await manager.renameWallet(1, '新昵称');
+      await manager.renameWallet(1, '新钱包名');
 
       expect(WalletManager.walletsRevision.value, before + 1);
       final wallets = await manager.getWallets();
-      expect(wallets.firstWhere((w) => w.walletIndex == 1).walletName, '新昵称');
+      expect(wallets.firstWhere((w) => w.walletIndex == 1).walletName, '新钱包名');
     });
 
     test('sortOrder 相同(全 0)时按 walletIndex 升序兜底', () async {

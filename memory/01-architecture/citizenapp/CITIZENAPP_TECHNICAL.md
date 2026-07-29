@@ -153,8 +153,8 @@ citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 链
 - 用户入口：公民端在“多签”Tab 与“交易”Tab 之间提供“聊天”Tab；互联网聊天和近场聊天的消息都在“聊天”Tab 集中显示，用户不选择底层通信模式。聊天页顶栏为“搜索框 + 右上角加号”：搜索框进独立搜索页（会话 / 联系人 / 聊天记录三段）；加号弹出五个入口——扫一扫、收付款、发私信、发群聊、加好友。五者全部复用既有链路（交易扫码统一分派、全 App 唯一用户二维码、通讯录选人、建群、扫码加好友），聊天页不自建重复实现。
 - 聊天账户：CitizenApp 当前链账户 `account_id` 是用户可见聊天身份，也是聊天窗口内发起既有转账功能时的收付款账户；创建钱包时由钱包主私钥一次性绑定 P-256 设备子钥，此后聊天设备绑定和会话登录只使用 P-256 设备子钥，钱包 seed 不进入聊天运行态。
 - 互联网聊天：Worker 校验 `account_id` session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
-- 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入 `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；通讯录不复制公开资料。
-- 通讯录：联系人明文按默认热钱包隔离保存在 Isar；Cloudflare D1 只保存由热钱包 seed 域隔离密钥生成的 AES-256-GCM 单联系人密文和 HMAC `contact_id`，用于同一钱包换设备恢复。Worker 不持有密钥，也不能读取联系人账户或私人联系人名称。
+- 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入 `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；通讯录不复制公开资料。头像下固定按公开昵称、SS58 地址及复制按钮、CID、关注/关注者/帖子三项计数展示；SS58 只从当前绑定规范 `account_id` 即时派生，原始 AccountId 不展示、不复制，CID 单独展示且无复制按钮。
+- 通讯录：联系人关系永久主键是 `cid_number`，本机按当前身份账户隔离保存 `cid_number + account_id + ss58_address + contact_remark + 时间戳`；公开昵称、头像和签名仍以 CID 从公开资料读取，不复制进通讯录。Cloudflare D1 只保存由 CID 当前绑定账户 child 域隔离密钥生成的 AES-256-GCM 单联系人密文和以目标 CID 计算的 HMAC `contact_id`，用于同一身份换设备恢复；属主 CID 写入密文并参与 AAD。Worker 不持有密钥，也不能读取联系人 CID、账户、SS58 或私人备注。扫码添加只接受用户码：先把码内账户经链上双向绑定解析成 CID，收款码不得兼作联系人码。
 - 附件：Worker 只转发 SDP/ICE，附件经 WebRTC DTLS DataChannel 设备间传输；Chat 禁止使用 R2。
 - 近场通信：不设计独立“局域网模式”，不要求同一路由器；Android 优先 Nearby Connections，必要时回退 Wi-Fi Direct / Wi-Fi Aware / BLE；iOS 使用 Multipeer Connectivity；Android 与 iOS 跨平台近场通过 BLE GATT 做发现和短消息控制。
 - 删除边界：区块链节点聊天、桌面通信节点设置、手机节点配对和云端聊天内容存储均不得恢复。
@@ -528,6 +528,9 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 广场媒体内容不存链上，不改造 CitizenChain 全节点存储媒体；`manifest.json` 存 Cloudflare R2，图片/首图经 Worker 有界校验后由服务端写 Cloudflare Images，视频全部使用绑定精确字节和最长时长的 Cloudflare Stream TUS，经签名 Images delivery / Stream playback URL 访问。
 - CitizenChain 负责发布交易入块、统一链上交易收费、竞选发布权限校验、发布索引和事件；`SquarePost` pallet index 为 `34`、发布 call index 为 `0`。同一 pallet 的订阅 call、状态、价格、扣款和自动续费契约见 P-TX-014/P-STORAGE-006。
 - Cloudflare Worker 负责设备子钥钱包登录、finalized 订阅镜像与权益门禁、链上身份资格校验、加密通讯录密文 CRUD、统一资源限制、D1 原子额度预留、R2/Images/Stream 写入、上传回执、Stream webhook 实际时长/分辨率复核、链上发布事件确认、帖子删除和 feed。登录 Session 不读取 `System.Account` 或余额；链身份/余额只在需要它的业务入口校验。登录挑战先以 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期必须同时命中；并发重放只允许一个 Session，后续 KV 写入失败也不恢复挑战并删除孤立 Session。设备子密钥登记只接受五分钟窗口内的安全整数 `issued_at`，同一账户用条件 UPSERT 保证严格单调更新，拒绝重复与回滚。`citizenapp/cloudflare/src/limits/catalog.ts` 是所有请求体、文件、账户数量、周期用量和出站载荷的唯一硬上限；环境变量只能收紧。`POST /v1/square/uploads/prepare` 在调用媒体提供商前先用未陈旧链时钟校验平台订阅，再原子预留活动上传数、订阅周期图片数和视频秒数；`complete` 核销一次，删除帖子只回收实际存储总量而不返还周期上传额度。
+- 广场用户业务以 `cid_number` 为唯一稳定主键：帖子归属/计数、平台订阅、续费索引、
+  创作者套餐和创作者订阅关系均直接使用 CID。`account_id` 只用于当前链交易签名、首次扣款、
+  自动续费时由 CID 解析出的当前付款/收款账户及不可变审计；换绑后不得读取或扣取历史账户。
 - App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
 - Worker 链上游由 `citizenapp/cloudflare/src/chain/rpc.ts` 通过 `CHAIN_URL` 与两项 `CHAIN_ID / CHAIN_SECRET` Secret 访问 Access 保护的 HTTPS 服务。内部方法白名单只包含 finalized storage、签名交易广播、区块头/区块体/规范区块哈希读取所需方法，不接收 App 指定的 method 或 RPC URL。订阅镜像必须复核完整已签名 extrinsic 的 finalized 区块包含关系和同一区块 storage；发布确认继续交叉校验链上事件、上传记录和 R2 manifest。
 - 阶段 6 已在 App 端改为正式 feed 口径：`SquarePublishService` 链上入块后调用 Worker `POST /v1/square/posts/confirm`，`SquareHomePage` 默认和分类切换均通过 `SquareApiClient.fetchFeed()` 拉取 Worker 推荐、关注、竞选 feed。
@@ -589,10 +592,11 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   该目录属于本机私有运维工具，整目录由 Git 忽略，不得提交或推送 GitHub。生产部署逐次
   通过 Touch ID，Secret 只保存在 macOS Data Protection Keychain、Cloudflare Worker
   Secret 或 GitHub Secrets。
-- `citizenapp/cloudflare/migrations/0001_square_core.sql` 是清空数据库后的唯一重建
-  基线，不是可重复执行的增量迁移；通讯录与充值结构已合并进 0001，当前不存在后续
-  migration 文件。生产部署脚本禁止自动重放基线或未审核迁移；检测到未来新增 migration
-  文件时必须停止发布并单独审查。
+- `citizenapp/cloudflare/migrations/0001_square_core.sql` 是清空数据库后的重建基线，
+  不是可重复执行的增量迁移。`0002_reset_contacts_for_cid_payload.sql` 是通讯录切换
+  CID HMAC/AAD/密文载荷时的一次性破坏性清理，只删除旧 `square_contacts` 密文；
+  旧密文不兼容、不迁移。生产部署脚本禁止自动重放基线或迁移，所有新增 migration
+  必须停止发布并单独审查、人工确认执行目标。
 - CitizenConsole 使用 Xcode 签名的 `com.gmb.citizenconsole.security` 原生安全代理，
   仅接受 Touch ID，禁止 Mac 密码回退。所有本机 Secret 使用 Data Protection Keychain、
   `biometryCurrentSet`、`WhenUnlockedThisDeviceOnly` 与独立 access group；缺少有效签名、
@@ -736,14 +740,17 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 协议定义与路由分发（`QrRouter`）
 - 签名请求/响应：生成外部签名请求、扫描签名响应并验签
 - 收款码：生成与解析，预填转账表单
-- 用户码：通讯录交换，只保留 `QR_V1` 当前格式
+- 用户码：已绑定 CID 的身份账户生成固定 `k=3`，扫码时复核二维码 CID 与
+  SS58 派生 AccountId 的链上绑定；无 CID/非身份账户只生成五分钟 `k=4`
 
 关键口径：
 
 - 唯一协议：`QR_V1`
 - CitizenApp 不承担 OnChina 管理员扫码登录职责；登录签名请求由 OnChina 页面生成,CitizenWallet 公民钱包签名。
 - 链上转账/投票签名使用 `k=1` 请求和 `k=2` 响应；业务动作由 `b.a` 区分。
-- 用户协议使用 `k=3 user_contact` 和 `k=4 user_transfer`。
+- `k=3 user_contact` body 严格为
+  `cid_number + ss58_address + display_name`；`display_name` 只作公开展示，
+  不参与授权或私人备注。`k=4 user_transfer` 是临时收款码。
 
 详细技术文档见：`lib/qr/QR_TECHNICAL.md`
 
@@ -886,8 +893,10 @@ lib/rpc/
   小写 `0x` + 64 位十六进制。
 - 用户展示、扫码和地址输入使用 SS58 字符串（当前链 `ss58 = 2027`）；SS58 不是授权或
   持久化主键。
-- 通讯录保存规范 `account_id` 和对应 `ss58_address`；权限、加密隔离和去重只使用
-  AccountId，界面展示与扫码使用 SS58。
+- 通讯录关系主键统一为 `cid_number`；同时保存该 CID 当前绑定的规范 `account_id`
+  和对应 `ss58_address`，并可保存空值合法的私人 `contact_remark`。去重、增删改、
+  待同步合并和 HMAC `contact_id` 只使用 CID；账户只用于签名/转账，SS58 只用于展示
+  和边界输入输出。联系人卡以公开资料昵称为主标题，私人备注、CID、SS58 分别表达。
 - 机构 ID：链上 `[u8; 48]`，App 统一使用 `0x` + 96 hex 表达。
 - 签名算法：统一 `sr25519`。
 - `nonce/signature`：治理场景均使用字节向量（运行时上限当前为 64 字节）。

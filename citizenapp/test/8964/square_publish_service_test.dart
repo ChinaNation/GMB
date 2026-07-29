@@ -173,7 +173,7 @@ SquareIdentityState _identity({required String? cidNumber}) {
   return SquareIdentityState(
     accountId:
         '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    walletName: '测试钱包',
+    displayName: '公开昵称',
     cidNumber: cidNumber,
     walletIndex: 1,
     ss58Address: 'gmb_test_signer_ss58_address',

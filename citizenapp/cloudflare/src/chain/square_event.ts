@@ -7,7 +7,7 @@ const squarePostPublishedEventIndex = 0;
 export interface SquarePostPublishedEvent {
   post_id: string;
   account_id: string;
-  cid_number: string | null;
+  cid_number: string;
   post_category: PostCategory;
   content_hash: string;
   storage_receipt_id: string;
@@ -60,21 +60,15 @@ export function decodeSquarePostPublishedEventPayload(
   let cursor = offset;
   const postId = readCompactBytes(data, cursor);
   cursor = postId.nextOffset;
+
+  const cid = readCompactBytes(data, cursor);
+  cursor = cid.nextOffset;
+  const cidNumber = utf8(cid.value);
+  if (cidNumber.length === 0) return null;
+
   if (cursor + 32 > data.length) return null;
   const accountIdBytes = data.slice(cursor, cursor + 32);
   cursor += 32;
-
-  if (cursor >= data.length) return null;
-  let cidNumber: string | null = null;
-  const optionFlag = data[cursor];
-  cursor += 1;
-  if (optionFlag === 1) {
-    const cid = readCompactBytes(data, cursor);
-    cursor = cid.nextOffset;
-    cidNumber = utf8(cid.value);
-  } else if (optionFlag !== 0) {
-    return null;
-  }
 
   if (cursor + 1 + 32 > data.length) return null;
   const categoryByte = data[cursor];

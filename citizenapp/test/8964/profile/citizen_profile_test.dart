@@ -71,17 +71,15 @@ void main() {
       expect(profile.posts, 36);
     });
 
-    test(
-        'resolvedDisplayName uses wallet truth, public mirror, then local name',
-        () {
+    test('resolvedDisplayName uses public truth then stable local name', () {
       final named = CitizenProfile.fromJson(_profileJson(displayName: '张三'));
-      expect(named.resolvedDisplayName('钱包A'), '钱包A');
-      expect(named.resolvedDisplayName(''), '张三');
+      expect(named.resolvedDisplayName, '张三');
 
       final unnamed = CitizenProfile.fromJson(_profileJson(displayName: ''));
-      expect(unnamed.resolvedDisplayName('钱包A'), '钱包A');
-      final fallback = ProfilePresentation.forAccountId(_owner).fallbackName;
-      expect(unnamed.resolvedDisplayName(''), fallback);
+      final fallback = ProfilePresentation.forAccountId(
+        'CN001-CTZN-000000001-2026',
+      ).fallbackName;
+      expect(unnamed.resolvedDisplayName, fallback);
       expect(fallback, isNot(contains(_owner.substring(0, 6))));
     });
 
@@ -102,7 +100,8 @@ void main() {
 
     test('SquareAuthor never falls back to its wallet account', () {
       const author = SquareAuthor(accountId: _owner, displayName: '');
-      expect(author.title, ProfilePresentation.forAccountId(_owner).fallbackName);
+      expect(
+          author.title, ProfilePresentation.forAccountId(_owner).fallbackName);
       expect(author.title, isNot(_owner));
     });
 
@@ -156,8 +155,8 @@ void main() {
         return _ok({'ok': true, 'profile': _profileJson(isFollowing: true)});
       }));
 
-      final profile = await client.fetchUserProfile(
-          cidNumber: _owner, session: _session());
+      final profile =
+          await client.fetchUserProfile(cidNumber: _owner, session: _session());
 
       expect(authHeader, 'Bearer tok');
       expect(profile.isFollowing, isTrue);

@@ -4,10 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 推特式资料卡：头图下方白底，圆角方形头像跨压头图下缘 + 认证勾 +
-/// 展示名/地址·CID/签名/计数 + 右上三图标。
+/// 展示名/SS58/CID/签名/计数 + 右上三图标。
 ///
 /// 头像用 [Positioned] 上移半个身位跨到头图上；文字为深色（落在白底）；
 /// 数据来自已加载的 [profile]（可空 → 占位）。
@@ -17,7 +18,6 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.cidNumber,
     required this.profile,
     required this.actions,
-    this.fallbackName = '',
     this.avatarUrl,
     this.avatarHeaders,
     this.onFollowing,
@@ -30,10 +30,6 @@ class ProfileHeaderCard extends StatelessWidget {
   /// 钱包账户从 [profile].accountId 取。
   final String cidNumber;
   final CitizenProfile? profile;
-
-  /// 本人钱包名称是昵称真源；他人资料使用公开镜像。两者缺失时由账户稳定
-  /// 选择本地默认昵称，不把账户或公民身份字段当昵称。
-  final String fallbackName;
 
   /// 头像图片 URL（object_key 解析后的公开媒体地址）；为空显示占位。
   final String? avatarUrl;
@@ -62,7 +58,6 @@ class ProfileHeaderCard extends StatelessWidget {
 
   String get _name {
     return ProfilePresentation.forAccountId(cidNumber).resolveDisplayName(
-      walletName: fallbackName,
       publicName: profile?.displayName,
     );
   }
@@ -104,9 +99,9 @@ class ProfileHeaderCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 3),
-                _AddressRow(
+                _IdentityDetails(
                   accountId: profile?.accountId ?? '',
-                  cidNumber: profile?.cidNumber ?? cidNumber,
+                  cidNumber: cidNumber,
                 ),
                 if (bio.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -172,50 +167,83 @@ class ProfileHeaderCard extends StatelessWidget {
   }
 }
 
-class _AddressRow extends StatelessWidget {
-  const _AddressRow({required this.accountId, required this.cidNumber});
+class _IdentityDetails extends StatelessWidget {
+  const _IdentityDetails({
+    required this.accountId,
+    required this.cidNumber,
+  });
 
   final String accountId;
-  final String? cidNumber;
+  final String cidNumber;
+
+  /// SS58 只由规范 AccountId 即时派生，不从资料响应读取第二份地址。
+  ///
+  /// 公开资料尚未加载或服务端返回非法 AccountId 时从严降级，不显示复制入口，
+  /// 更不能把原始 AccountId 冒充为 SS58。
+  String? get _ss58Address {
+    final normalized = accountId.trim();
+    if (normalized.isEmpty) return null;
+    try {
+      return ss58FromAccountIdText(normalized);
+    } on FormatException {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cid = cidNumber?.trim() ?? '';
-    return Row(
+    final ss58Address = _ss58Address;
+    final cid = cidNumber.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Flexible(
-          child: Text(
-            _shortenAccount(accountId),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 4),
-        InkWell(
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: accountId));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('地址已复制')),
-            );
-          },
-          child: const Padding(
-            padding: EdgeInsets.all(2),
-            child: Icon(Icons.copy, size: 13, color: AppTheme.textTertiary),
-          ),
-        ),
-        if (cid.isNotEmpty) ...[
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              '· $cid',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                ss58Address == null ? 'SS58：暂不可用' : 'SS58：$ss58Address',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 12,
+                ),
+              ),
             ),
+            if (ss58Address != null) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: '复制 SS58 地址',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(
+                  width: 28,
+                  height: 28,
+                ),
+                padding: EdgeInsets.zero,
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: ss58Address));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('SS58 地址已复制')),
+                  );
+                },
+                icon: const Icon(
+                  Icons.copy,
+                  size: 14,
+                  color: AppTheme.textTertiary,
+                ),
+              ),
+            ],
+          ],
+        ),
+        Text(
+          cid.isEmpty ? 'CID：暂不可用' : 'CID：$cid',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppTheme.textTertiary,
+            fontSize: 12,
           ),
-        ],
+        ),
       ],
     );
   }
@@ -255,10 +283,4 @@ class _Stat extends StatelessWidget {
       ),
     );
   }
-}
-
-String _shortenAccount(String accountId) {
-  if (accountId.length <= 12) return accountId;
-  return '${accountId.substring(0, 6)}...'
-      '${accountId.substring(accountId.length - 6)}';
 }

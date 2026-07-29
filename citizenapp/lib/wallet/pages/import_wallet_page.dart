@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:citizenapp/8964/profile/services/nickname_publisher.dart';
 import 'package:citizenapp/ui/widgets/bip39_input.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -37,10 +36,8 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
         profile.ss58Address,
         profile.accountId,
       ));
-      // 云端为真源：换设备 / 重装后导入，昵称应从云端取回，而不是停在默认名
-      // 「钱包N」——默认名还会在后续改名时把云端那份正确的名字覆盖掉。
-      // best-effort：无网时留待进钱包页再同步。
-      await NicknamePublisher().syncWalletName(profile);
+      // 钱包名是本机标签，导入后保留本机默认值；公开昵称由 cid_number 对应的
+      // display_name 独立恢复，本流程不得联网改写钱包标签。
       _mnemonicController.clear();
       if (!mounted) {
         return;

@@ -146,13 +146,29 @@ async fn find_allowed_memberships_for_login(
     }
 }
 
-/// 用户码确定账户后先查链上 Active 管理员集合，禁止为无登录资格账户签发二维码。
+/// 用户码确定 CID+AccountId 后先查链上 Active 管理员集合。
 ///
-/// 完成签名后仍会再次执行完整 gate，以最新链上状态为准签发会话。
-pub(super) async fn validate_login_account(account_id: &str) -> Result<String, GateError> {
+/// 两者必须同时命中同一条管理员记录；公开昵称不参与授权。完成签名后仍会再次执行
+/// 完整 gate，以最新链上状态为准签发会话。
+pub(super) async fn validate_login_identity(
+    cid_number: &str,
+    account_id: &str,
+) -> Result<String, GateError> {
     let normalized =
         chain_runtime::normalize_account_id(account_id).ok_or(GateError::NotOnchainAdmin)?;
-    let memberships = find_allowed_memberships_for_login(&normalized).await?;
+    let memberships =
+        match chain_runtime::find_active_admin_memberships_for_identity(&normalized, cid_number)
+            .await
+        {
+            Ok(memberships) => memberships,
+            Err(err) if err == chain_runtime::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED => {
+                return Err(GateError::DesktopGovernanceUnsupported);
+            }
+            Err(err) if err == chain_runtime::PERSONAL_MULTISIG_LOGIN_UNSUPPORTED => {
+                return Err(GateError::PersonalMultisigUnsupported);
+            }
+            Err(err) => return Err(GateError::ChainUnreachable(err)),
+        };
     if memberships.is_empty() {
         return Err(GateError::NotOnchainAdmin);
     }

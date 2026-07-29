@@ -58,7 +58,10 @@ WebRTC 只使用公共 STUN 发现候选地址，不配置中继服务。NAT 环
 
 聊天页的用户展示复用统一 `ProfilePresentation` / `ProfileAvatar`：调用方已有公开昵称时优先使用；名称缺失或错误传入完整/截断账户时，按对方账户稳定选择本地默认昵称。真实头像缺失时使用同一账户对应的本地默认照片；账户只显示在标题下方的账户行，不得充当昵称。
 
-通讯录联系人三点菜单的“私信”直接复用 `openDirectChat()`：`peerAccountId` 使用联系人的链账户 `account_id`，标题使用统一公开昵称或稳定本地昵称。联系人私人名称只属于通讯录，不进入 Chat 路由真源；该入口不得复制聊天页面、会话创建或传输逻辑。
+通讯录联系人三点菜单的“私信”直接复用 `openDirectChat()`：`peerAccountId` 使用联系人
+CID 当前绑定的链账户 `account_id`，标题使用统一公开昵称或稳定本地昵称。联系人私人
+`contact_remark` 只属于通讯录，不进入 Chat 路由真源；该入口不得复制聊天页面、
+会话创建或传输逻辑。
 
 钱包主私钥只在创建热钱包时证明 P-256 设备子钥归属。Chat 运行态禁止读取 seed、调用用户认证签名或使用 CitizenWallet。
 
@@ -143,11 +146,17 @@ chat_keypackages
   expires_at
 
 chat_device_binding_nonces
-  account_id
+  cid_number
   nonce_hash
   expires_at
   created_at
 ```
+
+CID 换绑时不得删除 `chat_device_binding_nonces`，也不得关闭按 `cid_number` 命名的
+`ChatRealtimeObject`。二者属于同一身份换绑前后共享的 CID 级状态；删除或关闭会误伤
+刚完成换绑的新账户。换绑止损只允许按旧 `account_id` 删除 `chat_devices`、
+`chat_keypackages` 及账户登录/设备子钥材料。整身份注销才允许关闭 CID 实时对象并清除
+CID 级 nonce。
 
 Chat 的普通消息、会话和 ≤100MB 附件禁止使用 R2；>100MB 薪火会员附件只允许进入
 `CHAT_RELAY` 瞬时密文桶并按领取确认或 24 小时生命周期删除。当前本地 Cloudflare
@@ -241,7 +250,12 @@ Chat 与广场权限分离：
 
 - 聊天页入口改造(顶栏搜索框 + 加号 5 入口,2026-07-23)：`chat_tab.dart` 顶栏由「装饰性搜索图标 + 新建群聊卡片」改为「**搜索框 + 右上角加号**」。加号弹出 5 项,分派枚举 `_ChatEntryAction`,全部复用既有链路,聊天页零重复实现:扫一扫→`openScanDispatchFlow(paymentWallet: 默认钱包)`;收付款→全 App 唯一 `UserQrPage`;发私信→`ContactBookPage(mode: pickForMessage)`;发群聊→既有 `GroupCreatePage`(原卡片职能迁入菜单);加好友→`scanAndAddContact`。可注入 `ChatEntryOpeners`(5 个 `ChatEntryOpener = Future<void> Function(BuildContext)`)供测试断言路由;**先查注入再解析钱包**,否则注入替身时仍会先摸真实 `WalletManager` 碰存储。
 - 加号弹窗样式(2026-07-23)：淡深色面板(`0xF01F2A30`)+ 白色图标文案 + **顶部凸出三角,顶点对齐加号中心**。**未用 `PopupMenuButton`** —— 它的水平位置由框架按可用空间决定，拿不到确定锚点，三角只能靠猜偏移量。改为 `showGeneralDialog` 自绘：经 `Builder` 取加号按钮自身 `RenderBox` 的屏幕坐标算出中心 X，反推面板左边界并夹到屏内，再用夹取后的实际左边界回算三角横向位置，保证仍对准加号。`barrierColor` 透明(不压黑整屏)。**面板本身必须是 `Material`** —— 弹窗不在 Scaffold 之下，`InkWell` 缺 Material 祖先会直接抛异常(此坑由 widget 测试拦下)。
-- 用户二维码唯一化 + 扫码场景分流(2026-07-23)：全 App 只有**一张**用户二维码(`QR_V1 k=3` userContact 名片码 = 钱包 SS58 + 昵称),真源收敛到 `8964/profile/user_qr_page.dart`;原 `wallet/widgets/wallet_qr_dialog.dart` 编码同一份载荷属双轨,**整文件删除**,钱包身份卡改跳 `UserQrPage` 并传 `wallet.accountId`(非 ss58,合 ADR-040)。扫码结果**由扫描模式决定**:`contact` 模式=加入通讯录、`transfer`/`dispatch` 模式=按收款人进入转账;`qr_scan_page` 的 `dispatch` 分支补 `userContact` → 复用已存在的 `_handleContactAsRecipient`。**不新造带金额收款码**。
+- 用户二维码唯一化 + 扫码场景分流(2026-07-23，2026-07-28 CID 收口)：全 App 只有
+  **一张**用户二维码(`QR_V1 k=3` userContact 名片码 = 钱包 SS58 + 钱包标签)，真源
+  收敛到 `8964/profile/user_qr_page.dart`。扫码结果由扫描模式决定：`contact` 模式
+  只接受 userContact，先由 SS58 派生账户并链读双向绑定 CID 后加入通讯录，钱包标签
+  不写入私人备注；`transfer`/`dispatch` 模式把 userContact 作为收款人进入转账。
+  缺少 CID 的 userTransfer 收款码不得再兼作联系人码。**不新造带金额收款码**。
 - 聊天搜索页(2026-07-23)：新增 `chat/chat_search_page.dart`,一个输入框三段结果(会话 / 联系人 / 聊天记录)。会话按 `title`/`lastMessage`、联系人按备注名/账户在内存过滤(公开昵称需联网,搜索页不引入网络依赖);聊天记录走新增的 `ChatStore.searchMessages({accountId, keyword, limit=50})`——按 `accountId` 索引收窄后在内存匹配,**`plaintext` 存的是编码载荷,必须先经 `ChatPayloadCodec.decode(...).summary` 解码再匹配**(裸匹配会漏正文并错配媒体元数据),大小写不敏感、时间倒序截断,**不为搜索改表结构或加索引**。点结果一律复用 `openGroupChat` / `openDirectChat`,不复刻 ChatPage 装配;异步检索用递增序号丢弃过期结果。聊天记录命中**只打开所在会话,不定位到具体消息**(消息级锚点需 ChatPage 支持滚动定位,另列后续任务)。
 
 外部控制台待完成：

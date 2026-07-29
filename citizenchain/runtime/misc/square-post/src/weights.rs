@@ -8,7 +8,7 @@ pub trait WeightInfo {
     fn set_creator_plans(tiers: u32) -> Weight;
     fn change_subscription_plan() -> Weight;
     fn propose_set_platform_price() -> Weight;
-    /// 单笔到期续费（读价/收款方 + 转账 + 状态写 + 双向调度索引）；on_idle 按此估算每块可排空笔数。
+    /// 单笔到期续费（读价/收款方 + 转账 + 状态写 + 双向调度索引）；on_initialize 据实记账。
     fn process_one_due() -> Weight;
 }
 

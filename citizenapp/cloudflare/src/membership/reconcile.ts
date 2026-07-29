@@ -148,16 +148,16 @@ async function reconcilePlatformCandidates(
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
     // active（可能转挂起）与 suspended/creatorPaused（可能链上恢复为 active）都要复核。
-    // 按身份主键 cid 迭代镜像;回链读订阅仍用该身份当前绑定账户 account_id。
-    `SELECT cid_number, account_id FROM square_memberships
+    // 按身份主键 CID 直接读取链上订阅；账户换绑不会改变 storage key。
+    `SELECT cid_number FROM square_memberships
       WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
         AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
-  ).bind(point.chainTimestamp, batch).all<{ cid_number: string; account_id: string }>();
+  ).bind(point.chainTimestamp, batch).all<{ cid_number: string }>();
   return runBatch(rows.results ?? [], async (row) => {
     const state = await deps.readSubscriptionAtBlock(
       env,
-      row.account_id,
+      row.cid_number,
       { kind: "platform" },
       point.blockHash,
     );
@@ -173,8 +173,8 @@ async function reconcileCreatorCandidates(
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
     // creatorPaused 在链上会随创作者恢复自动续为 active，必须纳入复核刷新镜像。
-    // 按订阅者/创作者身份主键 cid 迭代;回链读订阅用各自当前绑定账户 account_id。
-    `SELECT subscriber_cid_number, creator_cid_number, subscriber_account_id, creator_account_id
+    // 订阅者和创作者都以 CID 定位链上状态，不读取审计用账户列。
+    `SELECT subscriber_cid_number, creator_cid_number
       FROM square_creator_subscriptions
       WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
         AND paid_until <= ?
@@ -182,14 +182,12 @@ async function reconcileCreatorCandidates(
   ).bind(point.chainTimestamp, batch).all<{
     subscriber_cid_number: string;
     creator_cid_number: string;
-    subscriber_account_id: string;
-    creator_account_id: string;
   }>();
   return runBatch(rows.results ?? [], async (row) => {
     const state = await deps.readSubscriptionAtBlock(
       env,
-      row.subscriber_account_id,
-      { kind: "creator", creatorAccountId: row.creator_account_id },
+      row.subscriber_cid_number,
+      { kind: "creator", creatorCidNumber: row.creator_cid_number },
       point.blockHash,
     );
     await applyCreatorState(env, row.subscriber_cid_number, row.creator_cid_number, state, point);

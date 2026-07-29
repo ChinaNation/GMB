@@ -5,6 +5,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
 import 'package:citizenapp/qr/qr_router.dart';
+import 'package:citizenapp/chat/identity/peer_cid_resolver.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 
 /// 扫码结果：收款码预填数据。
@@ -22,6 +23,28 @@ class QrScanTransferResult {
   final String? symbol;
   final String? memo;
   final String? bank;
+}
+
+/// 把用户名片码转成 CID 通讯录关系。
+///
+/// 码内 CID 只是声明值，必须把 SS58 派生为 AccountId 后经链上双向绑定重新解析，
+/// 两者完全一致才允许入库；公开昵称只是扫码展示快照，不写成私人备注。
+Future<ContactImportResult> addUserQrContact({
+  required UserContactBody body,
+  required PeerCidResolver cidResolver,
+  required UserContactService contactService,
+}) async {
+  final contactAccountId =
+      UserContactService.accountIdFromSs58(body.ss58Address);
+  final resolvedCidNumber = await cidResolver.resolve(contactAccountId);
+  if (resolvedCidNumber != body.cidNumber) {
+    throw const FormatException('用户码 CID 与 SS58 的链上绑定不一致');
+  }
+  return contactService.addContact(
+    cidNumber: body.cidNumber,
+    ss58Address: body.ss58Address,
+    contactRemark: '',
+  );
 }
 
 /// 扫码模式。
@@ -49,22 +72,26 @@ class QrScanPage extends StatefulWidget {
   const QrScanPage({
     super.key,
     required this.mode,
-    this.selfAddress,
     this.initialCode,
     this.customTitle,
+    this.contactService,
+    this.cidResolver,
   });
 
   /// 扫码模式。
   final QrScanMode mode;
-
-  /// 当前用户 SS58 地址（通讯录防自加用）。
-  final String? selfAddress;
 
   /// 如果已扫码，可直接传入原始字符串跳过扫码步骤。
   final String? initialCode;
 
   /// 自定义标题（为 null 时使用默认标题）。
   final String? customTitle;
+
+  /// 测试注入；正式运行使用统一加密通讯录服务。
+  final UserContactService? contactService;
+
+  /// 测试注入；正式运行通过链上双向绑定把二维码账户解析为永久 CID。
+  final PeerCidResolver? cidResolver;
 
   @override
   State<QrScanPage> createState() => _QrScanPageState();
@@ -73,7 +100,10 @@ class QrScanPage extends StatefulWidget {
 class _QrScanPageState extends State<QrScanPage> {
   final MobileScannerController _controller = MobileScannerController();
   final QrRouter _router = QrRouter();
-  final UserContactService _contactService = UserContactService();
+  late final UserContactService _contactService =
+      widget.contactService ?? UserContactService();
+  late final PeerCidResolver _cidResolver =
+      widget.cidResolver ?? PeerCidResolver();
   bool _handled = false;
   bool _torchOn = false;
   // 本页正在 pop/dispose 时置真，阻止 _handleCode 的 finally 重启相机（避免与 dispose 竞态）。
@@ -145,10 +175,8 @@ class _QrScanPageState extends State<QrScanPage> {
             await _showUnrecognized();
           }
         case QrScanMode.contact:
-          // 扫码添加好友:接受 user_transfer(带 recipient_name)/ user_contact
-          if (result.type == QrRouteType.userTransfer) {
-            await _handleContactFromTransfer(result);
-          } else if (result.type == QrRouteType.userContact) {
+          // 通讯录关系必须先解析永久 CID；收款码不携带 CID，不再兼作联系人码。
+          if (result.type == QrRouteType.userContact) {
             await _handleContact(result);
           } else {
             await _showUnrecognized();
@@ -235,77 +263,23 @@ class _QrScanPageState extends State<QrScanPage> {
     _popPage(QrScanTransferResult(toSs58Address: address));
   }
 
-  // 收款码 → 添加通讯录
-  Future<void> _handleContactFromTransfer(QrRouteResult result) async {
-    if (!mounted) return;
-    try {
-      final body = result.envelope!.body as UserTransferBody;
-      final name = body.recipientName.trim();
-      if (name.isEmpty) {
-        await showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('无法添加'),
-            content: const Text('该收款码不包含钱包名称，无法添加到通讯录'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-        );
-        return;
-      }
-      final contactResult = await _contactService.addContact(
-        ss58Address: body.ss58Address,
-        contactName: name,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            contactResult.created
-                ? '已加入通讯录：${contactResult.contact.contactName}'
-                : '已更新通讯录：${contactResult.contact.contactName}',
-          ),
-        ),
-      );
-      _popPage();
-    } catch (e) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('添加失败'),
-          content: Text('$e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('继续扫描'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
   // 用户码
   Future<void> _handleContact(QrRouteResult result) async {
     if (!mounted) return;
     try {
       final body = result.envelope!.body as UserContactBody;
-      final addResult = await _contactService.addContact(
-        ss58Address: body.ss58Address,
-        contactName: body.contactName,
+      final addResult = await addUserQrContact(
+        body: body,
+        cidResolver: _cidResolver,
+        contactService: _contactService,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             addResult.created
-                ? '已加入通讯录：${addResult.contact.contactName}'
-                : '已更新通讯录：${addResult.contact.contactName}',
+                ? '已加入通讯录：${body.displayName}'
+                : '已更新通讯录：${body.displayName}',
           ),
         ),
       );
@@ -333,7 +307,7 @@ class _QrScanPageState extends State<QrScanPage> {
       widget.customTitle ??
       switch (widget.mode) {
         QrScanMode.transfer => '扫描收款码',
-        QrScanMode.contact => '扫描对方收款码',
+        QrScanMode.contact => '扫描对方用户码',
         QrScanMode.raw => '扫描二维码',
         QrScanMode.dispatch => '扫描二维码',
       };

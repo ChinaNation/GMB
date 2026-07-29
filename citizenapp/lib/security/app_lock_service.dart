@@ -2,17 +2,16 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../isar/app_isar.dart';
+import 'secure_storage.dart';
 
 /// 应用锁（6 位 PIN）服务。
 ///
 /// PIN 以 PBKDF2-HMAC-SHA256(pin + salt, 10 万次迭代) 形式存储在 SecureStorage 中。
 /// 连续 5 次验证错误锁定 24 小时，累计 3 次锁定则清空全部应用数据。
 class AppLockService {
-  static const FlutterSecureStorage _secure = FlutterSecureStorage();
   static const String _keyPinHash = 'pin_hash';
   static const String _keyPinSalt = 'pin_salt';
   static const String _keyFailCount = 'pin_fail_count';
@@ -27,12 +26,12 @@ class AppLockService {
   static Future<void> setPin(String pin) async {
     final salt = _generateSalt();
     final hash = _hash(pin, salt);
-    await _secure.write(key: _keyPinSalt, value: salt);
-    await _secure.write(key: _keyPinHash, value: hash);
+    await appSecureStorage.write(key: _keyPinSalt, value: salt);
+    await appSecureStorage.write(key: _keyPinHash, value: hash);
     // 重置错误计数
-    await _secure.write(key: _keyFailCount, value: '0');
-    await _secure.delete(key: _keyLockUntil);
-    await _secure.write(key: _keyLockCount, value: '0');
+    await appSecureStorage.write(key: _keyFailCount, value: '0');
+    await appSecureStorage.delete(key: _keyLockUntil);
+    await appSecureStorage.write(key: _keyLockCount, value: '0');
   }
 
   /// 验证 PIN。
@@ -44,25 +43,31 @@ class AppLockService {
     // 锁定中不允许验证
     if (await isLocked()) return false;
 
-    final storedHash = await _secure.read(key: _keyPinHash);
-    final storedSalt = await _secure.read(key: _keyPinSalt);
+    final storedHash = await appSecureStorage.read(key: _keyPinHash);
+    final storedSalt = await appSecureStorage.read(key: _keyPinSalt);
     if (storedHash == null || storedSalt == null) return false;
 
     final inputHash = _hash(pin, storedSalt);
     if (inputHash == storedHash) {
       // 验证成功，重置错误计数
-      await _secure.write(key: _keyFailCount, value: '0');
+      await appSecureStorage.write(key: _keyFailCount, value: '0');
       return true;
     }
 
     // 验证失败
     final failCount = await _readInt(_keyFailCount) + 1;
-    await _secure.write(key: _keyFailCount, value: failCount.toString());
+    await appSecureStorage.write(
+      key: _keyFailCount,
+      value: failCount.toString(),
+    );
 
     if (failCount >= maxFailAttempts) {
       final lockCount = await _readInt(_keyLockCount) + 1;
-      await _secure.write(key: _keyLockCount, value: lockCount.toString());
-      await _secure.write(key: _keyFailCount, value: '0');
+      await appSecureStorage.write(
+        key: _keyLockCount,
+        value: lockCount.toString(),
+      );
+      await appSecureStorage.write(key: _keyFailCount, value: '0');
 
       if (lockCount >= maxLockCount) {
         await wipeAllData();
@@ -71,7 +76,10 @@ class AppLockService {
 
       // 锁定 24 小时
       final lockUntil = DateTime.now().add(lockDuration).millisecondsSinceEpoch;
-      await _secure.write(key: _keyLockUntil, value: lockUntil.toString());
+      await appSecureStorage.write(
+        key: _keyLockUntil,
+        value: lockUntil.toString(),
+      );
     }
 
     return false;
@@ -79,23 +87,23 @@ class AppLockService {
 
   /// 关闭应用锁（验证后调用）。
   static Future<void> removePin() async {
-    await _secure.delete(key: _keyPinHash);
-    await _secure.delete(key: _keyPinSalt);
-    await _secure.delete(key: _keyFailCount);
-    await _secure.delete(key: _keyLockUntil);
-    await _secure.delete(key: _keyLockCount);
+    await appSecureStorage.delete(key: _keyPinHash);
+    await appSecureStorage.delete(key: _keyPinSalt);
+    await appSecureStorage.delete(key: _keyFailCount);
+    await appSecureStorage.delete(key: _keyLockUntil);
+    await appSecureStorage.delete(key: _keyLockCount);
   }
 
   /// 是否已设置 PIN。
   static Future<bool> isPinSet() async {
-    final hash = await _secure.read(key: _keyPinHash);
+    final hash = await appSecureStorage.read(key: _keyPinHash);
     return hash != null && hash.isNotEmpty;
   }
 
   // 锁定状态
   /// 当前是否处于 24h 锁定期。
   static Future<bool> isLocked() async {
-    final lockUntilStr = await _secure.read(key: _keyLockUntil);
+    final lockUntilStr = await appSecureStorage.read(key: _keyLockUntil);
     if (lockUntilStr == null) return false;
     final lockUntil = int.tryParse(lockUntilStr);
     if (lockUntil == null) return false;
@@ -104,7 +112,7 @@ class AppLockService {
 
   /// 剩余锁定秒数（未锁定返回 0）。
   static Future<int> getRemainingLockSeconds() async {
-    final lockUntilStr = await _secure.read(key: _keyLockUntil);
+    final lockUntilStr = await appSecureStorage.read(key: _keyLockUntil);
     if (lockUntilStr == null) return 0;
     final lockUntil = int.tryParse(lockUntilStr);
     if (lockUntil == null) return 0;
@@ -128,7 +136,7 @@ class AppLockService {
     }
 
     // 2. 清空 SecureStorage
-    await _secure.deleteAll();
+    await appSecureStorage.deleteAll();
 
     // 3. 清空 SharedPreferences
     final prefs = await SharedPreferences.getInstance();
@@ -186,7 +194,7 @@ class AppLockService {
   }
 
   static Future<int> _readInt(String key) async {
-    final str = await _secure.read(key: key);
+    final str = await appSecureStorage.read(key: key);
     if (str == null) return 0;
     return int.tryParse(str) ?? 0;
   }

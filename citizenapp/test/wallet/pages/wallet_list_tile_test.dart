@@ -17,9 +17,9 @@ void main() {
     const publicKey =
         '0x1111111111111111111111111111111111111111111111111111111111111111';
 
-    test('从当前钱包二维码 user_contact 提取地址', () {
+    test('从新用户二维码 user_contact 提取地址', () {
       const raw =
-          '{"p":"QR_V1","k":3,"b":{"ss58_address":"$address","contact_name":"测试钱包"}}';
+          '{"p":"QR_V1","k":3,"b":{"cid_number":"CN001-CTZN-000000001-2026","ss58_address":"$address","display_name":"测试用户"}}';
 
       expect(extractColdWalletImportAddress(raw), address);
     });

@@ -78,6 +78,11 @@ class QrEnvelope<T extends QrBody> {
     }
     final kindWire = data['k'];
     final kind = QrKind.fromWire(kindWire);
+    _requireExactKeys(
+      data,
+      kind.temporary ? const {'p', 'k', 'i', 'e', 'b'} : const {'p', 'k', 'b'},
+      'QR envelope',
+    );
 
     String? id;
     int? issuedAt;
@@ -131,6 +136,19 @@ class QrEnvelope<T extends QrBody> {
       throw FormatException('字段 $key 必填且为整数');
     }
     return v;
+  }
+
+  static void _requireExactKeys(
+    Map<String, dynamic> data,
+    Set<String> expected,
+    String context,
+  ) {
+    final actual = data.keys.toSet();
+    if (actual.length != expected.length ||
+        !actual.containsAll(expected) ||
+        !expected.containsAll(actual)) {
+      throw FormatException('$context 字段集合不符合 QR_V1');
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 # CitizenApp QR 技术说明
 
-- 更新日期:2026-07-19
+- 更新日期:2026-07-28
 - 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
 - Action 注册表:`memory/01-architecture/qr/qr-action-registry.md`
 
@@ -12,7 +12,7 @@ CitizenApp 只使用 `QR_V1`。所有扫码 envelope 顶层字段固定为 `p/k/
 |---:|---|---|
 | 1 | `sign_request` | 生成需要外部签名的请求二维码 |
 | 2 | `sign_response` | 扫描外部签名设备返回的签名响应并验签 |
-| 3 | `user_contact` | 生成/扫描联系人钱包码 |
+| 3 | `user_contact` | 仅为链上 CID↔AccountId 闭环命中的身份账户生成；扫描时复核二维码 CID 与链上绑定 |
 | 4 | `user_transfer` | 生成/扫描收款码 |
 
 CitizenApp 不处理管理员扫码登录。登录签名请求由 OnChina 页面生成,由 CitizenWallet 公民钱包扫码签名。
@@ -58,7 +58,14 @@ CitizenApp 扫描 `k=2` 签名响应:
 
 ## 4. 用户码
 
-`user_contact` 是固定码,不带 `i/e`,body 只包含联系人所需字段。
+`user_contact` 是固定身份码，不带 `i/e`，body 严格只含
+`cid_number + ss58_address + display_name`。CID 和公开昵称必须无首尾空格，
+SS58 必须是 prefix 2027 的规范地址；旧 `contact_name` 和任何未知字段直接拒绝。
+
+身份账户生成 `k=3` 前必须命中链上 CID↔AccountId 闭环。未注册账户和其它钱包账户
+只生成五分钟 `k=4 user_transfer`；链读失败从严拒绝生成。扫码添加联系人时必须把
+SS58 还原为 AccountId，再按链上绑定解析 CID，并与二维码声明的 `cid_number`
+精确比较；`display_name` 只作公开展示，不写入私人 `contact_remark`。
 
 `user_transfer` 是收款临时码,带 `i/e`,body 可以包含 `memo`。备注仅用于付款方展示和业务填充,不得参与签名协议真源。
 

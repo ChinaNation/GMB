@@ -3,6 +3,8 @@
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
 // 与 CitizenApp / CitizenWallet 的 Dart envelope 字段逐字节一致。
 
+import { decodeSs58 } from '../utils/ss58';
+
 export const QR_V1 = 'QR_V1' as const;
 
 export type QrKind = 'sign_request' | 'sign_response' | 'user_contact' | 'user_transfer';
@@ -39,8 +41,9 @@ export interface SignResponseBody {
 }
 
 export interface UserContactBody {
+  cid_number: string;
   ss58_address: string;
-  contact_name: string;
+  display_name: string;
 }
 
 export interface UserTransferBody {
@@ -168,10 +171,32 @@ function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
 }
 
 function parseUserContactBody(b: Record<string, unknown>): UserContactBody {
-  requireExactKeys(b, ['ss58_address', 'contact_name'], 'b');
+  requireExactKeys(b, ['cid_number', 'ss58_address', 'display_name'], 'b');
+  const cidNumber = requireString(b, 'cid_number');
+  if (cidNumber !== cidNumber.trim() || new TextEncoder().encode(cidNumber).length > 32) {
+    throw new QrParseError('b.cid_number 必须为无首尾空格的 1 到 32 字节字符串');
+  }
+  const ss58Address = requireString(b, 'ss58_address');
+  if (ss58Address !== ss58Address.trim()) {
+    throw new QrParseError('b.ss58_address 不得包含首尾空格');
+  }
+  try {
+    decodeSs58(ss58Address);
+  } catch (error) {
+    throw new QrParseError(
+      `b.ss58_address 必须为本链规范 SS58 地址: ${
+        error instanceof Error ? error.message : '校验失败'
+      }`,
+    );
+  }
+  const displayName = requireString(b, 'display_name');
+  if (displayName !== displayName.trim() || [...displayName].length > 40) {
+    throw new QrParseError('b.display_name 必须为无首尾空格的 1 到 40 字符串');
+  }
   return {
-    ss58_address: requireString(b, 'ss58_address'),
-    contact_name: requireString(b, 'contact_name'),
+    cid_number: cidNumber,
+    ss58_address: ss58Address,
+    display_name: displayName,
   };
 }
 

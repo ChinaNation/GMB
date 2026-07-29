@@ -1301,11 +1301,20 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
 }
 
 #[test]
-fn runtime_square_post_normal_publish_allows_visitor_account_id() {
+fn runtime_square_post_normal_publish_requires_and_records_active_cid() {
     new_test_ext().execute_with(|| {
-        let visitor = AccountId::new([42u8; 32]);
+        let signer_account_id = AccountId::new([42u8; 32]);
+        let cid_number = real_cid_number("SQUARE-ANON-NORMAL", "CTZN", "1");
+        let bounded_cid_number: citizen_identity::CidNumberBound = cid_number
+            .clone()
+            .try_into()
+            .expect("cid number should fit");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(signer_account_id.clone()),
+            bounded_cid_number.clone(),
+        ));
         assert_ok!(SquarePost::publish_post(
-            RuntimeOrigin::signed(visitor.clone()),
+            RuntimeOrigin::signed(signer_account_id.clone()),
             b"sqp_runtime_normal".to_vec(),
             square_post::SquarePostCategory::Normal,
             [3u8; 32],
@@ -1319,29 +1328,41 @@ fn runtime_square_post_normal_publish_allows_visitor_account_id() {
             .expect("post id fits");
         let stored = square_post::SquarePosts::<Runtime>::get(stored_post_id)
             .expect("square post should be indexed");
-        assert_eq!(stored.owner_account_id, visitor);
-        assert_eq!(stored.cid_number, None);
+        assert_eq!(stored.signer_account_id, signer_account_id);
+        assert_eq!(stored.cid_number, bounded_cid_number);
         assert_eq!(
             stored.post_category,
             square_post::SquarePostCategory::Normal
+        );
+        assert_eq!(
+            square_post::PublishedPostCountByCid::<Runtime>::get(stored.cid_number),
+            1
         );
     });
 }
 
 #[test]
-fn runtime_square_post_campaign_requires_citizen_identity() {
+fn runtime_square_post_campaign_rejects_anonymous_active_cid() {
     new_test_ext().execute_with(|| {
-        let visitor = AccountId::new([43u8; 32]);
+        let signer_account_id = AccountId::new([43u8; 32]);
+        let cid_number = real_cid_number("SQUARE-ANON-CAMPAIGN", "CTZN", "1");
+        let bounded_cid_number: citizen_identity::CidNumberBound = cid_number
+            .try_into()
+            .expect("cid number should fit");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(signer_account_id.clone()),
+            bounded_cid_number,
+        ));
         assert_noop!(
             SquarePost::publish_post(
-                RuntimeOrigin::signed(visitor),
+                RuntimeOrigin::signed(signer_account_id),
                 b"sqp_runtime_campaign_denied".to_vec(),
                 square_post::SquarePostCategory::Campaign,
                 [4u8; 32],
                 b"sqr_runtime_campaign_denied".to_vec(),
                 1_893_456_000_000,
             ),
-            square_post::Error::<Runtime>::CampaignRequiresCitizen
+            square_post::Error::<Runtime>::CampaignRequiresVotingIdentity
         );
     });
 }
@@ -1399,13 +1420,10 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_account_id() {
             .expect("post id fits");
         let stored = square_post::SquarePosts::<Runtime>::get(stored_post_id)
             .expect("square post should be indexed");
-        assert_eq!(stored.owner_account_id, account_id);
+        assert_eq!(stored.signer_account_id, account_id);
+        assert_eq!(stored.cid_number.to_vec(), cid_number);
         assert_eq!(
-            stored.cid_number.map(|value| value.to_vec()),
-            Some(cid_number)
-        );
-        assert_eq!(
-            square_post::PublishedPostCountByAccount::<Runtime>::get(account_id),
+            square_post::PublishedPostCountByCid::<Runtime>::get(stored.cid_number),
             1
         );
     });

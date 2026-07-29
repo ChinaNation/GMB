@@ -10,7 +10,7 @@ const POINT = {
   observedAt: 10_000,
 };
 
-// 身份主键 cid 与其当前绑定账户 account_id 刻意取不同值，验证「按 cid 迭代镜像、按 account_id 回链读」的拆分。
+// 链上订阅直接按身份主键 CID 读取；账户列只保留为历史审计字段。
 const CID_DUE = "CN220-CTZN2-198805200-2026";
 const CID_FUTURE = "CN220-CTZN2-197001010-2026";
 const CID_BAD = "CN220-CTZN2-199001010-2026";
@@ -53,13 +53,13 @@ class FakeStmt {
   bind(...args: unknown[]): FakeStmt { this.args = args; return this; }
 
   async all<T>(): Promise<{ results: T[] }> {
-    if (this.sql.includes("SELECT cid_number, account_id FROM square_memberships")) {
+    if (this.sql.includes("SELECT cid_number FROM square_memberships")) {
       const [chainTimestamp, limit] = this.args as [number, number];
       const results = [...this.db.rows.values()]
         .filter((row) => row.subscription_status === "active" && row.paid_until <= chainTimestamp)
         .sort((a, b) => a.paid_until - b.paid_until)
         .slice(0, limit)
-        .map((row) => ({ cid_number: row.cid_number, account_id: row.account_id }));
+        .map((row) => ({ cid_number: row.cid_number }));
       return { results: results as T[] };
     }
     return { results: [] };
@@ -111,10 +111,9 @@ function deps(
 ): ReconcileDeps {
   return {
     finalizedPoint: async () => POINT,
-    // 回链读订阅按当前绑定账户 account_id 入参，states/fail 均以 account_id 为键。
-    readSubscriptionAtBlock: async (_env, accountId) => {
-      if (fail.has(accountId)) throw new Error("chain failed");
-      return states[accountId] ?? null;
+    readSubscriptionAtBlock: async (_env, cidNumber) => {
+      if (fail.has(cidNumber)) throw new Error("chain failed");
+      return states[cidNumber] ?? null;
     },
   };
 }
@@ -137,7 +136,10 @@ describe("平台订阅低资源到期对账", () => {
     const db = new FakeDb();
     db.seed(CID_DUE, "acct-due", 8_000);
     db.seed(CID_FUTURE, "acct-future", 12_000);
-    const result = await reconcileMemberships(env(db), deps({ "acct-due": active("democracy") }));
+    const result = await reconcileMemberships(
+      env(db),
+      deps({ [CID_DUE]: active("democracy") }),
+    );
     expect(result).toEqual({ scanned: 1, updated: 1, failed: 0 });
     expect(db.rows.get(CID_DUE)?.membership_level).toBe("democracy");
     expect(db.rows.get(CID_DUE)?.paid_until).toBe(20_000);
@@ -147,7 +149,7 @@ describe("平台订阅低资源到期对账", () => {
   it("链上查无时 fail-closed 为 terminated", async () => {
     const db = new FakeDb();
     db.seed(CID_DUE, "acct-due", 8_000);
-    await reconcileMemberships(env(db), deps({ "acct-due": null }));
+    await reconcileMemberships(env(db), deps({ [CID_DUE]: null }));
     expect(db.rows.get(CID_DUE)?.subscription_status).toBe("terminated");
   });
 
@@ -157,7 +159,7 @@ describe("平台订阅低资源到期对账", () => {
     db.seed(CID_GOOD, "acct-good", 8_000);
     const result = await reconcileMemberships(
       env(db),
-      deps({ "acct-good": active("spark") }, new Set(["acct-bad"])),
+      deps({ [CID_GOOD]: active("spark") }, new Set([CID_BAD])),
     );
     expect(result).toEqual({ scanned: 2, updated: 1, failed: 1 });
     expect(db.rows.get(CID_BAD)?.verified_at).toBe(1);
@@ -169,11 +171,11 @@ describe("平台订阅低资源到期对账", () => {
     db.seed(CID_DUE, "acct-due", 8_000);
     await expect(reconcileMemberships(
       env(db, { MEMBERSHIP_RECONCILE_ENABLED: "0" }),
-      deps({ "acct-due": null }),
+      deps({ [CID_DUE]: null }),
     )).resolves.toEqual({ scanned: 0, updated: 0, failed: 0 });
     await expect(reconcileMemberships(
       env(db, { CHAIN_URL: undefined }),
-      deps({ "acct-due": null }),
+      deps({ [CID_DUE]: null }),
     )).resolves.toEqual({ scanned: 0, updated: 0, failed: 0 });
   });
 });

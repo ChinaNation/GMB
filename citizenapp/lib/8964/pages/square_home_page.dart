@@ -63,9 +63,8 @@ class _SquareHomePageState extends State<SquareHomePage> {
   late Future<List<SquarePost>> _feedFuture;
   final List<SquarePost> _localPosts = [];
 
-  /// 最近一次身份加载结果的钱包快照,供 _onWalletsChanged 廉价比对。
+  /// 最近一次身份加载结果的身份账户，供 _onWalletsChanged 廉价比对。
   String? _identityAddress;
-  String? _identityWalletName;
 
   final SquareApiClient _squareApi = SquareApiClient();
 
@@ -188,7 +187,6 @@ class _SquareHomePageState extends State<SquareHomePage> {
       readLiveChain: readLiveChain,
     );
     _identityAddress = identity.accountId;
-    _identityWalletName = identity.walletName;
     return identity;
   }
 
@@ -251,19 +249,16 @@ class _SquareHomePageState extends State<SquareHomePage> {
   }
 
   Future<void> _onWalletsChanged() async {
-    // 先廉价比对(纯 Isar 读):默认身份地址与昵称都没变时跳过,
+    // 先廉价比对（纯 Isar 读）：身份账户没变时跳过。
+    // 钱包名是本机标签，改名不得触发广场身份或公开昵称重载。
     // 避免无关钱包操作触发 CID 链查询。乱序安全由 FutureBuilder
     // 只跟踪最新 _identityFuture 保证。
-    final manager = widget.identityService.walletManager ?? WalletManager();
-    final wallet = await manager.getDefaultWallet();
-    // 身份账户廉价读（不启动 smoldot），与 _identityAddress 同口径比对；walletName
-    // 仍是钱包级比对（默认钱包改名也要重载身份卡）。
+    // 身份账户廉价读（不启动 smoldot），与 _identityAddress 同口径比对。
     final identityAccountId =
         await IdentityAccountCache.instance.accountId(allowChainRead: false) ??
             '';
     if (!mounted) return;
-    if (identityAccountId == (_identityAddress ?? '') &&
-        wallet?.walletName == _identityWalletName) {
+    if (identityAccountId == (_identityAddress ?? '')) {
       return;
     }
     _operationalIdentityAccount = null;

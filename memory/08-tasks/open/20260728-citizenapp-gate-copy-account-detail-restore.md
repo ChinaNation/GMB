@@ -76,7 +76,8 @@
   / `identity_registration_gate_test` / `clearing_bank_settings_page_test`。
 - UI 复核新增边界：
   - 账户名称重命名只写 `AccountEntity.accountName`，不联动钱包名或链上昵称。
-  - 账户用户二维码直接复用 `UserQrPage(contactName, accountId)`，不新增二维码协议。
+  - 账户二维码统一复用 `openAccountQrPage(accountId, paymentDisplayName)`；2026-07-28
+    起身份账户生成严格 `k=3`，其它账户生成五分钟 `k=4`，不新增二维码协议。
   - 账户扫码签名改造现有三个签名服务为账户维度，不保留误落账户0的双轨分支。
   - `qr_scan_page.dart` 基线 SHA-256：
     `8160c55fab80256615d3132a3ae7e6e221ae434124be24788025718f196d7303`。

@@ -29,12 +29,22 @@ import {
   releaseActionChallenge
 } from '../src/account/action_challenge';
 import { purgeAccount, revokeRebindOldAccount } from '../src/account/purge';
+import { rebindRevokeRoute } from '../src/rebind/service';
 import { routeRequest } from '../src/routes';
+import { accountIdBytes } from '../src/shared/ids';
+import {
+  concatBytes,
+  OP_SIGN_CID_REBIND,
+  scaleString,
+  signingMessage
+} from '../src/shared/signing_message';
 import type { Env, MediaAssetRow } from '../src/types';
 
 const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
 
 const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
+const NEW_ACCOUNT_ID = '0x2222222222222222222222222222222222222222222222222222222222222222';
+const OLD_ACCOUNT_SIGNATURE = `0x${'ab'.repeat(64)}`;
 // 唯一身份主键 CID：注销按 cid_number 删 off-chain 表，须与上方 identity mock 一致。
 const STANDARD_CID = 'CN220-CTZN2-198805200-2026';
 
@@ -414,10 +424,10 @@ describe('revokeRebindOldAccount', () => {
     // 账户级鉴权敏感数据全删(Chat 端到端材料/登录挑战/设备子钥)。
     expect(joined).toContain('DELETE FROM chat_keypackages WHERE account_id = ?');
     expect(joined).toContain('DELETE FROM chat_devices WHERE account_id = ?');
-    // R5 起绑定 nonce 按身份主键 cid 归属（PK 去掉 account_id 列），吊销旧账户按 cid 硬删。
-    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE cid_number = ?');
     expect(joined).toContain('DELETE FROM square_login_challenges WHERE account_id = ?');
     expect(joined).toContain('DELETE FROM square_device_subkeys WHERE account_id = ?');
+    // 换绑后这些 CID 级状态由新账户继续使用，绝不能随旧账户吊销。
+    expect(joined).not.toContain('chat_device_binding_nonces');
     // 随 CID 迁到新账户的数据(永不丢失)绝不删——R4 起通讯录密文亦按 cid 归属,一并保留。
     expect(joined).not.toContain('square_contacts');
     expect(joined).not.toContain('square_posts');
@@ -429,5 +439,113 @@ describe('revokeRebindOldAccount', () => {
     expect(kv.store.has(`square_sessions_by_account_id:${ACCOUNT_ID}`)).toBe(false);
     expect(kv.store.has('square_session:tok1')).toBe(false);
     expect(result.deleted_rows).toBeGreaterThan(0);
+  });
+});
+
+class RebindKv {
+  readonly store = new Map<string, unknown>();
+
+  async get<T>(key: string, type?: 'json'): Promise<T | string | null> {
+    const value = this.store.get(key);
+    if (value === undefined) return null;
+    if (type === 'json') return value as T;
+    return typeof value === 'string' ? value : JSON.stringify(value);
+  }
+
+  async delete(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+}
+
+function rebindEnv(): { env: Env; db: PurgeDb; kv: RebindKv } {
+  const db = new PurgeDb();
+  const kv = new RebindKv();
+  kv.store.set('square_session:new-token', {
+    cid_number: STANDARD_CID,
+    account_id: NEW_ACCOUNT_ID,
+    device_key_hash: 'a'.repeat(64),
+    created_at: 1,
+    expires_at: Date.now() + 60_000
+  });
+  kv.store.set(`square_sessions_by_account_id:${ACCOUNT_ID}`, JSON.stringify(['old-token']));
+  kv.store.set('square_session:old-token', {
+    cid_number: STANDARD_CID,
+    account_id: ACCOUNT_ID,
+    device_key_hash: 'b'.repeat(64),
+    created_at: 1,
+    expires_at: Date.now() + 60_000
+  });
+  return {
+    env: { DB: db, SQUARE_CACHE: kv } as unknown as Env,
+    db,
+    kv
+  };
+}
+
+function rebindRequest(
+  oldAccountId = ACCOUNT_ID,
+  oldAccountSignature = OLD_ACCOUNT_SIGNATURE
+): Request {
+  return new Request('https://worker.test/v1/square/rebind/revoke', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer new-token',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      old_account_id: oldAccountId,
+      old_account_signature: oldAccountSignature
+    })
+  });
+}
+
+describe('rebindRevokeRoute', () => {
+  beforeEach(() => mockVerify.mockReset());
+
+  it('新账户会话 + 精确旧账户换绑授权才可代吊销，且只删旧账户级材料', async () => {
+    const { env, db, kv } = rebindEnv();
+    mockVerify.mockResolvedValue(true);
+
+    const response = await rebindRevokeRoute(rebindRequest(), env);
+    expect(response.status).toBe(200);
+    expect(mockVerify).toHaveBeenCalledWith(
+      signingMessage(
+        OP_SIGN_CID_REBIND,
+        concatBytes(scaleString(STANDARD_CID), accountIdBytes(NEW_ACCOUNT_ID))
+      ),
+      OLD_ACCOUNT_SIGNATURE,
+      ACCOUNT_ID
+    );
+    const joined = db.deletes.join('\n');
+    expect(joined).toContain('DELETE FROM chat_keypackages WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM chat_devices WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_login_challenges WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_device_subkeys WHERE account_id = ?');
+    expect(joined).not.toContain('chat_device_binding_nonces');
+    expect(kv.store.has('square_session:old-token')).toBe(false);
+    expect(kv.store.has('square_session:new-token')).toBe(true);
+  });
+
+  it('他人/错误旧账户签名拒绝且不产生任何删除', async () => {
+    const { env, db } = rebindEnv();
+    mockVerify.mockResolvedValue(false);
+
+    await expect(rebindRevokeRoute(rebindRequest(), env)).rejects.toMatchObject({
+      status: 403,
+      code: 'invalid_rebind_authorization'
+    });
+    expect(db.deletes).toEqual([]);
+  });
+
+  it('禁止把当前新账户自身伪装成旧账户清理', async () => {
+    const { env, db } = rebindEnv();
+    await expect(
+      rebindRevokeRoute(rebindRequest(NEW_ACCOUNT_ID), env)
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'rebind_account_unchanged'
+    });
+    expect(mockVerify).not.toHaveBeenCalled();
+    expect(db.deletes).toEqual([]);
   });
 });

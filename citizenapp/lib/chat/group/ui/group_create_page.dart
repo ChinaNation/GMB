@@ -163,9 +163,9 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
                                 }
                               }),
                               title: Text(
-                                contact.contactName.isEmpty
+                                contact.contactRemark.isEmpty
                                     ? _short(contact.accountId)
-                                    : contact.contactName,
+                                    : contact.contactRemark,
                               ),
                               subtitle: Text(
                                 _short(contact.accountId),

@@ -535,13 +535,10 @@ class _ChatTabState extends State<ChatTab> {
       setState(() => _error = '请先在「我的 → 我的钱包」创建热钱包');
       return;
     }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => UserQrPage(
-          accountId: wallet.accountId,
-          contactName: wallet.walletName,
-        ),
-      ),
+    await openAccountQrPage(
+      context,
+      accountId: wallet.accountId,
+      paymentDisplayName: wallet.walletName,
     );
   }
 
@@ -571,7 +568,7 @@ class _ChatTabState extends State<ChatTab> {
       await opener(context);
       return;
     }
-    await scanAndAddContact(context, selfAccountId: _accountId);
+    await scanAndAddContact(context);
   }
 
   /// 搜索 = 进入独立搜索页；透传 store 与账户，避免搜索页重复解析依赖。

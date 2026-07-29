@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:citizenapp/8964/profile/services/nickname_publisher.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
@@ -193,33 +192,11 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
-  /// 钱包名云端同步（云端为真源）：重放待推送项 + 按云端版本回写本机。
-  ///
-  /// best-effort 且**逐钱包隔离**：单个失败只跳过它，不影响其余、也不阻塞列表。
-  Future<void> _syncWalletNames(List<WalletProfile>? wallets) async {
-    final list = wallets;
-    if (list == null || list.isEmpty) return;
-    final publisher = NicknamePublisher();
-    var touched = false;
-    for (final wallet in list) {
-      if (!wallet.isHotWallet) continue;
-      touched = true;
-      try {
-        await publisher.syncWalletName(wallet);
-      } catch (e) {
-        AppLog.d('[Wallet] 钱包名同步失败 index=${wallet.walletIndex}: $e');
-      }
-    }
-    // 同步可能改写了本机名，重读一次让列表反映最新值。
-    if (touched && mounted) await _loadWallets(showSnack: false);
-  }
-
   Future<void> _reload() async {
     final wallets = await _loadWallets();
     if (!_isSelectionMode) {
       await _loadIdentityWallet();
       await _refreshBalancesFromChain(wallets: wallets);
-      await _syncWalletNames(wallets);
     }
   }
 
@@ -406,10 +383,8 @@ class _WalletTabState extends State<WalletTab> {
       return;
     }
     try {
+      // 钱包名是纯本机标签，不发布为公开昵称，也不读取资料服务。
       await _walletService.renameWallet(wallet.walletIndex, newName);
-      // 钱包名 = 昵称：推到**该钱包自己账户**的 display_name（云端为真源、
-      // 本机为缓存）。推送失败会留在待同步队列，下次进本页重放。
-      await NicknamePublisher().onLocalRename(wallet, newName);
       if (!mounted) return;
       await _loadWallets();
     } catch (e) {
@@ -1484,13 +1459,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
   }
 
-  /// 钱包名持久化（纯落盘 + 聊天账户昵称双向同步）。
+  /// 钱包名持久化（纯本机落盘）。
   ///
   ///
-  /// - 编辑态和回滚逻辑已搬到 [WalletIdentityCard],这里仅负责落盘 + 同步。
+  /// - 编辑态和回滚逻辑已搬到 [WalletIdentityCard]，这里只负责本机落盘。
   /// - 调用方(WalletIdentityCard)传进来的 newName 已 trim,但 updateWalletDisplay
   ///   内部再 trim 一次也无副作用,保持签名稳定。
-  /// - 若该钱包绑定的是当前聊天账户，需要同步更新 UserProfile 里的昵称。
+  /// - 公开昵称、聊天联系人名均有独立真源，本方法不得触发资料或聊天同步。
   /// - 出错时重新抛出,让 WalletIdentityCard 走回滚分支。
   Future<void> _saveWalletName(String newName) async {
     try {
@@ -1499,9 +1474,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         walletName: newName,
         walletIcon: widget.wallet.walletIcon,
       );
-      // 钱包名 = 昵称：推到**该钱包自己账户**的 display_name（云端为真源、
-      // 本机为缓存）。推送失败会留在待同步队列，下次进钱包页重放。
-      await NicknamePublisher().onLocalRename(widget.wallet, newName);
       if (!mounted) return;
       setState(() {
         _hasChanged = true;

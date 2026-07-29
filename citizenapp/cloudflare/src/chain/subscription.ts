@@ -23,7 +23,7 @@ import {
 
 export type SubscriptionIssuer =
   | { kind: "platform" }
-  | { kind: "creator"; creatorAccountId: string };
+  | { kind: "creator"; creatorCidNumber: string };
 
 export type SubscriptionStatus =
   | "active"
@@ -32,7 +32,10 @@ export type SubscriptionStatus =
   | "suspended"
   | "creatorPaused";
 
-export type SuspendReason = "needReconsent" | "insufficientBalance";
+export type SuspendReason =
+  | "needReconsent"
+  | "insufficientBalance"
+  | "identityBindingUnavailable";
 
 export type PlatformLevel = "freedom" | "democracy" | "spark";
 export type BillingPeriod = "monthly" | "quarterly" | "yearly";
@@ -65,14 +68,14 @@ export type SubscriptionBusinessAction =
   | { kind: "platform_change"; membershipLevel: PlatformLevel }
   | {
       kind: "creator_subscribe";
-      creatorAccountId: string;
+      creatorCidNumber: string;
       tierId: string;
       billingPeriod: BillingPeriod;
     }
-  | { kind: "creator_cancel"; creatorAccountId: string }
+  | { kind: "creator_cancel"; creatorCidNumber: string }
   | {
       kind: "creator_change";
-      creatorAccountId: string;
+      creatorCidNumber: string;
       tierId: string;
       billingPeriod: BillingPeriod;
     }
@@ -134,27 +137,36 @@ function encodeIssuerKey(issuer: SubscriptionIssuer): Uint8Array {
   }
   return concat([
     new Uint8Array([CREATOR_ISSUER_TAG]),
-    decodeAccountId(issuer.creatorAccountId),
+    encodeCidNumber(issuer.creatorCidNumber),
   ]);
 }
 
 export function buildSubscriptionKey(
-  subscriberAccountId: string,
+  subscriberCidNumber: string,
   issuer: SubscriptionIssuer,
 ): Uint8Array {
   return storageMapKey(
     "SquarePost",
     "Subscriptions",
-    concat([decodeAccountId(subscriberAccountId), encodeIssuerKey(issuer)]),
+    concat([encodeCidNumber(subscriberCidNumber), encodeIssuerKey(issuer)]),
   );
 }
 
-export function buildCreatorPlansKey(creatorAccountId: string): Uint8Array {
+export function buildCreatorPlansKey(creatorCidNumber: string): Uint8Array {
   return storageMapKey(
     "SquarePost",
     "CreatorPlans",
-    decodeAccountId(creatorAccountId),
+    encodeCidNumber(creatorCidNumber),
   );
+}
+
+/** `CidNumberOf = BoundedVec<u8, 32>` 的唯一 SCALE 编码，不接受空值或超长值。 */
+function encodeCidNumber(cidNumber: string): Uint8Array {
+  const bytes = new TextEncoder().encode(cidNumber);
+  if (bytes.length === 0 || bytes.length > 32) {
+    throw new HttpError(400, "invalid_cid_number", "cid_number 的 UTF-8 长度必须为 1-32 字节");
+  }
+  return concat([new Uint8Array([bytes.length << 2]), bytes]);
 }
 
 function readU128Le(data: Uint8Array, offset: number): bigint {
@@ -256,6 +268,8 @@ export function decodeSubscriptionState(
       suspendReason = "needReconsent";
     } else if (reasonByte === 1) {
       suspendReason = "insufficientBalance";
+    } else if (reasonByte === 2) {
+      suspendReason = "identityBindingUnavailable";
     } else {
       throw new RangeError("invalid suspend_reason");
     }
@@ -332,10 +346,10 @@ function readCompactCount(
 
 export async function readSubscription(
   env: Env,
-  subscriberAccountId: string,
+  subscriberCidNumber: string,
   issuer: SubscriptionIssuer,
 ): Promise<ChainSubscriptionState | null> {
-  const key = buildSubscriptionKey(subscriberAccountId, issuer);
+  const key = buildSubscriptionKey(subscriberCidNumber, issuer);
   const hex = await fetchFinalizedChainStorage(env, `0x${bytesToHex(key)}`);
   return hex ? decodeSubscriptionState(hexToBytes(hex)) : null;
 }
@@ -343,27 +357,27 @@ export async function readSubscription(
 /** 在指定 finalized 区块读取订阅，确保交易证明、状态和链时间属于同一状态快照。 */
 export async function readSubscriptionAtBlock(
   env: Env,
-  subscriberAccountId: string,
+  subscriberCidNumber: string,
   issuer: SubscriptionIssuer,
   blockHash: string,
 ): Promise<ChainSubscriptionState | null> {
-  const key = buildSubscriptionKey(subscriberAccountId, issuer);
+  const key = buildSubscriptionKey(subscriberCidNumber, issuer);
   const hex = await fetchChainStorage(env, `0x${bytesToHex(key)}`, blockHash);
   return hex ? decodeSubscriptionState(hexToBytes(hex)) : null;
 }
 
 export function readPlatformSubscription(
   env: Env,
-  subscriberAccountId: string,
+  subscriberCidNumber: string,
 ): Promise<ChainSubscriptionState | null> {
-  return readSubscription(env, subscriberAccountId, { kind: "platform" });
+  return readSubscription(env, subscriberCidNumber, { kind: "platform" });
 }
 
 export async function readCreatorPlans(
   env: Env,
-  creatorAccountId: string,
+  creatorCidNumber: string,
 ): Promise<ChainCreatorTier[]> {
-  const key = buildCreatorPlansKey(creatorAccountId);
+  const key = buildCreatorPlansKey(creatorCidNumber);
   const hex = await fetchFinalizedChainStorage(env, `0x${bytesToHex(key)}`);
   return hex ? decodeCreatorPlans(hexToBytes(hex)) : [];
 }
@@ -372,10 +386,10 @@ export async function readCreatorPlans(
 /** 在指定 finalized 区块读取创作者付款档位，展示字段不得进入该链上结构。 */
 export async function readCreatorPlansAtBlock(
   env: Env,
-  creatorAccountId: string,
+  creatorCidNumber: string,
   blockHash: string,
 ): Promise<ChainCreatorTier[]> {
-  const key = buildCreatorPlansKey(creatorAccountId);
+  const key = buildCreatorPlansKey(creatorCidNumber);
   const hex = await fetchChainStorage(env, `0x${bytesToHex(key)}`, blockHash);
   return hex ? decodeCreatorPlans(hexToBytes(hex)) : [];
 }
@@ -593,7 +607,7 @@ function decodeSubscriptionCall(
     return issuer.kind === "platform"
       ? { action: { kind: "platform_cancel" }, offset }
       : {
-          action: { kind: "creator_cancel", creatorAccountId: issuer.creatorAccountId },
+          action: { kind: "creator_cancel", creatorCidNumber: issuer.creatorCidNumber },
           offset,
         };
   }
@@ -614,7 +628,7 @@ function decodeSubscriptionCall(
     return {
       action: {
         kind: callIndex === 1 ? "creator_subscribe" : "creator_change",
-        creatorAccountId: issuer.creatorAccountId,
+        creatorCidNumber: issuer.creatorCidNumber,
         tierId: decodedPlan.tierId,
         billingPeriod: decodedPlan.billingPeriod,
       },
@@ -629,14 +643,18 @@ function decodeCallIssuer(
   offset: number,
 ):
   | { kind: "platform"; offset: number }
-  | { kind: "creator"; creatorAccountId: string; offset: number } {
+  | { kind: "creator"; creatorCidNumber: string; offset: number } {
   const tag = data[offset++];
   if (tag === PLATFORM_ISSUER_TAG) return { kind: "platform", offset };
   if (tag !== CREATOR_ISSUER_TAG) {
     throw new HttpError(400, "invalid_subscription_call", "订阅收款主体不合法");
   }
-  const account = sliceExact(data, offset, 32);
-  return { kind: "creator", creatorAccountId: `0x${bytesToHex(account)}`, offset: offset + 32 };
+  const cid = readScaleBytes(data, offset);
+  return {
+    kind: "creator",
+    creatorCidNumber: strictCidNumber(cid.value),
+    offset: cid.offset,
+  };
 }
 
 function decodeCallPlan(
@@ -785,14 +803,14 @@ function businessActionsEqual(
     return actual.membershipLevel === expected.membershipLevel;
   }
   if (actual.kind === "creator_cancel" && expected.kind === "creator_cancel") {
-    return accountHex(expected.creatorAccountId) === actual.creatorAccountId;
+    return expected.creatorCidNumber === actual.creatorCidNumber;
   }
   if (
     (actual.kind === "creator_subscribe" || actual.kind === "creator_change") &&
     (expected.kind === "creator_subscribe" || expected.kind === "creator_change")
   ) {
     return (
-      accountHex(expected.creatorAccountId) === actual.creatorAccountId &&
+      expected.creatorCidNumber === actual.creatorCidNumber &&
       actual.tierId === expected.tierId &&
       actual.billingPeriod === expected.billingPeriod
     );
@@ -814,16 +832,19 @@ function creatorTiersEqual(actual: ChainCreatorTier[], expected: ChainCreatorTie
   });
 }
 
-function accountHex(account: string): string {
-  return `0x${bytesToHex(decodeAccountId(account))}`;
-}
-
 function strictUtf8(value: Uint8Array): string {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(value);
   } catch {
     throw new HttpError(400, "invalid_subscription_call", "订阅文本不是合法 UTF-8");
   }
+}
+
+function strictCidNumber(value: Uint8Array): string {
+  if (value.length === 0 || value.length > 32) {
+    throw new HttpError(400, "invalid_subscription_call", "cid_number 长度不合法");
+  }
+  return strictUtf8(value);
 }
 
 function sliceExact(data: Uint8Array, offset: number, length: number): Uint8Array {

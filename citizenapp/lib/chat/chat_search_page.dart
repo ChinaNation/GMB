@@ -130,10 +130,11 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
   List<UserContact> get _contactHits {
     if (_query.isEmpty) return const <UserContact>[];
     final needle = _query.toLowerCase();
-    // 只匹配本人备注名与账户：公开昵称要联网拉取，搜索页不引入网络依赖。
+    // 只匹配私人备注、CID 与账户：公开昵称要联网拉取，搜索页不引入网络依赖。
     return _contacts
         .where((item) =>
-            item.contactName.toLowerCase().contains(needle) ||
+            item.contactRemark.toLowerCase().contains(needle) ||
+            item.cidNumber.toLowerCase().contains(needle) ||
             item.accountId.toLowerCase().contains(needle))
         .toList(growable: false);
   }
@@ -158,9 +159,9 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
 
   Future<void> _openContact(UserContact contact) async {
     final opener = widget.directChatOpener ?? openDirectChat;
-    final title = contact.contactName.trim().isEmpty
+    final title = contact.contactRemark.isEmpty
         ? ProfilePresentation.forAccountId(contact.accountId).fallbackName
-        : contact.contactName;
+        : contact.contactRemark;
     await opener(context, peerAccountId: contact.accountId, title: title);
   }
 
@@ -227,76 +228,85 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
                     : noHit
                         ? const Center(child: Text('没有找到相关内容'))
                         : ListView(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      children: [
-                        if (conversationHits.isNotEmpty) ...[
-                          const _SectionHeader(title: '会话'),
-                          for (final item in conversationHits)
-                            ListTile(
-                              key: ValueKey(
-                                'search-conversation-${item.conversationId}',
-                              ),
-                              leading: Icon(
-                                item.isGroup
-                                    ? Icons.groups_rounded
-                                    : Icons.person_rounded,
-                                color: AppTheme.textSecondary,
-                              ),
-                              title: Text(item.title),
-                              subtitle: Text(
-                                item.lastMessage,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onTap: () => unawaited(_openConversation(item)),
-                            ),
-                        ],
-                        if (contactHits.isNotEmpty) ...[
-                          const _SectionHeader(title: '联系人'),
-                          for (final item in contactHits)
-                            ListTile(
-                              key: ValueKey(
-                                'search-contact-${item.accountId}',
-                              ),
-                              leading: const Icon(
-                                Icons.account_circle_rounded,
-                                color: AppTheme.textSecondary,
-                              ),
-                              title: Text(item.contactName),
-                              subtitle: Text(
-                                item.ss58Address,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onTap: () => unawaited(_openContact(item)),
-                            ),
-                        ],
-                        if (_messageHits.isNotEmpty) ...[
-                          const _SectionHeader(title: '聊天记录'),
-                          for (final item in _messageHits)
-                            ListTile(
-                              key: ValueKey(
-                                'search-message-${item.envelopeId}',
-                              ),
-                              leading: const Icon(
-                                Icons.chat_bubble_outline_rounded,
-                                color: AppTheme.textSecondary,
-                              ),
-                              // 载荷需解码成摘要：媒体/贴纸显示类型化占位。
-                              title: Text(
-                                ChatPayloadCodec.decode(item.plaintext ?? '')
-                                    .summary,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onTap: () => unawaited(_openMessageHit(item)),
-                            ),
-                        ],
-                      ],
-                    ),
-              ),
-            ],
+                            padding: const EdgeInsets.only(bottom: 24),
+                            children: [
+                              if (conversationHits.isNotEmpty) ...[
+                                const _SectionHeader(title: '会话'),
+                                for (final item in conversationHits)
+                                  ListTile(
+                                    key: ValueKey(
+                                      'search-conversation-${item.conversationId}',
+                                    ),
+                                    leading: Icon(
+                                      item.isGroup
+                                          ? Icons.groups_rounded
+                                          : Icons.person_rounded,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    title: Text(item.title),
+                                    subtitle: Text(
+                                      item.lastMessage,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () =>
+                                        unawaited(_openConversation(item)),
+                                  ),
+                              ],
+                              if (contactHits.isNotEmpty) ...[
+                                const _SectionHeader(title: '联系人'),
+                                for (final item in contactHits)
+                                  ListTile(
+                                    key: ValueKey(
+                                      'search-contact-${item.accountId}',
+                                    ),
+                                    leading: const Icon(
+                                      Icons.account_circle_rounded,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    title: Text(
+                                      item.contactRemark.isEmpty
+                                          ? ProfilePresentation.forAccountId(
+                                              item.accountId,
+                                            ).fallbackName
+                                          : item.contactRemark,
+                                    ),
+                                    subtitle: Text(
+                                      item.cidNumber,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () => unawaited(_openContact(item)),
+                                  ),
+                              ],
+                              if (_messageHits.isNotEmpty) ...[
+                                const _SectionHeader(title: '聊天记录'),
+                                for (final item in _messageHits)
+                                  ListTile(
+                                    key: ValueKey(
+                                      'search-message-${item.envelopeId}',
+                                    ),
+                                    leading: const Icon(
+                                      Icons.chat_bubble_outline_rounded,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    // 载荷需解码成摘要：媒体/贴纸显示类型化占位。
+                                    title: Text(
+                                      ChatPayloadCodec.decode(
+                                              item.plaintext ?? '')
+                                          .summary,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () =>
+                                        unawaited(_openMessageHit(item)),
+                                  ),
+                              ],
+                            ],
+                          ),
           ),
+        ],
+      ),
     );
   }
 }

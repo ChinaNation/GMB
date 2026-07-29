@@ -67,7 +67,9 @@
 - **扫一扫认用户码 → 转账**：`qr_scan_page.dart` `_handleCode` 的 `QrScanMode.dispatch` 分支补 `QrRouteType.userContact` → 复用**已存在**的 `_handleContactAsRecipient`(transfer 模式早在用)。零新逻辑;至此同一张 `userContact` 码按扫描场景分流:contact 模式=加好友、transfer/dispatch=按收款人转账。
 - **用户二维码收敛为唯一组件**：以 `8964/profile/user_qr_page.dart` 的 `UserQrPage` 为全 App 唯一真源 —— 并入原钱包弹窗独有的「复制地址」(地址居中 + 复制图标浮右);新增 `_ss58Address` getter(accountId 真源、ss58 仅展示,免重复派生);底部文案由「其他用户扫描此二维码可添加通讯录」订正为如实覆盖双场景的「扫描此二维码可加为联系人，或向其转账」;类注释升级为「唯一用户二维码 + 扫码结果由扫描模式决定」。
 - **删除重复出口**：`lib/wallet/widgets/wallet_qr_dialog.dart` 与 `test/wallet/widgets/wallet_qr_dialog_test.dart` **整文件删除**(与 UserQrPage 编码同一份 `userContact` 载荷,属双轨)。
-- **调用点改接**：`wallet_identity_card.dart` QR 图标改为 push `UserQrPage(accountId: wallet.accountId, contactName: _walletName)`(传 accountId 而非 ss58,符合 ADR-040);import 与 :16 类注释同步订正。
+- **调用点改接**：`wallet_identity_card.dart` QR 图标传规范 AccountId。2026-07-28
+  用户码 clean cutover 后该入口统一调用 `openAccountQrPage()`：身份账户生成
+  `k=3`，其它账户生成五分钟 `k=4`。
 - **测试**：新建 `test/8964/profile/user_qr_page_test.dart`(5 用例:渲染昵称/地址/复制/下载入口、双场景文案、复制不抛、下载流程不抛、载荷仍 QR_V1 且 k=3)。
 - **验收**：`flutter analyze`(全项目 lib+test)**0 问题**;`user_qr_page_test` + `profile_header_test` **22/22 通过**(含「kebab QR code opens the user QR page」);`test/wallet/widgets/` **12/12 通过**(身份卡改接无回归)。
 - **残留核查**：`WalletQrDialog` / `wallet_qr_dialog` 全仓引用归零;`UserQrPage` 现有 2 个调用点(社交主页 ⋮、钱包身份卡),聊天页「收付款」待 Step 4 接第 3 个。
@@ -88,7 +90,11 @@
 - **顶栏改到目标态**（`chat_tab.dart`，本步唯一改的业务文件）：
   - `_ChatHeader` 由 `const` 无回调改为接收 `onAction`；原**无点击的装饰** `Icon(Icons.search_rounded)` 换成加号按钮(`Icons.add_rounded`，tooltip「新建」)。**弹窗样式于 2026-07-23 二次改造**：初版用 `PopupMenuButton`，但用户要求「淡深色背景 + 顶部凸出三角、三角顶点对齐加号」，而 `PopupMenuButton` 的水平位置由框架决定、拿不到确定锚点，三角只能靠猜；改为 `showGeneralDialog` 自绘弹窗，按加号按钮 `RenderBox` 的真实屏幕坐标定位（见「加号弹窗样式改造」小节）。
   - **删除** `_NewGroupEntry` 整个 widget 及其挂载点，原位换成 `_SearchEntry`(搜索框，点击进 `ChatSearchPage`，透传 `store` 与 `_accountId` 收窄依赖)。
-  - 新增 `_ChatEntryAction` 枚举 + `_onEntryAction` 分派 + 5 个处理方法：扫一扫 `openScanDispatchFlow(paymentWallet: 默认钱包)`；收付款 push `UserQrPage(accountId: wallet.accountId, contactName: wallet.walletName)`；发私信 push `ContactBookPage(mode: pickForMessage)` 后回刷；发群聊复用既有 `_openCreateGroup`(原卡片处理函数，职能迁入菜单)；加好友 `scanAndAddContact`。
+  - 新增 `_ChatEntryAction` 枚举 + `_onEntryAction` 分派 + 5 个处理方法：扫一扫
+    `openScanDispatchFlow(paymentWallet: 默认钱包)`；收付款当前统一调用
+    `openAccountQrPage(accountId, paymentDisplayName)`；发私信 push
+    `ContactBookPage(mode: pickForMessage)` 后回刷；发群聊复用既有
+    `_openCreateGroup`；加好友 `scanAndAddContact`。
   - 新增 `_requireAccount()` 统一无热钱包拦截提示。
 - **`ChatEntryOpeners`(可注入入口，用户选定方案)**：5 个 opener 统一为 `ChatEntryOpener = Future<void> Function(BuildContext)`，且**先查注入再解析钱包** —— 否则测试注入时仍会先摸真实 `WalletManager`(触碰存储)。正式运行 `openers` 为 null 走真实实现。
 - **测试**：`chat_tab_test.dart` 新增 4 用例(顶栏为搜索框+加号且旧卡片已删、加号弹出 5 项、5 项分别路由、点搜索框进搜索页)。菜单动画用固定步长 `pump` 而非 `pumpAndSettle`——聊天页有 15s 轮询定时器，`pumpAndSettle` 会被推着走。存量用例未断言过旧卡片与装饰搜索图标(已核实)，故删卡片不破坏存量。

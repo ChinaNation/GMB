@@ -95,14 +95,13 @@ class ProfilePresentation {
     );
   }
 
-  /// 钱包名称是本人昵称真源，Cloudflare `display_name` 是公开镜像；两者都
-  /// 缺失时使用稳定默认昵称。任何账户本身或截断账户都不会被接受为昵称。
-  String resolveDisplayName({String? walletName, String? publicName}) {
-    for (final candidate in <String?>[walletName, publicName]) {
-      final normalized = candidate?.trim() ?? '';
-      if (normalized.isNotEmpty && !_isAccountDerived(normalized)) {
-        return normalized;
-      }
+  /// 公开昵称唯一真源是 `display_name`；缺失时使用稳定默认昵称。
+  ///
+  /// 本机钱包名不得传入本方法。任何账户本身或截断账户也不会被接受为昵称。
+  String resolveDisplayName({String? publicName}) {
+    final normalized = publicName?.trim() ?? '';
+    if (normalized.isNotEmpty && !_isAccountDerived(normalized)) {
+      return normalized;
     }
     return fallbackName;
   }

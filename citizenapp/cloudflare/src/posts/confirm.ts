@@ -273,6 +273,7 @@ function findMatchingEvent(
     events.find(
       (event) =>
         event.post_id === upload.post_id &&
+        event.cid_number === upload.cid_number &&
         event.account_id === upload.account_id &&
         event.post_category === upload.post_category &&
         normalizeHash(event.content_hash) === normalizeHash(upload.content_hash ?? '') &&

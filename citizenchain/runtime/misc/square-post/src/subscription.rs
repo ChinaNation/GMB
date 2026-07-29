@@ -44,7 +44,7 @@ pub enum MembershipLevel {
     Spark = 2,
 }
 
-/// 订阅收款主体。创作者使用账户，不使用链下 CID 或展示资料替代。
+/// 订阅收款主体。创作者使用链上永久 CID，实际收款账户在每次扣款时解析。
 #[derive(
     Clone,
     Encode,
@@ -56,9 +56,9 @@ pub enum MembershipLevel {
     TypeInfo,
     MaxEncodedLen,
 )]
-pub enum IssuerKey<AccountId> {
+pub enum IssuerKey<CidNumber> {
     Platform,
-    Creator(AccountId),
+    Creator(CidNumber),
 }
 
 /// 真实公历周期。runtime 按 UTC 年月日运算，不换算为固定天数或区块数。
@@ -199,6 +199,8 @@ pub enum SuspendReason {
     NeedReconsent = 0,
     /// 续费时订阅者余额不足，待充值后再签恢复。
     InsufficientBalance = 1,
+    /// 订阅者或创作者 CID 当前没有完整 active 双向账户绑定，禁止退回历史账户扣款/收款。
+    IdentityBindingUnavailable = 2,
 }
 
 /// 链上订阅真源。所有时间都是 UTC Unix 毫秒时间戳。
@@ -305,8 +307,11 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 已付款且尚未到期的 Active/Cancelled 平台订阅都继续提供本周期权益。
-    pub(crate) fn has_effective_platform_subscription(account: &T::AccountId, now: u64) -> bool {
-        Subscriptions::<T>::get((account.clone(), IssuerKey::Platform))
+    pub(crate) fn has_effective_platform_subscription(
+        cid_number: &crate::pallet::CidNumberOf<T>,
+        now: u64,
+    ) -> bool {
+        Subscriptions::<T>::get((cid_number.clone(), IssuerKey::Platform))
             .map(|state| {
                 matches!(
                     state.subscription_status,
@@ -318,7 +323,7 @@ impl<T: Config> Pallet<T> {
 
     /// 从链上当前价格和计划解析本次收款账户。每次真实扣款都重新调用，禁止永久锁价。
     pub(crate) fn current_price_and_payee(
-        issuer: &IssuerKey<T::AccountId>,
+        issuer: &crate::pallet::IssuerKeyOf<T>,
         plan: &SubscriptionPlan,
         now: u64,
     ) -> Result<(u128, T::AccountId), DispatchError> {
@@ -339,17 +344,17 @@ impl<T: Config> Pallet<T> {
                 Ok((price, payee))
             }
             (
-                IssuerKey::Creator(creator_account_id),
+                IssuerKey::Creator(creator_cid_number),
                 SubscriptionPlan::Creator {
                     tier_id,
                     billing_period,
                 },
             ) => {
                 ensure!(
-                    Self::has_effective_platform_subscription(creator_account_id, now),
+                    Self::has_effective_platform_subscription(creator_cid_number, now),
                     Error::<T>::CreatorNotPlatformMember
                 );
-                let tiers = CreatorPlans::<T>::get(creator_account_id);
+                let tiers = CreatorPlans::<T>::get(creator_cid_number);
                 let tier = tiers
                     .iter()
                     .find(|tier| &tier.tier_id == tier_id)
@@ -361,7 +366,8 @@ impl<T: Config> Pallet<T> {
                     .map(|price| price.price_fen)
                     .ok_or(Error::<T>::CreatorPlanNotFound)?;
                 ensure!(price > 0, Error::<T>::ZeroPrice);
-                Ok((price, creator_account_id.clone()))
+                let payee = Self::current_account_id_for_cid(creator_cid_number)?;
+                Ok((price, payee))
             }
             _ => Err(Error::<T>::PlanIssuerMismatch.into()),
         }

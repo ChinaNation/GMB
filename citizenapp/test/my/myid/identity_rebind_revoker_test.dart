@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/myid/identity_rebind_revoker.dart';
@@ -9,6 +10,14 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 const _oldAccountId =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _newAccountId =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _otherAccountId =
+    '0x3333333333333333333333333333333333333333333333333333333333333333';
+const _cidNumber = 'CN220-CTZN2-198805200-2026';
+const _oldAccountSignature =
+    '0xabababababababababababababababababababababababababababababababab'
+    'abababababababababababababababababababababababababababababababab';
 
 WalletProfile _wallet(int walletIndex) => WalletProfile(
       walletIndex: walletIndex,
@@ -27,7 +36,13 @@ WalletProfile _wallet(int walletIndex) => WalletProfile(
 class _FakeApi extends SquareApiClient {
   _FakeApi() : super(baseUrl: 'https://revoke.test');
   final List<String> sessionsFor = <String>[];
-  final List<String> revokedSessions = <String>[];
+  final List<
+      ({
+        String sessionAccountId,
+        String oldAccountId,
+        String oldAccountSignature
+      })> revoked = [];
+  bool failRevoke = false;
 
   @override
   Future<SquareSession> ensureSession({
@@ -40,15 +55,24 @@ class _FakeApi extends SquareApiClient {
     await signLoginPayload(Uint8List.fromList(const [1, 2, 3]));
     return SquareSession(
       sessionToken: 'tok-$accountId',
-      cidNumber: "CN220-CTZN2-198805200-2026",
+      cidNumber: _cidNumber,
       accountId: accountId,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
     );
   }
 
   @override
-  Future<void> revokeRebindOldAccount({required SquareSession session}) async {
-    revokedSessions.add(session.accountId);
+  Future<void> revokeRebindOldAccount({
+    required SquareSession session,
+    required String oldAccountId,
+    required String oldAccountSignature,
+  }) async {
+    if (failRevoke) throw StateError('模拟网络失败');
+    revoked.add((
+      sessionAccountId: session.accountId,
+      oldAccountId: oldAccountId,
+      oldAccountSignature: oldAccountSignature,
+    ));
   }
 }
 
@@ -69,7 +93,13 @@ class _WalletManagerWith extends WalletManager {
 }
 
 void main() {
-  test('用旧账户设备子钥静默建旧会话并调吊销端点', () async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
+  test('换绑后严格使用新账户会话代吊销旧账户并在成功后清除 outbox', () async {
     final api = _FakeApi();
     final subkey = _FakeDeviceSubkey();
     final revoker = IdentityRebindRevoker(
@@ -77,25 +107,119 @@ void main() {
       deviceSubkey: subkey,
       walletManager: _WalletManagerWith(_wallet(7)),
     );
+    await revoker.stagePendingCleanup(
+      cidNumber: _cidNumber,
+      oldAccountId: _oldAccountId,
+      newAccountId: _newAccountId,
+      oldAccountSignature: _oldAccountSignature,
+    );
 
-    await revoker.revokeOldAccount(_oldAccountId);
+    // 链上仍是旧账户时只保留待办，绝不尝试用旧账户建会话。
+    expect(
+      await revoker.retryPendingCleanup(
+        cidNumber: _cidNumber,
+        currentAccountId: _oldAccountId,
+      ),
+      isFalse,
+    );
+    expect(api.sessionsFor, isEmpty);
 
-    expect(api.sessionsFor, [_oldAccountId]); // 为旧账户建会话
+    expect(
+      await revoker.retryPendingCleanup(
+        cidNumber: _cidNumber,
+        currentAccountId: _newAccountId,
+      ),
+      isTrue,
+    );
+
+    expect(api.sessionsFor, [_newAccountId]); // 只为新账户建会话
     expect(subkey.signedWalletIndexes, [7]); // 用该钱包设备子钥签名(静默)
-    expect(api.revokedSessions, [_oldAccountId]); // 调吊销端点
+    expect(api.revoked.single.sessionAccountId, _newAccountId);
+    expect(api.revoked.single.oldAccountId, _oldAccountId);
+    expect(api.revoked.single.oldAccountSignature, _oldAccountSignature);
+    expect(await revoker.readPendingCleanup(), isNull);
   });
 
-  test('无热钱包时静默跳过', () async {
+  test('网络失败或无热钱包时不丢待清理授权', () async {
     final api = _FakeApi();
+    api.failRevoke = true;
     final revoker = IdentityRebindRevoker(
       apiClient: api,
       deviceSubkey: _FakeDeviceSubkey(),
-      walletManager: _WalletManagerWith(null),
+      walletManager: _WalletManagerWith(_wallet(7)),
+    );
+    await revoker.stagePendingCleanup(
+      cidNumber: _cidNumber,
+      oldAccountId: _oldAccountId,
+      newAccountId: _newAccountId,
+      oldAccountSignature: _oldAccountSignature,
     );
 
-    await revoker.revokeOldAccount(_oldAccountId);
+    await expectLater(
+      revoker.retryPendingCleanup(
+        cidNumber: _cidNumber,
+        currentAccountId: _newAccountId,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect((await revoker.readPendingCleanup())?.oldAccountId, _oldAccountId);
 
-    expect(api.sessionsFor, isEmpty);
-    expect(api.revokedSessions, isEmpty);
+    final noWalletRevoker = IdentityRebindRevoker(
+      apiClient: _FakeApi(),
+      deviceSubkey: _FakeDeviceSubkey(),
+      walletManager: _WalletManagerWith(null),
+    );
+    await expectLater(
+      noWalletRevoker.retryPendingCleanup(
+        cidNumber: _cidNumber,
+        currentAccountId: _newAccountId,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect((await noWalletRevoker.readPendingCleanup())?.oldAccountId,
+        _oldAccountId);
+  });
+
+  test('未完成清理时禁止覆盖成另一笔换绑授权', () async {
+    final revoker = IdentityRebindRevoker(
+      apiClient: _FakeApi(),
+      deviceSubkey: _FakeDeviceSubkey(),
+      walletManager: _WalletManagerWith(_wallet(7)),
+    );
+    await revoker.stagePendingCleanup(
+      cidNumber: _cidNumber,
+      oldAccountId: _oldAccountId,
+      newAccountId: _newAccountId,
+      oldAccountSignature: _oldAccountSignature,
+    );
+
+    await expectLater(
+      revoker.ensureCanStartRebind(
+        cidNumber: _cidNumber,
+        oldAccountId: _newAccountId,
+        newAccountId: _otherAccountId,
+      ),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('损坏的 outbox 必须 fail-closed，不能按无待办继续换绑', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'identity_rebind_cleanup_pending': '{"old_account_id":"broken"}',
+    });
+    final revoker = IdentityRebindRevoker(
+      apiClient: _FakeApi(),
+      deviceSubkey: _FakeDeviceSubkey(),
+      walletManager: _WalletManagerWith(_wallet(7)),
+    );
+
+    await expectLater(
+      revoker.ensureCanStartRebind(
+        cidNumber: _cidNumber,
+        oldAccountId: _oldAccountId,
+        newAccountId: _newAccountId,
+      ),
+      throwsA(isA<StateError>()),
+    );
   });
 }

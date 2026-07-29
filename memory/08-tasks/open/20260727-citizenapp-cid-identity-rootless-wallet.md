@@ -240,6 +240,15 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 - **注释 A1-A6**:wallet_manager signWithWallet/signForAccountId 文档身份签名路由订正、_deriveContactKeys/_contactKeyStore/ContactKeyMaterial「账户0 child」→身份账户 child、wallet_page:912「默认/身份徽标」→身份徽标、verifyWalletAccess 文档删已删概念(方法保守保留)。
 - **残余(记录)**:C1 revoke best-effort——失败仅记录不阻断功能重建、不自动重试(旧云端副本残留至下次成功),开发期零用户可接受;换绑前已被复制的数据不可删(架构残余,须产品文档披露)。posts/followers 服务端随 CID 迁移(re-key)是更大范围、未做,属身份迁移单独议题。
 
+## S8.4 通讯录 CID 真源与昵称/备注分离（2026-07-28，实施中）
+
+- **模型彻底切换**：`UserContact` 固定为 `cid_number + account_id + ss58_address + contact_remark + created_at + updated_at`；CID 必填且是关系主键，私人备注允许空值，公开昵称/头像/签名不复制进通讯录。旧 `contact_name` JSON 不兼容。
+- **索引与加密契约**：增删改、待同步、跨端冲突合并全部按 CID；`contact_id = HMAC(index_key, target cid_number)`。AES-256-GCM 明文载荷包含 `owner_cid_number`、联系人四字段与时间戳，AAD 使用属主 CID + 不透明 ID；删除旧 `citizenapp.contacts.v1` 域，HKDF 改为未版本化 `citizenapp.contacts/{encryption,index}`。
+- **扫码入口**：当前 `QR_V1 user_contact` 尚未携带 CID，本步在入库前按二维码 SS58 派生 `account_id`，再经链上双向绑定读取永久 CID；未绑定即拒绝。收款码缺少 CID，不再兼作联系人码；二维码钱包标签不是私人备注，首次入库备注为空。
+- **换绑重建**：本地关系按 CID 合并并迁到新身份账户；持久化云端重建标记，分页删除属主 CID 下全部旧不透明密文成功后，才以新账户 child 密钥重新上传。断网时保留标记与待办，下次同步继续，不把旧密文当兼容数据。
+- **旧数据清理**：目标态本地 KV 改用 `contact_book_by_account:` / `contact_pending_by_account:` / `contact_sync_by_account:` / `contact_cloud_reset_by_account:`；数据库打开时删除旧 `contacts:` / `contact_pending_ops:` / `contact_sync_state:`。安全存储改用 `citizenapp_contacts_key_`，旧 `wallet_contacts_key_v1_` 只删不读。新增 `cloudflare/migrations/0002_reset_contacts_for_cid_payload.sql`，生产只允许单独审核后人工执行，本任务不部署。
+- **UI 口径**：通讯录卡片公开昵称为主标题；`备注：`、`CID：`、`SS58：` 分行展示；修改动作只编辑私人备注。资料页和公开资料缓存直接按联系人 CID 寻址，不再对已有联系人重复做 account→CID 链读。
+
 ## 待办 / 未决
 
 ## 待办 / 未决

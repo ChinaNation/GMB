@@ -226,15 +226,28 @@ struct UserContactEnvelope {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UserContactBody {
+    cid_number: String,
     ss58_address: String,
-    contact_name: String,
+    display_name: String,
 }
 
-/// 严格解析管理员出示的 QR_V1/k=3 用户码并返回规范账户 ID。
+/// 管理员出示的固定身份二维码。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UserContactIdentity {
+    /// 公民永久身份号；登录授权时必须与链上管理员记录中的个人 CID 一致。
+    pub(crate) cid_number: String,
+    /// 由本链 SS58 地址解出的规范 AccountId。
+    pub(crate) account_id: String,
+    /// 公开昵称只用于登录页展示，永不参与授权。
+    pub(crate) display_name: String,
+}
+
+/// 严格解析管理员出示的 QR_V1/k=3 用户码并返回完整身份声明。
 ///
-/// 只接受完整固定码 `p/k/b.ss58_address/b.contact_name`；裸 SS58、裸公钥、字段别名、
-/// 临时码字段和未知字段全部拒绝。`contact_name` 只验证用户码完整性，不参与授权。
-pub(crate) fn parse_user_contact_account_id(raw: &str) -> Result<String, QrParseError> {
+/// 只接受 `p/k/b.cid_number/b.ss58_address/b.display_name`；裸 SS58、裸公钥、
+/// 字段别名、临时码字段和未知字段全部拒绝。CID 与 AccountId 在登录 gate 中必须
+/// 同时命中链上管理员记录；公开昵称只作展示。
+pub(crate) fn parse_user_contact_identity(raw: &str) -> Result<UserContactIdentity, QrParseError> {
     let envelope: UserContactEnvelope =
         serde_json::from_str(raw).map_err(|error| QrParseError::BadJson(error.to_string()))?;
     if envelope.proto != QR_V1 {
@@ -243,9 +256,22 @@ pub(crate) fn parse_user_contact_account_id(raw: &str) -> Result<String, QrParse
     if envelope.kind != QrKind::UserContact.code() {
         return Err(QrParseError::BadKind(envelope.kind.to_string()));
     }
-    if envelope.body.contact_name.trim().is_empty() {
+    let cid_number = envelope.body.cid_number.trim();
+    if cid_number.is_empty()
+        || cid_number != envelope.body.cid_number
+        || cid_number.as_bytes().len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
+    {
         return Err(QrParseError::BadField(
-            "b.contact_name 必须为非空字符串".into(),
+            "b.cid_number 必须为无首尾空格的 1 到 32 字节字符串".into(),
+        ));
+    }
+    let display_name = envelope.body.display_name.trim();
+    if display_name.is_empty()
+        || display_name != envelope.body.display_name
+        || display_name.chars().count() > 40
+    {
+        return Err(QrParseError::BadField(
+            "b.display_name 必须为无首尾空格的 1 到 40 字符串".into(),
         ));
     }
     let ss58_address = envelope.body.ss58_address.trim();
@@ -267,7 +293,11 @@ pub(crate) fn parse_user_contact_account_id(raw: &str) -> Result<String, QrParse
             "b.ss58_address 账户长度必须为 32 字节".into(),
         ));
     }
-    Ok(format!("0x{}", hex::encode(bytes)))
+    Ok(UserContactIdentity {
+        cid_number: cid_number.to_string(),
+        account_id: format!("0x{}", hex::encode(bytes)),
+        display_name: display_name.to_string(),
+    })
 }
 
 /// 解析 QR_V1/k=2 签名响应。后端收到签名方响应后使用。
@@ -365,19 +395,20 @@ mod tests {
             "p": QR_V1,
             "k": QrKind::UserContact.code(),
             "b": {
+                "cid_number": "CN001-CTZN-000000001-2026",
                 "ss58_address": ss58_address,
-                "contact_name": "测试管理员"
+                "display_name": "测试管理员"
             }
         })
         .to_string()
     }
 
     #[test]
-    fn user_contact_parser_returns_canonical_account_id() {
-        assert_eq!(
-            parse_user_contact_account_id(&user_contact_json()).expect("完整用户码应通过"),
-            ACCOUNT_ID
-        );
+    fn user_contact_parser_returns_canonical_identity() {
+        let identity = parse_user_contact_identity(&user_contact_json()).expect("完整用户码应通过");
+        assert_eq!(identity.account_id, ACCOUNT_ID);
+        assert_eq!(identity.cid_number, "CN001-CTZN-000000001-2026");
+        assert_eq!(identity.display_name, "测试管理员");
     }
 
     #[test]
@@ -387,12 +418,32 @@ mod tests {
         let body = alias["b"].as_object_mut().expect("测试 body");
         let address = body.remove("ss58_address").expect("测试地址");
         body.insert("address".into(), address);
-        assert!(parse_user_contact_account_id(&alias.to_string()).is_err());
+        assert!(parse_user_contact_identity(&alias.to_string()).is_err());
 
         let mut temporary: serde_json::Value =
             serde_json::from_str(&user_contact_json()).expect("测试 JSON");
         temporary["i"] = serde_json::json!("forbidden");
-        assert!(parse_user_contact_account_id(&temporary.to_string()).is_err());
+        assert!(parse_user_contact_identity(&temporary.to_string()).is_err());
+
+        let mut legacy: serde_json::Value =
+            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
+        let body = legacy["b"].as_object_mut().expect("测试 body");
+        let display_name = body.remove("display_name").expect("测试昵称");
+        body.insert("contact_name".into(), display_name);
+        assert!(parse_user_contact_identity(&legacy.to_string()).is_err());
+    }
+
+    #[test]
+    fn user_contact_parser_rejects_noncanonical_identity_fields() {
+        let mut bad_cid: serde_json::Value =
+            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
+        bad_cid["b"]["cid_number"] = serde_json::json!(" CN001-CTZN-000000001-2026");
+        assert!(parse_user_contact_identity(&bad_cid.to_string()).is_err());
+
+        let mut bad_name: serde_json::Value =
+            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
+        bad_name["b"]["display_name"] = serde_json::json!(" ");
+        assert!(parse_user_contact_identity(&bad_name.to_string()).is_err());
     }
 
     #[test]
@@ -419,7 +470,10 @@ mod tests {
         assert_eq!(value["p"], QR_V1);
         assert_eq!(value["k"], 1);
         assert_eq!(value["b"]["u"], "");
-        assert_eq!(value["b"]["a"].as_u64().expect("动作码"), u64::from(action_occupy()));
+        assert_eq!(
+            value["b"]["a"].as_u64().expect("动作码"),
+            u64::from(action_occupy())
+        );
         // b.d = Compact(26)=0x68 ++ cid;钱包 signing_message(0x12, d ++ 本账户32) 与后端对齐。
         // golden 钉死 URL_SAFE_NO_PAD(append_bounded(cid)):偏离即冷热签名破坏。
         assert_eq!(value["b"]["d"], "aENOMjIwLUNUWk4yLTE5ODgwNTIwMC0yMDI2");

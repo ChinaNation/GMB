@@ -219,7 +219,10 @@ lib/8964/profile/
 
 ### 阶段 7a 追加（二维码归属，用户拍板落地）
 - 决定：删「我的」tab 右上角二维码图标；主页 `⋮ → 二维码` 显示该主页用户名片码（钱包账户 + 昵称）。
-- 实现：`_MyQrCodePage`/`_HollowQrPainter` 从 user.dart 提取为公开 `lib/8964/profile/user_qr_page.dart` `UserQrPage(contactName, address)`（复用 UserContactBody 名片码 + 存相册）；删 user.dart 里旧 QR 图标 Positioned、`_openMyQrPage`、旧私有 QR 类与 painter，清 3 个未用导入（dart:ui/rendering/saver_gallery）。主页 `⋮ 二维码` → `UserQrPage(名字, ownerAccount)`（self=本人码，other=对方码）。
+- 实现：`_MyQrCodePage`/`_HollowQrPainter` 从 user.dart 提取为公开
+  `lib/8964/profile/user_qr_page.dart`。2026-07-28 clean cutover 后当前构造为
+  `UserQrPage.userContact(cidNumber, displayName, accountId)`，固定码严格携带
+  CID、SS58 和公开昵称并支持存相册；旧私有 QR 类与 painter 已删除。
 - 测试：`⋮ → 二维码` 打开 `UserQrPage`（+1）。验收 `flutter test test/8964` **47/47**。
 
 ## 整卡状态：主页功能完整交付；遗留两项（另行处置）

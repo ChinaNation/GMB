@@ -1,7 +1,7 @@
 import 'dart:math';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar_community/isar.dart';
+import 'package:citizenapp/security/secure_storage.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_secure_keys.dart';
@@ -29,8 +29,6 @@ class AttestationState {
 }
 
 class AttestationService {
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
-
   static const String _kScope = 'attest';
   static const String _kMetaExpiresAtMillis =
       'wallet.session.attest.expires_at_millis.v1';
@@ -42,7 +40,7 @@ class AttestationService {
   static const _kRenewThresholdMillis = 2 * 60 * 1000; // renew before expire
 
   Future<AttestationState> getState() async {
-    final token = await _secureStorage.read(key: _tokenKey());
+    final token = await appSecureStorage.read(key: _tokenKey());
     final local = await WalletIsar.instance.read((isar) async {
       final expiresAtMillis = await _getKvInt(isar, _kMetaExpiresAtMillis);
       final policy = await _getKvString(isar, _kMetaPolicy) ??
@@ -82,7 +80,7 @@ class AttestationService {
     final payload = _buildPayload(wallet);
     final token = _issueToken();
     final expiresAt = DateTime.now().millisecondsSinceEpoch + _kTokenTtlMillis;
-    await _secureStorage.write(key: _tokenKey(), value: token);
+    await appSecureStorage.write(key: _tokenKey(), value: token);
     await WalletIsar.instance.writeTxn((isar) async {
       await _putKvInt(isar, _kMetaExpiresAtMillis, expiresAt);
       await _putKvString(isar, _kMetaPolicy, walletServicePolicy(wallet));
@@ -92,7 +90,7 @@ class AttestationService {
   }
 
   Future<void> clearToken() async {
-    await _secureStorage.delete(key: _tokenKey());
+    await appSecureStorage.delete(key: _tokenKey());
     await WalletIsar.instance.writeTxn((isar) async {
       await _deleteKv(isar, _kMetaExpiresAtMillis);
       await _deleteKv(isar, _kMetaPolicy);

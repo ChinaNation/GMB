@@ -55,12 +55,37 @@ void main() {
         'p': QrProtocol.v1,
         'k': QrKind.userContact.code,
         'b': {
-          'ss58_address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-          'contact_name': '张三',
+          'cid_number': 'CN001-CTZN-000000001-2026',
+          'ss58_address': 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT',
+          'display_name': '张三',
         },
       });
       final result = router.route(raw);
       expect(result.type, QrRouteType.userContact);
+    });
+
+    test('旧 contact_name 用户码和未知字段直接拒绝', () {
+      final old = jsonEncode({
+        'p': QrProtocol.v1,
+        'k': QrKind.userContact.code,
+        'b': {
+          'ss58_address': 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT',
+          'contact_name': '旧字段',
+        },
+      });
+      final extra = jsonEncode({
+        'p': QrProtocol.v1,
+        'k': QrKind.userContact.code,
+        'b': {
+          'cid_number': 'CN001-CTZN-000000001-2026',
+          'ss58_address': 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT',
+          'display_name': '张三',
+          'name': '别名',
+        },
+      });
+
+      expect(router.route(old).type, QrRouteType.unknown);
+      expect(router.route(extra).type, QrRouteType.unknown);
     });
 
     test('should route sign_request', () {

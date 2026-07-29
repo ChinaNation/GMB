@@ -29,7 +29,7 @@ abstract interface class CreatorApi {
 
   /// 读某创作者的档位（订阅者在他人主页选档用）。无档返回 null。
   Future<CreatorPlan?> fetchPlanOf(
-      SquareSession session, String creatorAccountId);
+      SquareSession session, String creatorCidNumber);
 
   /// 订阅/取消创作者会员上链后回执镜像（best-effort，链上已是真源）。
   Future<void> confirmCreatorSubscription({
@@ -38,7 +38,7 @@ abstract interface class CreatorApi {
     required String blockHashHex,
     required String signedExtrinsicHex,
     required String action,
-    required String creatorAccountId,
+    required String creatorCidNumber,
     String? tierId,
     String? billingPeriod,
   });
@@ -109,13 +109,11 @@ class CreatorApiHttp implements CreatorApi {
     return CreatorPlan.fromJson(plan);
   }
 
-  // worker 契约：/creator/plan/:account URL 仍传创作者钱包账户（worker 内部 resolve
-  // 到 cid），入参保持 creatorAccountId 不改；仅 plan 响应体字段改 creator_cid_number。
   @override
   Future<CreatorPlan?> fetchPlanOf(
-      SquareSession session, String creatorAccountId) async {
+      SquareSession session, String creatorCidNumber) async {
     final data = await _getJson(
-      '/v1/square/creator/plan/${Uri.encodeComponent(creatorAccountId)}',
+      '/v1/square/creator/plan/${Uri.encodeComponent(creatorCidNumber)}',
       session,
     );
     final plan = data['plan'];
@@ -130,7 +128,7 @@ class CreatorApiHttp implements CreatorApi {
     required String blockHashHex,
     required String signedExtrinsicHex,
     required String action,
-    required String creatorAccountId,
+    required String creatorCidNumber,
     String? tierId,
     String? billingPeriod,
   }) async {
@@ -141,9 +139,7 @@ class CreatorApiHttp implements CreatorApi {
         'block_hash': blockHashHex,
         'signed_extrinsic_hex': signedExtrinsicHex,
         'action': action,
-        // worker 契约：subscription/confirm 请求体仍传 creator_account_id（worker
-        // 内部 resolve，链验证按 account），不改。
-        'creator_account_id': creatorAccountId,
+        'creator_cid_number': creatorCidNumber,
         if (tierId != null) 'tier_id': tierId,
         if (billingPeriod != null) 'billing_period': billingPeriod,
       },
@@ -256,8 +252,7 @@ class FakeCreatorApi implements CreatorApi {
   }) async {
     lastSaveTxHash = txHash;
     _plan = CreatorPlan(
-      // 离线 fake 只有会话钱包账户、无 cid 来源；cid 字段留空，不塞 account_id。
-      creatorCidNumber: '',
+      creatorCidNumber: session.cidNumber,
       tiers: tiers,
       updatedAt: 0,
     );
@@ -266,7 +261,7 @@ class FakeCreatorApi implements CreatorApi {
 
   @override
   Future<CreatorPlan?> fetchPlanOf(
-          SquareSession session, String creatorAccountId) async =>
+          SquareSession session, String creatorCidNumber) async =>
       _plan;
 
   @override
@@ -276,7 +271,7 @@ class FakeCreatorApi implements CreatorApi {
     required String blockHashHex,
     required String signedExtrinsicHex,
     required String action,
-    required String creatorAccountId,
+    required String creatorCidNumber,
     String? tierId,
     String? billingPeriod,
   }) async {}

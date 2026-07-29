@@ -72,7 +72,7 @@ class CreatorService {
     if (session == null) return CreatorPageData.gated();
 
     final membership = await _subscriptionRpc.fetchSubscriptionSnapshot(
-      subscriberAccountId: session.accountId,
+      subscriberCidNumber: session.cidNumber,
     );
     if (membership.state?.isEffectiveAt(membership.chainNowMs) != true) {
       return CreatorPageData.gated();
@@ -85,16 +85,14 @@ class CreatorService {
       // Cloudflare 只补展示名与统计；瞬时不可用时仍允许按链上真态进入页面。
       _api.fetchMyPlan(session).catchError((_) => null),
       _api.fetchOverview(session).catchError((_) => CreatorOverview.zero),
-      _subscriptionRpc.fetchCreatorPlans(session.accountId),
+      _subscriptionRpc.fetchCreatorPlans(session.cidNumber),
     ]);
     final displayPlan = results[0] as CreatorPlan?;
     final overview = results[1] as CreatorOverview;
     final chainTiers = results[2] as List<ChainCreatorTier>;
     return CreatorPageData.active(
-      // 创作者身份主键取 worker 计划镜像（`creator_cid_number`）；session 只有钱包账户，
-      // 不得塞进 cid 字段。worker 不可用（displayPlan==null）时该展示字段留空。
       plan: mergeCreatorPlanWithChain(
-        creatorCidNumber: displayPlan?.creatorCidNumber ?? '',
+        creatorCidNumber: session.cidNumber,
         displayPlan: displayPlan,
         chainTiers: chainTiers,
       ),
@@ -121,7 +119,7 @@ class CreatorService {
     }
     try {
       final membership = await _subscriptionRpc.fetchSubscriptionSnapshot(
-        subscriberAccountId: identity.accountId,
+        subscriberCidNumber: session.cidNumber,
       );
       if (membership.state?.isEffectiveAt(membership.chainNowMs) != true) {
         throw const CreatorException('需要当前有效的平台会员才能设置创作者会员档');
@@ -144,11 +142,13 @@ class CreatorService {
               ),
             )
             .toList(growable: false),
-        sign: (payload) => _wallet.signForAccountId(identity.accountId, payload),
+        sign: (payload) =>
+            _wallet.signForAccountId(identity.accountId, payload),
       );
       return _completeFinalizedSave(
         session: session,
         accountId: identity.accountId,
+        creatorCidNumber: session.cidNumber,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -249,15 +249,14 @@ class CreatorService {
   Future<CreatorPlan> _completeFinalizedSave({
     required SquareSession session,
     required String accountId,
+    required String creatorCidNumber,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
     required List<CreatorTier> tiers,
   }) async {
     final localPlan = CreatorPlan(
-      // 此处仅有签名钱包账户、无 cid 来源；离线兜底展示计划的 cid 字段留空，
-      // 不把 account_id 塞进身份主键字段造成语义污染。
-      creatorCidNumber: '',
+      creatorCidNumber: creatorCidNumber,
       tiers: tiers,
       updatedAt: 0,
     );
@@ -294,10 +293,10 @@ class CreatorService {
     }
 
     try {
-      final chainTiers = await _subscriptionRpc.fetchCreatorPlans(accountId);
+      final chainTiers =
+          await _subscriptionRpc.fetchCreatorPlans(creatorCidNumber);
       return mergeCreatorPlanWithChain(
-        // cid 取 worker 保存后回执镜像的 `creator_cid_number`；边缘失败回退到 localPlan 时为空。
-        creatorCidNumber: displayPlan.creatorCidNumber,
+        creatorCidNumber: creatorCidNumber,
         displayPlan: displayPlan,
         chainTiers: chainTiers,
       );

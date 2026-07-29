@@ -1,6 +1,6 @@
 # QR_V1 扫码签名两色识别方案
 
-- 更新日期:2026-07-19
+- 更新日期:2026-07-28
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:CitizenWallet / CitizenApp 扫描 QR 后的识别、展示、签名放行和签名响应验签规则
 - 依赖:
@@ -73,8 +73,10 @@ citizenchain node 的链交易冷签路径和热钱包路径必须统一调用 `
 ## 4. 登录签名
 
 登录不再有独立 QR kind。OnChina 必须先扫描管理员完整的
-`k=3 user_contact` 用户码，只读取并校验其中的 `b.ss58_address`，由此确定唯一目标
-`account_id` 并完成链上管理员前置校验后，再生成 `k=1,a=1`：
+`k=3 user_contact` 用户码，校验 `b.cid_number / b.ss58_address /
+b.display_name` 三字段并由地址确定唯一目标 `account_id`；随后要求二维码 CID 与
+AccountId 同时命中链上同一条 Active 管理员记录，再生成 `k=1,a=1`。
+`display_name` 只用于登录页展示，不参与授权：
 
 | 字段 | 规则 |
 |---|---|

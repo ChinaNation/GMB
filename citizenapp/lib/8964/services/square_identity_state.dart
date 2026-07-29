@@ -1,4 +1,6 @@
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
+import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -11,7 +13,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 class SquareIdentityState {
   const SquareIdentityState({
     required this.accountId,
-    this.walletName,
+    this.displayName,
     this.cidNumber,
     this.walletIndex,
     this.ss58Address,
@@ -20,7 +22,7 @@ class SquareIdentityState {
   });
 
   final String accountId;
-  final String? walletName;
+  final String? displayName;
   final String? cidNumber;
   final int? walletIndex;
   final String? ss58Address;
@@ -35,6 +37,11 @@ class SquareIdentityState {
   /// 竞选身份（candidate）：发布竞选内容的资格（用户 2026-07-16：发帖分类按身份档）。
   bool get isCandidate => identityLevel == 'candidate';
 
+  /// 发帖页展示公开昵称；资料尚未缓存时按 CID（无 CID 才按账户）稳定兜底。
+  String get resolvedDisplayName =>
+      ProfilePresentation.forAccountId(cidNumber ?? accountId)
+          .resolveDisplayName(publicName: displayName);
+
   String get accountLabel {
     if (!hasWallet) return '未选择钱包';
     if (accountId.length <= 14) return accountId;
@@ -48,18 +55,20 @@ class SquareIdentityService {
     this.chainService,
     this.badgeSnapshotStore,
     this.identityAccountCache,
+    this.profileCache,
   });
 
   final WalletManager? walletManager;
   final SquareChainService? chainService;
   final IdentityBadgeSnapshotStore? badgeSnapshotStore;
   final IdentityAccountCache? identityAccountCache;
+  final CitizenProfileCache? profileCache;
 
   /// 加载当前广场身份。
   ///
   /// 身份主键 = CID 号:`accountId`/`ss58`/`cid` 跟随**身份账户**(CID 绑定账户,
-  /// 常态=账户0),`walletIndex` 保持钱包级(设备子钥按 walletIndex 存)、`walletName`
-  /// 取钱包名。[readLiveChain] 仅允许发布等主动链流程传 true;广场浏览必须传 false,
+  /// 常态=账户0),`walletIndex` 保持钱包级(设备子钥按 walletIndex 存)、公开昵称
+  /// 只从 CID 资料缓存读取。[readLiveChain] 仅允许发布等主动链流程传 true;广场浏览必须传 false,
   /// 只读账户级徽章快照,不能因此启动 smoldot(身份账户解析同样按此不链读)。
   Future<SquareIdentityState> loadCurrent({bool readLiveChain = true}) async {
     final wallet = await (walletManager ?? WalletManager()).getDefaultWallet();
@@ -67,8 +76,9 @@ class SquareIdentityService {
       return const SquareIdentityState(accountId: '');
     }
     // 身份账户(CID 绑定账户);readLiveChain=false 时不链读,命中缓存或回退账户0。
-    final identity = await (identityAccountCache ?? IdentityAccountCache.instance)
-        .resolve(allowChainRead: readLiveChain);
+    final identity =
+        await (identityAccountCache ?? IdentityAccountCache.instance)
+            .resolve(allowChainRead: readLiveChain);
     final identityAccountId = identity?.accountId ?? wallet.accountId;
     final identitySs58 = identity?.ss58Address ?? wallet.ss58Address;
 
@@ -98,9 +108,20 @@ class SquareIdentityService {
       identityLevel = snapshot?.identityLevel ?? 'visitor';
     }
 
+    String? displayName;
+    final profileCid = cidNumber?.trim() ?? '';
+    if (profileCid.isNotEmpty) {
+      final profile =
+          await (profileCache ?? const CitizenProfileCache()).read(profileCid);
+      final cachedName = profile?.displayName.trim() ?? '';
+      if (cachedName.isNotEmpty) {
+        displayName = cachedName;
+      }
+    }
+
     return SquareIdentityState(
       accountId: identityAccountId,
-      walletName: wallet.walletName,
+      displayName: displayName,
       cidNumber: cidNumber,
       walletIndex: wallet.walletIndex,
       ss58Address: identitySs58,

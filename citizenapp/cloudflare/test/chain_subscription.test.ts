@@ -16,7 +16,7 @@ function accountId(bytes: Uint8Array): string {
   return `0x${bytesToHex(bytes)}`;
 }
 
-// 与 runtime 金标 state_platform 逐字节一致（新布局：无 pending_plan，末尾含
+// 与 runtime 金标 state_platform 逐字节一致（无延迟生效套餐字段，末尾含
 // authorized_price_fen + suspend_reason）。
 const STATE_PLATFORM =
   "00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000001c8d5b0000000000000000000000000000";
@@ -49,6 +49,11 @@ describe("decodeSubscriptionState", () => {
     const s = decodeSubscriptionState(hexToBytes(suspended));
     expect(s.status).toBe("suspended");
     expect(s.suspendReason).toBe("needReconsent");
+    const identityUnavailable =
+      STATE_PREFIX + "03" + STATE_AUTHORIZED + "0102";
+    expect(
+      decodeSubscriptionState(hexToBytes(identityUnavailable)).suspendReason,
+    ).toBe("identityBindingUnavailable");
 
     const creatorPaused = STATE_PREFIX + "04" + STATE_AUTHORIZED + "00";
     const c = decodeSubscriptionState(hexToBytes(creatorPaused));
@@ -110,33 +115,33 @@ describe("decodeCreatorPlans", () => {
 
 describe("buildSubscriptionKey", () => {
   it("平台键保持 Blake2_128Concat 单键布局", () => {
-    const account = accountId(
-      Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 1)),
-    );
-    const key = buildSubscriptionKey(account, { kind: "platform" });
+    const subscriberCidNumber = "CN220-CTZN2-100000001-2026";
+    const key = buildSubscriptionKey(subscriberCidNumber, { kind: "platform" });
     const prefix = storageValueKey("SquarePost", "Subscriptions");
     expect(Array.from(key.slice(0, 32))).toEqual(Array.from(prefix));
-    expect(key.length).toBe(81);
+    expect(key.length).toBe(50 + subscriberCidNumber.length);
     expect(key[key.length - 1]).toBe(0x00);
   });
 
-  it("创作者键包含收款账户", () => {
-    const subscriber = accountId(new Uint8Array(32).fill(2));
-    const creator = accountId(new Uint8Array(32).fill(9));
-    const key = buildSubscriptionKey(subscriber, {
+  it("创作者键只包含订阅者 CID 与创作者 CID", () => {
+    const subscriberCidNumber = "CN220-CTZN2-100000001-2026";
+    const creatorCidNumber = "CN220-CTZN2-900000001-2026";
+    const key = buildSubscriptionKey(subscriberCidNumber, {
       kind: "creator",
-      creatorAccountId: creator,
+      creatorCidNumber,
     });
-    expect(key.length).toBe(113);
-    expect(key[key.length - 33]).toBe(0x01);
+    expect(key.length).toBe(
+      51 + subscriberCidNumber.length + creatorCidNumber.length,
+    );
+    expect(key[49 + subscriberCidNumber.length]).toBe(0x01);
   });
 
-  it("CreatorPlans 键使用创作者账户作为 Blake2_128Concat 单键", () => {
-    const creator = accountId(new Uint8Array(32).fill(7));
-    const key = buildCreatorPlansKey(creator);
+  it("CreatorPlans 键使用创作者 CID 作为 Blake2_128Concat 单键", () => {
+    const creatorCidNumber = "CN220-CTZN2-900000001-2026";
+    const key = buildCreatorPlansKey(creatorCidNumber);
     const prefix = storageValueKey("SquarePost", "CreatorPlans");
     expect(Array.from(key.slice(0, 32))).toEqual(Array.from(prefix));
-    expect(key.length).toBe(80);
+    expect(key.length).toBe(49 + creatorCidNumber.length);
   });
 });
 
@@ -185,6 +190,50 @@ describe("finalized 订阅交易证明", () => {
         signedExtrinsicHex: `0x${bytesToHex(signed)}`,
       },
     )).rejects.toMatchObject({ code: "subscription_tx_action_mismatch" });
+  });
+
+  it("创作者交易按 CID 解码并校验，不接受账户键语义", async () => {
+    const signer = new Uint8Array(32).fill(7);
+    const creatorCidNumber = "CN220-CTZN2-900000001-2026";
+    const creatorCid = new TextEncoder().encode(creatorCidNumber);
+    const tier = new TextEncoder().encode("supporter");
+    const call = Uint8Array.from([
+      34,
+      1,
+      1,
+      creatorCid.length << 2,
+      ...creatorCid,
+      1,
+      tier.length << 2,
+      ...tier,
+      0,
+      ...new Uint8Array(16).fill(1),
+    ]);
+    const signed = signedExtrinsic(signer, call);
+    const signedHex = `0x${bytesToHex(signed)}`;
+    const txHash = `0x${bytesToHex(blake2AsU8a(signed, 256))}`;
+    const blockHash = `0x${"a".repeat(64)}`;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = rpcFetch({ blockHash, signedHex });
+    try {
+      await expect(
+        verifyFinalizedSubscriptionTransaction(
+          rpcEnv(),
+          accountId(signer),
+          {
+            kind: "creator_subscribe",
+            creatorCidNumber,
+            tierId: "supporter",
+            billingPeriod: "monthly",
+          },
+          { txHash, blockHash, signedExtrinsicHex: signedHex },
+        ),
+      ).resolves.toMatchObject({
+        action: { kind: "creator_subscribe", creatorCidNumber },
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("同一 tx_hash 只允许绑定同一规范化业务请求，原请求可幂等重试", async () => {

@@ -88,7 +88,7 @@ schema 初始化和链上业务投影必须分离。schema 入口只允许幂等
 - `chain_sign_sessions`：公民/机构链交易的短期签名会话，只保存 `actor_public_key`、签名 payload 和链上成功后写正式投影所需的上下文；它不是业务草稿，不参与 CID/名称占用，submit 成功或失败后都必须删除。
 - `node_institution_bindings`、`node_binding_challenges`：本节点首次登录绑定机构和绑定确认挑战；绑定表使用 `bound_account_id`，挑战使用 `account_id`，并只保存链上身份键，禁止保存机构名称和省市镇权限派生值。解绑 / 换机构由 `NODE_BINDING_UNBIND` 冷签动作停用 active binding。
 - `admin_sessions`：会话以 `account_id` 保存账户身份，并保存签发时的 `candidate_id`；每次鉴权与当前 active binding 严格比对，解绑、重绑或候选不一致时立即删除会话，不允许回落。
-- `admin_login_sign_requests`、`admin_qr_login_results`、`admin_action_challenges`、`admin_security_grants`：登录和扫码签名运行态。管理员登录必须先扫描完整 `QR_V1/k=3 user_contact` 用户码，由后端从 `b.ss58_address` 派生规范 `account_id`、先查链上管理员名册，再生成 `QR_V1/k=1,a=1` 定向请求；`b.u` 必须是该账户公钥且数据库 `account_id` 不得为空。签名响应只能证明持有该目标账户私钥，不得改写目标账户。
+- `admin_login_sign_requests`、`admin_qr_login_results`、`admin_action_challenges`、`admin_security_grants`：登录和扫码签名运行态。管理员登录必须先扫描完整 `QR_V1/k=3 user_contact` 用户码；后端严格解析 `cid_number + ss58_address + display_name`，从 SS58 派生规范 `account_id`，并要求二维码 CID 与 AccountId 同时命中链上同一条 Active 管理员记录后，才生成 `QR_V1/k=1,a=1` 定向请求。`display_name` 只用于前端展示；`b.u` 必须是目标账户公钥且数据库 `account_id` 不得为空。签名响应只能证明持有该目标账户私钥，不得改写目标账户。
 - `chain_requests`、`chain_nonces`、`tx_records`、`tx_indexer_state`：链路幂等、防重放和索引运行态；交易发送方、接收方固定使用 `sender_account_id/recipient_account_id`。
 
 `cid_number` 是唯一且不可变的身份标识。不得新增 `identity_key`、`generation_key` 等第二身份键。

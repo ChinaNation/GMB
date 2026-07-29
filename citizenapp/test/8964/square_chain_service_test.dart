@@ -96,6 +96,26 @@ void main() {
     expect(identity.identityLevel, 'candidate');
   });
 
+  test('匿名 active CID 保留帖子归属但不升级投票身份', () async {
+    final service = SquareChainService(
+      identityChainReader: _FakeIdentityReader(
+        CitizenIdentityChainSnapshot(
+          cidNumber: 'CN001-CTZN-000000002-2026',
+          accountId: Uint8List(32),
+          votingIdentity: null,
+        ),
+      ),
+    );
+
+    final identity = await service.fetchIdentity('ignored-in-reader');
+    expect(identity.cidNumber, 'CN001-CTZN-000000002-2026');
+    expect(identity.identityLevel, 'visitor');
+    expect(
+      await service.fetchNormalCitizenCidNumber('ignored-in-reader'),
+      'CN001-CTZN-000000002-2026',
+    );
+  });
+
   test('三档平台价格通过一次 finalized storage 批量读取', () async {
     final rpc = _BatchPriceChainRpc();
     final service = SquareChainService(chainRpc: rpc);
