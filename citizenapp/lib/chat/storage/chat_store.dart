@@ -5,6 +5,7 @@ import '../chat_models.dart';
 import '../chat_payload.dart';
 import '../group/group_model.dart';
 import '../proto/chat_envelope.pb.dart';
+import 'chat_crypto.dart';
 
 /// Chat 本地消息记录。
 class ChatStoredMessage {
@@ -102,9 +103,65 @@ class ChatRoute {
 class ChatStore {
   ChatStore({
     WalletIsar? walletIsar,
-  }) : _walletIsar = walletIsar ?? WalletIsar.instance;
+    ChatCrypto? crypto,
+  })  : _walletIsar = walletIsar ?? WalletIsar.instance,
+        _crypto = crypto ?? ChatCrypto();
 
   final WalletIsar _walletIsar;
+
+  /// 聊天本地密文的唯一加解密边界。加解密一律在 Isar 事务**之外**完成,
+  /// 不让密码学运算占住写事务。
+  final ChatCrypto _crypto;
+
+  /// 把正文加密成密文 + 搜索索引;正文为空时返回空密文与空索引。
+  Future<_SealedMessage> _sealMessage({
+    required String accountId,
+    required String envelopeId,
+    required String? plaintext,
+  }) async {
+    if (plaintext == null || plaintext.isEmpty) {
+      return const _SealedMessage(cipher: null, tokens: <String>[]);
+    }
+    return _SealedMessage(
+      cipher: await _crypto.encryptText(
+        accountId: accountId,
+        recordId: envelopeId,
+        plaintext: plaintext,
+      ),
+      // 索引建在**摘要**上,与搜索时的匹配口径一致(媒体/贴纸取类型化占位)。
+      tokens: await _crypto.buildSearchTokens(
+        accountId: accountId,
+        text: _messageSummary(plaintext),
+      ),
+    );
+  }
+
+  Future<String> _sealSummary({
+    required String accountId,
+    required String conversationId,
+    required String? plaintext,
+  }) =>
+      _crypto.encryptText(
+        accountId: accountId,
+        recordId: conversationId,
+        plaintext: _messageSummary(plaintext),
+      );
+
+  Future<String?> _openMessage(ChatMessageEntity row) async {
+    final cipher = row.plaintextCipher;
+    if (cipher == null || cipher.isEmpty) return null;
+    return _crypto.decryptText(
+      accountId: row.accountId,
+      recordId: row.envelopeId,
+      blob: cipher,
+    );
+  }
+
+  Future<String> _openSummary(ChatConversationEntity row) => _crypto.decryptText(
+        accountId: row.accountId,
+        recordId: row.conversationId,
+        blob: row.lastMessageCipher,
+      );
 
   Future<List<ChatConversationPreview>> readConversationPreviews({
     String? accountId,
@@ -121,9 +178,11 @@ class ChatStore {
               .toList(growable: false);
       filtered.sort(
           (a, b) => b.lastUpdatedAtMillis.compareTo(a.lastUpdatedAtMillis));
-      return filtered
-          .map(_conversationPreviewFromEntity)
-          .toList(growable: false);
+      final out = <ChatConversationPreview>[];
+      for (final row in filtered) {
+        out.add(_conversationPreviewFromEntity(row, await _openSummary(row)));
+      }
+      return List<ChatConversationPreview>.unmodifiable(out);
     });
   }
 
@@ -178,40 +237,72 @@ class ChatStore {
           .where((row) => row.conversationId == conversationId)
           .toList(growable: false)
         ..sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
-      return filtered.map(_messageFromEntity).toList(growable: false);
+      final out = <ChatStoredMessage>[];
+      for (final row in filtered) {
+        out.add(_messageFromEntity(row, await _openMessage(row)));
+      }
+      return List<ChatStoredMessage>.unmodifiable(out);
     });
   }
 
   /// 跨会话搜索本机聊天记录（聊天搜索页的「聊天记录」段）。
   ///
-  /// 消息 `plaintext` 存的是**编码载荷**（文本 / 媒体 / 贴纸），必须先经
-  /// [ChatPayloadCodec] 解成摘要再匹配：直接拿原串匹配会漏掉文本正文，
-  /// 又会错配到媒体元数据。大小写不敏感。
+  /// 正文已在磁盘上加密，无法再做明文子串匹配，改为**两段式**：
+  /// 1. 用 `LocalKeyPurpose.chatIndex` 子钥把查询串切成 HMAC bigram token，
+  ///    经 `searchTokens` 多值索引取出**同时命中全部 token** 的候选；
+  /// 2. 只对候选解密，再验一次真实子串。
   ///
-  /// 性能：先用 `accountId` 索引收窄，再在内存里匹配（`plaintext` 无索引，
-  /// 不为搜索改表结构），按时间倒序截断 [limit]，避免大历史一次性铺开。
+  /// 第 2 步不可省：token 是 HMAC **截断值**，存在假阳性；且 bigram 命中不等于
+  /// 原串顺序命中（查 "abc" 会命中含 "ab"、"bc" 但实为 "bcab" 的记录）。
+  /// 复验保证结果与旧的明文 `contains` 语义完全一致。
+  ///
+  /// 匹配口径仍是**摘要**（文本取正文，媒体/贴纸取类型化占位），与建索引时一致；
+  /// 大小写不敏感。查询不足 2 字符时无 bigram 可用，回落到按 `accountId` 收窄后
+  /// 解密扫描——单字符查询在中文里很常见，不能直接拒绝。
   Future<List<ChatStoredMessage>> searchMessages({
     required String accountId,
     required String keyword,
     int limit = 50,
-  }) {
+  }) async {
     final needle = keyword.trim().toLowerCase();
     if (needle.isEmpty || accountId.isEmpty) {
-      return Future<List<ChatStoredMessage>>.value(const <ChatStoredMessage>[]);
+      return const <ChatStoredMessage>[];
     }
+    final tokens = await _crypto.buildQueryTokens(
+      accountId: accountId,
+      query: needle,
+    );
     return _walletIsar.read((isar) async {
-      final rows = await isar.chatMessageEntitys
-          .filter()
-          .accountIdEqualTo(accountId)
-          .findAll();
-      final hits = rows
-          .where(
-            (row) =>
-                _messageSummary(row.plaintext).toLowerCase().contains(needle),
-          )
-          .toList(growable: false)
-        ..sort((a, b) => b.createdAtMillis.compareTo(a.createdAtMillis));
-      return hits.take(limit).map(_messageFromEntity).toList(growable: false);
+      List<ChatMessageEntity> candidates;
+      if (tokens.isEmpty) {
+        candidates = await isar.chatMessageEntitys
+            .filter()
+            .accountIdEqualTo(accountId)
+            .findAll();
+      } else {
+        var query = isar.chatMessageEntitys
+            .filter()
+            .accountIdEqualTo(accountId)
+            .and()
+            .searchTokensElementEqualTo(tokens.first);
+        for (final token in tokens.skip(1)) {
+          query = query.and().searchTokensElementEqualTo(token);
+        }
+        candidates = await query.findAll();
+      }
+      candidates
+          .sort((a, b) => b.createdAtMillis.compareTo(a.createdAtMillis));
+
+      final hits = <ChatStoredMessage>[];
+      for (final row in candidates) {
+        if (hits.length >= limit) break;
+        final plaintext = await _openMessage(row);
+        if (!_messageSummary(plaintext).toLowerCase().contains(needle)) {
+          continue; // 索引假阳性，复验滤掉
+        }
+        hits.add(_messageFromEntity(row, plaintext));
+      }
+      return List<ChatStoredMessage>.unmodifiable(hits);
     });
   }
 
@@ -341,7 +432,18 @@ class ChatStore {
     required ChatMessageKind messageKind,
     required ChatMessageDeliveryState deliveryState,
     String? plaintext,
-  }) {
+  }) async {
+    // 加解密在事务外完成，避免密码学运算占住 Isar 写事务。
+    final sealed = await _sealMessage(
+      accountId: envelope.senderAccountId,
+      envelopeId: envelope.envelopeId,
+      plaintext: plaintext,
+    );
+    final summaryCipher = await _sealSummary(
+      accountId: envelope.senderAccountId,
+      conversationId: envelope.conversationId,
+      plaintext: plaintext,
+    );
     return _walletIsar.writeTxn((isar) async {
       await _putConversationInTxn(
         isar: isar,
@@ -349,7 +451,7 @@ class ChatStore {
         accountId: envelope.senderAccountId,
         peerAccountId: envelope.recipientAccountId,
         title: envelope.recipientAccountId,
-        lastMessage: _messageSummary(plaintext),
+        lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 0,
         deliveryState: deliveryState,
@@ -362,7 +464,8 @@ class ChatStore {
           direction: 'outgoing',
           messageKind: messageKind,
           deliveryState: deliveryState,
-          plaintext: plaintext,
+          plaintextCipher: sealed.cipher,
+          searchTokens: sealed.tokens,
         ),
       );
       await isar.chatOutboundQueueEntitys.putByEnvelopeId(
@@ -405,7 +508,17 @@ class ChatStore {
     required List<int> envelopeBytes,
     required ChatMessageKind messageKind,
     required String plaintext,
-  }) {
+  }) async {
+    final sealed = await _sealMessage(
+      accountId: envelope.recipientAccountId,
+      envelopeId: envelope.envelopeId,
+      plaintext: plaintext,
+    );
+    final summaryCipher = await _sealSummary(
+      accountId: envelope.recipientAccountId,
+      conversationId: envelope.conversationId,
+      plaintext: plaintext,
+    );
     return _walletIsar.writeTxn((isar) async {
       await _putConversationInTxn(
         isar: isar,
@@ -413,7 +526,7 @@ class ChatStore {
         accountId: envelope.recipientAccountId,
         peerAccountId: envelope.senderAccountId,
         title: envelope.senderAccountId,
-        lastMessage: _messageSummary(plaintext),
+        lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 1,
         deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -426,7 +539,8 @@ class ChatStore {
           direction: 'incoming',
           messageKind: messageKind,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
-          plaintext: plaintext,
+          plaintextCipher: sealed.cipher,
+          searchTokens: sealed.tokens,
         ),
       );
     });
@@ -659,7 +773,7 @@ class ChatStore {
         ..peerAccountId = creatorAccountId
         ..title = groupName
         ..conversationKind = 'group'
-        ..lastMessage = conversation?.lastMessage ?? ''
+        ..lastMessageCipher = conversation?.lastMessageCipher ?? ''
         ..lastUpdatedAtMillis = conversation?.lastUpdatedAtMillis ?? now
         ..unreadCount = conversation?.unreadCount ?? 0
         ..lastDeliveryState = conversation?.lastDeliveryState ??
@@ -831,13 +945,23 @@ class ChatStore {
     required int createdAtMillis,
     required List<ChatEnvelope> envelopes,
     required Map<String, String> recipientCidByAccountId,
-  }) {
+  }) async {
+    final sealed = await _sealMessage(
+      accountId: senderAccountId,
+      envelopeId: logicalEnvelopeId,
+      plaintext: payload,
+    );
+    final summaryCipher = await _sealSummary(
+      accountId: senderAccountId,
+      conversationId: groupId,
+      plaintext: payload,
+    );
     return _walletIsar.writeTxn((isar) async {
       await _touchGroupConversationInTxn(
         isar: isar,
         groupId: groupId,
         accountId: senderAccountId,
-        lastMessage: _messageSummary(payload),
+        lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: createdAtMillis,
         unreadDelta: 0,
         deliveryState: ChatMessageDeliveryState.queued,
@@ -855,7 +979,8 @@ class ChatStore {
           ..mlsMessageKind =
               MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION.name
           ..deliveryState = ChatMessageDeliveryState.queued.name
-          ..plaintext = payload
+          ..plaintextCipher = sealed.cipher
+          ..searchTokens = sealed.tokens
           ..envelopeBytesHex = ''
           ..createdAtMillis = createdAtMillis,
       );
@@ -887,13 +1012,23 @@ class ChatStore {
     required List<int> envelopeBytes,
     required ChatMessageKind messageKind,
     required String plaintext,
-  }) {
+  }) async {
+    final sealed = await _sealMessage(
+      accountId: envelope.recipientAccountId,
+      envelopeId: envelope.envelopeId,
+      plaintext: plaintext,
+    );
+    final summaryCipher = await _sealSummary(
+      accountId: envelope.recipientAccountId,
+      conversationId: envelope.conversationId,
+      plaintext: plaintext,
+    );
     return _walletIsar.writeTxn((isar) async {
       await _touchGroupConversationInTxn(
         isar: isar,
         groupId: envelope.conversationId,
         accountId: envelope.recipientAccountId,
-        lastMessage: _messageSummary(plaintext),
+        lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 1,
         deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -906,7 +1041,8 @@ class ChatStore {
           direction: 'incoming',
           messageKind: messageKind,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
-          plaintext: plaintext,
+          plaintextCipher: sealed.cipher,
+          searchTokens: sealed.tokens,
         ),
       );
     });
@@ -917,7 +1053,7 @@ class ChatStore {
     required Isar isar,
     required String groupId,
     required String accountId,
-    required String lastMessage,
+    required String lastMessageCipher,
     required int lastUpdatedAtMillis,
     required int unreadDelta,
     required ChatMessageDeliveryState deliveryState,
@@ -935,7 +1071,7 @@ class ChatStore {
           existing?.peerAccountId ?? (group?.creatorAccountId ?? '')
       ..title = group?.groupName ?? existing?.title ?? groupId
       ..conversationKind = 'group'
-      ..lastMessage = lastMessage
+      ..lastMessageCipher = lastMessageCipher
       ..lastUpdatedAtMillis = lastUpdatedAtMillis
       ..unreadCount = (existing?.unreadCount ?? 0) + unreadDelta
       ..lastDeliveryState = deliveryState.name;
@@ -967,7 +1103,7 @@ class ChatStore {
     required String accountId,
     required String peerAccountId,
     required String title,
-    required String lastMessage,
+    required String lastMessageCipher,
     required int lastUpdatedAtMillis,
     required int unreadDelta,
     required ChatMessageDeliveryState deliveryState,
@@ -980,7 +1116,7 @@ class ChatStore {
       ..accountId = accountId
       ..peerAccountId = peerAccountId
       ..title = title
-      ..lastMessage = lastMessage
+      ..lastMessageCipher = lastMessageCipher
       ..lastUpdatedAtMillis = lastUpdatedAtMillis
       ..unreadCount = (existing?.unreadCount ?? 0) + unreadDelta
       ..lastDeliveryState = deliveryState.name;
@@ -988,13 +1124,14 @@ class ChatStore {
   }
 }
 
+/// [lastMessage] 由 `ChatStore` 解密后传入——本函数不接触密钥。
 ChatConversationPreview _conversationPreviewFromEntity(
-    ChatConversationEntity row) {
+    ChatConversationEntity row, String lastMessage) {
   return ChatConversationPreview(
     conversationId: row.conversationId,
     title: row.title,
     peerAccountId: row.peerAccountId,
-    lastMessage: row.lastMessage,
+    lastMessage: lastMessage,
     lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(row.lastUpdatedAtMillis),
     unreadCount: row.unreadCount,
     deliveryState: _deliveryStateFromName(row.lastDeliveryState),
@@ -1002,7 +1139,8 @@ ChatConversationPreview _conversationPreviewFromEntity(
   );
 }
 
-ChatStoredMessage _messageFromEntity(ChatMessageEntity row) {
+/// [plaintext] 由 `ChatStore` 解密后传入——本函数不接触密钥。
+ChatStoredMessage _messageFromEntity(ChatMessageEntity row, String? plaintext) {
   return ChatStoredMessage(
     envelopeId: row.envelopeId,
     conversationId: row.conversationId,
@@ -1012,7 +1150,7 @@ ChatStoredMessage _messageFromEntity(ChatMessageEntity row) {
     messageKind: _messageKindFromName(row.messageKind),
     deliveryState: _deliveryStateFromName(row.deliveryState),
     createdAtMillis: row.createdAtMillis,
-    plaintext: row.plaintext,
+    plaintext: plaintext,
   );
 }
 
@@ -1037,7 +1175,8 @@ ChatMessageEntity _messageEntity({
   required String direction,
   required ChatMessageKind messageKind,
   required ChatMessageDeliveryState deliveryState,
-  String? plaintext,
+  String? plaintextCipher,
+  List<String> searchTokens = const <String>[],
 }) {
   return ChatMessageEntity()
     ..envelopeId = envelope.envelopeId
@@ -1050,7 +1189,8 @@ ChatMessageEntity _messageEntity({
     ..messageKind = messageKind.name
     ..mlsMessageKind = envelope.mlsMessageKind.name
     ..deliveryState = deliveryState.name
-    ..plaintext = plaintext
+    ..plaintextCipher = plaintextCipher
+    ..searchTokens = searchTokens
     ..envelopeBytesHex = _bytesToHex(envelopeBytes)
     ..createdAtMillis = envelope.createdAtMillis.toInt();
 }
@@ -1089,4 +1229,15 @@ List<int> _hexToBytes(String value) {
     bytes.add(int.parse(normalized.substring(i, i + 2), radix: 16));
   }
   return bytes;
+}
+
+/// 一条消息落盘所需的密文与搜索索引。
+class _SealedMessage {
+  const _SealedMessage({required this.cipher, required this.tokens});
+
+  /// 正文密文；正文为空时为 null。
+  final String? cipher;
+
+  /// HMAC 分词索引（去重后的 bigram token）。
+  final List<String> tokens;
 }

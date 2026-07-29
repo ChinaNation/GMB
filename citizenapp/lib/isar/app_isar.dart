@@ -584,7 +584,10 @@ class ChatConversationEntity {
   late String peerAccountId;
 
   late String title;
-  late String lastMessage;
+
+  /// 会话摘要**密文**(AES-256-GCM,`LocalKeyPurpose.chat` 子钥,AAD 绑 conversationId)。
+  /// 手机磁盘上不得出现聊天明文;解密边界收敛在 `ChatStore` 一层。
+  late String lastMessageCipher;
 
   @Index()
   late int lastUpdatedAtMillis;
@@ -598,8 +601,9 @@ class ChatConversationEntity {
 
 /// Chat 消息本地记录。
 ///
-/// `envelopeBytesHex` 保存完整 ChatEnvelope Protobuf bytes，便于重试
-/// 和排查；`plaintext` 只写手机本地库，绝不上传 Cloudflare 或近场 transport。
+/// `envelopeBytesHex` 保存完整 ChatEnvelope Protobuf bytes(其正文本身已由 MLS
+/// 端到端加密,故不再叠一层本地加密),便于重试和排查;**解出来的正文只以
+/// [plaintextCipher] 密文形式落盘**,绝不上传 Cloudflare 或近场 transport。
 @collection
 class ChatMessageEntity {
   Id id = Isar.autoIncrement;
@@ -620,7 +624,19 @@ class ChatMessageEntity {
   late String messageKind;
   late String mlsMessageKind;
   late String deliveryState;
-  String? plaintext;
+
+  /// 正文**密文**(AES-256-GCM,`LocalKeyPurpose.chat` 子钥,AAD 绑 envelopeId)。
+  /// 解密边界收敛在 `ChatStore`,UI 与业务层拿到的仍是明文对象。
+  String? plaintextCipher;
+
+  /// 搜索用 **HMAC 分词索引**(`LocalKeyPurpose.chatIndex` 子钥)。
+  ///
+  /// 存的是去重后的字符 bigram 的 HMAC-SHA256 截断值,**绝不保存明文 token**。
+  /// 截断会带来假阳性,故索引只负责收窄候选,`ChatStore` 解密后必须再验一次
+  /// 真实子串,保证搜索结果正确。
+  @Index(type: IndexType.value)
+  List<String> searchTokens = const <String>[];
+
   late String envelopeBytesHex;
 
   @Index()

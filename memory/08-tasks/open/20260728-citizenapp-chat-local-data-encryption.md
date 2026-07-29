@@ -106,6 +106,54 @@ CID 换绑就要把整个聊天历史 + MLS 状态 + 全部附件重新加密一
 实际按用户决定**不做迁移**，旧明文直接删除；对应地，`atomic_write` 仍按卡要求实现，
 用于防止正常写入过程崩溃导致状态损坏。
 
+### 第 3+4 步（合并）：聊天正文加密 + HMAC 分词搜索索引（2026-07-29 完成）
+
+用户选择**合并实施**，避免出现「加密完成但搜索只能全解密扫描」的中间降级态。
+
+**三个设计决策**
+1. **索引用字符 bigram**（去重后存）。中文没有词边界，英文/数字也要支持子串搜索，
+   bigram 两者通吃；查询不足 2 字符时回落到按 `accountId` 收窄后解密扫描——
+   单字符查询在中文里很常见，不能直接拒绝。
+2. **token = HMAC-SHA256 截断 8 字节**（`LocalKeyPurpose.chatIndex` 子钥，
+   与正文钥域隔离）。截断换索引体积，代价是假阳性。
+3. **解密边界收敛在 `ChatStore` 一层**，UI 与业务层拿到的仍是明文 DTO
+   （`ChatStoredMessage.plaintext` / `ChatConversationPreview.lastMessage`），
+   不散落解密代码、不散落密钥。
+
+**搜索改为两段式（关键）**：token 命中只用来**收窄候选**，解密后**必须再验一次
+真实子串**。不可省——token 是截断值有假阳性，且 bigram 命中 ≠ 原串顺序命中
+（查 `abc` 会命中含 `ab`/`bc` 但实为 `bcab` 的记录）。复验保证语义与旧的明文
+`contains` 完全一致。已写成测试钉死。
+
+**改动**
+- `lib/isar/app_isar.dart`：`ChatConversationEntity.lastMessage` →
+  `lastMessageCipher`；`ChatMessageEntity.plaintext` → `plaintextCipher`；
+  新增 `searchTokens: List<String>` 带 `@Index(type: IndexType.value)` 多值索引。
+  `app_isar.g.dart` 已重新生成。
+- **`envelopeBytesHex` 刻意不加密**：其内容是 MLS 端到端密文，且随附元数据
+  （sender/recipient/conversation）本就是明文列，再套一层不减少泄露面。
+- 新增 `lib/chat/storage/chat_crypto.dart`：`ChatCrypto`（按 accountId 缓存子钥、
+  加解密、分词、`tokenize` 静态方法便于单测）。含 `debugFixedLocalDataKey`
+  测试注入口，仿 `WalletManager.debugSeedStore` 惯例。
+- `lib/chat/storage/chat_store.dart`：4 个写入路径改为**事务外预加密**
+  （不让密码学运算占住 Isar 写事务）；2 个读取路径解密；`searchMessages` 两段式重写；
+  两个 mapper 改为接收已解密文本。
+
+**测试策略**：`test/support/isar_test_env.dart` 注入固定 LDK。这是
+**换密钥来源、不绕过加密**——测试仍走真实 AES-GCM 与真实 HMAC 索引，
+否则加密就成了测试盲区。
+
+**验收（实跑）**
+- `flutter analyze lib/ test/` 零问题
+- `flutter test test/chat/` **169 通过**（既有测试全部恢复，无回归）
+- 新增 `test/chat/storage/{chat_crypto_test,chat_store_encryption_test}.dart`
+  **16 通过**，其中两条关键断言：
+  1. 绕过 `ChatStore` 直接查 Isar 原始行，`plaintextCipher` / `lastMessageCipher` /
+     `searchTokens` 中**均不含明文片段**；
+  2. `bcab` 作为 `abc` 的索引假阳性**必须被复验滤掉**，只返回真正含 `abc` 的记录。
+  另覆盖中英数子串命中、大小写不敏感、单字符回落、不命中返空、
+  密文损坏必抛错（不静默返回空白，否则用户会看到聊天记录凭空变空）。
+
 ## 完成标准
 
 - Isar 和 App 私有目录不再保存联系人、聊天正文、会话摘要、MLS 秘密或附件明文。
