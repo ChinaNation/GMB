@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../8964/profile/user_qr_page.dart';
 import '../8964/profile/widgets/local_identity_avatar.dart';
 import '../my/myid/identity_account_cache.dart';
 import '../my/myid/widgets/identity_registration_gate.dart';
@@ -12,6 +11,7 @@ import '../my/user/contact_book_page.dart';
 import '../qr/scan_dispatch_flow.dart';
 import '../ui/app_theme.dart';
 import '../wallet/core/wallet_manager.dart';
+import '../wallet/pages/wallet_qr_page.dart';
 import 'chat_page.dart';
 import 'chat_runtime.dart';
 import 'chat_models.dart';
@@ -51,7 +51,7 @@ class ChatEntryOpeners {
   /// 扫一扫 = 交易·扫一扫统一分派（扫到用户二维码按收款人进入转账）。
   final ChatEntryOpener? openScan;
 
-  /// 收付款 = 展示本人唯一用户二维码。
+  /// 收付款 = 展示本账户钱包码（收款码 `k=4` 生成方待实现）。
   final ChatEntryOpener? openReceivePay;
 
   /// 发私信 = 通讯录单选后直开私聊。
@@ -521,7 +521,11 @@ class _ChatTabState extends State<ChatTab> {
     await openScanDispatchFlow(context: context, paymentWallet: wallet);
   }
 
-  /// 收付款 = 展示本人唯一用户二维码，他人扫码后按收款人向我转账。
+  /// 收付款 = 展示本账户钱包码（`k=5`），他人扫码后按账户向我转账。
+  ///
+  /// 本入口最终归属是收款码（`k=4`，带金额与备注、临时有效），当前其生成方尚未实现，
+  /// 暂出钱包码；收款码落地时只切这一处，见任务卡
+  /// `memory/08-tasks/open/20260729-qr-three-code-classification.md`。
   Future<void> _openReceivePay() async {
     if (!_requireAccount()) return;
     final opener = widget.openers?.openReceivePay;
@@ -535,10 +539,10 @@ class _ChatTabState extends State<ChatTab> {
       setState(() => _error = '请先在「我的 → 我的钱包」创建热钱包');
       return;
     }
-    await openAccountQrPage(
+    await openWalletQrPage(
       context,
       accountId: wallet.accountId,
-      paymentDisplayName: wallet.walletName,
+      accountLabel: wallet.walletName,
     );
   }
 

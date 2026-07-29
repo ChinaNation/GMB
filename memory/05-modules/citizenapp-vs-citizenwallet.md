@@ -28,15 +28,20 @@
 | `sign_request`(接收) | ❌ | ✅ 扫码,展示交易摘要 |
 | `sign_response`(生成) | ❌ | ✅ 签完生成,展示给热端扫 |
 | `sign_response`(接收) | ✅ 扫回,广播交易 | ❌ |
-| `user_contact` | ✅ 身份账户生成+扫描并核验 CID | ✅ 只解析，不生成 |
-| `user_transfer` | ✅ 生成+扫 | ✅ 离线账户生成五分钟临时收款码 |
+| `user_contact`(用户码) | ✅ 身份账户生成(用户主页)+扫描并核验 CID | ✅ 只解析，不生成 |
+| `user_transfer`(收款码) | ✅ 生成+扫(生成方待实现) | ❌ 既不生成也不解析 |
+| `wallet_code`(钱包码) | ✅ 账户详情生成+扫 | ✅ 账户详情生成 |
 | `user_multisig` | ✅ 生成+扫 | ❌ |
 
 **核心结论**:
-- **登录**是 citizenwallet 公民钱包专属能力(OnChina 后端只认冷钱包签的登录签名响应)
+- **登录**由两端分工，不是任一端的专属能力：第 1 步由 citizenwallet 出示 `k=5` 钱包码提供
+  目标账户，第 2 步由同一 citizenwallet 冷签 `k=2` 登录响应。OnChina 后端只认冷钱包签的
+  登录签名响应，且登录全程不需要 citizenapp 参与
+  （2026-07-29 更正：旧表述「登录是 citizenwallet 专属能力」与当时「第 1 步必须扫
+  citizenapp 出的 `k=3`」自相矛盾，实际导致管理员拿冷钱包的收款码去扫而报错）
 - **交易签名**是两端协作(热端发起 → 冷端签名 → 热端广播)
-- **固定身份用户码/联系人关系/多签业务**由 CitizenApp 持有链上与业务真源；
-  CitizenWallet 只解析固定身份码，并为离线账户生成无身份声明的临时收款码
+- **用户码/联系人关系/多签业务**由 CitizenApp 持有链上与业务真源；CitizenWallet 只解析
+  用户码，并为自己的每个账户生成固定钱包码（无身份声明、无时效）
 
 2026-06-26 个人多签创建交易口径：
 
@@ -57,7 +62,9 @@
 
 1. **citizenapp 禁止出现任何登录二维码生成代码**(`sign_request` / `sign_response`)。如果历史上有,按协议统一任务一并删除。
 2. **CitizenWallet 禁止生成 `k=3 user_contact`**。离线账户没有 CID 真源，只允许解析
-   `k=3`，并生成五分钟 `k=4 user_transfer` 临时收款码。
+   `k=3`，账户详情生成固定 `k=5 wallet_code` 钱包码。**禁止在离线端生成任何带 `i/e`
+   的码**：冷钱包完全离线、无 NTP，本机时钟漂移或被改写都无从纠正，签发带绝对时间戳的
+   凭证本身不成立。CitizenWallet 也不解析 `k=4` 收款码（离线发不了交易，扫它无用途）。
 3. **两端的 `QrEnvelope` / `QrKind` / `bodies/*.dart` / `signature_message.dart` 必须逐字节一致**。通过 golden fixture 测试强制对齐:两端测试都从 `memory/01-architecture/qr/qr-protocol-fixtures/` 读取同一批样本。
 4. 扫到自己不处理的 kind:显示明确错误("此二维码需用 XX 钱包扫描"),不能静默忽略。
 

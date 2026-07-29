@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
+import 'package:citizenapp/qr/bodies/wallet_code_body.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/qr_router.dart';
 import 'package:citizenapp/qr/scan_dispatch_flow.dart';
@@ -78,6 +79,10 @@ String? extractColdWalletImportAddress(String raw) {
     case QrRouteType.userTransfer:
       final body = result.envelope!.body as UserTransferBody;
       return body.ss58Address.trim();
+    case QrRouteType.walletCode:
+      // 冷钱包账户详情出的就是钱包码：只含 account_id，展示地址在本机派生。
+      final body = result.envelope!.body as WalletCodeBody;
+      return ss58FromAccountIdText(body.accountId);
     case QrRouteType.legacyAddress:
       return result.extractedAddress?.trim();
     case QrRouteType.signRequest:

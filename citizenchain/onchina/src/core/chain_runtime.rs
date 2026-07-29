@@ -850,15 +850,6 @@ fn matching_admin<'a>(
         .find(|admin| &admin.account_id == target)
 }
 
-fn admin_matches_claimed_cid(
-    admin: &OnChainAdminRecord,
-    required_admin_cid_number: Option<&str>,
-) -> bool {
-    required_admin_cid_number.map_or(true, |cid_number| {
-        admin.cid_number.as_slice() == cid_number.as_bytes()
-    })
-}
-
 /// 解出 `Blake2_128Concat<CidNumber>` storage key 中的 CID。
 fn admin_accounts_cid_from_key(key_bytes: &[u8]) -> Result<Vec<u8>, String> {
     const PREFIX_AND_HASH_LEN: usize = 32 + 16;
@@ -1456,26 +1447,12 @@ pub(crate) async fn for_each_chain_private_institution_cid(
     Ok(count)
 }
 
+/// 按 `account_id` 查找该账户所属的全部 Active 管理员机构集合。
+///
+/// 账户匹配（`matching_admin`）本身就确认了「该账户是此机构的在职管理员」，
+/// 无需二维码额外声明个人 CID：钱包码只给 account_id，登录判据由链上单向反查决定。
 pub(crate) async fn find_active_admin_memberships(
     verified_account_id: &str,
-) -> Result<Vec<ActiveAdminMembership>, String> {
-    find_active_admin_memberships_inner(verified_account_id, None).await
-}
-
-/// 按二维码声明的个人 CID+AccountId 闭环查找 Active 管理员机构集合。
-///
-/// 个人 CID 来自 `InstitutionAdmins.admins[].cid_number`，机构 CID 仍来自
-/// `AdminAccounts` storage key；两者语义不同，禁止混用。
-pub(crate) async fn find_active_admin_memberships_for_identity(
-    verified_account_id: &str,
-    admin_cid_number: &str,
-) -> Result<Vec<ActiveAdminMembership>, String> {
-    find_active_admin_memberships_inner(verified_account_id, Some(admin_cid_number)).await
-}
-
-async fn find_active_admin_memberships_inner(
-    verified_account_id: &str,
-    required_admin_cid_number: Option<&str>,
 ) -> Result<Vec<ActiveAdminMembership>, String> {
     let target = parse_account_id_bytes(verified_account_id).ok_or_else(|| {
         "verified_account_id must be lowercase 0x plus 64 hexadecimal characters".to_string()
@@ -1509,10 +1486,7 @@ async fn find_active_admin_memberships_inner(
             let decoded = decode_onchain_admin_account(raw, pallet).map_err(|e| {
                 format!("decode {} AdminAccounts failed: {e}", pallet.pallet_name())
             })?;
-            let Some(admin) = matching_admin(&decoded, &target) else {
-                continue;
-            };
-            if !admin_matches_claimed_cid(admin, required_admin_cid_number) {
+            if matching_admin(&decoded, &target).is_none() {
                 continue;
             }
             if let Some(reason) = console_login_block_reason(&decoded.institution_code) {
@@ -1682,14 +1656,15 @@ mod tests {
         assert_eq!(decoded.institution_code, *b"CREG");
         assert_eq!(decoded.admins.len(), 1);
         assert_eq!(decoded.admins[0].account_id, [0x42; 32]);
-        assert!(super::admin_matches_claimed_cid(
-            &decoded.admins[0],
-            Some("CN220-CTZN2-198805200-2026"),
-        ));
-        assert!(!super::admin_matches_claimed_cid(
-            &decoded.admins[0],
-            Some("CN220-CTZN2-198805201-2026"),
-        ));
+        // 个人 CID 仍是记录的一部分，但登录判据只按 account_id 单向反查，
+        // 不再要求二维码额外声明 CID（钱包码只含 account_id）。
+        assert_eq!(
+            decoded.admins[0].cid_number.as_slice(),
+            "CN220-CTZN2-198805200-2026".as_bytes()
+        );
+        // 账户匹配本身就确认在职管理员身份，这是登录唯一判据的来源。
+        assert!(super::matching_admin(&decoded, &[0x42u8; 32]).is_some());
+        assert!(super::matching_admin(&decoded, &[0x43u8; 32]).is_none());
 
         let old_layout = (*b"CREG", vec![[0x42u8; 32]]).encode();
         assert!(

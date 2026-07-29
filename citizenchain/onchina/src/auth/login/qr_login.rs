@@ -41,23 +41,21 @@ pub(crate) async fn admin_auth_qr_sign_request(
     if derived_domain.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "domain is required");
     }
-    let identity = match crate::core::qr::parse_user_contact_identity(&input.identity_qr) {
+    // 登录第 1 步只收钱包码：管理员私钥保管在离线的 CitizenWallet，钱包码由它自己
+    // 就能出示。二维码不携带 CID 与昵称——CID 由链上 `CidByAccountId` 反查，管理员
+    // 姓名由链上记录读出，两者都比二维码自述可靠。
+    let scanned_account_id = match crate::core::qr::parse_wallet_code_account_id(&input.identity_qr)
+    {
         Ok(value) => value,
         Err(error) => {
-            let message =
-                format!("identity_qr must be a complete QR_V1 user_contact code: {error}");
+            let message = format!("identity_qr must be a complete QR_V1 wallet_code: {error}");
             return api_error(StatusCode::BAD_REQUEST, 1001, &message);
         }
     };
-    // 公开昵称不参与授权；CID 与 AccountId 必须作为同一链上管理员记录闭环命中。
-    let _display_name = identity.display_name;
-    let account_id =
-        match onchain_gate::validate_login_identity(&identity.cid_number, &identity.account_id)
-            .await
-        {
-            Ok(value) => value,
-            Err(error) => return onchain_gate::gate_error_response(error),
-        };
+    let account_id = match onchain_gate::validate_login_identity(&scanned_account_id).await {
+        Ok(value) => value,
+        Err(error) => return onchain_gate::gate_error_response(error),
+    };
 
     let now = Utc::now();
     let expire_at = now + Duration::seconds(LOGIN_SIGN_REQUEST_TTL_SECONDS);

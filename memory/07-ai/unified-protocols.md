@@ -899,27 +899,39 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 禁止把内部哈希、nonce、原始公钥 hex 当作普通用户确认字段展示
 - 必跑测试：`citizenwallet/test/signer/payload_decoder_test.dart`、QR sign request 测试
 
-### P-QR-003：QR_V1 / k=5 chat_node_pairing
+### P-QR-003：QR_V1 / k=5 wallet_code（钱包码）
 
-- 状态：已删除（2026-07-05 聊天方案改为 Cloudflare 互联网聊天 + 近场聊天；区块链节点通信节点聊天方式不再作为正式路线）
-- 类型：扫码协议内固定码
-- 唯一真源：无当前代码真源；旧实现文件已删除
+- 状态：现行（2026-07-29 三码分类落地；`k=5` 码值由已废止的 `chat_node_pairing` 回收）
+- 类型：扫码协议内固定码（无 `i/e`）
+- 唯一真源：`memory/01-architecture/qr/qr-protocol-spec.md` 第 8 节
 - 详细文档：
   - `memory/01-architecture/qr/qr-protocol-spec.md`
-  - `memory/05-modules/citizenapp/chat/CHAT_TECHNICAL.md`
-  - `memory/05-modules/citizenchain/node/NODE_TECHNICAL.md`
-- 生产者：无；桌面节点不再生成 Chat 配对二维码。
-- 消费者：无；CitizenApp 扫到 `k=5` 按未知类型拒绝。
+  - `memory/05-modules/citizenapp/qr/QR_TECHNICAL.md`
+  - `memory/05-modules/citizenapp-vs-citizenwallet.md`
+- 生产者：CitizenApp `lib/wallet/pages/wallet_qr_page.dart`、CitizenWallet `lib/ui/account_detail_page.dart`（钱包-账户详情，任意账户无条件生成）
+- 消费者：
+  - CitizenApp 扫码转账（`transfer`/`dispatch` 模式）
+  - OnChina 管理员登录第 1 步（`auth/login/qr_login.rs` → `parse_wallet_code_account_id`）
+  - OnChina `core/ScanAccountModal.tsx`、citizenchain node `shared/qr/parseAddressQr.ts` 的「扫码识别账户」
 - 字段：
-  - 无当前字段；旧 `b.node_peer_id`、`b.node_multiaddr`、`b.endpoint_kind` 已删除。
-- 编码：无当前编码；`QR_V1/k=5` 不再是合法扫码流向。
-- 签名/验签规则：正式聊天不再扫描区块链软件通信节点二维码。
-- 禁止兼容：不得恢复旧联系人码、旧 Chat 联系人 bundle、旧 `communication` 模式字段或通信节点配对流程。
+  - `b.account_id`：小写 `0x` 加 64 位十六进制，唯一字段。
+  - 禁止携带钱包账户名、公开昵称、CID、SS58 及任何时效字段。展示用 SS58 由扫码端派生。
+- 编码：`{"p":"QR_V1","k":5,"b":{"account_id":"0x…"}}`；顶层字段集精确为 `p/k/b`。
+- 签名/验签规则：本码不参与签名，只提供目标账户。OnChina 登录据此按
+  `account_id → CidByAccountId → CidRegistry Active → 管理员记录 Active` 单向反查，三级
+  任一不成立即拒绝登录。
+- 为什么不带 CID 与昵称：管理员私钥保管在离线的 CitizenWallet，若要求二维码携带 CID 就只有
+  联网热钱包能出码，管理员将被迫在「私钥落到联网设备」与「无法登录」之间二选一。CID 由链上
+  反查即可得到，昵称本来就不参与授权（旧实现在后端直接丢弃）。
+- 禁止兼容：不得恢复 `chat_node_pairing` 及其 `node_peer_id`/`node_multiaddr`/`endpoint_kind`
+  字段；旧载荷靠 body 字段集精确匹配拒绝，不需要专门的拒绝分支。
 - 禁止事项：
-  - 禁止用本二维码添加联系人。
-  - 禁止把本二维码作为交易、转账、治理或 CID 身份码处理。
-  - 禁止恢复通信节点配对、桌面通信节点二维码、节点 Chat 消息服务或已删除的节点聊天协议。
-- 删除验收：已删除 `citizenapp/lib/qr/bodies/chat_node_pairing_body.dart`、`citizenapp/lib/chat/chat_node_settings_page.dart`、桌面通信节点二维码生成和相关测试残留；`test/qr/qr_router_test.dart` 覆盖 `k=5` 拒绝。
+  - 禁止用钱包码写入通讯录（无 CID 真源，通讯录关系必须锚永久 CID）。
+  - 禁止在钱包码中夹带任何身份或时效字段。
+  - 禁止让 CitizenWallet 生成用户码，或让钱包码承担「人」的语义。
+- 必跑测试：`citizenapp/test/wallet/pages/wallet_qr_page_test.dart`、
+  `citizenapp/test/qr/qr_router_test.dart`、`citizenwallet/test/ui/account_detail_page_test.dart`、
+  `citizenchain/onchina/src/core/qr/mod.rs` 的 `wallet_code_parser_*` 测试
 
 ### P-CRED-003：CitizenIdentity VotingIdentityPayload
 

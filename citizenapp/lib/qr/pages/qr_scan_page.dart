@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
+import 'package:citizenapp/qr/bodies/wallet_code_body.dart';
 import 'package:citizenapp/qr/qr_router.dart';
 import 'package:citizenapp/chat/identity/peer_cid_resolver.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
@@ -163,21 +165,27 @@ class _QrScanPageState extends State<QrScanPage> {
 
       switch (widget.mode) {
         case QrScanMode.transfer:
-          // 扫码支付:接受 user_transfer / user_contact / 裸地址
+          // 扫码支付:接受收款码 / 用户码 / 钱包码 / 裸地址
           // (多签发现走反向索引)
           if (result.type == QrRouteType.userTransfer) {
             _handleTransfer(result);
           } else if (result.type == QrRouteType.userContact) {
             _handleContactAsRecipient(result);
+          } else if (result.type == QrRouteType.walletCode) {
+            _handleWalletCode(result);
           } else if (result.type == QrRouteType.legacyAddress) {
             _handleLegacyAddress(result.extractedAddress!);
           } else {
             await _showUnrecognized();
           }
         case QrScanMode.contact:
-          // 通讯录关系必须先解析永久 CID；收款码不携带 CID，不再兼作联系人码。
+          // 通讯录关系必须锚永久 CID,只有用户码携带 CID。
+          // 钱包码与收款码只声明账户/一笔收款,不得写入通讯录。
           if (result.type == QrRouteType.userContact) {
             await _handleContact(result);
+          } else if (result.type == QrRouteType.walletCode ||
+              result.type == QrRouteType.userTransfer) {
+            await _showNotAContactCode();
           } else {
             await _showUnrecognized();
           }
@@ -190,9 +198,11 @@ class _QrScanPageState extends State<QrScanPage> {
           if (result.type == QrRouteType.userTransfer) {
             _handleTransfer(result);
           } else if (result.type == QrRouteType.userContact) {
-            // 扫一扫扫到用户名片码 = 按收款人进入转账;
-            // 加好友走 contact 模式扫同一张码,按扫描场景分流,不再生成第二份码。
+            // 扫一扫扫到用户码 = 按收款人进入转账;
+            // 加好友走 contact 模式扫同一张用户码,按扫描场景分流。
             _handleContactAsRecipient(result);
+          } else if (result.type == QrRouteType.walletCode) {
+            _handleWalletCode(result);
           } else if (result.type == QrRouteType.legacyAddress) {
             _handleLegacyAddress(result.extractedAddress!);
           } else if (result.type == QrRouteType.signRequest) {
@@ -253,6 +263,15 @@ class _QrScanPageState extends State<QrScanPage> {
     if (!mounted) return;
     final body = result.envelope!.body as UserContactBody;
     _popPage(QrScanTransferResult(toSs58Address: body.ss58Address));
+  }
+
+  // 钱包码：只声明账户，展示地址在本机由 account_id 派生。
+  void _handleWalletCode(QrRouteResult result) {
+    if (!mounted) return;
+    final body = result.envelope!.body as WalletCodeBody;
+    _popPage(QrScanTransferResult(
+      toSs58Address: ss58FromAccountIdText(body.accountId),
+    ));
   }
 
   // 裸地址（向后兼容）
@@ -320,6 +339,27 @@ class _QrScanPageState extends State<QrScanPage> {
         QrScanMode.raw => '扫描二维码',
         QrScanMode.dispatch => '扫一扫',
       };
+
+  /// 扫到不能加联系人的码时给明确原因,不用「无法识别」含糊过去。
+  Future<void> _showNotAContactCode() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('这不是用户码'),
+        content: const Text(
+          '通讯录关系必须锚定对方的永久 CID，只有「用户主页」出示的用户码携带 CID。'
+          '钱包码和收款码只声明账户，不能加为联系人。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _showUnrecognized() async {
     if (!mounted) {

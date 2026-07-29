@@ -1,7 +1,7 @@
 # QR_V1 统一二维码协议规范
 
 - 版本:`QR_V1`
-- 更新日期:2026-07-28
+- 更新日期:2026-07-29
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有“生成二维码 -> 扫码识别 -> 签名/确认 -> 签名响应验签”的二维码流程
 
@@ -46,12 +46,23 @@
 |---:|---|---|---|---|---|
 | 1 | `sign_request` | 临时 | CitizenApp / CitizenWallet / CID / citizenchain node | 签名方 | 请求扫码方签名 `b.d` |
 | 2 | `sign_response` | 临时 | 签名方 | 请求生成方 | 回传签名结果 |
-| 3 | `user_contact` | 固定 | CitizenApp 已绑定 CID 的身份账户 | CitizenApp / CitizenWallet / OnChina | 声明永久 CID、当前绑定地址和公开昵称 |
-| 4 | `user_transfer` | 临时 | 收款方 | 付款方 | 收款码,可带金额和备注 |
+| 3 | `user_contact` | 固定 | CitizenApp 已绑定 CID 的身份账户 | CitizenApp / CitizenWallet / OnChina | **用户码**:声明永久 CID、当前绑定地址和公开昵称 |
+| 4 | `user_transfer` | 临时 | 仅 CitizenApp | 付款方 | **收款码**:一笔收款请求,可带金额和备注 |
+| 5 | `wallet_code` | 固定 | CitizenApp / CitizenWallet 任意账户 | CitizenApp / OnChina / citizenchain node | **钱包码**:只声明账户,不含任何身份字段 |
+
+展示型二维码按「谁生成 + 表达什么」三分,入口即语义,禁止任何运行时分流:
+
+| 码 | 表达 | `k` | 生成端 | 唯一入口 |
+|---|---|---:|---|---|
+| 用户码 | 人(永久 CID) | 3 | 仅 CitizenApp,且 CID↔AccountId 闭环命中 | 用户主页 |
+| 钱包码 | 账户 | 5 | CitizenApp + CitizenWallet,任意账户无条件 | 钱包-账户详情 |
+| 收款码 | 一笔收款请求 | 4 | 仅 CitizenApp | 聊天-加号-收付款 |
+
+「是否带时效字段」由「生成端是否联网」推导:钱包码必须离线端也能出,因此固定;收款码只在联网端生成,因此允许 `i/e`。离线设备无 NTP,不得签发带绝对时间戳的凭证。
 
 登录、公民签名确认、管理员确认、交易签名、运行时升级等都不新增 `k`;它们统一是 `k=1` 签名请求,具体业务由 `b.a` 区分。
 
-`k=5 chat_node_pairing` 已删除。正式解析器必须把 `k=5` 当成未知类型拒绝，不得恢复桌面区块链软件通信节点配对流程。
+`k=5` 曾用于已废止的 `chat_node_pairing`(桌面通信节点配对)。该流程整体取消后码值回收给钱包码,规格见第 8 节。不得恢复桌面区块链软件通信节点配对流程;旧字段 `node_peer_id`、`node_multiaddr`、`endpoint_kind` 不属于当前 QR_V1 可解析 body,携带它们的旧码会因 body 字段集不匹配被拒绝。
 
 ## 4. k=1 sign_request
 
@@ -95,9 +106,16 @@
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
 | Runtime 升级哈希签名 | `a = 7` 或已登记 RuntimeUpgrade hash-only action | `d` 允许是 32B signing bytes,签该 32B;这是 QR_V1 唯一 hash-only 例外 |
 
-OnChina 登录生成 `a=1` 前必须先扫描完整 `k=3 user_contact` 用户码，从
-`b.ss58_address` 派生唯一目标 `account_id`，并要求 `b.cid_number + account_id`
-同时命中链上同一条 Active 管理员记录。`b.display_name` 只用于页面展示，不参与授权。
+OnChina 登录生成 `a=1` 前必须先扫描 `k=5 wallet_code` 钱包码，取 `b.account_id`
+作为唯一目标账户，再按 `account_id → CidByAccountId → CidRegistry Active →
+管理员记录 Active` 单向反查确认其为在职管理员；三级中任一不成立必须拒绝登录，不得
+「读不到就放行」。管理员私钥保管在离线的 CitizenWallet，登录第 1 步必须由
+CitizenWallet 自己出示钱包码即可完成，不得要求联网热钱包参与——否则管理员只能在
+「私钥落到联网设备」与「无法登录」之间二选一。
+
+二维码不携带 CID 与昵称:CID 由链上 `CidByAccountId` 反查得到，管理员姓名由链上
+记录读出，两者都比二维码自述更可靠，且「两字段互不匹配」这类攻击形态从根上不存在。
+
 随后 `k=1` 请求的 `b.u` 必须编码该账户的 32 字节公钥，`b.d` 固定为 UTF-8
 `onchina`；不得生成空 `b.u`，不得允许扫码钱包自行选择其它账户。登录响应仍使用
 `k=2`，其 `b.u` 必须与请求目标和数据库目标账户一致。
@@ -160,15 +178,25 @@ OnChina 登录生成 `a=1` 前必须先扫描完整 `k=3 user_contact` 用户码
 | `ss58_address` | string | 是 | 当前 CID 绑定账户的本链规范 SS58 地址，prefix 固定 2027；只用于展示和边界输入输出 |
 | `display_name` | string | 是 | 公开昵称；无首尾空格、1–40 个 Unicode 字符，只作展示 |
 
-`k=3` 只能由 CitizenApp 在链上 CID↔AccountId 闭环命中的身份账户生成。未注册账户、
-其它钱包子账户以及无法读取链上身份时不得伪造身份码：前两者生成五分钟 `k=4`
-临时收款码，链读失败则从严拒绝生成。CitizenWallet 是离线钱包，没有 CID 真源，只
-解析 `k=3`，账户详情收款统一生成五分钟 `k=4`。解析器必须拒绝旧
-`contact_name`、缺失字段、未知字段、非 2027 SS58 及非规范 CID/昵称。
+用户码只能由 CitizenApp 在链上 CID↔AccountId 闭环命中的身份账户生成，唯一入口是
+用户主页；链读失败从严拒绝生成，不得降级成其它码。未注册账户与其它钱包子账户
+不出用户码——它们在钱包-账户详情出 `k=5` 钱包码。CitizenWallet 是离线钱包，没有
+CID 真源，永远只解析 `k=3`、不生成。解析器必须拒绝旧 `contact_name`、缺失字段、
+未知字段、非 2027 SS58 及非规范 CID/昵称。
 
-## 7. k=4 user_transfer
+用户码是唯一能写入通讯录的码：通讯录关系必须锚永久 CID，不能锚会换绑的账户。
+钱包码与收款码进通讯录必须拒绝。
 
-临时码,带 `i/e`。
+## 7. k=4 user_transfer(收款码)
+
+临时码,带 `i/e`。唯一入口是 CitizenApp 聊天-加号-收付款,唯一生成端是 CitizenApp
+(联网,时钟可信)。CitizenWallet 永远不生成、不解析收款码。
+
+**当前状态:预留,生成方待实现。** 落地任务卡
+`memory/08-tasks/open/20260729-qr-three-code-classification.md`。零生成方是已规划
+未实现,不是残桩,清扫审计不得删除。生成方落地时必须同批补两件事:金额/备注输入
+UI(否则 `amount` 恒为空串,该码与钱包码无差别),以及扫码侧 `e` 过期即拒绝(当前全仓
+`e` 的校验只有签名请求/响应一处,收款码路径无校验)。
 
 ```jsonc
 {
@@ -196,9 +224,44 @@ OnChina 登录生成 `a=1` 前必须先扫描完整 `k=3 user_contact` 用户码
 | `memo` | string | 是 | 备注,允许空串 |
 | `bank` | string | 是 | 清算行/清算网络标识,允许空串 |
 
-## 8. 已删除 k=5 chat_node_pairing
+## 8. k=5 wallet_code(钱包码)
 
-旧 `k=5 chat_node_pairing` 固定码已删除。旧字段 `node_peer_id`、`node_multiaddr`、`endpoint_kind` 不再属于当前 QR_V1 可解析 body；CitizenApp 扫到 `k=5` 必须返回未知类型。
+固定码,不带 `i/e`。
+
+```jsonc
+{
+  "p": "QR_V1",
+  "k": 5,
+  "b": {
+    "account_id": "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 注释 |
+|---|---|---|---|
+| `account_id` | string | 是 | 账户唯一标识；小写 `0x` 加 64 位十六进制，即 sr25519 公钥原字节 |
+
+body 只有 `account_id` 一个字段。**不得**携带钱包账户名、公开昵称、CID、SS58 或
+任何时效字段：本机钱包标签用户可随意改写、无任何链上或服务端约束，一旦进入二维码
+就会被扫码端当成对方公开身份显示。展示用 SS58(prefix 2027)由扫码端从 `account_id`
+自行派生。
+
+生成端为 CitizenApp 与 CitizenWallet 的钱包-账户详情，任意账户无条件生成,包括
+CID 已绑定的身份账户——账户详情表达的是「账户」，身份由用户主页的用户码表达。
+
+`account_id` 与 `k=3` 用户码的 `ss58_address` 口径不同：钱包码的主要消费方是 OnChina
+管理员登录与「扫码识别账户」，它们要的就是 `account_id`(登录请求 `b.u`、`same_account_id`
+比对均为 `account_id` 语义)，用 SS58 会让每个扫码端多一次 decode 与 prefix 校验。
+用户码保持 `ss58_address` 不变,该差异是有意保留的已知项。
+
+钱包码的合法用途只有三类:按账户转账、OnChina 管理员登录第 1 步、OnChina 与
+citizenchain node 前端的「扫码识别账户」。**写入通讯录必须拒绝**(无 CID 真源)。
+
+`k=5` 是回收码值:旧 `chat_node_pairing` 已随桌面通信节点配对流程整体废止,其
+`node_peer_id`、`node_multiaddr`、`endpoint_kind` 三字段不属于当前 QR_V1 可解析 body。
+无需为旧码写专门的拒绝逻辑——顶层字段集精确匹配(`p/k/b`)之后,body 字段集精确匹配
+会拒掉它。
 
 ## 9. 签名原文拼接
 

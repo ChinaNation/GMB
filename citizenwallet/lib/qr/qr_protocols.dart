@@ -18,8 +18,16 @@ class QrProtocols {
 enum QrKind {
   signRequest(1, temporary: true),
   signResponse(2, temporary: true),
+
+  /// 用户码 = 人(永久 CID);公民钱包只解析、永远不生成(离线无 CID 真源)。
   userContact(3, temporary: false),
-  userTransfer(4, temporary: true);
+
+  /// 收款码 = 一笔收款请求;只属于 CitizenApp。公民钱包离线发不了交易,
+  /// 既不生成也不解析,扫到必须报明确错误。
+  userTransfer(4, temporary: true),
+
+  /// 钱包码 = 账户;唯一入口钱包-账户详情,冷热两端都能生成,固定码。
+  walletCode(5, temporary: false);
 
   const QrKind(this.code, {required this.temporary});
 

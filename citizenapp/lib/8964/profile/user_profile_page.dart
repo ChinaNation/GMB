@@ -343,7 +343,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => UserQrPage.userContact(
+        builder: (_) => UserQrPage(
           cidNumber: widget.cidNumber,
           displayName: _displayName,
           accountId: accountId,

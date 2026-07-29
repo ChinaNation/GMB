@@ -11,7 +11,6 @@ pub(crate) use sign_request::{
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
-use sp_core::crypto::{AccountId32, Ss58AddressFormat, Ss58Codec};
 use std::sync::LazyLock;
 
 pub const QR_V1: &str = "QR_V1";
@@ -21,11 +20,16 @@ pub const QR_V1: &str = "QR_V1";
 pub enum QrKind {
     SignRequest = 1,
     SignResponse = 2,
+    /// k=3 用户码(人/永久 CID):由 CitizenApp 用户主页出示,只能写入通讯录与转账。
+    /// OnChina 不解析它——登录改由 k=5 钱包码提供目标账户,理由见 qr-protocol-spec.md 第 4 节。
+    #[allow(dead_code)]
     UserContact = 3,
-    /// k=4 转账扫码流向:Rust 侧暂不构造,但前端 citizenQr.ts 有完整解析,
-    /// 是跨端协议码契约(一张码 contact=加好友 / transfer=转账),删除会破坏契约与码值。
+    /// k=4 收款码(一笔收款请求):只属于 CitizenApp,Rust 侧不构造也不解析。
+    /// 五端 `k` 码值必须一致,删除变体会让码表出现空洞。
     #[allow(dead_code)]
     UserTransfer = 4,
+    /// k=5 钱包码(账户):body 只有 `account_id`,固定码。登录第 1 步的唯一输入。
+    WalletCode = 5,
 }
 
 impl QrKind {
@@ -214,90 +218,50 @@ struct CompactResponseBody {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UserContactEnvelope {
+struct WalletCodeEnvelope {
     #[serde(rename = "p")]
     proto: String,
     #[serde(rename = "k")]
     kind: u8,
     #[serde(rename = "b")]
-    body: UserContactBody,
+    body: WalletCodeBody,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UserContactBody {
-    cid_number: String,
-    ss58_address: String,
-    display_name: String,
+struct WalletCodeBody {
+    account_id: String,
 }
 
-/// 管理员出示的固定身份二维码。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct UserContactIdentity {
-    /// 公民永久身份号；登录授权时必须与链上管理员记录中的个人 CID 一致。
-    pub(crate) cid_number: String,
-    /// 由本链 SS58 地址解出的规范 AccountId。
-    pub(crate) account_id: String,
-    /// 公开昵称只用于登录页展示，永不参与授权。
-    pub(crate) display_name: String,
-}
-
-/// 严格解析管理员出示的 QR_V1/k=3 用户码并返回完整身份声明。
+/// 严格解析 QR_V1/k=5 钱包码，返回规范 `account_id`。
 ///
-/// 只接受 `p/k/b.cid_number/b.ss58_address/b.display_name`；裸 SS58、裸公钥、
-/// 字段别名、临时码字段和未知字段全部拒绝。CID 与 AccountId 在登录 gate 中必须
-/// 同时命中链上管理员记录；公开昵称只作展示。
-pub(crate) fn parse_user_contact_identity(raw: &str) -> Result<UserContactIdentity, QrParseError> {
-    let envelope: UserContactEnvelope =
+/// 只接受 `p/k/b.account_id`；裸 SS58、裸公钥、字段别名、临时码字段（`i`/`e`）和
+/// 未知字段全部拒绝。已废止的旧 `k=5 chat_node_pairing` 载荷会因 body 字段集不匹配
+/// 被 `deny_unknown_fields` 拒掉，不需要专门的拒绝分支。
+///
+/// 钱包码不携带 CID 与昵称：CID 由链上 `CidByAccountId` 反查，管理员姓名由链上记录
+/// 读出，两者都比二维码自述可靠，且「两字段互不匹配」这类攻击形态从根上不存在。
+/// 管理员私钥保管在离线的 CitizenWallet，钱包码由它自己就能出示，登录第 1 步不再
+/// 需要联网热钱包参与。
+pub(crate) fn parse_wallet_code_account_id(raw: &str) -> Result<String, QrParseError> {
+    let envelope: WalletCodeEnvelope =
         serde_json::from_str(raw).map_err(|error| QrParseError::BadJson(error.to_string()))?;
     if envelope.proto != QR_V1 {
         return Err(QrParseError::BadProto(envelope.proto));
     }
-    if envelope.kind != QrKind::UserContact.code() {
+    if envelope.kind != QrKind::WalletCode.code() {
         return Err(QrParseError::BadKind(envelope.kind.to_string()));
     }
-    let cid_number = envelope.body.cid_number.trim();
-    if cid_number.is_empty()
-        || cid_number != envelope.body.cid_number
-        || cid_number.as_bytes().len() > primitives::core_const::CID_NUMBER_MAX_BYTES as usize
-    {
+    let account_id = envelope.body.account_id.as_str();
+    let normalized = crate::crypto::pubkey::normalize_account_id(account_id).ok_or_else(|| {
+        QrParseError::BadField("b.account_id 必须为小写 0x 加 64 位十六进制".into())
+    })?;
+    if normalized != account_id {
         return Err(QrParseError::BadField(
-            "b.cid_number 必须为无首尾空格的 1 到 32 字节字符串".into(),
+            "b.account_id 必须为小写 0x 加 64 位十六进制".into(),
         ));
     }
-    let display_name = envelope.body.display_name.trim();
-    if display_name.is_empty()
-        || display_name != envelope.body.display_name
-        || display_name.chars().count() > 40
-    {
-        return Err(QrParseError::BadField(
-            "b.display_name 必须为无首尾空格的 1 到 40 字符串".into(),
-        ));
-    }
-    let ss58_address = envelope.body.ss58_address.trim();
-    if ss58_address.is_empty() || ss58_address != envelope.body.ss58_address {
-        return Err(QrParseError::BadField(
-            "b.ss58_address 必须为无首尾空格的非空字符串".into(),
-        ));
-    }
-    let (account, format) = AccountId32::from_ss58check_with_version(ss58_address)
-        .map_err(|error| QrParseError::BadField(format!("b.ss58_address 非法: {error}")))?;
-    if format != Ss58AddressFormat::custom(2027) {
-        return Err(QrParseError::BadField(
-            "b.ss58_address 必须使用 SS58 prefix 2027".into(),
-        ));
-    }
-    let bytes: &[u8] = account.as_ref();
-    if bytes.len() != 32 {
-        return Err(QrParseError::BadField(
-            "b.ss58_address 账户长度必须为 32 字节".into(),
-        ));
-    }
-    Ok(UserContactIdentity {
-        cid_number: cid_number.to_string(),
-        account_id: format!("0x{}", hex::encode(bytes)),
-        display_name: display_name.to_string(),
-    })
+    Ok(normalized)
 }
 
 /// 解析 QR_V1/k=2 签名响应。后端收到签名方响应后使用。
@@ -388,66 +352,106 @@ mod tests {
 
     const ACCOUNT_ID: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
 
-    fn user_contact_json() -> String {
-        let ss58_address =
-            crate::crypto::pubkey::account_id_to_ss58(ACCOUNT_ID).expect("测试账户可转 SS58");
+    fn wallet_code_json() -> String {
         serde_json::json!({
             "p": QR_V1,
-            "k": QrKind::UserContact.code(),
-            "b": {
-                "cid_number": "CN001-CTZN-000000001-2026",
-                "ss58_address": ss58_address,
-                "display_name": "测试管理员"
-            }
+            "k": QrKind::WalletCode.code(),
+            "b": { "account_id": ACCOUNT_ID }
         })
         .to_string()
     }
 
     #[test]
-    fn user_contact_parser_returns_canonical_identity() {
-        let identity = parse_user_contact_identity(&user_contact_json()).expect("完整用户码应通过");
-        assert_eq!(identity.account_id, ACCOUNT_ID);
-        assert_eq!(identity.cid_number, "CN001-CTZN-000000001-2026");
-        assert_eq!(identity.display_name, "测试管理员");
+    fn wallet_code_parser_returns_canonical_account_id() {
+        let account_id =
+            parse_wallet_code_account_id(&wallet_code_json()).expect("完整钱包码应通过");
+        assert_eq!(account_id, ACCOUNT_ID);
     }
 
     #[test]
-    fn user_contact_parser_rejects_aliases_and_temporary_fields() {
+    fn wallet_code_parser_rejects_aliases_extra_and_temporary_fields() {
+        // 字段别名。
         let mut alias: serde_json::Value =
-            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
+            serde_json::from_str(&wallet_code_json()).expect("测试 JSON");
         let body = alias["b"].as_object_mut().expect("测试 body");
-        let address = body.remove("ss58_address").expect("测试地址");
-        body.insert("address".into(), address);
-        assert!(parse_user_contact_identity(&alias.to_string()).is_err());
+        let account_id = body.remove("account_id").expect("测试账户");
+        body.insert("account".into(), account_id);
+        assert!(parse_wallet_code_account_id(&alias.to_string()).is_err());
 
+        // 固定码不得带时效字段。
         let mut temporary: serde_json::Value =
-            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
+            serde_json::from_str(&wallet_code_json()).expect("测试 JSON");
         temporary["i"] = serde_json::json!("forbidden");
-        assert!(parse_user_contact_identity(&temporary.to_string()).is_err());
+        assert!(parse_wallet_code_account_id(&temporary.to_string()).is_err());
 
-        let mut legacy: serde_json::Value =
-            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
-        let body = legacy["b"].as_object_mut().expect("测试 body");
-        let display_name = body.remove("display_name").expect("测试昵称");
-        body.insert("contact_name".into(), display_name);
-        assert!(parse_user_contact_identity(&legacy.to_string()).is_err());
+        // 钱包码只声明账户,不得夹带身份字段。
+        let mut extra: serde_json::Value =
+            serde_json::from_str(&wallet_code_json()).expect("测试 JSON");
+        extra["b"]["display_name"] = serde_json::json!("测试管理员");
+        assert!(parse_wallet_code_account_id(&extra.to_string()).is_err());
+
+        let mut with_cid: serde_json::Value =
+            serde_json::from_str(&wallet_code_json()).expect("测试 JSON");
+        with_cid["b"]["cid_number"] = serde_json::json!("CN001-CTZN-000000001-2026");
+        assert!(parse_wallet_code_account_id(&with_cid.to_string()).is_err());
     }
 
     #[test]
-    fn user_contact_parser_rejects_noncanonical_identity_fields() {
-        let mut bad_cid: serde_json::Value =
-            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
-        bad_cid["b"]["cid_number"] = serde_json::json!(" CN001-CTZN-000000001-2026");
-        assert!(parse_user_contact_identity(&bad_cid.to_string()).is_err());
+    fn wallet_code_parser_rejects_noncanonical_account_id() {
+        // SS58 不是授权主键,钱包码只收 account_id。
+        let ss58_address =
+            crate::crypto::pubkey::account_id_to_ss58(ACCOUNT_ID).expect("测试账户可转 SS58");
+        let mut as_ss58: serde_json::Value =
+            serde_json::from_str(&wallet_code_json()).expect("测试 JSON");
+        as_ss58["b"]["account_id"] = serde_json::json!(ss58_address);
+        assert!(parse_wallet_code_account_id(&as_ss58.to_string()).is_err());
 
-        let mut bad_name: serde_json::Value =
-            serde_json::from_str(&user_contact_json()).expect("测试 JSON");
-        bad_name["b"]["display_name"] = serde_json::json!(" ");
-        assert!(parse_user_contact_identity(&bad_name.to_string()).is_err());
+        // 大写 hex、缺 0x、首尾空格全部拒绝。
+        for bad in [
+            ACCOUNT_ID.to_uppercase(),
+            ACCOUNT_ID.trim_start_matches("0x").to_string(),
+            format!(" {ACCOUNT_ID}"),
+        ] {
+            let mut value: serde_json::Value =
+                serde_json::from_str(&wallet_code_json()).expect("测试 JSON");
+            value["b"]["account_id"] = serde_json::json!(bad);
+            assert!(parse_wallet_code_account_id(&value.to_string()).is_err());
+        }
     }
 
     #[test]
-    fn login_request_always_targets_user_contact_account() {
+    fn wallet_code_parser_rejects_legacy_chat_node_pairing_payload() {
+        // k=5 已从已废止的 chat_node_pairing 回收给钱包码;旧载荷靠 body 字段集拒绝。
+        let legacy = serde_json::json!({
+            "p": QR_V1,
+            "k": 5,
+            "b": {
+                "node_peer_id": "12D3Koo",
+                "node_multiaddr": "/ip4/1.2.3.4/tcp/30333",
+                "endpoint_kind": "ip4"
+            }
+        })
+        .to_string();
+        assert!(parse_wallet_code_account_id(&legacy).is_err());
+    }
+
+    #[test]
+    fn wallet_code_parser_rejects_other_kinds() {
+        for kind in [
+            QrKind::SignRequest.code(),
+            QrKind::SignResponse.code(),
+            QrKind::UserContact.code(),
+            QrKind::UserTransfer.code(),
+        ] {
+            let mut value: serde_json::Value =
+                serde_json::from_str(&wallet_code_json()).expect("测试 JSON");
+            value["k"] = serde_json::json!(kind);
+            assert!(parse_wallet_code_account_id(&value.to_string()).is_err());
+        }
+    }
+
+    #[test]
+    fn login_request_always_targets_wallet_code_account() {
         let body = login_request_body("onchina", ACCOUNT_ID).expect("规范账户应生成登录请求");
         assert_eq!(
             b64_to_prefixed_hex(&body.account_id, 32, "b.u").expect("b.u 应可解码"),

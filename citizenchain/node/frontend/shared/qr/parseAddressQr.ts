@@ -1,16 +1,15 @@
-// 解析收款地址二维码。
+// 解析「扫码识别账户」二维码,用于治理提案的收款地址、手续费地址与安全基金地址。
 //
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
-// 只接受 QR_V1 envelope,k ∈ {3(user_contact),4(user_transfer)}。
-// 其他 k 不是收款码,直接报错。
+// 这里要的是「一个账户」,因此只接受 `k=5 wallet_code` 钱包码。
+// 用户码(k=3)表达的是「人」、收款码(k=4)表达的是「一笔收款请求」,都不是账户声明,一律拒绝。
 // 裸 SS58 地址和 gmb://account/<addr> 仍然支持(非二维码协议的本地输入兜底)。
 
-import { parseQrEnvelope, QrParseError, type UserContactBody, type UserTransferBody } from './citizenQr';
+import { accountIdToSs58 } from '../ss58';
+import { parseQrEnvelope, QrParseError, type WalletCodeBody } from './citizenQr';
 
 export type AddressScanResult = {
   ss58_address: string;
-  amount?: number;
-  memo?: string;
 };
 
 const SS58_RE = /^[1-9A-HJ-NP-Za-km-z]{30,80}$/;
@@ -37,32 +36,15 @@ export function parseAddressQr(raw: string): AddressScanResult {
     }
 
     if (env) {
-      switch (env.kind) {
-        case 'user_contact': {
-          const body = env.body as UserContactBody;
-          if (!SS58_RE.test(body.ss58_address)) {
-            throw new Error('用户码中地址格式无效');
-          }
-          return { ss58_address: body.ss58_address };
-        }
-        case 'user_transfer': {
-          const body = env.body as UserTransferBody;
-          if (!SS58_RE.test(body.ss58_address)) {
-            throw new Error('收款码中地址格式无效');
-          }
-          const result: AddressScanResult = { ss58_address: body.ss58_address };
-          if (body.amount) {
-            const amt = Number(body.amount);
-            if (!isNaN(amt) && amt > 0) result.amount = amt;
-          }
-          if (body.memo) {
-            result.memo = body.memo;
-          }
-          return result;
-        }
-        default:
-          throw new Error('该二维码不是收款码');
+      if (env.kind !== 'wallet_code') {
+        throw new Error('请扫描钱包码（钱包 → 账户详情右上角二维码）');
       }
+      const body = env.body as WalletCodeBody;
+      const ss58Address = accountIdToSs58(body.account_id);
+      if (!SS58_RE.test(ss58Address)) {
+        throw new Error('钱包码中账户格式无效');
+      }
+      return { ss58_address: ss58Address };
     }
   }
 

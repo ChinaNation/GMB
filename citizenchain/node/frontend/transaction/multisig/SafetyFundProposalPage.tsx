@@ -218,10 +218,9 @@ export function SafetyFundProposalPage({ actorCidNumber, institution_account_id,
 
           {showAddressScan && (
             <AddressScanModal
-              onResult={({ ss58_address, amount, memo }) => {
+              onResult={({ ss58_address }) => {
+                // 钱包码只声明账户，不带金额与备注；两者一律由本端手工填写。
                 setBeneficiary(ss58_address);
-                if (amount !== undefined) setAmountYuan(String(amount));
-                if (memo !== undefined) setRemark(memo);
                 setShowAddressScan(false);
               }}
               onClose={() => setShowAddressScan(false)}

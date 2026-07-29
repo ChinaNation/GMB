@@ -1,43 +1,24 @@
-import 'dart:convert';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../qr/qr_protocols.dart';
 import '../qr/envelope.dart';
-import '../qr/bodies/user_transfer_body.dart';
+import '../qr/bodies/wallet_code_body.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
 
-/// 为离线账户生成五分钟有效的临时收款码。
+/// 为账户生成固定钱包码（`k=5`）。
 ///
-/// 公民钱包没有 CID↔AccountId 链上真源，因此这里只能签发 `k=4`，不得伪造
-/// `k=3 user_contact` 身份二维码。
-String buildOfflineReceiveQr({
-  required String ss58Address,
-  required String recipientName,
-  required int nowEpochSeconds,
-  String? requestId,
-}) {
-  final random = Random.secure();
-  final randomId = base64UrlEncode(
-    List<int>.generate(16, (_) => random.nextInt(256)),
-  ).replaceAll('=', '');
-  return QrEnvelope<UserTransferBody>(
-    kind: QrKind.userTransfer,
-    id: requestId ?? 'pay_$randomId',
-    expiresAt: nowEpochSeconds + 300,
-    body: UserTransferBody(
-      ss58Address: ss58Address,
-      recipientName: recipientName,
-      amount: '',
-      symbol: 'GMB',
-      memo: '',
-      bank: '',
-    ),
+/// 钱包码只声明账户，不带时效、不带账户名、不带 CID/昵称。公民钱包完全离线、无 NTP，
+/// 不得签发带绝对时间戳的凭证；也没有 CID↔AccountId 链上真源，不得伪造 `k=3` 用户码。
+String buildWalletQr({required String accountId}) {
+  return QrEnvelope<WalletCodeBody>(
+    kind: QrKind.walletCode,
+    id: null,
+    expiresAt: null,
+    body: WalletCodeBody(accountId: accountId),
   ).toRawJson();
 }
 
@@ -223,13 +204,8 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     );
   }
 
-  void _showReceiveQr() {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final qrData = buildOfflineReceiveQr(
-      ss58Address: widget.account.ss58Address,
-      recipientName: '${widget.walletName} · $_accountName',
-      nowEpochSeconds: now,
-    );
+  void _showWalletQr() {
+    final qrData = buildWalletQr(accountId: widget.account.accountId);
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -268,7 +244,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
               ),
               const SizedBox(height: 12),
               const Text(
-                '临时收款码，5 分钟内有效',
+                '钱包码：扫描可向本账户转账，或用于扫码登录',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppTheme.textSecondary,
@@ -364,10 +340,10 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 ),
                 Semantics(
                   button: true,
-                  label: '显示收款二维码',
+                  label: '显示钱包码',
                   child: IconButton(
-                    tooltip: '显示收款二维码',
-                    onPressed: _showReceiveQr,
+                    tooltip: '显示钱包码',
+                    onPressed: _showWalletQr,
                     icon: Container(
                       width: 36,
                       height: 36,

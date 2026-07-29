@@ -2,7 +2,7 @@
 // model B 后 C-1 反转:每账户私钥独立隔离,展示单账户私钥安全(默认隐藏,验证后显示)。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenwallet/qr/bodies/user_transfer_body.dart';
+import 'package:citizenwallet/qr/bodies/wallet_code_body.dart';
 import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/ui/account_detail_page.dart';
@@ -63,32 +63,52 @@ void main() {
     expect(find.text('点击查看私钥'), findsOneWidget);
   });
 
-  testWidgets('离线账户只生成五分钟 k=4 临时收款码', (tester) async {
+  testWidgets('账户详情出固定钱包码，不出现任何时效文案', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: AccountDetailPage(account: account, walletName: '钱包1'),
     ));
     await tester.pump();
 
-    await tester.tap(find.byTooltip('显示收款二维码'));
+    await tester.tap(find.byTooltip('显示钱包码'));
     await tester.pumpAndSettle();
 
-    expect(find.text('临时收款码，5 分钟内有效'), findsOneWidget);
+    expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
+    expect(find.textContaining('分钟内有效'), findsNothing);
   });
 
-  test('离线账户收款载荷严格为五分钟 k=4', () {
-    final qrData = buildOfflineReceiveQr(
-      ss58Address: account.ss58Address,
-      recipientName: '钱包1 · 账户1',
-      nowEpochSeconds: 1000,
-      requestId: 'pay_test',
-    );
+  test('钱包码载荷严格为固定 k=5，只含 account_id', () {
+    final qrData = buildWalletQr(accountId: account.accountId);
     final envelope = QrEnvelope.parse(qrData);
-    final body = envelope.body as UserTransferBody;
-    expect(envelope.kind, QrKind.userTransfer);
-    expect(envelope.id, 'pay_test');
-    expect(envelope.expiresAt, 1300);
-    expect(body.ss58Address, account.ss58Address);
-    expect(body.recipientName, '钱包1 · 账户1');
-    expect(qrData, isNot(contains('contact_name')));
+    final body = envelope.body as WalletCodeBody;
+    expect(envelope.kind, QrKind.walletCode);
+    // 固定码:顶层不得出现 i/e。
+    expect(envelope.id, isNull);
+    expect(envelope.expiresAt, isNull);
+    expect(qrData, isNot(contains('"i"')));
+    expect(qrData, isNot(contains('"e"')));
+    expect(body.accountId, account.accountId);
+    // 不得携带账户名、昵称、CID 或 SS58。
+    expect(qrData, isNot(contains('recipient_name')));
+    expect(qrData, isNot(contains('display_name')));
+    expect(qrData, isNot(contains('cid_number')));
+    expect(qrData, isNot(contains('ss58_address')));
+    expect(qrData, isNot(contains('钱包1')));
+  });
+
+  test('公民钱包拒绝解析收款码', () {
+    const receiveQr =
+        '{"p":"QR_V1","k":4,"i":"pay_test","e":1300,"b":{"ss58_address":'
+        '"w5FhUDLW4BxsE1QXK4sNjPZ8rqSnK2QeVpUfXzqczpWdxChxV","recipient_name":'
+        '"张三","amount":"","symbol":"GMB","memo":"","bank":""}}';
+    expect(
+      () => QrEnvelope.parse(receiveQr),
+      throwsA(
+        isA<FormatException>().having(
+          (e) => e.message,
+          'message',
+          contains('收款码请用「公民」App 扫描'),
+        ),
+      ),
+    );
   });
 }

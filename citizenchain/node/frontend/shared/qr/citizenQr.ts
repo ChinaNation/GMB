@@ -11,20 +11,23 @@ export type QrKind =
   | 'sign_request'
   | 'sign_response'
   | 'user_contact'
-  | 'user_transfer';
+  | 'user_transfer'
+  | 'wallet_code';
 
 export const QR_KIND_CODE: Record<QrKind, number> = {
   sign_request: 1,
   sign_response: 2,
   user_contact: 3,
   user_transfer: 4,
+  wallet_code: 5,
 };
 
 const QR_KIND_BY_CODE = new Map<number, QrKind>(
   Object.entries(QR_KIND_CODE).map(([kind, code]) => [code, kind as QrKind]),
 );
 
-export const FIXED_KINDS: readonly QrKind[] = ['user_contact'];
+// 用户码与钱包码都是固定码（无 i/e）；收款码与签名请求/响应是临时码。
+export const FIXED_KINDS: readonly QrKind[] = ['user_contact', 'wallet_code'];
 
 export function isFixedKind(kind: QrKind): boolean {
   return FIXED_KINDS.includes(kind);
@@ -57,11 +60,17 @@ export interface UserTransferBody {
   bank: string;
 }
 
+/** 钱包码 body：只声明账户，不含任何身份字段。 */
+export interface WalletCodeBody {
+  account_id: string;
+}
+
 export type QrBodyByKind = {
   sign_request: SignRequestBody;
   sign_response: SignResponseBody;
   user_contact: UserContactBody;
   user_transfer: UserTransferBody;
+  wallet_code: WalletCodeBody;
 };
 
 export interface QrEnvelope<K extends QrKind = QrKind> {
@@ -213,6 +222,15 @@ function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
   return { ss58_address, recipientName, amount, symbol, memo, bank };
 }
 
+function parseWalletCodeBody(b: Record<string, unknown>): WalletCodeBody {
+  requireExactKeys(b, ['account_id'], 'b');
+  const accountId = requireString(b, 'account_id');
+  if (!/^0x[0-9a-f]{64}$/.test(accountId)) {
+    throw new QrParseError('wallet_code.account_id 必须为小写 0x 加 64 位十六进制');
+  }
+  return { account_id: accountId };
+}
+
 export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelope {
   let data: Record<string, unknown>;
   if (typeof raw === 'string') {
@@ -267,6 +285,9 @@ export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelo
       break;
     case 'user_transfer':
       body = parseUserTransferBody(b);
+      break;
+    case 'wallet_code':
+      body = parseWalletCodeBody(b);
       break;
   }
 

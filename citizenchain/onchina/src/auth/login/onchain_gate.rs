@@ -146,29 +146,18 @@ async fn find_allowed_memberships_for_login(
     }
 }
 
-/// 用户码确定 CID+AccountId 后先查链上 Active 管理员集合。
+/// 钱包码给出目标账户后，按 `account_id` 单向反查链上 Active 管理员集合。
 ///
-/// 两者必须同时命中同一条管理员记录；公开昵称不参与授权。完成签名后仍会再次执行
-/// 完整 gate，以最新链上状态为准签发会话。
-pub(super) async fn validate_login_identity(
-    cid_number: &str,
-    account_id: &str,
-) -> Result<String, GateError> {
+/// 判据 fail-closed：账户格式非法、链不可达、集合为空一律拒绝登录，不存在「读不到就
+/// 放行」。旧口径要求二维码同时携带 CID 并与 AccountId 双向闭环；改为只收 account_id
+/// 后攻击面收缩——「二维码里 CID 与账户互不匹配」这种形态从根上不存在，而账户是否为
+/// 在职管理员本来就由 `AdminAccounts` 的账户匹配决定，CID 只是同一记录上的冗余字段。
+///
+/// 完成签名后仍会再次执行完整 gate，以最新链上状态为准签发会话。
+pub(super) async fn validate_login_identity(account_id: &str) -> Result<String, GateError> {
     let normalized =
         chain_runtime::normalize_account_id(account_id).ok_or(GateError::NotOnchainAdmin)?;
-    let memberships =
-        match chain_runtime::find_active_admin_memberships_for_identity(&normalized, cid_number)
-            .await
-        {
-            Ok(memberships) => memberships,
-            Err(err) if err == chain_runtime::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED => {
-                return Err(GateError::DesktopGovernanceUnsupported);
-            }
-            Err(err) if err == chain_runtime::PERSONAL_MULTISIG_LOGIN_UNSUPPORTED => {
-                return Err(GateError::PersonalMultisigUnsupported);
-            }
-            Err(err) => return Err(GateError::ChainUnreachable(err)),
-        };
+    let memberships = find_allowed_memberships_for_login(normalized.as_str()).await?;
     if memberships.is_empty() {
         return Err(GateError::NotOnchainAdmin);
     }

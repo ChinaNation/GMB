@@ -334,7 +334,7 @@ CitizenApp 私密聊天只保留 Cloudflare 瞬时转发、WebRTC 设备附件�
 - 删除边界：已删除 `citizenchain/node/src/chat/`、`src/settings/communication-node/`、`frontend/settings/communication-node/`、已删除的节点聊天协议 注册、通信节点 Tauri 命令、桌面通信节点二维码和 `citizenchain/scripts/im-two-node-smoke.sh`。
 - 全节点边界：归档全节点和普通全节点只描述链数据保存方式；节点同步、挖矿、治理、交易和链上中国平台启动不受 Chat 方案调整影响。
 - App 聊天边界：CitizenApp 私聊和群聊使用 `account_id` 作为聊天账户，以 OpenMLS 加密并由 `ChatEnvelope` Protobuf schema 承载密文；互联网密文由 Worker/DO 瞬时转发，附件由 WebRTC 设备间传输，近场由手机蓝牙/Wi-Fi 直连。
-- 二维码边界：`QR_V1/k=5 chat_node_pairing` 已删除，扫码解析端应按未知类型拒绝；桌面节点不再生成聊天配对二维码。
+- 二维码边界：`chat_node_pairing` 已删除，其 `k=5` 码值 2026-07-29 起回收给 `wallet_code` 钱包码；旧载荷靠 body 字段集精确匹配拒绝，桌面节点不再生成聊天配对二维码。节点前端「扫码识别账户」（`shared/qr/parseAddressQr.ts`）只接受钱包码。
 - 禁止恢复：不得把聊天功能接回节点 RPC、`sc-network/libp2p` request-response 或通信节点开关；Chat 验收以 CitizenApp + Cloudflare staging 和双真机为准。
 
 ## 10. 桌面同步守护边界

@@ -17,8 +17,16 @@ class QrProtocol {
 enum QrKind {
   signRequest(1, temporary: true),
   signResponse(2, temporary: true),
+
+  /// 用户码 = 人(永久 CID);唯一入口用户主页,唯一能写入通讯录的码。
   userContact(3, temporary: false),
-  userTransfer(4, temporary: true);
+
+  /// 收款码 = 一笔收款请求;唯一入口聊天-加号-收付款。
+  /// 当前预留:生成方待实现,见任务卡 20260729-qr-three-code-classification。
+  userTransfer(4, temporary: true),
+
+  /// 钱包码 = 账户;唯一入口钱包-账户详情,冷热两端都能生成,固定码。
+  walletCode(5, temporary: false);
 
   const QrKind(this.code, {required this.temporary});
 

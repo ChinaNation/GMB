@@ -3,11 +3,14 @@ import 'package:citizenapp/qr/envelope.dart';
 
 /// 扫码内容的路由分类结果。统一协议 QR_V1 下按 `k` 分派。
 enum QrRouteType {
-  /// 用户码 - 联系人(user_contact)
+  /// 用户码 - 人/永久 CID(user_contact)
   userContact,
 
-  /// 用户码 - 收款码(user_transfer)
+  /// 收款码 - 一笔收款请求(user_transfer)
   userTransfer,
+
+  /// 钱包码 - 账户(wallet_code)
+  walletCode,
 
   /// 交易签名请求(sign_request)
   signRequest,
@@ -64,6 +67,7 @@ class QrRouter {
           QrKind.signResponse => QrRouteType.signResponse,
           QrKind.userContact => QrRouteType.userContact,
           QrKind.userTransfer => QrRouteType.userTransfer,
+          QrKind.walletCode => QrRouteType.walletCode,
         };
         return QrRouteResult(type: type, raw: raw, envelope: env);
       } on FormatException {

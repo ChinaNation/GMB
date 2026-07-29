@@ -12,12 +12,22 @@ CitizenApp 只使用 `QR_V1`。所有扫码 envelope 顶层字段固定为 `p/k/
 |---:|---|---|
 | 1 | `sign_request` | 生成需要外部签名的请求二维码 |
 | 2 | `sign_response` | 扫描外部签名设备返回的签名响应并验签 |
-| 3 | `user_contact` | 仅为链上 CID↔AccountId 闭环命中的身份账户生成；扫描时复核二维码 CID 与链上绑定 |
-| 4 | `user_transfer` | 生成/扫描收款码 |
+| 3 | `user_contact` | **用户码**：仅为链上 CID↔AccountId 闭环命中的身份账户生成，唯一入口用户主页；扫描时复核二维码 CID 与链上绑定 |
+| 4 | `user_transfer` | **收款码**：唯一入口聊天-加号-收付款。当前预留，生成方待实现（任务卡 `20260729-qr-three-code-classification`），该入口暂出钱包码 |
+| 5 | `wallet_code` | **钱包码**：唯一入口钱包-账户详情，任意账户无条件生成，body 只有 `account_id` |
 
-CitizenApp 不处理管理员扫码登录。登录签名请求由 OnChina 页面生成,由 CitizenWallet 公民钱包扫码签名。
+展示型二维码按入口分类，不做任何运行时分流：用户主页出用户码（`lib/8964/profile/user_qr_page.dart`），
+钱包-账户详情出钱包码（`lib/wallet/pages/wallet_qr_page.dart`），两者共用展示外壳
+`lib/qr/widgets/qr_display_scaffold.dart`。
 
-`k=5 chat_node_pairing` 已删除。CitizenApp 扫到旧通信节点配对码时按未知 `k` 拒绝，不再保存桌面区块链软件通信节点信息。
+扫码判据：`contact` 模式只接受用户码，扫到钱包码/收款码给出明确原因并拒绝（通讯录关系必须锚
+永久 CID）；`transfer`/`dispatch` 模式接受用户码、钱包码、收款码与裸地址。
+
+CitizenApp 不处理管理员扫码登录。登录签名请求由 OnChina 页面生成,由 CitizenWallet 公民钱包扫码签名；
+登录第 1 步的目标账户由 CitizenWallet 出示的钱包码提供。
+
+`k=5` 由已废止的 `chat_node_pairing` 回收给钱包码。旧 `node_peer_id`/`node_multiaddr`/`endpoint_kind`
+载荷靠 body 字段集精确匹配拒绝，不再保存桌面区块链软件通信节点信息。
 
 ## 2. 签名请求
 

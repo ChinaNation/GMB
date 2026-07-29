@@ -4,7 +4,7 @@ import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/qr/bodies/sign_request_body.dart';
 import 'package:citizenwallet/qr/bodies/sign_response_body.dart';
 import 'package:citizenwallet/qr/bodies/user_contact_body.dart';
-import 'package:citizenwallet/qr/bodies/user_transfer_body.dart';
+import 'package:citizenwallet/qr/bodies/wallet_code_body.dart';
 
 /// QR_V1 统一 envelope。与 citizenapp/lib/qr/envelope.dart 逐字节一致。
 class QrEnvelope<T extends QrBody> {
@@ -88,7 +88,11 @@ class QrEnvelope<T extends QrBody> {
       case QrKind.userContact:
         body = UserContactBody.fromJson(bodyRaw);
       case QrKind.userTransfer:
-        body = UserTransferBody.fromJson(bodyRaw);
+        // 收款码只属于 CitizenApp:公民钱包完全离线、发不了交易,扫它没有任何用途。
+        // 按角色边界报明确错误,不静默忽略。
+        throw const FormatException('收款码请用「公民」App 扫描');
+      case QrKind.walletCode:
+        body = WalletCodeBody.fromJson(bodyRaw);
     }
 
     return QrEnvelope<QrBody>(

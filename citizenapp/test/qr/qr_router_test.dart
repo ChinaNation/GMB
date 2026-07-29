@@ -137,11 +137,33 @@ void main() {
       expect(result.type, QrRouteType.unknown);
     });
 
-    test('should reject removed QR kind 5', () {
+    test('should route wallet_code', () {
+      final raw = jsonEncode({
+        'p': QrProtocol.v1,
+        'k': QrKind.walletCode.code,
+        'b': {
+          'account_id':
+              '0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48',
+        },
+      });
+      final result = router.route(raw);
+      expect(result.type, QrRouteType.walletCode);
+      expect(result.envelope, isNotNull);
+      expect(result.envelope!.id, isNull);
+      expect(result.envelope!.expiresAt, isNull);
+    });
+
+    test('should reject legacy chat_node_pairing payload on k=5', () {
+      // k=5 已回收给钱包码；旧 chat_node_pairing 载荷靠 body 字段集精确匹配拒绝，
+      // 不需要专门的拒绝分支。
       final raw = jsonEncode({
         'p': QrProtocol.v1,
         'k': 5,
-        'b': {'removed': true},
+        'b': {
+          'node_peer_id': '12D3Koo',
+          'node_multiaddr': '/ip4/1.2.3.4/tcp/30333',
+          'endpoint_kind': 'ip4',
+        },
       });
       final result = router.route(raw);
       expect(result.type, QrRouteType.unknown);

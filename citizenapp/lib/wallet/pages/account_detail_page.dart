@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:citizenapp/8964/profile/user_qr_page.dart';
-import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/isar/app_isar.dart';
-import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/transaction_history_page.dart';
+import 'package:citizenapp/wallet/pages/wallet_qr_page.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 
 /// 账户详情（Lv3）：单个 `//index` 账户 = 单钱包多账户下「以前的钱包详情」。
@@ -18,7 +16,7 @@ import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 /// - 充值 / 提现 / 零钱包（[WalletActionCard]，链下清算行零钱包按账户独立绑定）；
 /// - 清算行（[ClearingBankSettingsPage] 绑定 / 切换）；
 /// - 交易记录（[TransactionHistoryPage]，按账户 `account_id` 查询）；
-/// - 顶部完整 SS58 地址与全 App 唯一用户二维码；
+/// - 顶部完整 SS58 地址与该账户的钱包码（`k=5`，只声明账户；身份码在用户主页）；
 /// - AppBar 菜单中的私钥（child mini-secret 独立、单向；展示前生物识别 +
 ///   防截屏 + 纯文本不可复制）。
 ///
@@ -27,13 +25,9 @@ class AccountDetailPage extends StatefulWidget {
   const AccountDetailPage({
     super.key,
     required this.account,
-    this.identityResolver,
-    this.profileCache = const CitizenProfileCache(),
   });
 
   final Account account;
-  final IdentityAccountResolver? identityResolver;
-  final CitizenProfileCache profileCache;
 
   @override
   State<AccountDetailPage> createState() => _AccountDetailPageState();
@@ -212,14 +206,12 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     await _actionCardKey.currentState?.refresh();
   }
 
-  /// 身份账户出固定用户码；普通子账户出五分钟临时收款码。
-  Future<void> _openUserQr() async {
-    await openAccountQrPage(
+  /// 账户详情统一出固定钱包码（`k=5`）：这里表达的是「账户」，身份由用户主页的用户码表达。
+  Future<void> _openWalletQr() async {
+    await openWalletQrPage(
       context,
       accountId: widget.account.accountId,
-      paymentDisplayName: widget.account.accountName,
-      identityResolver: widget.identityResolver,
-      profileCache: widget.profileCache,
+      accountLabel: widget.account.accountName,
     );
   }
 
@@ -403,7 +395,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               padding: EdgeInsets.zero,
-              onPressed: _openUserQr,
+              onPressed: _openWalletQr,
               icon: const Icon(
                 Icons.qr_code_rounded,
                 size: 20,
