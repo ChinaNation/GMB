@@ -12,6 +12,7 @@ import '../8964/services/square_api_client.dart';
 import '../my/myid/identity_account_cache.dart';
 import '../wallet/core/device_subkey.dart';
 import '../security/local_data_key.dart';
+import 'media/attachment_vault.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/chat_device_binding.dart';
 import 'crypto/mls_boundary.dart';
@@ -242,6 +243,33 @@ class ChatRuntime {
 
   Future<String?> readAccountId() async {
     return _identityCache.accountId();
+  }
+
+  /// 附件本地静止态密钥（`LocalKeyPurpose.attachment` 子钥）。
+  Future<List<int>> _attachmentKey() async {
+    final accountId = await readAccountId();
+    if (accountId == null || accountId.isEmpty) {
+      throw StateError('无身份账户，无法读取附件加密密钥');
+    }
+    final ldk = await _walletManager.ensureLocalDataKeyForAccountId(accountId);
+    return ldk.subkey(LocalKeyPurpose.attachment);
+  }
+
+  /// 短命明文目录：解密出来的附件只落这里，与密文缓存物理分开。
+  Future<Directory> _plainDirectory() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return Directory(
+      '${dir.path}/chat/attachments/${AttachmentVault.plainDirName}',
+    );
+  }
+
+  /// 清空短命明文附件。
+  ///
+  /// 明文按「**只在前台存活**」管理：App 启动、退到后台、删会话/退出账户三处
+  /// 各 purge 一次。不做逐处所有权交接——UI 侧预览/播放/打开/转发路径太多，
+  /// 漏一处这份明文就永久留在盘上。
+  Future<void> purgePlainAttachments() async {
+    await AttachmentVault.purgePlainDirectory(await _plainDirectory());
   }
 
   /// 点击「广场发帖」推送时发信号（转发自设备推送服务），供 AppShell 切到广场 tab。
@@ -672,6 +700,8 @@ class ChatRuntime {
         contentType: contentType,
         clearByteSize: clearByteSize,
         cacheDirectory: Directory('${dir.path}/chat/attachments'),
+        attachmentKey: await _attachmentKey(),
+        plainDirectory: await _plainDirectory(),
       );
       return cached?.filePath;
     } catch (_) {
@@ -693,6 +723,8 @@ class ChatRuntime {
       conversationId: conversationId,
       controlPlaintext: controlPlaintext,
       cacheDirectory: cacheDirectory,
+      attachmentKey: await _attachmentKey(),
+      plainDirectory: await _plainDirectory(),
     );
   }
 
@@ -721,6 +753,8 @@ class ChatRuntime {
       contentType: contentType,
       clearByteSize: byteSize,
       cacheDirectory: cacheDirectory,
+      attachmentKey: await _attachmentKey(),
+      plainDirectory: await _plainDirectory(),
     );
     if (cached != null) return cached;
 
@@ -757,6 +791,8 @@ class ChatRuntime {
     if (await attachmentDir.exists()) {
       await attachmentDir.delete(recursive: true);
     }
+    // purge 点之三:删会话同时清掉可能已解密出来的短命明文。
+    await purgePlainAttachments();
   }
 
   /// 重试发送设备本机队列中的密文,并补发待设备投递的媒体字节。
@@ -847,6 +883,8 @@ class ChatRuntime {
       tempFilePath: filePath,
       byteSize: byteSize,
       cacheDirectory: Directory('${dir.path}/chat/attachments'),
+      attachmentKey: await _attachmentKey(),
+      plainDirectory: await _plainDirectory(),
     );
   }
 
@@ -870,6 +908,8 @@ class ChatRuntime {
       byteSize: byteSize,
       moveSource: false,
       cacheDirectory: Directory('${dir.path}/chat/attachments'),
+      attachmentKey: await _attachmentKey(),
+      plainDirectory: await _plainDirectory(),
     );
   }
 

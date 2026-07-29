@@ -154,6 +154,51 @@ CID 换绑就要把整个聊天历史 + MLS 状态 + 全部附件重新加密一
   另覆盖中英数子串命中、大小写不敏感、单字符回落、不命中返空、
   密文损坏必抛错（不静默返回空白，否则用户会看到聊天记录凭空变空）。
 
+### 第 5 步：附件本地缓存加密（2026-07-29 完成）
+
+**现状订正**：项 11 不是"完全没做"——大媒体**传输**早已加密（上传 R2 前流式
+AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存**。
+
+**方案 A（用户 2026-07-29 选定）**：长期缓存一律密文，播放/预览时才解密到
+**短命明文临时文件**。选 A 而非"全程无明文落盘"的 B：图片/视频播放器要的是
+文件路径而不是内存字节，B 对视频的工程代价过高。
+
+**明文生命周期（关键决策，用户确认「前台存活 + 三点 purge」）**
+
+原打算"用完即删、逐处交接所有权"，实施前发现该口径**不可靠**：UI 侧有预览、
+播放、打开、转发多条路径，逐个 widget 交接极易漏，而漏一次这份明文就永久留盘，
+方案 A 的安全性即名存实亡。改为**不依赖任何调用方记得释放**，靠生命周期兜底：
+
+1. **App 启动** purge（`main.dart` `initState`）——崩溃/强杀会跳过退后台清理，
+   没有这道兜底明文会跨会话存活；
+2. **退到后台** purge（`didChangeAppLifecycleState` paused）——把明文窗口
+   压到一次前台会话内；
+3. **删会话 / 退出账户** purge（`deleteLocalConversation`）。
+
+代价：同一次前台会话内看过的附件明文存活到切后台。比"逐处交接但漏几处永久留盘"
+安全得多，且不可能因新增 UI 路径而退化。
+
+**改动**
+- 新增 `lib/chat/media/attachment_vault.dart`：`AttachmentVault`。密文后缀 `.enc`
+  （与明文路径永不重名，杜绝"以为加密了其实读的是旧明文"）；明文只落
+  `<cache>/.plain/` 专用目录；复用 `MediaRelayCrypto` 分块流式（5GB 不进内存）；
+  **解密失败也删半截明文**。
+- `lib/chat/chat_flow.dart`：`importAttachmentFileToCache` / `acceptReceivedMediaToCache`
+  / `readCachedAttachment` / `downloadAttachment` 增 `attachmentKey` + `plainDirectory`。
+  **`readCachedAttachment` 判据必须改**：密文长度含分块 GCM 框架开销、与明文不等，
+  不能再拿密文 stat 比对 `clearByteSize`；改为解密后验明文长度，不符即清明文返回 null。
+  改造后 `_streamCopy` 失去引用，已删除（无残桩）。
+- `lib/chat/chat_runtime.dart`：`_attachmentKey()`（`LocalKeyPurpose.attachment` 子钥）、
+  `_plainDirectory()`、`purgePlainAttachments()`；5 处调用点接线。
+- `lib/main.dart`：启动与退后台两个 purge 点，失败静默（纵深防御，不阻断启动/切换）。
+
+**验收（实跑）**
+- 新增 `test/chat/media/attachment_vault_test.dart` **7 项通过**：
+  密文落盘且明文源被删、明文路径根本不存在只有 `.enc`、往返完整还原、
+  **错误密钥失败不留半截明文**、密文缺失明确报错、**崩溃残留由启动清理兜底**、
+  重复 open 不残留多份。
+- `flutter analyze lib/ test/` 零问题。
+
 ## 完成标准
 
 - Isar 和 App 私有目录不再保存联系人、聊天正文、会话摘要、MLS 秘密或附件明文。

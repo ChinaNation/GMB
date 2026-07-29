@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'crypto/mls_boundary.dart';
+import 'media/attachment_vault.dart';
 import 'chat_media_limits.dart';
 import 'chat_models.dart';
 import 'chat_payload.dart';
@@ -487,6 +488,8 @@ class ChatFlow {
     required String conversationId,
     required String controlPlaintext,
     required Directory cacheDirectory,
+    required List<int> attachmentKey,
+    required Directory plainDirectory,
   }) async {
     final content = ChatPayloadCodec.decode(controlPlaintext);
     final attachmentId = content.attachmentId ?? '';
@@ -501,6 +504,8 @@ class ChatFlow {
       contentType: content.mime ?? 'application/octet-stream',
       clearByteSize: content.byteSize ?? 0,
       cacheDirectory: cacheDirectory,
+      attachmentKey: attachmentKey,
+      plainDirectory: plainDirectory,
     );
     if (cached != null) return cached;
     throw StateError('附件尚未完成设备间传输');
@@ -521,33 +526,35 @@ class ChatFlow {
     required int byteSize,
     required bool moveSource,
     required Directory cacheDirectory,
+    required List<int> attachmentKey,
+    required Directory plainDirectory,
   }) async {
-    final file = _attachmentCacheFile(
+    final cachePath = attachmentCachePath(
       cacheDirectory: cacheDirectory,
       conversationId: conversationId,
       attachmentId: attachmentId,
       fileName: fileName,
     );
-    await file.parent.create(recursive: true);
-    final source = File(sourcePath);
-    if (moveSource) {
-      try {
-        await source.rename(file.path);
-      } on FileSystemException {
-        await _streamCopy(source, file);
-        if (await source.exists()) {
-          await source.delete();
-        }
-      }
-    } else {
-      await _streamCopy(source, file);
-    }
+    // 长期缓存只落密文。moveSource=true(接收端临时文件)封存后删源；
+    // =false(发送端用户原文件)保留源。
+    await AttachmentVault.seal(
+      plainSource: File(sourcePath),
+      cachePath: cachePath,
+      key: attachmentKey,
+      deleteSource: moveSource,
+    );
+    // 返回给 UI 的是解密出来的**短命明文**，由前台生命周期统一 purge。
+    final plain = await AttachmentVault.openPlain(
+      cachePath: cachePath,
+      key: attachmentKey,
+      plainDirectory: plainDirectory,
+    );
     return ChatDownloadedAttachment(
       attachmentId: attachmentId,
       fileName: fileName,
       contentType: contentType,
       clearByteSize: byteSize,
-      filePath: file.path,
+      filePath: plain.path,
     );
   }
 
@@ -563,6 +570,8 @@ class ChatFlow {
     required String tempFilePath,
     required int byteSize,
     required Directory cacheDirectory,
+    required List<int> attachmentKey,
+    required Directory plainDirectory,
   }) async {
     if (byteSize > ChatMediaLimits.forMime(contentType)) {
       final temp = File(tempFilePath);
@@ -579,6 +588,8 @@ class ChatFlow {
       sourcePath: tempFilePath,
       byteSize: byteSize,
       moveSource: true,
+      attachmentKey: attachmentKey,
+      plainDirectory: plainDirectory,
       cacheDirectory: cacheDirectory,
     );
   }
@@ -598,7 +609,10 @@ class ChatFlow {
     ).path;
   }
 
-  /// 只按文件存在性 + 大小(stat,不读整块字节)判定缓存是否就绪。
+  /// 判定密文缓存是否就绪，并解密出短命明文供展示。
+  ///
+  /// 密文长度含分块 GCM 框架开销、与明文长度不等，**不能再拿密文 stat 比对
+  /// [clearByteSize]**；改为解密后验明文长度，长度不符视为损坏并清掉明文。
   static Future<ChatDownloadedAttachment?> readCachedAttachment({
     required String conversationId,
     required String attachmentId,
@@ -606,18 +620,26 @@ class ChatFlow {
     required String contentType,
     required int clearByteSize,
     required Directory cacheDirectory,
+    required List<int> attachmentKey,
+    required Directory plainDirectory,
   }) async {
-    final file = _attachmentCacheFile(
+    final cachePath = attachmentCachePath(
       cacheDirectory: cacheDirectory,
       conversationId: conversationId,
       attachmentId: attachmentId,
       fileName: fileName,
     );
-    if (!await file.exists()) {
+    if (!await AttachmentVault.hasCipher(cachePath)) {
       return null;
     }
-    final length = await file.length();
+    final plain = await AttachmentVault.openPlain(
+      cachePath: cachePath,
+      key: attachmentKey,
+      plainDirectory: plainDirectory,
+    );
+    final length = await plain.length();
     if (length != clearByteSize) {
+      await AttachmentVault.releasePlain(plain);
       return null;
     }
     return ChatDownloadedAttachment(
@@ -625,17 +647,8 @@ class ChatFlow {
       fileName: fileName,
       contentType: contentType,
       clearByteSize: length,
-      filePath: file.path,
+      filePath: plain.path,
     );
-  }
-}
-
-Future<void> _streamCopy(File source, File destination) async {
-  final sink = destination.openWrite();
-  try {
-    await sink.addStream(source.openRead());
-  } finally {
-    await sink.close();
   }
 }
 

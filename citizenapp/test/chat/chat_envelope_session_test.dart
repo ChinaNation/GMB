@@ -12,6 +12,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/isar_test_env.dart';
 
+/// 附件本地加密测试密钥(固定 32 字节,仅测试用)。
+final List<int> _testAttachmentKey =
+    List<int>.generate(32, (i) => (i * 5) % 256);
+
 /// 钱包账户 account_id（MLS 名册/归属）与身份主键 cid_number（投递路由键）语义分离。
 const _bobAccountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
@@ -447,6 +451,8 @@ void main() {
           conversationId: 'c',
           controlPlaintext: control,
           cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
         ),
         throwsA(isA<FormatException>()),
       );
@@ -472,6 +478,8 @@ void main() {
         conversationId: 'conv-x',
         controlPlaintext: control,
         cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
       ),
       throwsA(isA<StateError>()),
     );
@@ -488,12 +496,16 @@ void main() {
       byteSize: 3,
       moveSource: false,
       cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
     );
     await expectLater(
       ChatFlow.downloadAttachment(
         conversationId: 'conv-x',
         controlPlaintext: control,
         cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
       ),
       throwsA(isA<StateError>()),
     );
@@ -513,6 +525,8 @@ void main() {
       byteSize: 10,
       moveSource: false,
       cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
     );
     final control = ChatPayloadCodec.encode(
       ChatContent.media(
@@ -528,6 +542,8 @@ void main() {
       conversationId: 'conv-cache',
       controlPlaintext: control,
       cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
     );
 
     expect(loaded.filePath, saved.filePath);
@@ -549,6 +565,8 @@ void main() {
       byteSize: 11,
       moveSource: true,
       cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
     );
 
     expect(await temp.exists(), isFalse); // 源(临时)已移走,不留残余
@@ -570,6 +588,8 @@ void main() {
       tempFilePath: big.path,
       byteSize: ChatMediaLimits.maxBytesForLevel('freedom') + 1,
       cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
     );
     expect(rejected, isNull);
     expect(await big.exists(), isFalse);
@@ -585,6 +605,8 @@ void main() {
       tempFilePath: ok.path,
       byteSize: 2,
       cacheDirectory: root,
+      attachmentKey: _testAttachmentKey,
+      plainDirectory: Directory('${root.path}/.plain'),
     );
     expect(accepted, isNotNull);
     expect(await ok.exists(), isFalse);

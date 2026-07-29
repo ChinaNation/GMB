@@ -121,7 +121,19 @@ class _AppLockGateState extends State<_AppLockGate>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 短命明文附件 purge 点之一:启动即清上次会话残留。
+    // 崩溃/强杀会跳过退后台那次清理，没有这道兜底明文就会跨会话留在盘上。
+    unawaited(_purgePlainAttachments());
     _checkLock();
+  }
+
+  /// 清空解密出来的短命明文附件。失败静默——它是纵深防御，不该阻断 App 启动/切换。
+  Future<void> _purgePlainAttachments() async {
+    try {
+      await ChatRuntime().purgePlainAttachments();
+    } catch (_) {
+      // 忽略：下次启动/切后台会再清一次。
+    }
   }
 
   @override
@@ -134,6 +146,8 @@ class _AppLockGateState extends State<_AppLockGate>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _pausedAt = DateTime.now();
+      // purge 点之二:退到后台即清明文，把明文窗口压到一次前台会话内。
+      unawaited(_purgePlainAttachments());
     } else if (state == AppLifecycleState.resumed && _authenticated) {
       final paused = _pausedAt;
       if (paused != null &&
