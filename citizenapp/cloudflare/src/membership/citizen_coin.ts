@@ -83,6 +83,7 @@ export async function platformSubscriptionConfirmRoute(
   );
   await bindFinalizedTransactionConfirmation(
     env,
+    session.cid_number,
     session.account_id,
     transaction,
     requestHash,

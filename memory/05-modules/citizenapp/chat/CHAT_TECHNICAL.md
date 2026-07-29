@@ -216,7 +216,10 @@ iOS 已启用 `remote-notification` 后台模式和 `aps-environment` entitlemen
 - `chat/attachments/`：设备私有媒体缓存(收发媒体经流式落盘/复制进入)。
 - `chat/attachments/.tmp/`：接收端字节流的临时落盘目录;`.part` 文件在完整校验通过后移入缓存,拒收/截断时删除。
 
-删除某个会话只影响当前设备。注销账户时当前设备清除全部 Chat 本地数据，同时 Worker 先关闭实时连接，再硬删除设备、KeyPackage 和防重放行。
+删除某个会话只影响当前设备。注销身份时当前绑定 `account_id` 只完成授权；Worker 以
+`cid_number` 为唯一删除主键，先关闭该 CID 实时连接，再按 CID 硬删除跨历次换绑账户的
+全部设备、KeyPackage、防重放行和会话。会话 token 只以 SHA-256 哈希进入 KV 键与 D1
+强一致 CID 注销索引，不依赖 KV 前缀枚举。当前设备随后清除全部 Chat 本地数据。
 
 ## 9. 广场边界
 

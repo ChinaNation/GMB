@@ -6,6 +6,7 @@ import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
+import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import '../support/fake_secure_seed_store.dart';
@@ -68,12 +69,44 @@ class _MemoryBlobStore implements VaultBlobStore {
   Future<void> delete(String key) async => values.remove(key);
 }
 
+class _RecordingDeviceSubkey extends DeviceSubkey {
+  final List<int> deletedWalletIndexes = <int>[];
+  final Set<int> failingWalletIndexes = <int>{};
+
+  @override
+  Future<void> delete(int walletIndex) async {
+    deletedWalletIndexes.add(walletIndex);
+    if (failingWalletIndexes.contains(walletIndex)) {
+      throw StateError('设备子钥删除失败');
+    }
+  }
+}
+
+class _DeleteFailingSeedStore extends FakeSecureSeedStore {
+  bool failAccountKeyDeletion = false;
+
+  @override
+  Future<void> deleteAccountKey({
+    required int walletIndex,
+    required String accountId,
+  }) async {
+    if (failAccountKeyDeletion) {
+      throw StateError('账户 child 删除失败');
+    }
+    await super.deleteAccountKey(
+      walletIndex: walletIndex,
+      accountId: accountId,
+    );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   useIsolatedIsar();
 
   late FakeSecureSeedStore fakeStore;
   late _MemoryBlobStore contactBlobStore;
+  late _RecordingDeviceSubkey deviceSubkey;
 
   // 动钱动权验证已上移到 WalletManager 的硬件金库读 child；单测里把 local_auth
   // channel 打桩为「验证通过」，让纯 Dart 环境不因缺插件而抛。
@@ -85,6 +118,8 @@ void main() {
     WalletManager.debugSeedStore = fakeStore;
     contactBlobStore = _MemoryBlobStore();
     WalletManager.debugContactKeyStore = contactBlobStore;
+    deviceSubkey = _RecordingDeviceSubkey();
+    WalletManager.debugDeviceSubkey = deviceSubkey;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(localAuthChannel, (call) async {
       switch (call.method) {
@@ -151,6 +186,7 @@ void main() {
       await manager.deleteWallet(created.profile.walletIndex);
       expect(await manager.getWallets(), isEmpty);
       expect(fakeStore.accountKeys, isEmpty);
+      expect(deviceSubkey.deletedWalletIndexes, [created.profile.walletIndex]);
 
       final imported = await manager.importWallet(_mnemonicA);
       expect(imported.walletIndex, 1);
@@ -164,6 +200,73 @@ void main() {
       expect(await manager.getWallet(), isNull);
       expect(await manager.getWallets(), isEmpty);
       expect(fakeStore.accountKeys, isEmpty);
+      expect(
+        deviceSubkey.deletedWalletIndexes,
+        [created.profile.walletIndex, imported.walletIndex],
+      );
+    });
+
+    test('删除非末账户只清账户秘密，删除整钱包才清共享设备子钥', () async {
+      final manager = WalletManager();
+      final wallet = await manager.importWallet(_mnemonicA);
+      final account1 = await manager.addNextAccount(
+        wallet.accountId,
+        _mnemonicA,
+      );
+
+      await manager.ensureLocalDataKeyForAccountId(account1.accountId);
+      await manager.deleteAccount(account1.accountId);
+
+      expect(deviceSubkey.deletedWalletIndexes, isEmpty);
+      expect(fakeStore.accountKeys.containsKey(account1.accountId), isFalse);
+
+      await manager.deleteWallet(wallet.walletIndex);
+      expect(deviceSubkey.deletedWalletIndexes, [wallet.walletIndex]);
+      expect(contactBlobStore.values, isEmpty);
+    });
+
+    test('clearWallet 清全部账户秘密并只删除热钱包设备子钥', () async {
+      final manager = WalletManager();
+      final hot = await manager.importWallet(_mnemonicA);
+      final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x44));
+      await manager.ensureContactKeyMaterialForAccountId(hot.accountId);
+      await manager.ensureLocalDataKeyForAccountId(hot.accountId);
+
+      await manager.clearWallet();
+
+      expect(await manager.getWallets(), isEmpty);
+      expect(fakeStore.accountKeys, isEmpty);
+      expect(contactBlobStore.values, isEmpty);
+      expect(deviceSubkey.deletedWalletIndexes, [hot.walletIndex]);
+      expect(
+          deviceSubkey.deletedWalletIndexes, isNot(contains(cold.walletIndex)));
+    });
+
+    test('账户 child 清理失败仍继续删除钱包 KEK 与设备子钥', () async {
+      final failingStore = _DeleteFailingSeedStore();
+      WalletManager.debugSeedStore = failingStore;
+      final manager = WalletManager();
+      final wallet = await manager.importWallet(_mnemonicA);
+      failingStore.failAccountKeyDeletion = true;
+      deviceSubkey.failingWalletIndexes.add(wallet.walletIndex);
+
+      await expectLater(
+        manager.deleteWallet(wallet.walletIndex),
+        throwsA(
+          isA<WalletLocalCleanupException>().having(
+            (error) => error.failures.join('\n'),
+            'failures',
+            allOf(
+              contains('账户 child 删除失败'),
+              contains('设备子钥删除失败'),
+            ),
+          ),
+        ),
+      );
+
+      expect(await manager.getWallets(), isEmpty);
+      expect(failingStore.deletedWalletKeyIndexes, [wallet.walletIndex]);
+      expect(deviceSubkey.deletedWalletIndexes, [wallet.walletIndex]);
     });
 
     test('importWallet 拒绝非法助记词', () async {
@@ -364,6 +467,7 @@ void main() {
       await manager.deleteWallet(cold.walletIndex);
       final wallets = await manager.getWallets();
       expect(wallets.where((w) => w.walletIndex == cold.walletIndex), isEmpty);
+      expect(deviceSubkey.deletedWalletIndexes, isEmpty);
     });
   });
 }

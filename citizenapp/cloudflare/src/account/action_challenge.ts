@@ -19,21 +19,21 @@ export type SignedAction = 'delete_account';
 
 const ACTION_CHALLENGE_TTL_SECONDS = 300;
 
-/// 动作签名 SCALE payload：`action ‖ account_id ‖ challenge_id [‖ context] ‖ expires_at`。
-/// action 编入正文 → 登录/其它动作的签名无法被重放成本动作；[context] 若存在则插在
+/// 动作签名 SCALE payload：`action ‖ account_id ‖ challenge_id ‖ cid_number ‖ expires_at`。
+/// action 编入正文 → 登录/其它动作的签名无法被重放成本动作；cid_number 固定插在
 /// challenge_id 与 expires_at 之间。被签消息 = signing_message(OP_SIGN_SQUARE_ACTION, payload)。
 function buildActionScalePayload(
   action: SignedAction,
   accountId: string,
   challengeId: string,
   expiresAt: number,
-  context?: string
+  cidNumber: string
 ): Uint8Array {
   return concatBytes(
     scaleString(action),
     scaleString(accountId),
     scaleString(challengeId),
-    ...(context === undefined ? [] : [scaleString(context)]),
+    scaleString(cidNumber),
     u64Le(expiresAt)
   );
 }
@@ -49,34 +49,33 @@ export interface IssuedActionChallenge {
 /// SCALE payload 的 hex，动作编入其中）。
 export async function issueActionChallenge(
   env: Env,
+  cidNumber: string,
   accountId: string,
-  action: SignedAction,
-  context?: string
+  action: SignedAction
 ): Promise<IssuedActionChallenge> {
   const challengeId = createId('sqa');
   const expiresAt = secondsFromNow(ACTION_CHALLENGE_TTL_SECONDS);
   const signingPayloadHex = bytesToHex(
-    buildActionScalePayload(action, accountId, challengeId, expiresAt, context)
+    buildActionScalePayload(action, accountId, challengeId, expiresAt, cidNumber)
   );
 
   await env.DB.prepare(
     `INSERT INTO square_login_challenges
-      (challenge_id, account_id, signing_payload, expires_at, used_at)
-      VALUES (?, ?, ?, ?, NULL)`
+      (challenge_id, cid_number, account_id, signing_payload, expires_at, used_at)
+      VALUES (?, ?, ?, ?, ?, NULL)`
   )
-    .bind(challengeId, accountId, signingPayloadHex, expiresAt)
+    .bind(challengeId, cidNumber, accountId, signingPayloadHex, expiresAt)
     .run();
 
   return { challengeId, opTag: OP_SIGN_SQUARE_ACTION, signingPayloadHex, expiresAt };
 }
 
 export interface ActionSignatureInput {
+  cidNumber: string;
   accountId: string;
   action: SignedAction;
   challengeId: string;
   signature: string;
-  /// 动作专属绑定字段，须与下发时一致。
-  context?: string;
 }
 
 /// 校验并**一次性消费**动作签名：挑战存在且归属该账户、未用、未过期、动作匹配、
@@ -87,14 +86,18 @@ export async function consumeActionSignature(
   input: ActionSignatureInput
 ): Promise<void> {
   const challenge = await env.DB.prepare(
-    `SELECT challenge_id, account_id, signing_payload, expires_at, used_at
+    `SELECT challenge_id, cid_number, account_id, signing_payload, expires_at, used_at
       FROM square_login_challenges
       WHERE challenge_id = ?`
   )
     .bind(input.challengeId)
     .first<LoginChallengeRow>();
 
-  if (!challenge || challenge.account_id !== input.accountId) {
+  if (
+    !challenge ||
+    challenge.cid_number !== input.cidNumber ||
+    challenge.account_id !== input.accountId
+  ) {
     throw new HttpError(401, 'invalid_challenge', '签名挑战不存在');
   }
   if (challenge.used_at !== null) {
@@ -111,11 +114,11 @@ export async function consumeActionSignature(
       challenge.account_id,
       challenge.challenge_id,
       challenge.expires_at,
-      input.context
+      challenge.cid_number
     )
   );
   if (expectedPayloadHex !== challenge.signing_payload) {
-    throw new HttpError(401, 'action_mismatch', '签名挑战动作/上下文不匹配');
+    throw new HttpError(401, 'action_mismatch', '签名挑战动作/CID 不匹配');
   }
 
   const message = signingMessage(
@@ -127,10 +130,23 @@ export async function consumeActionSignature(
     throw new HttpError(401, 'invalid_signature', '钱包签名校验失败');
   }
 
+  const claimedAt = nowMs();
   const claimed = await env.DB.prepare(
-    `UPDATE square_login_challenges SET used_at = ? WHERE challenge_id = ? AND used_at IS NULL`
-  )
-    .bind(nowMs(), challenge.challenge_id)
+    `UPDATE square_login_challenges
+      SET used_at = ?
+      WHERE challenge_id = ?
+        AND cid_number = ?
+        AND account_id = ?
+        AND used_at IS NULL
+        AND expires_at > ?`
+    )
+    .bind(
+      claimedAt,
+      challenge.challenge_id,
+      challenge.cid_number,
+      challenge.account_id,
+      claimedAt
+    )
     .run();
   // 原子占位：并发下只有一方能把 used_at 从 NULL 翻成非空；命中 0 行说明已被
   // 抢先消费（含 SELECT 判空与本 UPDATE 之间的竞态），按已用处理。

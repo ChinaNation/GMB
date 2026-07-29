@@ -33,6 +33,7 @@ class SquareHomePage extends StatefulWidget {
     this.initialFeed = SquareFeedKind.recommended,
     this.seedPosts = const <SquarePost>[],
     this.smoldotClientManager,
+    this.sessionProvider,
     this.membershipLoader,
     this.onSquareUnreadChanged,
     this.selectedTab,
@@ -44,6 +45,7 @@ class SquareHomePage extends StatefulWidget {
   final SquareFeedKind initialFeed;
   final List<SquarePost> seedPosts;
   final SmoldotClientManager? smoldotClientManager;
+  final SquareSessionProvider? sessionProvider;
   final SquareMembershipLoader? membershipLoader;
 
   /// 广场底部 tab 红点计数回调（上抛给 AppShell 挂 Badge）。
@@ -73,6 +75,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
   /// 最近一次 feed 加载的 session token，供卡片头像鉴权头复用。
   String? _feedSessionToken;
   late final SmoldotClientManager _smoldotClientManager;
+  late final SquareSessionProvider _sessionProvider;
 
   /// 同一次 operational 状态下，同一默认钱包只触发一次真实链刷新。
   String? _operationalIdentityAccount;
@@ -89,9 +92,10 @@ class _SquareHomePageState extends State<SquareHomePage> {
     super.initState();
     _smoldotClientManager =
         widget.smoldotClientManager ?? SmoldotClientManager.instance;
+    _sessionProvider = widget.sessionProvider ?? SquareSessionProvider.instance;
     _feedSource = widget.feedSource ?? SquareApiClient();
     _identityFuture = _loadIdentity(readLiveChain: false);
-    _feedFuture = _loadFeed();
+    _feedFuture = _beginFeedLoad();
     // 本页常驻 IndexedStack；切换身份账户（CID 换绑 / 切钱包）后经
     // walletsRevision 广播重载身份，保证身份图标与作者点击的 isSelf
     // 判定始终基于当前身份账户。
@@ -130,8 +134,10 @@ class _SquareHomePageState extends State<SquareHomePage> {
 
   Future<SquareSession?> _notifySession() async {
     try {
-      return await SquareSessionProvider.instance.ensureSession();
-    } on Exception {
+      return await _sessionProvider.ensureSession();
+    } on Object {
+      // 后台通知由 unawaited 启动，任何会话失败都只能降级为不刷新红点，
+      // 不得逸出为未捕获异步异常并影响广场浏览。
       return null;
     }
   }
@@ -148,7 +154,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
       if (counts.followingUnread != _followingUnread) {
         setState(() => _followingUnread = counts.followingUnread);
       }
-    } on Exception {
+    } on Object {
       // 红点拉取失败静默：不影响广场浏览。
     }
   }
@@ -161,7 +167,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
     try {
       await _squareApi.markNotifyRead(session: session, scope: 'square');
       if (mounted) widget.onSquareUnreadChanged?.call(0);
-    } on Exception {
+    } on Object {
       // 清读失败静默；下次轮询以服务端为准。
     }
     await _refreshNotify();
@@ -177,7 +183,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
     if (session == null) return;
     try {
       await _squareApi.markNotifyRead(session: session, scope: 'following');
-    } on Exception {
+    } on Object {
       // 清读失败静默；本地已归零，下次轮询以服务端为准。
     }
   }
@@ -238,14 +244,13 @@ class _SquareHomePageState extends State<SquareHomePage> {
       final membership = loader != null
           ? await loader()
           : await () async {
-              final session =
-                  await SquareSessionProvider.instance.ensureSession();
+              final session = await _sessionProvider.ensureSession();
               return session != null
                   ? _squareApi.fetchMembership(session)
                   : null;
             }();
       return membership;
-    } on Exception {
+    } on Object {
       return null;
     }
   }
@@ -357,7 +362,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
                     onChanged: (feed) {
                       setState(() {
                         _selectedFeed = feed;
-                        _feedFuture = _loadFeed();
+                        _feedFuture = _beginFeedLoad();
                       });
                       // 进关注子 tab → 清关注红点。
                       if (feed == SquareFeedKind.following) {
@@ -442,7 +447,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
   Future<List<SquarePost>> _loadFeed() async {
     SquareSession? session;
     if (_feedSource is SquareApiClient) {
-      session = await SquareSessionProvider.instance.ensureSession();
+      session = await _sessionProvider.ensureSession();
       if (session == null) {
         throw const SquareApiException('需要钱包账户才能浏览广场');
       }
@@ -463,8 +468,24 @@ class _SquareHomePageState extends State<SquareHomePage> {
     return posts;
   }
 
+  Future<List<SquarePost>> _beginFeedLoad() {
+    final future = _loadFeed();
+    // initState 和分类切换会先创建 Future、随后才由下一帧 FutureBuilder 挂监听。
+    // Worker 快速失败时必须立刻观察错误，消除这段未处理时间窗；原 Future
+    // 不做转换，页面仍能通过 snapshot.hasError 展示真实前台失败态。
+    unawaited(
+      future.then<void>(
+        (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          AppLog.d('[SquareHomePage] feed load failed: $error');
+        },
+      ),
+    );
+    return future;
+  }
+
   Future<void> _refreshFeed() async {
-    final next = _loadFeed();
+    final next = _beginFeedLoad();
     setState(() => _feedFuture = next);
     await next;
   }

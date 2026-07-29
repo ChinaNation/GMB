@@ -7,6 +7,7 @@ import { reconcileSubscriptions } from './membership/reconcile';
 import { applyCors, cleanupSecurityState } from './security/request_guard';
 import { cleanupExpiredUploads } from './uploads/service';
 import { cleanupExpiredReservations } from './limits/usage';
+import { cleanupExpiredSessionIndexes } from './auth/session_index';
 
 export { ChatRealtimeObject } from './chat/realtime';
 
@@ -38,6 +39,7 @@ export default {
       cleanupExpiredUploads(env),
       cleanupSecurityState(env),
       cleanupExpiredReservations(env),
+      cleanupExpiredSessionIndexes(env),
       // 平台与创作者共享同一个 finalized 链锚点，只处理已经到期的有限候选。
       subscriptionJob,
     ];

@@ -1,8 +1,10 @@
 -- CitizenApp Cloudflare 唯一目标基线。
 -- 唯一生产环境清空重建时只执行本文件，不保留历史迁移链。
 
+-- 登录与注销挑战都绑定唯一身份主键 CID；account_id 仅记录本次必须签名的当前账户。
 CREATE TABLE square_login_challenges (
   challenge_id TEXT PRIMARY KEY,
+  cid_number TEXT NOT NULL,
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   signing_payload TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
@@ -10,6 +12,25 @@ CREATE TABLE square_login_challenges (
 );
 CREATE INDEX idx_square_login_challenges_account_id
   ON square_login_challenges(account_id, expires_at);
+CREATE INDEX idx_square_login_challenges_cid_number
+  ON square_login_challenges(cid_number, expires_at);
+
+-- 广场会话强一致索引。明文 token 只交给客户端，D1 与 KV 键仅保存其 SHA-256；
+-- cid_number 是注销范围，account_id 只记录签发该凭证时的当前绑定账户，供换绑吊销筛选。
+CREATE TABLE square_sessions (
+  session_token_hash TEXT PRIMARY KEY CHECK(
+    length(session_token_hash) = 64
+    AND session_token_hash NOT GLOB '*[^0-9a-f]*'
+  ),
+  cid_number TEXT NOT NULL,
+  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX idx_square_sessions_cid_number
+  ON square_sessions(cid_number, expires_at);
+CREATE INDEX idx_square_sessions_cid_account
+  ON square_sessions(cid_number, account_id, expires_at);
 
 -- 设备子钥:身份主键 cid_number(占即绑,挂当前绑定账户下)+ device_id(=P-256 公钥 sha256)。
 -- 子钥由钱包 account_id 生成、属于该账户;换绑后旧账户子钥靠链上绑定校验判失效,不迁移。
@@ -140,9 +161,11 @@ CREATE INDEX idx_square_creator_subscriptions_creator
 CREATE INDEX idx_square_creator_subscriptions_reconcile
   ON square_creator_subscriptions(subscription_status, paid_until, verified_at);
 
--- Cloudflare 只保留 finalized 交易的最小不可变证明；完整交易仍在链上，避免重复占用 D1。
+-- Cloudflare 只保留 finalized 交易的最小证明；cid_number 是身份归属主键，
+-- account_id 仅记录当次链交易签名账户。
 CREATE TABLE chain_transaction_confirmations (
   tx_hash TEXT PRIMARY KEY,
+  cid_number TEXT NOT NULL,
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   block_hash TEXT NOT NULL,
   block_number INTEGER NOT NULL,
@@ -152,8 +175,8 @@ CREATE TABLE chain_transaction_confirmations (
   chain_timestamp INTEGER NOT NULL,
   confirmed_at INTEGER NOT NULL
 );
-CREATE INDEX idx_chain_transaction_confirmations_account_id
-  ON chain_transaction_confirmations(account_id, confirmed_at DESC);
+CREATE INDEX idx_chain_transaction_confirmations_cid_number
+  ON chain_transaction_confirmations(cid_number, confirmed_at DESC);
 
 CREATE TABLE square_uploads (
   upload_id TEXT PRIMARY KEY,
@@ -373,6 +396,8 @@ CREATE INDEX idx_chat_device_binding_nonces_expires
   ON chat_device_binding_nonces(expires_at);
 
 -- 稳定币到账后的公民币发放台账。一行只代表一笔已确认 EVM 到账；
+-- 目标账户已绑定身份时，cid_number 固化付款意图签发时的 finalized 身份归属，供注销按
+-- CID 完整删除；未绑定 CID 的冷钱包或他人账户充值不属于任何公民身份，允许为空。
 -- CitizenChain 收款账户统一保存规范 AccountId，EVM 地址保持独立地址语义。
 CREATE TABLE topup_orders (
   order_id TEXT PRIMARY KEY,
@@ -384,6 +409,7 @@ CREATE TABLE topup_orders (
   payer_address TEXT NOT NULL,
   recv_address TEXT NOT NULL,
   pay_amount TEXT NOT NULL,
+  cid_number TEXT,
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   coin_fen TEXT NOT NULL,
   package_id TEXT NOT NULL,
@@ -401,3 +427,6 @@ CREATE UNIQUE INDEX idx_topup_orders_txhash
   ON topup_orders(chain_id, evm_tx_hash);
 CREATE INDEX idx_topup_orders_status
   ON topup_orders(status, confirmed_at);
+CREATE INDEX idx_topup_orders_cid_number
+  ON topup_orders(cid_number, confirmed_at DESC)
+  WHERE cid_number IS NOT NULL;

@@ -5,6 +5,7 @@ import '../support/identity_gate_test_util.dart';
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/pages/square_home_page.dart';
+import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/widgets/local_identity_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
@@ -61,6 +62,26 @@ class _FakeSquareChainService extends SquareChainService {
 class _FakeFeedSource implements SquareFeedSource {
   const _FakeFeedSource();
 
+  @override
+  Future<List<SquarePost>> fetchFeed({
+    required SquareFeedKind feedKind,
+    int limit = 20,
+    SquareSession? session,
+  }) async {
+    return const <SquarePost>[];
+  }
+}
+
+/// 模拟后台通知在创建会话时抛出非 Exception 错误，验证 unawaited 边界完整。
+class _ThrowingSessionProvider extends SquareSessionProvider {
+  @override
+  Future<SquareSession?> ensureSession() async {
+    throw StateError('session unavailable');
+  }
+}
+
+/// 保持生产路径类型判断成立，但不访问真实 Worker。
+class _FakeSquareApiClient extends SquareApiClient {
   @override
   Future<List<SquarePost>> fetchFeed({
     required SquareFeedKind feedKind,
@@ -348,5 +369,22 @@ void main() {
       expect(find.text('关注文章BB'), findsOneWidget);
       expect(find.text('种子SS'), findsNothing);
     });
+  });
+
+  testWidgets('信息流与后台通知会话快速失败时不产生未捕获异步异常', (tester) async {
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: SquareIdentityService(
+          walletManager: _FakeWalletManager(null),
+        ),
+        feedSource: _FakeSquareApiClient(),
+        sessionProvider: _ThrowingSessionProvider(),
+        membershipLoader: () async => null,
+      )),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(tester.takeException(), isNull);
   });
 }

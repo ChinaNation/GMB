@@ -93,7 +93,8 @@
 - **R2 冷存原片**：回灌后**保留**作冷 master（下次归档只需删 Stream，不用再走 download），成本 $0.01/GB·月，可接受。
 
 ### 7.5 注销交互
-- `purgeAccount` 扩展：一并删 R2 `archive/{owner}/*` 与任何残留 Stream 视频。
+- 当前注销入口 `purgeIdentity` 一并删除该 CID 对应清单中的归档对象与任何残留
+  Stream 视频；禁止按当前账户猜测历史对象范围。
 
 ### 7.6 链上
 - 归档/删 Stream 不动链；`content_hash`/储存回执不可变。归档期「链上有记录、链下暂不可播」为正常态。

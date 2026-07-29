@@ -4,6 +4,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
+import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -56,6 +57,12 @@ class _MemoryBlobStore implements VaultBlobStore {
   Future<void> delete(String key) async => values.remove(key);
 }
 
+/// 多账户测试只验证 WalletManager 编排；原生 Keystore 真删除由 androidTest 独立验收。
+class _NoopDeviceSubkey extends DeviceSubkey {
+  @override
+  Future<void> delete(int walletIndex) async {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   useIsolatedIsar();
@@ -68,6 +75,7 @@ void main() {
     fakeStore = FakeSecureSeedStore();
     WalletManager.debugSeedStore = fakeStore;
     WalletManager.debugContactKeyStore = _MemoryBlobStore();
+    WalletManager.debugDeviceSubkey = _NoopDeviceSubkey();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(localAuthChannel, (call) async {
       switch (call.method) {

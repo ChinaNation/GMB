@@ -107,6 +107,7 @@ class FakeProfileApi extends CitizenProfileApi {
   int followCalls = 0;
   int unfollowCalls = 0;
   int notifyCalls = 0;
+  int localPostCalls = 0;
   bool? lastNotifyEnabled;
   Map<String, String?>? lastUpdate;
 
@@ -145,6 +146,7 @@ class FakeProfileApi extends CitizenProfileApi {
   @override
   Future<List<SquareLocalPost>> fetchLocalPublishedPosts(
       String cidNumber) async {
+    localPostCalls++;
     return localPosts
         .where((post) => post.cidNumber == cidNumber)
         .toList(growable: false);

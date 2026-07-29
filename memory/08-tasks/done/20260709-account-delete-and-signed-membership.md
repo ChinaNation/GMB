@@ -20,7 +20,10 @@
 
 ### A 的清扫清单（owner=A / recipient=A）
 - R2：`profile/{A}/**`、`square/{A}/posts/**`、`chat/{A}/**`（附件：跳过仍被 B 未 ack 信封引用的，避免误删 B 未收到的）。
-- D1：square_memberships、square_uploads、square_posts、square_follows(owner=A)、square_user_signals(owner=A)、chat_devices、chat_keypackages、chat_device_binding_nonces、square_browse_days、square_media_assets(owner=A)、square_login_challenges。
+- D1：`square_memberships`、`square_uploads`、`square_posts`、`square_follows`、
+  `square_user_signals`、`chat_devices`、`chat_keypackages`、
+  `chat_device_binding_nonces`、`square_browse_days`、`square_media_assets`、
+  `square_login_challenges` 当前均按目标 CID 删除。
 - Images/Stream：先按 owner 取 provider_asset_id 调 provider DELETE，再删 D1 行（顺序不可反，防孤儿）。
 - KV：A 的会话（token 键→需账户反查或删当前）。
 - Stripe：以 stripe_subscription_id 退订（否则删了仍扣费）。
@@ -93,7 +96,7 @@
 三条 BFF 字符串域全删，各配一个 HASH 域 op_tag（紧挨 Chat 绑定 0x1A，走 `signing_message=blake2_256(GMB‖op_tag‖SCALE)`）：
 | op_tag | 名称 | SCALE payload | 签名密钥（不变） |
 |---|---|---|---|
-| `0x1B` | OP_SIGN_SQUARE_LOGIN | owner, challenge_id, expires_at | P-256 设备子钥 ES256（静默握手，seed 生物绑定定案，不改） |
+| `0x1B` | OP_SIGN_SQUARE_LOGIN | account_id, cid_number, challenge_id, expires_at | P-256 设备子钥 ES256（2026-07-29 增补 CID 绑定，静默握手） |
 | `0x1C` | OP_SIGN_SQUARE_DEVICE_BIND | owner, p256_pubkey, issued_at | sr25519 主钥 |
 | `0x1D` | OP_SIGN_SQUARE_ACTION | action, owner, challenge_id, expires_at | sr25519 主钥 |
 
@@ -119,7 +122,9 @@ payload 编码照 0x1A：SCALE_string(文本) ++ u64_le(时间戳)。挑战/绑�
 - `cloudflare/src/account/action_challenge.ts`（新）
   - `SignedAction = 'delete_account' | 'cancel_membership'`。
   - `buildActionPayload` = `GMB_SQUARE_ACTION_V1\naction:<x>\nowner_account:<ss58>\nchallenge_id:<id>\nexpires_at:<ms>`；**action 行入 payload** → A 动作的签名不能用于 B 动作。
-  - `issueActionChallenge` 复用 `square_login_challenges` 表落挑战；`consumeActionSignature` 校验：存在 / owner 一致 / 未用 / 未过期 / **payload 内 action 行匹配** → 再 `verifyWalletSignature`（sr25519）→ 标记 used_at。
+  - `issueActionChallenge` 复用 `square_login_challenges` 表落挑战；
+    `consumeActionSignature` 校验 CID、签名 `account_id`、未用、未过期及 payload 动作一致，
+    再执行 sr25519 验签并原子标记 `used_at`。
 
 ### Stripe 真退订（此前只有 webhook，无主动退订）
 - `cloudflare/src/membership/stripe_api.ts`（新）
@@ -127,15 +132,12 @@ payload 编码照 0x1A：SCALE_string(文本) ++ u64_le(时间戳)。挑战/绑�
   - `cancelStripeSubscriptionAtPeriodEnd` = `POST cancel_at_period_end=true`（官网取消用，当期用完再终止）。
   - `STRIPE_DEV_PROXY==='1'` dev 短路；缺 `STRIPE_SECRET_KEY` 抛 503；非 2xx 抛 502。
 
-### 账户级硬删编排
-- `cloudflare/src/account/purge.ts`（新）`purgeAccount(env, owner)` 顺序：
-  1. `getMembership` 取 `stripe_subscription_id`；
-  2. `cancelStripeSubscriptionNow`——**失败即抛、整单中止**（绝不「删了库还在扣费」）；
-  3. `SELECT square_media_assets(provider,provider_asset_id) WHERE owner=A` → 逐个 `deleteProviderAsset`（**先 provider 再 D1**，防孤儿）；
-  4. R2 前缀清扫 `profile/{A}/`、`square/{A}/posts/`、`chat/{A}/`（`chat` 下跳过仍被 B 未 ack 信封引用的附件目录=B 的数据）；
-  5. D1 批删所有 owner=A 引用：memberships/uploads/posts/user_signals/media_assets/follows/chat_devices/chat_keypackages/chat_device_binding_nonces/square_browse_days/device_subkeys/login_challenges；
-  6. KV 删 `square_identity:{A}` + `clearOwnerSessions`（定向失效该账户全部会话）。
-- `cloudflare/src/auth/session_index.ts`（新）：登录时 `indexSessionToken` 维护 `square_sessions_by_owner:{A}` token 列表；注销 `clearOwnerSessions` 删全部 `square_session:{token}` + 索引。`auth/service.ts` 登录成功处已接入。
+### 身份硬删编排（2026-07-29 以当前实现订正）
+- `cloudflare/src/account/purge.ts` 当前入口为
+  `purgeIdentity(env, cid_number, authorization_account_id)`：唯一删除主键是 CID；
+  `account_id` 只完成当前 finalized 绑定与签名授权。Chat、设备、挑战、会话、关系、内容、
+  媒体和用量按 CID 全删；R2 资料按 CID 前缀，帖子对象按严格 D1 清单精确删除。
+- `cloudflare/src/auth/session_index.ts`：2026-07-29 已彻底替换旧账户 token 列表；当前只将 token 的 SHA-256 写入 KV 键与 D1 `square_sessions`，注销按 CID 强一致索引删除全部会话，换绑吊销按 CID + 旧账户筛选。
 
 ### 路由 / 服务
 - `cloudflare/src/account/service.ts`（新）4 handler：delete challenge/confirm、cancel challenge/confirm。
@@ -145,7 +147,7 @@ payload 编码照 0x1A：SCALE_string(文本) ++ u64_le(时间戳)。挑战/绑�
 - `cloudflare/src/posts/confirm.ts`（改）`deletePostCloudflareData`：`UPDATE post_state='deleted'` → `DELETE FROM square_posts`；并加 `DELETE FROM square_uploads`（清悬挂上传行）。链上仅存 content_hash 不受影响。
 
 ### 测试
-- `cloudflare/test/account.test.ts`（新）：consumeActionSignature 6 例 + purgeAccount 2 例。
+- `cloudflare/test/account.test.ts`：覆盖动作挑战与 `purgeIdentity` 的 CID 删除边界。
   - purge 测试**不 mock stripe_api**，改用 env 驱动真函数（dev 短路=退订成功；缺密钥=退订抛 503 中止），既避开 vitest spy 抛错串扰，又直测真实退订中止路径。
 - `cloudflare/test/chain_confirm.test.ts`（改）删帖用例改断言硬删（行移除 + 再删 404），FakeDb 处理 `DELETE FROM square_posts/square_uploads`。
 - 结果：`npm run typecheck` 干净；`npm test` 16 文件 80 例全绿。

@@ -1,43 +1,102 @@
-import type { Env } from '../types';
-import { putKvJson } from '../limits/storage';
-import { resourceLimit } from '../limits/catalog';
+import type { Env, SessionState } from '../types';
+import { sha256Hex } from '../shared/hash';
+import { nowMs } from '../shared/time';
 
-/// 会话按 token 为键存 KV（square_session:{token}），无法按账户枚举。
-/// 这里额外维护「账户 → token 列表」索引，使注销时能定向失效该账户全部会话，
-/// 不必等 token TTL 自然过期，满足「零残留」。
-function accountSessionsKey(accountId: string): string {
-  return `square_sessions_by_account_id:${accountId}`;
+interface SessionIndexRow {
+  session_token_hash: string;
 }
 
-/// 登录成功后把新 token 记入账户索引。TTL 取至少一个会话周期，随每次登录续期。
-/// 注：KV 读改写非原子，极端并发下个别 token 可能漏记 → 该 token 仍由自身 TTL 兜底过期。
-export async function indexSessionToken(
+/// 明文 Bearer token 永远不进入 D1 或 KV 键；两处只使用统一 SHA-256 标识。
+export async function sessionCacheKey(sessionToken: string): Promise<string> {
+  return `square_session:${await sha256Hex(sessionToken)}`;
+}
+
+/// KV 会话写入成功后登记 D1 强一致索引。调用方负责在本函数失败时回滚 KV。
+export async function indexIdentitySession(
   env: Env,
-  accountId: string,
-  token: string,
-  sessionTtlSeconds: number
+  sessionToken: string,
+  session: SessionState
 ): Promise<void> {
-  const key = accountSessionsKey(accountId);
-  const existing = await env.SQUARE_CACHE.get(key);
-  const tokens: string[] = existing ? (JSON.parse(existing) as string[]) : [];
-  if (!tokens.includes(token)) {
-    tokens.push(token);
-  }
-  const kept = tokens.slice(-(resourceLimit('session_index').max_count ?? 1));
-  await putKvJson(env, key, kept, 'session_index', {
-    expirationTtl: Math.max(sessionTtlSeconds, 3600)
-  });
+  const sessionTokenHash = await sha256Hex(sessionToken);
+  await env.DB.prepare(
+    `INSERT INTO square_sessions
+      (session_token_hash, cid_number, account_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(
+      sessionTokenHash,
+      session.cid_number,
+      session.account_id,
+      session.created_at,
+      session.expires_at
+    )
+    .run();
 }
 
-/// 注销时清空该账户全部会话 token 及索引本身。
-export async function clearAccountSessions(env: Env, accountId: string): Promise<void> {
-  const key = accountSessionsKey(accountId);
-  const existing = await env.SQUARE_CACHE.get(key);
-  if (existing) {
-    const tokens = JSON.parse(existing) as string[];
-    for (const token of tokens) {
-      await env.SQUARE_CACHE.delete(`square_session:${token}`);
-    }
+/// Session 签发失败时同时清除可能已落下的 KV 与 D1 半成品。
+export async function rollbackIdentitySession(
+  env: Env,
+  sessionToken: string
+): Promise<void> {
+  const sessionTokenHash = await sha256Hex(sessionToken);
+  await Promise.all([
+    env.SQUARE_CACHE.delete(`square_session:${sessionTokenHash}`),
+    env.DB.prepare(
+      `DELETE FROM square_sessions WHERE session_token_hash = ?`
+    )
+      .bind(sessionTokenHash)
+      .run()
+  ]);
+}
+
+/// 注销身份时先用 D1 强一致索引定位并删除该 CID 跨换绑账户的全部 KV 会话。
+///
+/// D1 索引行由 purge 最终原子 batch 删除；任一 KV 删除失败时索引仍完整保留，重试可收敛。
+export async function clearIdentitySessions(
+  env: Env,
+  cidNumber: string
+): Promise<void> {
+  const rows = await env.DB.prepare(
+    `SELECT session_token_hash FROM square_sessions WHERE cid_number = ?`
+  )
+    .bind(cidNumber)
+    .all<SessionIndexRow>();
+  for (const row of rows.results ?? []) {
+    await env.SQUARE_CACHE.delete(`square_session:${row.session_token_hash}`);
   }
-  await env.SQUARE_CACHE.delete(key);
+}
+
+/// 换绑吊销只失效同一 CID 下由旧账户签发的会话，新账户会话必须保留。
+export async function clearIdentityAccountSessions(
+  env: Env,
+  cidNumber: string,
+  accountId: string
+): Promise<void> {
+  const rows = await env.DB.prepare(
+    `SELECT session_token_hash
+      FROM square_sessions WHERE cid_number = ? AND account_id = ?`
+  )
+    .bind(cidNumber, accountId)
+    .all<SessionIndexRow>();
+  for (const row of rows.results ?? []) {
+    await env.SQUARE_CACHE.delete(`square_session:${row.session_token_hash}`);
+  }
+  await env.DB.prepare(
+    `DELETE FROM square_sessions WHERE cid_number = ? AND account_id = ?`
+  )
+    .bind(cidNumber, accountId)
+    .run();
+}
+
+/// KV 会按 TTL 自动淘汰会话正文；D1 只保存不可逆 token 哈希，因此由定时任务清理过期索引。
+/// 此处使用 Worker 服务端时间，只处理登录态生命周期，不参与任何会员权益到期判定。
+export async function cleanupExpiredSessionIndexes(
+  env: Env,
+  currentTime = nowMs()
+): Promise<void> {
+  await env.DB.prepare(
+    `DELETE FROM square_sessions WHERE expires_at <= ?`
+  )
+    .bind(currentTime)
+    .run();
 }

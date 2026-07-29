@@ -97,6 +97,7 @@ export interface VerifiedFinalizedTransaction {
 }
 
 interface TransactionConfirmationRow {
+  cid_number: string;
   account_id: string;
   block_hash: string;
   block_number: number;
@@ -474,11 +475,12 @@ export async function verifyFinalizedSubscriptionTransaction(
 }
 
 /**
- * 把 tx_hash 首次绑定到唯一账户、业务动作和规范化请求。相同请求可无限 HTTP 重试，
- * 同一链上交易不得改绑另一组展示名或另一项订阅关系。
+ * 把 tx_hash 首次绑定到唯一 CID、签名账户、业务动作和规范化请求。相同请求可无限
+ * HTTP 重试，同一链上交易不得改绑另一身份、另一组展示名或另一项订阅关系。
  */
 export async function bindFinalizedTransactionConfirmation(
   env: Env,
+  cidNumber: string,
   accountId: string,
   transaction: VerifiedFinalizedTransaction,
   requestHash: string,
@@ -489,12 +491,13 @@ export async function bindFinalizedTransactionConfirmation(
   }
   await env.DB.prepare(
     `INSERT OR IGNORE INTO chain_transaction_confirmations
-      (tx_hash, account_id, block_hash, block_number, extrinsic_index, action_kind,
-       request_hash, chain_timestamp, confirmed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (tx_hash, cid_number, account_id, block_hash, block_number, extrinsic_index,
+       action_kind, request_hash, chain_timestamp, confirmed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       transaction.txHash,
+      cidNumber,
       accountId,
       transaction.blockHash,
       transaction.blockNumber,
@@ -506,7 +509,7 @@ export async function bindFinalizedTransactionConfirmation(
     )
     .run();
   const saved = await env.DB.prepare(
-    `SELECT account_id, block_hash, block_number, extrinsic_index, action_kind,
+    `SELECT cid_number, account_id, block_hash, block_number, extrinsic_index, action_kind,
         request_hash, chain_timestamp
       FROM chain_transaction_confirmations WHERE tx_hash = ?`,
   )
@@ -514,6 +517,7 @@ export async function bindFinalizedTransactionConfirmation(
     .first<TransactionConfirmationRow>();
   if (
     !saved ||
+    saved.cid_number !== cidNumber ||
     saved.account_id !== accountId ||
     saved.block_hash !== transaction.blockHash ||
     saved.block_number !== transaction.blockNumber ||

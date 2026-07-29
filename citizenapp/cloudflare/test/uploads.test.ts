@@ -1,9 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assertAllowedOrigin, normalizeApiPath } from '../src/security/request_guard';
 import { assertRequestBodyLimit } from '../src/limits/request';
 import { HttpError } from '../src/shared/http';
-import type { Env } from '../src/types';
-import { createStorageReceiptId, estimateUploadBytes, validateUploadItems } from '../src/uploads/service';
+import type { Env, PreparedUploadRow } from '../src/types';
+import {
+  cleanupExpiredUploads,
+  createStorageReceiptId,
+  estimateUploadBytes,
+  validateUploadItems
+} from '../src/uploads/service';
+
+const uploadAccountId =
+  '0x8888888888888888888888888888888888888888888888888888888888888888';
+const uploadPostId = 'sqp_expired';
+const uploadManifestKey =
+  `square/${uploadAccountId.slice(2)}/posts/${uploadPostId}/manifest.json`;
 
 describe('upload validation', () => {
   it('accepts supported image and video content types', () => {
@@ -60,4 +71,94 @@ describe('upload validation', () => {
     });
     expect(() => assertRequestBodyLimit(request, '/v1/square/uploads/prepare')).toThrowError(HttpError);
   });
+
+  it('到期上传清单损坏时不触碰 provider、R2 或 D1，并记录失败项', async () => {
+    const upload = expiredUpload('{');
+    const harness = expiredCleanupEnv(upload);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const result = await cleanupExpiredUploads(harness.env);
+
+    expect(result).toEqual({ deleted: 0, failed: 1 });
+    expect(harness.mediaQueryCount()).toBe(0);
+    expect(harness.r2Delete).not.toHaveBeenCalled();
+    expect(harness.batch).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('到期上传清单正确时删除规范 R2 对象并原子提交 D1 清理', async () => {
+    const harness = expiredCleanupEnv(
+      expiredUpload(JSON.stringify([uploadManifestKey]))
+    );
+
+    const result = await cleanupExpiredUploads(harness.env);
+
+    expect(result).toEqual({ deleted: 1, failed: 0 });
+    expect(harness.mediaQueryCount()).toBe(1);
+    expect(harness.r2Delete).toHaveBeenCalledWith([uploadManifestKey]);
+    expect(harness.batch).toHaveBeenCalledTimes(1);
+  });
 });
+
+function expiredUpload(objectKeysJson: string): PreparedUploadRow {
+  return {
+    upload_id: 'squ_expired',
+    post_id: uploadPostId,
+    cid_number: 'CN220-CTZN2-198805200-2026',
+    account_id: uploadAccountId,
+    post_category: 'normal',
+    manifest_hash: '11'.repeat(32),
+    content_hash: null,
+    storage_receipt_id: 'sqr_expired',
+    estimated_bytes: 1024,
+    object_keys_json: objectKeysJson,
+    status: 'prepared',
+    expires_at: 1,
+    created_at: 1,
+    completed_at: null
+  };
+}
+
+function expiredCleanupEnv(upload: PreparedUploadRow): {
+  env: Env;
+  r2Delete: ReturnType<typeof vi.fn>;
+  batch: ReturnType<typeof vi.fn>;
+  mediaQueryCount: () => number;
+} {
+  const r2Delete = vi.fn(async () => undefined);
+  const batch = vi.fn(async (statements: unknown[]) =>
+    statements.map(() => ({ meta: { changes: 1 } }))
+  );
+  let mediaQueries = 0;
+  const db = {
+    prepare(sql: string) {
+      const statement = {
+        bind() {
+          return statement;
+        },
+        async all() {
+          if (sql.includes('FROM square_uploads')) {
+            return { results: [upload] };
+          }
+          if (sql.includes('FROM square_media_assets')) {
+            mediaQueries += 1;
+            return { results: [] };
+          }
+          return { results: [] };
+        }
+      };
+      return statement;
+    },
+    batch
+  };
+  return {
+    env: {
+      DB: db,
+      SQUARE_MEDIA: { delete: r2Delete }
+    } as unknown as Env,
+    r2Delete,
+    batch,
+    mediaQueryCount: () => mediaQueries
+  };
+}

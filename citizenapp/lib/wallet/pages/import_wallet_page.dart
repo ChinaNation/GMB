@@ -7,11 +7,12 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
 import 'package:citizenapp/rpc/chain_tx_monitor.dart';
 
-/// 导入热钱包页：输入助记词 → 验证 → 落库 + 注册设备子钥。
+/// 导入热钱包页：输入助记词 → 验证 → 落库。
 ///
-/// **二元 fail-closed**：`importWallet` 保证"导入 + 子钥注册"全部成功才返回，此时
-/// `pop(true)` 交由调用方（钱包页 / 首启门禁）决定进入；任一失败即整笔回滚并抛出，
-/// 弹窗提示后停留本页、助记词保留在输入框（仅成功路径 clear），用户可直接重试。
+/// **fail-closed**：`importWallet` 保证钱包本地落库成功才返回，此时 `pop(true)`
+/// 交由调用方（钱包页 / 首启门禁）决定进入；失败即整笔回滚并抛出，弹窗提示后停留
+/// 本页、助记词保留在输入框（仅成功路径 clear），用户可直接重试。设备子钥不在导入时
+/// 注册——改由进入需 CID 页面时由门禁按需绑定（换机导入的账户可能已有 CID）。
 class ImportWalletPage extends StatefulWidget {
   const ImportWalletPage({super.key});
 
@@ -48,7 +49,7 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
       setState(() {
         _error = walletOperationErrorMessage(e);
       });
-      // fail-closed：导入含子钥注册，任一失败即已回滚。弹窗提示后停留导入页，
+      // fail-closed：钱包本地落库失败即已回滚。弹窗提示后停留导入页，
       // 助记词保留在输入框（仅成功路径 clear），用户可直接重试。
       await showDialog<void>(
         context: context,

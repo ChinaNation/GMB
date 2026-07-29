@@ -39,13 +39,16 @@ const SESSION_ACCOUNT_ID =
 function buildEnv(level: string | null = 'spark') {
   const kv = new FakeKv();
   const r2 = new FakeR2();
-  kv.store.set('square_session:tok', {
+  kv.store.set(
+    'square_session:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62',
+    {
     cid_number: SESSION_CID_NUMBER,
     account_id: SESSION_ACCOUNT_ID,
     device_key_hash: 'a'.repeat(64),
     created_at: 0,
     expires_at: Date.now() + 60_000,
-  });
+    }
+  );
   const membership = level === null
     ? null
     : {

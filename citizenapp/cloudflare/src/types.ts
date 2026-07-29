@@ -86,6 +86,8 @@ export interface SessionState {
 
 export interface LoginChallengeRow {
   challenge_id: string;
+  /// 挑战归属的唯一身份主键；account_id 只是该挑战要求的签名账户。
+  cid_number: string;
   account_id: string;
   signing_payload: string;
   expires_at: number;

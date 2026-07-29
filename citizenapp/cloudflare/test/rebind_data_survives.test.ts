@@ -32,8 +32,14 @@ function sessionKv(): KVNamespace {
     expires_at: Date.now() + 60_000
   };
   const store = new Map<string, unknown>([
-    ['square_session:tok-a', sessionA],
-    ['square_session:tok-b', sessionB]
+    [
+      'square_session:4f66a4283f8bc9768c3cb97fd06d267b79315aee941c9c1727b9354509242ffe',
+      sessionA
+    ],
+    [
+      'square_session:efa1cd32d437a4dd30463a379503cadfb2b13481660f6345110f3bde01f2e773',
+      sessionB
+    ]
   ]);
   return {
     get: async (key: string) => (store.get(key) as unknown) ?? null

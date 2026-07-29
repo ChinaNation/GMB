@@ -53,6 +53,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // CitizenApp Android 唯一支持 64 位 ARM；禁止恢复其他 ABI。
             abiFilters.add("arm64-v8a")
@@ -90,6 +91,8 @@ dependencies {
     implementation("androidx.core:core:1.13.1")
     // ⚠️ Step0 SPIKE：硬件 auth-bound 金库需要 AndroidX BiometricPrompt + CryptoObject。
     implementation("androidx.biometric:biometric:1.1.0")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
 
 gradle.taskGraph.whenReady {

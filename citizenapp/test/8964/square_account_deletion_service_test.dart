@@ -39,10 +39,10 @@ class _FakeApi extends SquareApiClient {
 
 class _FakeCache extends CitizenProfileCache {
   _FakeCache() : super();
-  bool cleared = false;
+  String? clearedCidNumber;
   @override
-  Future<void> clear(String accountId) async {
-    cleared = true;
+  Future<void> clear(String cidNumber) async {
+    clearedCidNumber = cidNumber;
   }
 }
 
@@ -102,7 +102,8 @@ void main() {
 
     expect(api.deleteCalled, isTrue);
     expect(api.signerInvoked, isTrue);
-    expect(cache.cleared, isTrue);
+    expect(cache.clearedCidNumber, _cidNumber);
+    expect(cache.clearedCidNumber, isNot(_owner));
     expect(api.sessionCleared, isTrue);
     expect(chatStore.cleared, isTrue);
     expect(subkey.deleted, isTrue);
@@ -134,7 +135,7 @@ void main() {
       throwsA(isA<SquareApiException>()),
     );
 
-    expect(cache.cleared, isFalse);
+    expect(cache.clearedCidNumber, isNull);
     expect(api.sessionCleared, isFalse);
     expect(chatStore.cleared, isFalse);
     expect(subkey.deleted, isFalse);
@@ -166,7 +167,7 @@ void main() {
     );
 
     expect(localPostStore.cleared, isTrue);
-    expect(cache.cleared, isTrue);
+    expect(cache.clearedCidNumber, _cidNumber);
     expect(api.sessionCleared, isTrue);
     expect(chatStore.cleared, isTrue);
     expect(subkey.deleted, isTrue);

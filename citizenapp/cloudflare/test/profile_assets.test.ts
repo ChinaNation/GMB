@@ -17,7 +17,10 @@ function fakeEnv(): Env {
   return {
     SQUARE_CACHE: {
       get: async (key: string) =>
-        key === 'square_session:tok' ? session : null
+        key ===
+        'square_session:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62'
+          ? session
+          : null
     } as unknown as KVNamespace,
   } as unknown as Env;
 }

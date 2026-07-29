@@ -146,7 +146,7 @@ void main() {
       final enc = calls.firstWhere((c) => c.method == 'encrypt');
       expect(enc.arguments['tier'], 'strict');
       expect(enc.arguments['walletIndex'], 3);
-      expect(blobs.store['wallet_account_key_v1_$_accountA'], isNotNull);
+      expect(blobs.store['account_child_key_$_accountA'], isNotNull);
     });
 
     test('two accounts share wallet KEK but keep distinct blobs', () async {
@@ -161,11 +161,11 @@ void main() {
         childMiniSecretHex: 'b',
       );
       // 两个账户共享 walletIndex=3 的严档 KEK（tier=strict），各存独立 blob。
-      expect(blobs.store['wallet_account_key_v1_$_accountA'], isNotNull);
-      expect(blobs.store['wallet_account_key_v1_$_accountB'], isNotNull);
+      expect(blobs.store['account_child_key_$_accountA'], isNotNull);
+      expect(blobs.store['account_child_key_$_accountB'], isNotNull);
       expect(
-        blobs.store['wallet_account_key_v1_$_accountA'],
-        isNot(blobs.store['wallet_account_key_v1_$_accountB']),
+        blobs.store['account_child_key_$_accountA'],
+        isNot(blobs.store['account_child_key_$_accountB']),
       );
     });
 
@@ -210,8 +210,7 @@ void main() {
         childMiniSecretHex: 'x',
       );
       await vault.deleteAccountKey(walletIndex: 3, accountId: _accountA);
-      expect(
-          blobs.store.containsKey('wallet_account_key_v1_$_accountA'), isFalse);
+      expect(blobs.store.containsKey('account_child_key_$_accountA'), isFalse);
       expect(calls.where((c) => c.method == 'deleteKey'), isEmpty);
     });
 

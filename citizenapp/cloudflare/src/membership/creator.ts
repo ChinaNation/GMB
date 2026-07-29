@@ -294,6 +294,7 @@ export async function creatorPlanSaveRoute(
   const requestHash = await sha256Hex(JSON.stringify({ action: "set_creator_plans", tiers }));
   await bindFinalizedTransactionConfirmation(
     env,
+    session.cid_number,
     session.account_id,
     transaction,
     requestHash,
@@ -348,6 +349,7 @@ export async function creatorSubscriptionConfirmRoute(
   );
   await bindFinalizedTransactionConfirmation(
     env,
+    session.cid_number,
     session.account_id,
     transaction,
     requestHash,

@@ -1,7 +1,8 @@
 import type { Env } from '../types';
 import { HttpError, jsonResponse, readJson } from '../shared/http';
-import { assertAccountId, createId } from '../shared/ids';
+import { assertAccountId, assertCidNumber, createId } from '../shared/ids';
 import { nowMs } from '../shared/time';
+import { fetchChainIdentityState } from '../chain/identity';
 import {
   findPackage,
   isEvmAddress,
@@ -33,6 +34,8 @@ export interface TopupOrderRow {
   payer_address: string;
   recv_address: string;
   pay_amount: string;
+  /// 付款意图签发时，目标账户在 finalized 链上的身份归属；未绑定身份的账户为空。
+  cid_number: string | null;
   account_id: string;
   coin_fen: string;
   package_id: string;
@@ -66,6 +69,7 @@ interface StatusBody {
 
 interface PaymentIntent {
   intent_id: string;
+  cid_number: string | null;
   account_id: string;
   payer_address: string;
   token: TopupToken;
@@ -80,6 +84,19 @@ interface PaymentIntent {
 }
 
 const INTENT_TTL_MS = 10 * 60 * 1000;
+
+export interface TopupIntentDeps {
+  resolveCidNumber: (env: Env, accountId: string) => Promise<string | null>;
+}
+
+const defaultTopupIntentDeps: TopupIntentDeps = {
+  resolveCidNumber: async (env, accountId) => {
+    // 充值意图是后续订单身份归属的唯一入口，必须直接读取 finalized 双向绑定；
+    // 禁止用展示缓存的软降级把链读取失败误记成“未绑定”，否则注销会漏删订单。
+    const identity = await fetchChainIdentityState(env, accountId);
+    return identity.cid_number === null ? null : assertCidNumber(identity.cid_number);
+  },
+};
 
 /// 台账状态 → 用户可读中文标签。
 export function statusLabel(status: TopupOrderStatus): string {
@@ -112,8 +129,13 @@ export async function topupConfigRoute(_request: Request, env: Env): Promise<Res
 ///
 /// 充值 = 付款人自掏稳定币给某个公民链账户打公民币,收款方无需证明账户所有权(同转账),
 /// 故本接口不做账户鉴权:`account_id` 即充值目标,由客户端指定,任意钱包账户(含冷钱包、
-/// 含他人账户)均可作目标。付款鉴权发生在外部 EVM 钱包侧。防滥用靠 IP 限流 + 意图 TTL。
-export async function topupIntentRoute(request: Request, env: Env): Promise<Response> {
+/// 含他人账户)均可作目标。Worker 同时把目标账户当时的 finalized CID 归属写进签名意图；
+/// 未绑定身份的账户记 null。付款鉴权发生在外部 EVM 钱包侧。防滥用靠 IP 限流 + 意图 TTL。
+export async function topupIntentRoute(
+  request: Request,
+  env: Env,
+  deps: TopupIntentDeps = defaultTopupIntentDeps,
+): Promise<Response> {
   const body = await readJson<IntentBody>(request);
   const accountId = parseAccountId(body.account_id);
   await enforceTopupWriteLimit(env, accountId);
@@ -127,9 +149,11 @@ export async function topupIntentRoute(request: Request, env: Env): Promise<Resp
   }
   const payerAddress = normalizeAddress(body.payer_address);
   const rail = topupRail(env, body.token);
+  const cidNumber = await deps.resolveCidNumber(env, accountId);
   const issuedAt = nowMs();
   const intent: PaymentIntent = {
     intent_id: createId('tpi'),
+    cid_number: cidNumber === null ? null : assertCidNumber(cidNumber),
     account_id: accountId,
     payer_address: payerAddress,
     token: rail.token,
@@ -177,6 +201,10 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
     return orderResponse(existing, true);
   }
 
+  // 命中外部 EVM RPC 前的全局硬顶(见 enforceGlobalEvmRpcLimit 注释)：放在 dedupe
+  // 短路之后——已有订单的重复轮询不打 RPC，不该消耗这个全局配额。
+  await enforceGlobalEvmRpcLimit(env, intent.chain_id);
+
   const rail = topupRail(env, intent.token);
   const outcome = await verifyErc20Payment({
     rail,
@@ -212,8 +240,8 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
   const inserted = await env.DB.prepare(
     `INSERT OR IGNORE INTO topup_orders
       (order_id, intent_id, chain_id, token, token_contract, evm_tx_hash, payer_address,
-       recv_address, pay_amount, account_id, coin_fen, package_id, status, confirmed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+       recv_address, pay_amount, cid_number, account_id, coin_fen, package_id, status, confirmed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
   )
     .bind(
       orderId,
@@ -225,6 +253,7 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
       outcome.payer,
       intent.recv_address,
       intent.pay_amount,
+      intent.cid_number,
       intent.account_id,
       intent.coin_fen,
       intent.package_id,
@@ -315,6 +344,16 @@ function enforceTopupWriteLimit(env: Env, accountId: string): Promise<void> {
   return enforceRateLimit(env, `topup_write:account_id:${accountId}`, 10, 60);
 }
 
+/// 命中外部 EVM RPC(`verifyErc20Payment`)前的全局硬顶,按 `chain_id` 分桶。
+///
+/// `account_id` 由请求指定、无需注册,`account_id` 维度限流可以被无限换号绕过;
+/// IP 维度限流可以被换 IP(代理池/僵尸网络)绕过。二者都挡不住"分布式滥用把
+/// 外部 RPC 配额/账单打爆"这类攻击——这条不按 IP/账户维度,是唯一挡得住的手段。
+/// 阈值是当前开发期零用户下的保守估计(见任务卡),真实流量出现后按用量复核。
+function enforceGlobalEvmRpcLimit(env: Env, chainId: number): Promise<void> {
+  return enforceRateLimit(env, `topup_confirm_evm_rpc:chain:${chainId}`, 300, 60);
+}
+
 function normalizeAddress(value: unknown): string {
   const address = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!isEvmAddress(address)) {
@@ -403,6 +442,8 @@ function isPaymentIntent(value: unknown): value is PaymentIntent {
   return (
     typeof intent.intent_id === 'string' &&
     /^tpi_[0-9a-f]{32}$/.test(intent.intent_id) &&
+    (intent.cid_number === null ||
+      (typeof intent.cid_number === 'string' && isValidCidNumber(intent.cid_number))) &&
     typeof intent.account_id === 'string' &&
     /^0x[0-9a-f]{64}$/.test(intent.account_id) &&
     typeof intent.payer_address === 'string' &&
@@ -424,6 +465,15 @@ function isPaymentIntent(value: unknown): value is PaymentIntent {
     typeof intent.expires_at === 'number' &&
     Number.isSafeInteger(intent.expires_at)
   );
+}
+
+function isValidCidNumber(value: string): boolean {
+  try {
+    assertCidNumber(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {

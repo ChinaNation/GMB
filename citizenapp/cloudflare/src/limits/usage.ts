@@ -126,15 +126,11 @@ export async function releaseUploadReservation(env: Env, uploadId: string): Prom
   ).bind(uploadId).run();
 }
 
-/** 删除帖子只回收当前存储总量，不返还已经消耗的订阅周期上传额度。 */
-export async function releaseStoredMedia(env: Env, assets: MediaAssetRow[]): Promise<void> {
-  await env.DB.batch(storedMediaReleaseStatements(env, assets));
-}
-
 /**
- * 构造存储总量回收语句，供内容删除与其 D1 行删除放进同一个原子 batch。
+ * 构造存储总量回收语句。只回收当前存储总量，不返还已消耗的订阅周期上传额度。
  *
- * 调用方不得先单独执行这些语句再删除内容行，否则后续失败重试会重复扣减总量。
+ * 调用方必须把返回语句与对应媒体/内容行删除放进同一个 D1 原子 batch；禁止提供或恢复
+ * 单独执行的释放入口，否则跨存储清理中途失败后重试会重复扣减全局总量。
  */
 export function storedMediaReleaseStatements(
   env: Env,

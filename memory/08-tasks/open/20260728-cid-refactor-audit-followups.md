@@ -78,7 +78,8 @@
   会话清理，成功才删记录。失败不得静默遗忘；App 启动/身份对账继续重试，未完成前禁止
   再次换绑，避免 A→B→C 连续换绑导致授权目标错位。
 - **严格清理边界**:只删旧账户的 `chat_keypackages`、`chat_devices`、
-  `square_login_challenges`、`square_device_subkeys`、旧账户会话与身份缓存。不得调用
+  同一 CID 下旧账户的 `square_login_challenges`、`square_device_subkeys`、旧账户会话
+  与身份缓存。不得调用
   `closeChatRealtime`（DO 按 CID 命名，会踢新账户），也不得删除
   `chat_device_binding_nonces`（该表按 CID 归属，删除会破坏新账户设备绑定）。
 - **验证门禁**:覆盖新账户可代吊销、错误/他人签名拒绝、CID/新账户不匹配拒绝、旧会话
@@ -140,5 +141,7 @@ P0 真实链验收发现续费若发生在 finalize 后阶段会被 NodeGuard �
 - `lib/chat/group/group_flow.dart` 6 处 `.where((account) => ...)` lambda 形参裸命名(同文件 `_deriveMemberRoles` 已改对)。
 - `lib/wallet/pages/wallet_page.dart` 的「身份钱包」徽标零测试覆盖(替换掉的旧「默认用户」徽标原有 6 个测试,一并删除未补)。
 - `cloudflare/src/shared/ids.ts` 的 `CID_NUMBER_PATTERN` 允许 1–64 字符,链端 `encodeBoundedBytes` 只接受 ≤32 字节 → 33–64 长度会在链读时抛错并软降级为访客。建议收紧到 32。
-- `cloudflare/src/account/service.ts` 的 `deleteAccountChallengeRoute` 未校验 `body.account_id === session.account_id`(与 `request_guard.ts:113-115` 自己写的不变量矛盾);真正销号仍需目标账户签名,故**无法真删他人**,但可对任意账户堆积 `square_login_challenges` 行(该表无定时清理)。
+- `cloudflare/src/account/service.ts` 注销挑战越权与堆积问题已于 2026-07-29 修复：
+  challenge/confirm 都要求请求账户等于 session 当前账户并读取最新 finalized CID 双向绑定；
+  `square_login_challenges` 增加必填 CID，注销按 CID 全删，过期挑战进入现有定时清理。
 - `cloudflare/src/routes.ts:211` 的 `POST /v1/square/signals` 全仓零调用方 → `square_user_signals` 表永不写入,推荐流行为信号维度实际为空。

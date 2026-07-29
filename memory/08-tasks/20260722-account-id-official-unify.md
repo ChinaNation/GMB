@@ -759,20 +759,20 @@ PostgreSQL、助记词派生、签名算法或任何 Secret，也不新增文件
 - `migrations/0001_square_core.sql` 已成为唯一最终基线；账户列均有规范格式
   `CHECK`，contacts 与 topup 已合并，开发期 `0003`、`0005` 已删除。旧 Stripe 表、
   旧列和字段迁移不保留。
-- R2 账户路径固定使用规范 AccountId 去掉 `0x` 后的 64 位小写 hex：
-  `profile/{account_id_hex}/...`、`square/{account_id_hex}/posts/...`、
-  `archive/{account_id_hex}/...`。KV session 索引固定为
-  `square_sessions_by_account_id:{account_id}`；聊天内部头固定为
-  `x-chat-account-id`。
+- R2 帖子路径中的签名账户段固定使用规范 AccountId 去掉 `0x` 后的 64 位小写 hex：
+  `square/{account_id_hex}/posts/...`、`archive/{account_id_hex}/...`；用户资料现按唯一
+  身份主键使用 `profile/{cid_number}/...`。2026-07-29 注销收口后，Session 明文 token
+  不再进入索引键：KV 键与 D1 `square_sessions` 只保存 SHA-256，D1 按 CID 提供强一致
+  注销索引；聊天内部头固定为 `x-chat-account-id`。
 - `wrangler` 已更新到 `4.114.0`，
   `@cloudflare/workers-types` 已更新到 `5.20260723.1`，
   `compatibility_date` 已同步为 `2026-07-23`；staging/production 明确列出全部
   非密钥 topup vars，dry-run 不再依赖环境继承。Secret 未读取、未输出、未删除。
 - 本地 `.wrangler/state/v3` 旧业务状态已移至系统临时目录作可恢复隔离，再按最终
-  0001 重建为空库。最终本地 D1 有 25 个业务表，业务样本行 0；`square_posts`
+  0001 重建为空库。当次本地 D1 有 25 个业务表，业务样本行 0；`square_posts`
   中旧 `owner_account` 列为 0、最终 `account_id` 列为 1，旧 Stripe 表为 0。
   实际 SQLite 写入证明 SS58 被 `CHECK` 拒绝，规范 AccountId 可写入；验收样本随后
-  已清空。
+  已清空。2026-07-29 创世基线新增 `square_sessions` 后最终表数为 26。
 - 已启动真实本地 Worker + D1 + KV + Durable Object/R2 模拟环境：
   `/health` 返回 200；规范 AccountId 挑战返回 200；旧字段、SS58 和大写 AccountId
   均返回 400。使用真实 P-256 密钥、真实设备证明、D1 子钥记录和 KV session 后，

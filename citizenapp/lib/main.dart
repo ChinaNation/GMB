@@ -33,7 +33,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FirebaseMessaging.onBackgroundMessage(chatRuntimeBackgroundHandler);
 
-  // 钱包创建后注册 P-256 设备子钥（8964 层实现，避免 wallet/core 反向依赖）。
+  // 注入 P-256 设备子钥绑定钩子（8964 层实现，避免 wallet/core 反向依赖）；实际
+  // 绑定时机是进入需 CID 页面时由门禁按需触发，不在钱包创建时。
   DeviceSubkeyRegistrar.turnstileTokenProvider = () async {
     final navigator = appNavigatorKey.currentState;
     if (navigator == null) return null;

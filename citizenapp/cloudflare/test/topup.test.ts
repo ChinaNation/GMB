@@ -6,6 +6,7 @@ import {
   topupConfirmRoute,
   topupIntentRoute,
   topupStatusRoute,
+  type TopupIntentDeps,
 } from '../src/topup/orders';
 import {
   topupClaimRoute,
@@ -24,6 +25,7 @@ const DISBURSE_ACCOUNT_ID = `0x${'55'.repeat(32)}`;
 const TX_HASH = `0x${'11'.repeat(32)}`;
 const BLOCK_HASH = `0x${'33'.repeat(32)}`;
 const GENESIS_HASH = `0x${'44'.repeat(32)}`;
+const CID_NUMBER = 'CN220-CTZN2-198805200-2026';
 
 describe('topup 稳定币充值后端', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -43,11 +45,13 @@ describe('topup 稳定币充值后端', () => {
     const env = makeEnv(new FakeDb());
     const intent = await createIntent(env, ACCOUNT_ID);
     const payload = JSON.parse(Buffer.from(intent.split('.')[0], 'base64url').toString()) as {
+      cid_number: string | null;
       account_id: string;
       payer_address: string;
       pay_amount: string;
     };
     expect(payload).toMatchObject({
+      cid_number: CID_NUMBER,
       account_id: ACCOUNT_ID,
       payer_address: PAYER,
       pay_amount: '15000000',
@@ -58,11 +62,14 @@ describe('topup 稳定币充值后端', () => {
     const db = new FakeDb();
     const env = makeEnv(db);
     // 冷钱包只有公钥、链上无 CID:请求不带任何 Authorization,目标账户由请求体指定。
-    const intent = await createIntent(env, OTHER_ACCOUNT_ID);
+    const intent = await createIntent(env, OTHER_ACCOUNT_ID, null);
     vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '' }));
     const order = await (await confirm(env, intent)).json<{ status: string; order_id: string }>();
     expect(order.status).toBe('pending');
-    expect(db.rows.get(order.order_id)).toMatchObject({ account_id: OTHER_ACCOUNT_ID });
+    expect(db.rows.get(order.order_id)).toMatchObject({
+      cid_number: null,
+      account_id: OTHER_ACCOUNT_ID,
+    });
   });
 
   it('confirm 篡改 intent → 拒绝且不访问 EVM', async () => {
@@ -88,6 +95,7 @@ describe('topup 稳定币充值后端', () => {
     expect(second.order_id).toBe(first.order_id);
     expect(db.rows.size).toBe(1);
     expect(db.rows.get(first.order_id)).toMatchObject({
+      cid_number: CID_NUMBER,
       account_id: ACCOUNT_ID,
       payer_address: PAYER,
       coin_fen: '1000000',
@@ -128,6 +136,45 @@ describe('topup 稳定币充值后端', () => {
     await expect(status(env, orderId, foreignIntent)).rejects.toMatchObject({
       code: 'topup_order_not_found',
     });
+  });
+
+  it('全局硬顶：命中外部 EVM RPC 的次数不分账户/IP,总量到顶即 429', async () => {
+    // account_id 无需注册、免费换号,账户级 10/60s 限流可被无限换号绕过;IP 级限流
+    // 同理可被换 IP(代理池)绕过。二者都挡不住"分布式滥用把外部 RPC 配额/账单打爆",
+    // 只有不按维度分桶的全局硬顶能挡。本用例逐次换全新账户 + 全新 tx hash,证明前两层
+    // 限流全程不介入(每个账户只用一次、每个 tx hash 从未出现过、dedupe 不短路),
+    // 唯一能拦下第 301 次的只有 enforceGlobalEvmRpcLimit。
+    const db = new FakeDb();
+    const env = makeEnv(db);
+    vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '' }));
+    const globalLimit = 300;
+
+    for (let i = 0; i < globalLimit; i++) {
+      const accountId = `0x${(i + 1).toString(16).padStart(64, '0')}`;
+      const txHash = `0x${(i + 1).toString(16).padStart(64, '0')}`;
+      const intent = await createIntent(env, accountId);
+      const response = await topupConfirmRoute(
+        post('https://x.test/v1/square/topup/confirm', {
+          payment_intent: intent,
+          evm_tx_hash: txHash,
+        }),
+        env,
+      );
+      expect(response.status).toBe(200);
+    }
+
+    const overflowAccountId = `0x${(globalLimit + 1).toString(16).padStart(64, '0')}`;
+    const overflowTxHash = `0x${(globalLimit + 2).toString(16).padStart(64, '0')}`;
+    const overflowIntent = await createIntent(env, overflowAccountId);
+    await expect(
+      topupConfirmRoute(
+        post('https://x.test/v1/square/topup/confirm', {
+          payment_intent: overflowIntent,
+          evm_tx_hash: overflowTxHash,
+        }),
+        env,
+      ),
+    ).rejects.toMatchObject({ code: 'request_rate_exceeded' });
   });
 
   it('claim 原子抢占且不自动过期，第二个结算流程不能重复抢占', async () => {
@@ -200,7 +247,17 @@ async function preparedOrder(): Promise<{ env: Env; db: FakeDb; orderId: string 
 }
 
 /// 充值三个接口一律不带 Authorization:鉴权已从广场会话解耦,目标账户由请求体指定。
-async function createIntent(env: Env, accountId: string): Promise<string> {
+async function createIntent(
+  env: Env,
+  accountId: string,
+  cidNumber: string | null = CID_NUMBER,
+): Promise<string> {
+  const deps: TopupIntentDeps = {
+    resolveCidNumber: async (_env, resolvedAccountId) => {
+      expect(resolvedAccountId).toBe(accountId);
+      return cidNumber;
+    },
+  };
   const response = await topupIntentRoute(
     post('https://x.test/v1/square/topup/intent', {
       account_id: accountId,
@@ -209,6 +266,7 @@ async function createIntent(env: Env, accountId: string): Promise<string> {
       payer_address: PAYER,
     }),
     env,
+    deps,
   );
   return (await response.json<{ payment_intent: string }>()).payment_intent;
 }
@@ -383,6 +441,7 @@ interface Row {
   payer_address: string;
   recv_address: string;
   pay_amount: string;
+  cid_number: string | null;
   account_id: string;
   coin_fen: string;
   package_id: string;
@@ -431,7 +490,22 @@ class FakeStmt {
 
   async run(): Promise<{ meta: { changes: number } }> {
     if (this.sql.includes('INSERT OR IGNORE INTO topup_orders')) {
-      const [orderId, intentId, chainId, token, tokenContract, txHash, payer, recv, payAmount, accountId, coinFen, packageId, confirmedAt] = this.args;
+      const [
+        orderId,
+        intentId,
+        chainId,
+        token,
+        tokenContract,
+        txHash,
+        payer,
+        recv,
+        payAmount,
+        cidNumber,
+        accountId,
+        coinFen,
+        packageId,
+        confirmedAt,
+      ] = this.args;
       if ([...this.db.rows.values()].some((row) => row.intent_id === intentId || (row.chain_id === chainId && row.evm_tx_hash === txHash))) {
         return { meta: { changes: 0 } };
       }
@@ -445,6 +519,7 @@ class FakeStmt {
         payer_address: payer as string,
         recv_address: recv as string,
         pay_amount: payAmount as string,
+        cid_number: cidNumber as string | null,
         account_id: accountId as string,
         coin_fen: coinFen as string,
         package_id: packageId as string,

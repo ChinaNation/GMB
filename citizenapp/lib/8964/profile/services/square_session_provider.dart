@@ -8,9 +8,10 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 后端会话握手用**默认热钱包的 P-256 硬件设备子钥静默签名**（不读 seed、不弹
 /// 生物识别）换取 session token，由 [SquareApiClient] 内部按 accountId 缓存复用。
 ///
-/// 子钥注册只在**创建 / 导入钱包时**静默完成（[WalletManager] 用内存 keypair 签，见
-/// `subkeyRegistrar`）；后台会话流程**绝不读 seed、绝不弹窗、绝不懒注册**——拿不到
-/// session（无热钱包 / 未注册）时广场与聊天按**不可用**处理，绝不在此补注册。
+/// 子钥绑定由 [IdentityRegistrationGate] 在用户初次进入需 CID 页面时按需完成（经
+/// [WalletManager.bindDeviceSubkeyToAccountId]，弹一次生物识别）；后台会话流程**绝不读
+/// seed、绝不弹窗、绝不懒注册**——拿不到 session（无热钱包 / 子钥未绑）时广场与聊天按
+/// **不可用**处理，绝不在此补注册。
 class SquareSessionProvider {
   SquareSessionProvider({
     SquareApiClient? client,

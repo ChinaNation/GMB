@@ -12,6 +12,8 @@ import {
 } from "../src/chain/subscription";
 import type { Env } from "../src/types";
 
+const CID_NUMBER = "CN220-CTZN2-198805200-2026";
+
 function accountId(bytes: Uint8Array): string {
   return `0x${bytesToHex(bytes)}`;
 }
@@ -248,9 +250,17 @@ describe("finalized 订阅交易证明", () => {
       action: { kind: "platform_cancel" as const },
     };
     const account = `0x${"33".repeat(32)}`;
-    await bindFinalizedTransactionConfirmation(env, account, transaction, "a".repeat(64), 2000);
+    await bindFinalizedTransactionConfirmation(
+      env,
+      CID_NUMBER,
+      account,
+      transaction,
+      "a".repeat(64),
+      2000,
+    );
     await expect(bindFinalizedTransactionConfirmation(
       env,
+      CID_NUMBER,
       account,
       transaction,
       "a".repeat(64),
@@ -258,9 +268,18 @@ describe("finalized 订阅交易证明", () => {
     )).resolves.toBeUndefined();
     await expect(bindFinalizedTransactionConfirmation(
       env,
+      CID_NUMBER,
       account,
       transaction,
       "b".repeat(64),
+      3000,
+    )).rejects.toMatchObject({ code: "subscription_tx_already_bound" });
+    await expect(bindFinalizedTransactionConfirmation(
+      env,
+      "CN220-CTZN2-199001010-2026",
+      account,
+      transaction,
+      "a".repeat(64),
       3000,
     )).rejects.toMatchObject({ code: "subscription_tx_already_bound" });
   });
@@ -278,13 +297,14 @@ class ProofStmt {
   async run(): Promise<{ meta: { changes: number } }> {
     if (this.sql.includes("INSERT OR IGNORE") && !this.db.row) {
       this.db.row = {
-        account_id: this.args[1],
-        block_hash: this.args[2],
-        block_number: this.args[3],
-        extrinsic_index: this.args[4],
-        action_kind: this.args[5],
-        request_hash: this.args[6],
-        chain_timestamp: this.args[7],
+        cid_number: this.args[1],
+        account_id: this.args[2],
+        block_hash: this.args[3],
+        block_number: this.args[4],
+        extrinsic_index: this.args[5],
+        action_kind: this.args[6],
+        request_hash: this.args[7],
+        chain_timestamp: this.args[8],
       };
       return { meta: { changes: 1 } };
     }

@@ -136,7 +136,10 @@ function fakeEnv(options: FakeEnvOptions): Env {
     created_at: 0,
     expires_at: Date.now() + 60_000
   };
-  kv.set('square_session:tok', session);
+  kv.set(
+    'square_session:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62',
+    session
+  );
 
   const reads = new Map<string, { square: number; following: number }>();
   if (options.reads) {

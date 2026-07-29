@@ -25,7 +25,18 @@ class _RegisteredResolver extends IdentityAccountResolver {
 /// 让 [IdentityRegistrationGate] 在**页面** widget 测试中直接放行(注入已注册判据,
 /// 不触发真 smoldot 链读)。在被 gate 包裹的页面测试 `main()` 顶部调用一次即可。
 /// gate 本身的门控行为由 `identity_registration_gate_test.dart` 独立覆盖。
+///
+/// 除判据 resolver 外,还必须注入 no-op 的**设备子钥绑定器**:gate 放行前会按需绑定
+/// 子钥,默认绑定器是真 `MyIdService().ensureDeviceSubkeyBound`(会 new `ChainRpc` 打
+/// smoldot,在 widget 测试里永不 settle → `pumpAndSettle` 超时)。页面测试只验证页面本身,
+/// 绑定这一步统一由 `identity_registration_gate_test.dart` 覆盖,这里空转即可。
 void useRegisteredIdentityGate() {
-  setUp(() => IdentityRegistrationGate.debugResolver = _RegisteredResolver());
-  tearDown(() => IdentityRegistrationGate.debugResolver = null);
+  setUp(() {
+    IdentityRegistrationGate.debugResolver = _RegisteredResolver();
+    IdentityRegistrationGate.debugSubkeyBinder = () async {};
+  });
+  tearDown(() {
+    IdentityRegistrationGate.debugResolver = null;
+    IdentityRegistrationGate.debugSubkeyBinder = null;
+  });
 }

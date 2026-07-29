@@ -9,8 +9,9 @@ import 'topup_models.dart';
 /// 稳定币充值 Worker 客户端(/v1/square/topup/*)。
 ///
 /// 充值 = 付款人自掏稳定币给某个公民链账户打公民币,收款方无需证明账户所有权(同转账),
-/// 故全程不带广场会话、不需要 CID:充值目标由 `account_id` 直接指定,**任意钱包账户
-/// (含冷钱包、含他人账户)均可作目标**;付款鉴权在外部 EVM 钱包侧由 WalletConnect 完成。
+/// 故全程不带广场会话：充值目标由 `account_id` 直接指定，任意钱包账户（含冷钱包、
+/// 含他人账户）均可作目标。Worker 从 finalized 链双向绑定自行确定目标当时是否归属
+/// 某个 `cid_number`，客户端不得自行声明身份归属；付款鉴权由 WalletConnect 完成。
 /// confirm / status 凭 Worker 用 HMAC 签发的付款意图自证(不可伪造,内部钉死付款人、
 /// 收款地址、金额、目标账户与签发时间)。
 class TopupApiException implements Exception {

@@ -37,7 +37,7 @@
 - **R3 会员/创作者/订阅/资源镜像** ✅ 完成 2026-07-28:memberships / creator_tiers / creator_subscriptions / resource_reservations / resource_usage 归属键 account_id→cid_number(镜像表保留 account_id);feed 读会员改按 cid。
 - **R4 通讯录** ✅ 完成 2026-07-28:square_contacts PK (account_id, contact_id)→(cid_number, contact_id),设备子钥鉴权。
 - **R5 chat** ✅ 完成 2026-07-28:chat_devices / chat_keypackages / chat_device_binding_nonces 归属/路由按 cid_number,设备/密钥属 account_id 保留。
-- **R6 收尾** ✅ 完成 2026-07-28:`account/purge` + rebind/revoke 语义重构(按 cid 删身份、去掉"删旧账户数据");`chain_transaction_confirmations` / `topup_orders` / `square_login_challenges` 三表继续以 `account_id` 为业务主体，不改为 CID 归属键；其中前两表是不可变链交易/财务事实，注销后保留，登录挑战属于临时鉴权材料，注销时删除。全套 e2e 门禁:换绑后同一 cid 社交数据不丢。
+- **R6 收尾** ✅ 完成 2026-07-28:`account/purge` + rebind/revoke 语义重构(按 cid 删身份、去掉"删旧账户数据")。2026-07-29 后续复查已订正：`chain_transaction_confirmations` / `topup_orders` 继续保存不可变链交易/财务事实；`square_login_challenges` 改为必填 CID 归属并随注销按 CID 删除，不再属于账户主键例外。
 
 ## 设计原则定案(用户已答)
 - 设备子钥**属钱包账户**(账户生成);换绑→旧账户+旧子钥作废,新账户重注册子钥;worker 靠链上 CidByAccount 实时校当前绑定,不搞子钥迁移。
@@ -87,8 +87,12 @@ worker `vitest` 全绿 + `tsc` 0;换绑后同一 cid_number 社交数据不丢(�
 ## R4 落地记录(2026-07-28)
 - **schema**(`migrations/0001`):square_contacts PK (account_id, contact_id)→(cid_number, contact_id),索引 cid_number;去掉 account_id 的 hex CHECK。
 - **contacts/service.ts**:list/put/delete 三路由 SQL 与 bind 全按 `session.cid_number` 属主隔离;`publicContactRow` 省略 cid_number(响应仍不下发属主键);`ContactCiphertextRow.account_id`→`cid_number`。设备子钥鉴权由 guardRequest 已按 cid,不变。
-- **purge**:通讯录密文按 cid 归属——`purgeAccount` 从 step1 移入 step4 cid 分支;**`revokeRebindOldAccount` 不再删 square_contacts**(密文按 cid 随身份保留给新账户,AEAD 密文对旧账户已无解密价值),吊销只删 chat 端到端材料/登录挑战/设备子钥(账户级)。
-- **顺带修 R2 残留 bug**:`purgeAccount` step3 的 R2 资料前缀从 `profile/{account_hex}/` 修正为 `profile/{cid_number}/`(R2 起 profile key 已迁 cid 路径,原按账户前缀会漏删头像/资料→注销隐私 bug);cid resolve 前移到 step3 前。
+- **purge**:通讯录密文按 cid 归属——`purgeIdentity` 直接接收唯一目标 CID；
+  **`revokeRebindOldAccount` 不删 square_contacts**(密文按 cid 随身份保留给新账户,
+  AEAD 密文对旧账户已无解密价值)，吊销只删同一 CID 下旧账户的 Chat 端到端材料、
+  登录挑战、设备子钥和会话。
+- **顺带修 R2 残留 bug**:`purgeIdentity` 的资料前缀固定为
+  `profile/{cid_number}/`，帖子对象只按严格 D1 对象清单删除，不按当前账户猜测。
 - **测试**:contacts.test.ts 按 cid 属主 + 存储行键断言 cid_number;account.test.ts purge/revoke 断言更新(contacts 入 cid 分支、revoke 不删 contacts、profile R2 路径按 cid)。门禁 `tsc` EXIT=0、`vitest` 29 文件 / 179 测试全绿。残留自审:square_contacts 零 account_id 归属;profile R2 前缀生成+删除全 cid 一致。
 
 ## R5 落地记录(2026-07-28)
@@ -103,13 +107,15 @@ worker `vitest` 全绿 + `tsc` 0;换绑后同一 cid_number 社交数据不丢(�
 - **⚠️前端(chat 契约变更,Flutter 须同步)**:会话发信 `recipient_account_id`→`recipient_cid_number`;KeyPackage 发布体 `account_id`→`cid_number`、拉取路由末段用目标 `cid_number`、领取体 `cid_number`(删 requester 字段);WS 握手头 `x-chat-account-id`→`x-chat-cid-number`;推送唤醒 payload `sender_account_id`→`sender_cid_number`。
 
 ## R6 落地记录(2026-07-28,收尾结题)
-- **注销语义(purgeAccount)**:注销=删身份——身份内容(square_posts/uploads/media_assets)与全部可清除的 off-chain/镜像表按 **cid_number** 删(删该身份跨换绑账户的全部内容);媒体 provider 本体按 cid 载入删除;账户级鉴权凭证(square_device_subkeys/square_login_challenges)按当前 account_id 删。R2 资料和帖子 manifest 按各自现行前缀硬删除。
+- **注销语义(purgeIdentity)**:注销=删身份——身份内容(square_posts/uploads/media_assets)与全部可清除的 off-chain/镜像表按 **cid_number** 删(删该身份跨换绑账户的全部内容);媒体 provider 本体按 cid 载入删除;设备子钥、挑战和会话也按 CID 全删。R2 资料按 CID 前缀、帖子 manifest 按严格 D1 对象清单硬删除。
 - **换绑吊销(revokeRebindOldAccount)**:已确认接线 `rebind/service.ts`;只删旧账户账户级鉴权材料(chat 端到端/登录挑战/设备子钥/会话),**不删** posts/media/memberships/follows/通讯录(按 cid 随身份留存);注释订正对齐实现。
-- **三表 account_id 归属决策(无 schema 改动)**:`chain_transaction_confirmations`(仅按 tx_hash 查,account_id=签名者事实)、`topup_orders`(按 tx/intent/order_id 查 + account_id 订单归属校验,账户级财务记录)、`square_login_challenges`(挑战阶段 cid 未 resolve,主体=待验证账户)——三表均保留 account_id、不加 cid；这不是“三表注销后全部保留”：前两表作为不可变链交易/财务事实保留，登录挑战作为临时鉴权材料由 `purgeAccount` 删除。
+- **不可变事实与鉴权材料边界(2026-07-29 订正)**:`chain_transaction_confirmations` 的 `account_id` 是 finalized 签名者事实，`topup_orders.account_id` 是订单授权事实，两者注销后保留；`square_login_challenges` 不属于该例外，必须在创建前解析 CID、同时保存 CID 与签名账户，并由 `purgeIdentity` 按 CID 删除。
 - **e2e 门禁**:新增 `test/rebind_data_survives.test.ts`——账户 A 写入通讯录密文,"同一 cid + 账户 B"会话按 cid 取回同一密文;会员镜像按 cid 读取跨账户不丢。
-- **全仓最终审计**:剩余 account_id 归属谓词全部合法(chat 设备/密钥属账户、square_device_subkeys 登录凭证、square_login_challenges 主体);社交/身份数据零 account_id 残留;严格命名核验无裸 `account` 缩写(routes.ts 路由段局部 `account`→`accountId`;chain/subscription.ts SCALE 解码器 32B 局部非归属字段不动)。
+- **全仓最终审计**:剩余 account_id 归属谓词全部合法(chat 设备/密钥属账户、square_device_subkeys 登录凭证、square_login_challenges 签名账户);挑战、会话、社交和身份归属均按 CID；严格命名核验无裸 `account` 缩写(routes.ts 路由段局部 `account`→`accountId`;chain/subscription.ts SCALE 解码器 32B 局部非归属字段不动)。
 - **门禁**:`tsc` EXIT=0、`vitest` 30 文件 / 181 测试全绿。
-- **2026-07-29 B2 注释订正**:`purgeAccount` 顶部契约不再声称删除“全部数据/所有账户引用”，明确前两张不可变事实表保留、登录挑战删除；本项未修改任何删除 SQL、调用顺序或返回值。TypeScript 类型检查和 `account.test.ts` 13 项回归通过。
+- **2026-07-29 后续订正**:`purgeIdentity` 已落实 CID 唯一删除主键；登录挑战与 Session
+  索引新增 CID 归属，前两张不可变事实表继续保留。当前批次的新增测试代码已补齐，按用户
+  要求统一延后到全部修复完成后的最终测试步骤执行。
 
 ## 结题汇总(R1–R6)
 Worker 全库用户数据身份主键 account_id→cid_number 彻底重构完成:

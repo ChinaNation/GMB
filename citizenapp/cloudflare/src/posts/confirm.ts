@@ -22,6 +22,7 @@ import { readProfileDoc } from '../profiles/repository';
 import { assertMembershipLevel, membershipPlan } from '../membership/plans';
 import { assertIdentityCanPublishCategory, assertManifestQuota } from '../uploads/quota';
 import { fetchChainIdentityState } from '../chain/identity';
+import { uploadObjectKeys } from '../storage/r2_keys';
 import {
   manifestObjectKeyFromUpload,
   readVerifiedSquarePostManifest,
@@ -99,8 +100,16 @@ export async function deletePostCloudflareDataByCid(
   if (upload && upload.cid_number !== cidNumber) {
     throw new HttpError(409, 'content_owner_mismatch', '内容项与身份归属不一致');
   }
+  const indexedPost = await loadPostForDeleteOrNull(env, postId);
+  if (indexedPost && indexedPost.cid_number !== cidNumber) {
+    throw new HttpError(409, 'content_owner_mismatch', '内容项与身份归属不一致');
+  }
+  if (indexedPost && !upload) {
+    throw new HttpError(409, 'post_upload_index_missing', '已发布内容缺少上传对象索引');
+  }
   const mediaAssets = upload ? await loadMediaAssets(env, upload.upload_id) : [];
-  const objectKeys = upload ? parseObjectKeys(upload) : [];
+  // 严格清单校验必须早于 provider、R2 和 D1 的任何删除副作用。
+  const objectKeys = upload ? uploadObjectKeys(upload) : [];
 
   for (const asset of mediaAssets) {
     await deleteProviderAsset(env, asset);
@@ -339,7 +348,18 @@ async function loadUploadForPost(env: Env, postId: string): Promise<PreparedUplo
 }
 
 async function loadPostForDelete(env: Env, postId: string): Promise<SquarePostFeedItem> {
-  const post = await env.DB.prepare(
+  const post = await loadPostForDeleteOrNull(env, postId);
+  if (!post) {
+    throw new HttpError(404, 'post_not_found', '动态不存在');
+  }
+  return post;
+}
+
+async function loadPostForDeleteOrNull(
+  env: Env,
+  postId: string
+): Promise<SquarePostFeedItem | null> {
+  return env.DB.prepare(
     `SELECT post_id, account_id, cid_number, post_category, content_format, title,
         text, content_hash, storage_receipt_id, chain_block, created_at, post_state
       FROM square_posts
@@ -347,10 +367,6 @@ async function loadPostForDelete(env: Env, postId: string): Promise<SquarePostFe
   )
     .bind(postId)
     .first<SquarePostFeedItem>();
-  if (!post) {
-    throw new HttpError(404, 'post_not_found', '动态不存在');
-  }
-  return post;
 }
 
 function decodePostId(rawPostId: string): string {
@@ -358,15 +374,6 @@ function decodePostId(rawPostId: string): string {
     return decodeURIComponent(rawPostId).trim();
   } catch {
     throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
-  }
-}
-
-function parseObjectKeys(row: PreparedUploadRow): string[] {
-  try {
-    const parsed = JSON.parse(row.object_keys_json);
-    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : [];
-  } catch {
-    return [];
   }
 }
 

@@ -34,6 +34,8 @@ const postId = "sqp_test";
 const contentHash = `0x${"11".repeat(32)}`;
 const storageReceiptId = "sqr_test";
 const blockHash = `0x${"22".repeat(32)}`;
+const canonicalManifestKey =
+  `square/${accountId.slice(2)}/posts/${postId}/manifest.json`;
 // 登录会话身份主键(=上传/媒体/帖子归属键);标准测试 cid。
 const sessionCid = "CN220-CTZN2-198805200-2026";
 // 链上 SquarePostPublished 事件携带的发布者 cid(=已发布帖镜像的身份主键)。
@@ -346,6 +348,76 @@ describe("square chain confirmation", () => {
     expect(r2.deletedKeys).toEqual([manifestKey]);
   });
 
+  it.each([
+    ["invalid JSON", "{"],
+    ["empty list", "[]"],
+    [
+      "extra foreign key",
+      JSON.stringify([canonicalManifestKey, "profile/other/profile.json"]),
+    ],
+    [
+      "wrong account path",
+      JSON.stringify([
+        `square/${"ff".repeat(32)}/posts/${postId}/manifest.json`,
+      ]),
+    ],
+    [
+      "wrong post path",
+      JSON.stringify([
+        `square/${accountId.slice(2)}/posts/sqp_other/manifest.json`,
+      ]),
+    ],
+  ])(
+    "fails closed before provider/R2/D1 deletion for %s object manifest",
+    async (_caseName, objectKeysJson) => {
+      const db = new FakeDb();
+      const upload = completedUpload(canonicalManifestKey);
+      upload.object_keys_json = objectKeysJson;
+      db.uploads.set(postId, upload);
+      db.mediaAssets.set(upload.upload_id, [imageAsset(upload.upload_id)]);
+      db.posts.set(postId, publishedPost());
+      const r2 = new FakeR2({ [canonicalManifestKey]: "{}" });
+      const env = {
+        DB: db,
+        SQUARE_MEDIA: r2,
+        CF_ACCOUNT_ID: "account",
+        CF_API_TOKEN: "token",
+      } as unknown as Env;
+      const providerDelete = vi.fn();
+      vi.stubGlobal("fetch", providerDelete);
+
+      await expect(
+        deletePostCloudflareDataByCid(env, sessionCid, postId, 10_000),
+      ).rejects.toMatchObject({ code: "upload_object_keys_invalid" });
+
+      expect(providerDelete).not.toHaveBeenCalled();
+      expect(r2.deletedKeys).toEqual([]);
+      expect(db.posts.has(postId)).toBe(true);
+      expect(db.uploads.has(postId)).toBe(true);
+      expect(db.mediaAssets.get(upload.upload_id)).toHaveLength(1);
+    },
+  );
+
+  it("retains a published post when its upload object index is missing", async () => {
+    const db = new FakeDb();
+    db.posts.set(postId, publishedPost());
+    const r2 = new FakeR2({ [canonicalManifestKey]: "{}" });
+    const providerDelete = vi.fn();
+    vi.stubGlobal("fetch", providerDelete);
+    const env = {
+      DB: db,
+      SQUARE_MEDIA: r2,
+    } as unknown as Env;
+
+    await expect(
+      deletePostCloudflareDataByCid(env, sessionCid, postId, 10_000),
+    ).rejects.toMatchObject({ code: "post_upload_index_missing" });
+
+    expect(providerDelete).not.toHaveBeenCalled();
+    expect(r2.deletedKeys).toEqual([]);
+    expect(db.posts.has(postId)).toBe(true);
+  });
+
   it("keeps D1 cleanup indexes when provider deletion fails", async () => {
     const db = new FakeDb();
     const manifestKey = `square/${accountId.slice(2)}/posts/${postId}/manifest.json`;
@@ -431,6 +503,23 @@ function completedUpload(manifestKey: string): PreparedUploadRow {
     expires_at: Date.now() + 60_000,
     created_at: 1,
     completed_at: 2,
+  };
+}
+
+function publishedPost(): Record<string, unknown> {
+  return {
+    post_id: postId,
+    account_id: accountId,
+    cid_number: sessionCid,
+    post_category: "normal",
+    content_format: "normal",
+    title: null,
+    text: "保留到重试",
+    content_hash: contentHash,
+    storage_receipt_id: storageReceiptId,
+    chain_block: 88,
+    created_at: 1,
+    post_state: "published",
   };
 }
 

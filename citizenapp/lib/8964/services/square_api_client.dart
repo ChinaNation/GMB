@@ -499,7 +499,8 @@ class SquareApiClient
     _sessions.remove(accountId);
   }
 
-  /// 注销账户：硬删除该用户在 Cloudflare 的全部数据（链上数据不受影响）。
+  /// 注销身份：当前绑定 account_id 只完成授权，Worker 按 session.cid_number
+  /// 硬删除该 CID 在 Cloudflare 的全部可清除数据（链上数据不受影响）。
   /// 换绑吊销:由**当前新账户**会话 [session] 代删 [oldAccountId] 的账户级鉴权材料。
   ///
   /// [oldAccountSignature] 是旧账户已经为本次

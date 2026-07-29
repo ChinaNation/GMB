@@ -287,6 +287,7 @@ export async function enforceRateLimit(
 export async function cleanupSecurityState(env: Env): Promise<void> {
   const now = nowMs();
   await env.DB.batch([
+    env.DB.prepare('DELETE FROM square_login_challenges WHERE expires_at <= ?').bind(now),
     env.DB.prepare('DELETE FROM square_request_nonces WHERE expires_at <= ?').bind(now),
     env.DB.prepare('DELETE FROM square_rate_windows WHERE expires_at <= ?').bind(now)
   ]);

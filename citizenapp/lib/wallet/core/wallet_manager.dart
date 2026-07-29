@@ -11,6 +11,7 @@ import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/security/local_data_key.dart';
+import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
@@ -95,6 +96,19 @@ class WalletAuthException implements Exception {
   String toString() => 'WalletAuthException: $message';
 }
 
+/// 钱包事实数据已经删除，但一个或多个本机安全存储条目清理失败。
+///
+/// 删除流程不会因首个 Keystore / Secure Enclave / Keychain 错误而停止；全部密钥都尝试
+/// 删除后统一报告，避免某个账户 child 清理失败导致钱包 KEK 或 P-256 设备子钥被跳过。
+class WalletLocalCleanupException implements Exception {
+  const WalletLocalCleanupException(this.failures);
+
+  final List<String> failures;
+
+  @override
+  String toString() => '钱包已删除，但本机安全存储清理未完成：${failures.join('；')}';
+}
+
 /// 通讯录专用密钥材料。**身份账户**(CID 绑定账户,可任意 `//n`)的 child mini-secret
 /// 只在 [WalletManager] 内参与 HKDF,业务层只能拿到已域隔离的加密钥和索引钥,不能借此
 /// 签名、恢复钱包或推导其他业务密钥。
@@ -108,9 +122,10 @@ class ContactKeyMaterial {
   final Uint8List indexKey;
 }
 
-/// 钱包创建后注册 P-256 设备子钥的钩子：给定 walletIndex/accountId 与一个对
-/// 绑定消息做账户0 sr25519 签名的闭包（返回 `0x` hex）。由 app 启动注入实现，
-/// 避免 wallet/core 反向依赖 8964 层。
+/// 注册 P-256 设备子钥的钩子：给定 walletIndex/accountId 与一个对绑定消息做该身份
+/// 账户 sr25519 签名的闭包（返回 `0x` hex）。由 app 启动注入实现，避免 wallet/core
+/// 反向依赖 8964 层。**触发时机 = 进入需 CID 页面时按需绑定**（见
+/// [WalletManager.bindDeviceSubkeyToAccountId]），不在钱包创建 / 导入时注册。
 typedef WalletSubkeyRegistrar = Future<void> Function({
   required int walletIndex,
   required String accountId,
@@ -155,12 +170,19 @@ class WalletManager {
   /// 安全存储；它不需要每次查看通讯录都重复触发生物识别。
   static VaultBlobStore _contactKeyStore = SecureStorageBlobStore();
 
+  /// 每只热钱包共享一把 P-256 硬件设备子钥，物理键由 walletIndex 隔离。
+  static DeviceSubkey _deviceSubkey = DeviceSubkey();
+
   @visibleForTesting
   static set debugSeedStore(SecureSeedStore store) => _store = store;
 
   @visibleForTesting
   static set debugContactKeyStore(VaultBlobStore store) =>
       _contactKeyStore = store;
+
+  @visibleForTesting
+  static set debugDeviceSubkey(DeviceSubkey deviceSubkey) =>
+      _deviceSubkey = deviceSubkey;
 
   /// 本地静止态数据密钥（LDK）信封金库。
   ///
@@ -173,8 +195,9 @@ class WalletManager {
   static String _localDataKeyCacheName(String accountId) =>
       'citizenapp_local_data_key_cache_$accountId';
 
-  /// 钱包创建后注册 P-256 设备子钥的钩子（app 启动注入；为空则跳过，用于测试 /
-  /// 未接后端）。「每次动钱动权都验证」现由硬件金库读 child 时的原子生物识别实现，
+  /// 设备子钥绑定钩子（app 启动注入；为空则跳过，用于测试 / 未接后端）。由
+  /// [bindDeviceSubkeyToAccountId] 在进入需 CID 页面时调用，不在钱包创建 / 导入时触发。
+  /// 「每次动钱动权都验证」现由硬件金库读 child 时的原子生物识别实现,
   /// 不再需要操作层 local_auth 软门禁。
   static WalletSubkeyRegistrar? _subkeyRegistrar;
 
@@ -396,9 +419,9 @@ class WalletManager {
       );
       try {
         await _persistContactKeys(profile.accountId, account0.childMiniSecret);
-      // 本地静止态数据密钥（LDK）与通讯录钥同批预置：此刻 child 在手，零额外生物识别。
-      await persistLocalDataKeyWithSecret(
-          profile.accountId, account0.childMiniSecret);
+        // 本地静止态数据密钥（LDK）与通讯录钥同批预置：此刻 child 在手，零额外生物识别。
+        await persistLocalDataKeyWithSecret(
+            profile.accountId, account0.childMiniSecret);
         await _verifyWalletPersisted(profile);
         // 与创建同理，设备子钥不在导入时注册：换设备导入的账户可能早已有 CID，也可能
         // 从未注册过 CID，一律等进入需 CID 页面时由门禁按需绑定（幂等 upsert，绑定即把
@@ -688,14 +711,22 @@ class WalletManager {
       remaining =
           await isar.accountEntitys.filter().masterIdEqualTo(masterId).count();
     });
-    await _store.deleteAccountKey(
-        walletIndex: walletIndex, accountId: accountId);
-    await _deleteContactKeys(accountId);
-
-    // 删空 = 该助记词已无可用账户,级联删钱包(清 WalletProfile + 剩余账户行 + 通讯录钥)。
+    // 删空 = 该助记词已无可用账户，交给整钱包删除统一清账户 child、LDK、钱包 KEK
+    // 与 P-256 设备子钥，避免先清一半后再次进入清理。
     if (remaining == 0) {
       await deleteWallet(walletIndex);
+      return;
     }
+
+    // 账户事实已经提交删除，先广播让常驻页面停止使用旧账户；安全存储清理即使失败
+    // 也不能让 UI 停留在已经不存在的账户上。
+    _bumpWalletsRevision();
+    await _cleanupDeletedWalletSecrets(
+      walletIndex: walletIndex,
+      accountIds: <String>{accountId},
+      deleteAccountKeys: true,
+      deleteWalletWideKeys: false,
+    );
   }
 
   Future<Set<int>> _existingAccountIndexes(String masterId) async {
@@ -773,28 +804,31 @@ class WalletManager {
     // 常驻页面将停留在已删除的旧身份上。
     _bumpWalletsRevision();
 
-    // masterId → walletIndex(child KEK 的绑定键),据此清每个账户的硬件金库 child。
+    // masterId → walletIndex(child KEK 的绑定键)，据此清每个账户的本机密钥。
     final walletIndexByMaster = <String, int>{
       for (final wallet in wallets)
         if (wallet.signMode == 'local') wallet.masterId: wallet.walletIndex,
     };
+    final failures = <String>[];
     for (final account in accounts) {
       final walletIndex = walletIndexByMaster[account.masterId];
       if (walletIndex != null) {
-        await _store.deleteAccountKey(
-            walletIndex: walletIndex, accountId: account.accountId);
+        await _attemptWalletCleanup(
+          failures,
+          '账户私钥(${account.accountId})',
+          () => _store.deleteAccountKey(
+            walletIndex: walletIndex,
+            accountId: account.accountId,
+          ),
+        );
       }
+      await _deleteAccountScopedSecrets(account.accountId, failures);
     }
-    for (final wallet in wallets) {
-      if (wallet.signMode == 'local') {
-        await _store.deleteWalletKey(walletIndex: wallet.walletIndex);
-      }
+    for (final wallet in wallets.where((row) => row.signMode == 'local')) {
+      await _deleteWalletWideSecrets(wallet.walletIndex, failures);
     }
-    for (final account in accounts) {
-      final walletIndex = walletIndexByMaster[account.masterId];
-      if (walletIndex != null) {
-        await _deleteContactKeys(account.accountId);
-      }
+    if (failures.isNotEmpty) {
+      throw WalletLocalCleanupException(List<String>.unmodifiable(failures));
     }
   }
 
@@ -847,8 +881,8 @@ class WalletManager {
       throw Exception('未找到钱包');
     }
 
-    // 删钱包 = 删这套助记词下的全部账户。先取全部账户 accountId,事务提交后逐个
-    // 清硬件金库 child;账户0(= target.accountId)必在其中,兜底再删一次(幂等)。
+    // 删钱包 = 删这套助记词下的全部账户。先取全部账户 accountId，事务提交后逐个
+    // 清账户 child、通讯录钥和 LDK；账户0(= target.accountId)必在其中，兜底再删一次。
     final accountRows = await WalletIsar.instance.read((isar) {
       return isar.accountEntitys
           .filter()
@@ -910,13 +944,98 @@ class WalletManager {
     // 同 clearWallet:事务已提交、身份已切换,先广播再做可能抛错的存储清理。
     _bumpWalletsRevision();
 
-    if (target.signMode == 'local') {
-      for (final accountId in accountIds) {
-        await _store.deleteAccountKey(
-            walletIndex: walletIndex, accountId: accountId);
-        await _deleteContactKeys(accountId);
+    await _cleanupDeletedWalletSecrets(
+      walletIndex: walletIndex,
+      accountIds: accountIds,
+      deleteAccountKeys: target.signMode == 'local',
+      deleteWalletWideKeys: target.signMode == 'local',
+    );
+  }
+
+  /// 清除已删除钱包/账户的全部本机秘密。每一项独立尝试，最后统一报告失败。
+  ///
+  /// [deleteAccountKeys] / [deleteWalletWideKeys] 仅对热钱包为 true：冷钱包没有 child、
+  /// 钱包 KEK 或设备子钥。账户级通讯录钥和 LDK 缓存仍按 accountId 清除，防止历史
+  /// 异常数据残留；删除单个非末账户时只开 [deleteAccountKeys]，保留整钱包共享子钥。
+  Future<void> _cleanupDeletedWalletSecrets({
+    required int walletIndex,
+    required Set<String> accountIds,
+    required bool deleteAccountKeys,
+    required bool deleteWalletWideKeys,
+  }) async {
+    final failures = <String>[];
+    for (final accountId in accountIds) {
+      if (deleteAccountKeys) {
+        await _attemptWalletCleanup(
+          failures,
+          '账户私钥($accountId)',
+          () => _store.deleteAccountKey(
+            walletIndex: walletIndex,
+            accountId: accountId,
+          ),
+        );
       }
-      await _store.deleteWalletKey(walletIndex: walletIndex);
+      await _deleteAccountScopedSecrets(accountId, failures);
+    }
+    if (deleteWalletWideKeys) {
+      await _deleteWalletWideSecrets(walletIndex, failures);
+    }
+    if (failures.isNotEmpty) {
+      throw WalletLocalCleanupException(List<String>.unmodifiable(failures));
+    }
+  }
+
+  Future<void> _deleteAccountScopedSecrets(
+    String accountId,
+    List<String> failures,
+  ) async {
+    await _attemptWalletCleanup(
+      failures,
+      '通讯录密钥($accountId)',
+      () => _contactKeyStore.delete(_contactKeyName(accountId)),
+    );
+    await _attemptWalletCleanup(
+      failures,
+      '旧通讯录密钥($accountId)',
+      () => _contactKeyStore.delete(_legacyContactKeyName(accountId)),
+    );
+    await _attemptWalletCleanup(
+      failures,
+      '本地数据密钥信封($accountId)',
+      () => _localKeyVault.deleteForAccount(accountId),
+    );
+    await _attemptWalletCleanup(
+      failures,
+      '本地数据密钥缓存($accountId)',
+      () => _contactKeyStore.delete(_localDataKeyCacheName(accountId)),
+    );
+  }
+
+  Future<void> _deleteWalletWideSecrets(
+    int walletIndex,
+    List<String> failures,
+  ) async {
+    await _attemptWalletCleanup(
+      failures,
+      '钱包硬件密钥($walletIndex)',
+      () => _store.deleteWalletKey(walletIndex: walletIndex),
+    );
+    await _attemptWalletCleanup(
+      failures,
+      '设备子钥($walletIndex)',
+      () => _deviceSubkey.delete(walletIndex),
+    );
+  }
+
+  Future<void> _attemptWalletCleanup(
+    List<String> failures,
+    String label,
+    Future<void> Function() action,
+  ) async {
+    try {
+      await action();
+    } on Object catch (error) {
+      failures.add('$label：$error');
     }
   }
 
@@ -1013,7 +1132,7 @@ class WalletManager {
   /// 助记词 → 母种子 → 账户0(`//0`)；母种子派生完成后立即清零。
   ///
   /// 返回的 [_Account0] 持有账户0 的 child mini-secret 与公开身份，供上层存储、
-  /// 派生通讯录钥、注册设备子钥；用完须调 [_Account0.dispose] 清零 child。
+  /// 派生通讯录钥与本地数据密钥；用完须调 [_Account0.dispose] 清零 child。
   Future<_Account0> _deriveAccount0FromMnemonic(String mnemonic) async {
     final seed = await _mnemonicToMiniSecret(mnemonic);
     try {
@@ -1408,9 +1527,10 @@ class WalletManager {
   ///    `device/register` 要求已绑 CID;只用钱包和交易的用户也根本不需要子钥。
   /// 2. **换绑跟随**——CID 换绑后设备子钥须归属新绑定账户。
   ///
-  /// **P-256 硬件子钥按 walletIndex 存、不删不重生**(与 accountId 解耦);只用**身份账户
-  /// 的 child** 重签绑定证明(经 [signForAccountId],弹一次生物识别)、后端 `device/register`
-  /// 把 p256 归属到身份账户。见死契约 [[cid-rebind-subkeys-must-auto-migrate]]:换绑
+  /// **P-256 硬件子钥按 walletIndex 存，身份换绑时不删不重生**(与 accountId 解耦)；
+  /// 只用**身份账户的 child** 重签绑定证明(经 [signForAccountId]，弹一次生物识别)，
+  /// 后端 `device/register` 把 p256 归属到身份账户。整只钱包删除时必须同步删除该
+  /// walletIndex 的硬件子钥。见死契约 [[cid-rebind-subkeys-must-auto-migrate]]：换绑
   /// Finalized 后必自动成功更换。无 registrar(未接后端 / 测试)时静默跳过。
   Future<void> bindDeviceSubkeyToAccountId(String identityAccountId) async {
     final registrar = _subkeyRegistrar;

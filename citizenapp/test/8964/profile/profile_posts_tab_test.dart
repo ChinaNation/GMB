@@ -11,13 +11,19 @@ import 'package:citizenapp/8964/services/square_post_store.dart';
 
 import 'fake_profile.dart';
 
-Widget _page(FakeProfileApi api) => MaterialApp(
+Widget _page(
+  FakeProfileApi api, {
+  bool withSession = true,
+  bool isSelf = true,
+}) =>
+    MaterialApp(
       home: UserProfilePage(
         cidNumber: fakeSession().cidNumber,
-        isSelf: true,
+        isSelf: isSelf,
         api: api,
         cache: FakeProfileCache(),
-        sessionProvider: FakeSessionProvider(fakeSession()),
+        sessionProvider:
+            FakeSessionProvider(withSession ? fakeSession() : null),
       ),
     );
 
@@ -176,6 +182,40 @@ void main() {
     expect(find.text('本机保留的正文'), findsOneWidget);
     expect(find.text('媒体已从云端清理，本机仅保留正文'), findsOneWidget);
     expect(find.text('加载失败，下拉重试'), findsNothing);
+  });
+
+  testWidgets('本人主页无法建立会话时仍从 CID 本地副本展示正文', (tester) async {
+    final api = FakeProfileApi(
+      sampleProfile(),
+      localPosts: [_localPost()],
+      throwOnAuthorPosts: true,
+    );
+
+    await tester.pumpWidget(_page(api, withSession: false));
+    await tester.pumpAndSettle();
+
+    expect(api.localPostCalls, 1);
+    expect(find.text('本机保留的正文'), findsOneWidget);
+    expect(find.text('媒体已从云端清理，本机仅保留正文'), findsOneWidget);
+    expect(find.text('加载失败，下拉重试'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('无会话的他人主页禁止读取本机本人副本', (tester) async {
+    final api = FakeProfileApi(
+      sampleProfile(),
+      localPosts: [_localPost()],
+      throwOnAuthorPosts: true,
+    );
+
+    await tester.pumpWidget(
+      _page(api, withSession: false, isSelf: false),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.localPostCalls, 0);
+    expect(find.text('本机保留的正文'), findsNothing);
+    expect(find.text('加载失败，下拉重试'), findsOneWidget);
   });
 
   testWidgets('同一 post_id 的 Worker 内容覆盖本地展示内容', (tester) async {

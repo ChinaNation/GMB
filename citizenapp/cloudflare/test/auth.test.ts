@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLoginChallenge, createSession } from '../src/auth/service';
+import { cleanupExpiredSessionIndexes } from '../src/auth/session_index';
+import { fetchChainIdentityState } from '../src/chain/identity';
 import { hexToBytes, signingMessage } from '../src/shared/signing_message';
 import { sha256Hex } from '../src/shared/hash';
 import type { Env } from '../src/types';
@@ -7,8 +9,9 @@ import type { Env } from '../src/types';
 const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
 // 身份主键 = 该钱包账户链上绑定的 cid_number;登录先解析它(测试里 mock 掉链)。
 const TEST_CID = 'CN220-CTZN2-198805200-2026';
+const CHANGED_CID = 'CN220-CTZN2-199001010-2026';
 vi.mock('../src/chain/identity', () => ({
-  fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) => ({
+  fetchChainIdentityState: vi.fn(async (_env: unknown, accountId: string) => ({
     account_id: accountId,
     identity_level: 'visitor',
     has_voting_identity: false,
@@ -20,10 +23,19 @@ vi.mock('../src/chain/identity', () => ({
 
 interface ChallengeRow {
   challenge_id: string;
+  cid_number: string;
   account_id: string;
   signing_payload: string;
   expires_at: number;
   used_at: number | null;
+}
+
+interface SessionIndexRow {
+  session_token_hash: string;
+  cid_number: string;
+  account_id: string;
+  created_at: number;
+  expires_at: number;
 }
 
 class AuthStmt {
@@ -37,18 +49,21 @@ class AuthStmt {
     if (this.sql.includes('INSERT INTO square_login_challenges')) {
       this.db.challenges.set(this.binds[0] as string, {
         challenge_id: this.binds[0] as string,
-        account_id: this.binds[1] as string,
-        signing_payload: this.binds[2] as string,
-        expires_at: this.binds[3] as number,
+        cid_number: this.binds[1] as string,
+        account_id: this.binds[2] as string,
+        signing_payload: this.binds[3] as string,
+        expires_at: this.binds[4] as number,
         used_at: null
       });
       return { meta: { changes: 1 } };
     } else if (this.sql.includes('UPDATE square_login_challenges')) {
       const row = this.db.challenges.get(this.binds[1] as string);
-      const accountId = this.binds[2] as string;
-      const claimedAt = this.binds[3] as number;
+      const cidNumber = this.binds[2] as string;
+      const accountId = this.binds[3] as string;
+      const claimedAt = this.binds[4] as number;
       if (
         row &&
+        row.cid_number === cidNumber &&
         row.account_id === accountId &&
         row.used_at === null &&
         row.expires_at > claimedAt
@@ -57,6 +72,32 @@ class AuthStmt {
         return { meta: { changes: 1 } };
       }
       return { meta: { changes: 0 } };
+    } else if (this.sql.includes('INSERT INTO square_sessions')) {
+      if (this.db.failNextSessionInsert) {
+        this.db.failNextSessionInsert = false;
+        throw new Error('session_index_write_failed');
+      }
+      this.db.sessions.set(this.binds[0] as string, {
+        session_token_hash: this.binds[0] as string,
+        cid_number: this.binds[1] as string,
+        account_id: this.binds[2] as string,
+        created_at: this.binds[3] as number,
+        expires_at: this.binds[4] as number
+      });
+      return { meta: { changes: 1 } };
+    } else if (this.sql.includes('DELETE FROM square_sessions WHERE session_token_hash')) {
+      const deleted = this.db.sessions.delete(this.binds[0] as string);
+      return { meta: { changes: deleted ? 1 : 0 } };
+    } else if (this.sql.includes('DELETE FROM square_sessions WHERE expires_at')) {
+      const expiresAt = this.binds[0] as number;
+      let deleted = 0;
+      for (const [hash, row] of this.db.sessions) {
+        if (row.expires_at <= expiresAt) {
+          this.db.sessions.delete(hash);
+          deleted += 1;
+        }
+      }
+      return { meta: { changes: deleted } };
     }
     return { meta: { changes: 0 } };
   }
@@ -90,6 +131,8 @@ interface StoredSubkey {
 class AuthDb {
   readonly challenges = new Map<string, ChallengeRow>();
   readonly subkeys = new Map<string, StoredSubkey>();
+  readonly sessions = new Map<string, SessionIndexRow>();
+  failNextSessionInsert = false;
   prepare(sql: string): AuthStmt {
     return new AuthStmt(this, sql);
   }
@@ -169,17 +212,14 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     return `0x${toHex(sig)}`;
   }
 
-  it('只验证设备子钥并签发 Session，全程不访问链账户、余额或 RPC', async () => {
-    const { env, keyPair } = await setup();
-    const fetchSpy = vi.fn(async () => {
-      throw new Error('Session 不得访问链 RPC');
-    });
-    vi.stubGlobal('fetch', fetchSpy);
+  it('按 finalized CID 归属挑战并只验证设备子钥，不读取 System.Account 或余额', async () => {
+    const { env, db, kv, keyPair } = await setup();
 
     const challenge = await jsonBody(
       await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     expect(challenge.op_tag).toBe(0x1b);
+    expect(challenge.cid_number).toBe(TEST_CID);
     expect(typeof challenge.signing_payload_hex).toBe('string');
     // 只下发 32 字节摘要，不下发任何字符串域。
     expect(challenge.signing_payload_hex).not.toContain('GMB');
@@ -201,7 +241,14 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     );
     expect(session.ok).toBe(true);
     expect(typeof session.session_token).toBe('string');
-    expect(fetchSpy).not.toHaveBeenCalled();
+    const sessionToken = session.session_token as string;
+    const sessionTokenHash = await sha256Hex(sessionToken);
+    expect(kv.store.has(`square_session:${sessionTokenHash}`)).toBe(true);
+    expect([...kv.store.keys()].join('\n')).not.toContain(sessionToken);
+    expect(db.sessions.get(sessionTokenHash)).toMatchObject({
+      cid_number: TEST_CID,
+      account_id: ACCOUNT_ID
+    });
   });
 
   it('rejects a signature over the wrong message', async () => {
@@ -221,6 +268,42 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
         env
       )
     ).rejects.toMatchObject({ code: 'invalid_signature' });
+  });
+
+  it('挑战签发后 finalized CID 绑定变化时拒绝创建 Session', async () => {
+    const { env } = await setup();
+    const identityMock = vi.mocked(fetchChainIdentityState);
+    identityMock
+      .mockResolvedValueOnce({
+        account_id: ACCOUNT_ID,
+        identity_level: 'visitor',
+        has_voting_identity: false,
+        has_candidate_identity: false,
+        cid_number: TEST_CID,
+        checked_at: 1
+      })
+      .mockResolvedValueOnce({
+        account_id: ACCOUNT_ID,
+        identity_level: 'visitor',
+        has_voting_identity: false,
+        has_candidate_identity: false,
+        cid_number: CHANGED_CID,
+        checked_at: 2
+      });
+    const challenge = await jsonBody(
+      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+    );
+
+    await expect(
+      createSession(
+        req('/v1/square/auth/session', {
+          account_id: ACCOUNT_ID,
+          challenge_id: challenge.challenge_id,
+          signature: `0x${'00'.repeat(64)}`
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'cid_binding_changed' });
   });
 
   it('并发提交同一挑战时只签发一个 Session', async () => {
@@ -248,6 +331,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     expect(rejected).toMatchObject({ reason: { code: 'used_challenge' } });
     expect(db.challenges.get(challenge.challenge_id as string)?.used_at).not.toBeNull();
     expect([...kv.store.keys()].filter((key) => key.startsWith('square_session:'))).toHaveLength(1);
+    expect(db.sessions.size).toBe(1);
   });
 
   it('KV 写入失败后仍烧毁挑战且不留下孤立 Session', async () => {
@@ -274,6 +358,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     ).rejects.toThrow('kv_write_failed');
     expect(db.challenges.get(challenge.challenge_id as string)?.used_at).not.toBeNull();
     expect([...kv.store.keys()].filter((key) => key.startsWith('square_session:'))).toHaveLength(0);
+    expect(db.sessions.size).toBe(0);
     await expect(
       createSession(
         req('/v1/square/auth/session', {
@@ -284,5 +369,55 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
         env
       )
     ).rejects.toMatchObject({ code: 'used_challenge' });
+  });
+
+  it('D1 哈希索引写入失败时回滚 KV，且不保存明文 token', async () => {
+    const { env, db, kv, keyPair } = await setup();
+    const challenge = await jsonBody(
+      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+    );
+    const signature = await signChallenge(
+      keyPair,
+      challenge.op_tag as number,
+      challenge.signing_payload_hex as string
+    );
+    db.failNextSessionInsert = true;
+
+    await expect(
+      createSession(
+        req('/v1/square/auth/session', {
+          account_id: ACCOUNT_ID,
+          challenge_id: challenge.challenge_id,
+          signature
+        }),
+        env
+      )
+    ).rejects.toThrow('session_index_write_failed');
+
+    expect(db.challenges.get(challenge.challenge_id as string)?.used_at).not.toBeNull();
+    expect(kv.store.size).toBe(0);
+    expect(db.sessions.size).toBe(0);
+  });
+
+  it('定时清理仅删除已经过期的 D1 会话哈希索引', async () => {
+    const { env, db } = await setup();
+    db.sessions.set('a'.repeat(64), {
+      session_token_hash: 'a'.repeat(64),
+      cid_number: TEST_CID,
+      account_id: ACCOUNT_ID,
+      created_at: 1,
+      expires_at: 999
+    });
+    db.sessions.set('b'.repeat(64), {
+      session_token_hash: 'b'.repeat(64),
+      cid_number: TEST_CID,
+      account_id: ACCOUNT_ID,
+      created_at: 1,
+      expires_at: 1001
+    });
+
+    await cleanupExpiredSessionIndexes(env, 1000);
+
+    expect([...db.sessions.keys()]).toEqual(['b'.repeat(64)]);
   });
 });

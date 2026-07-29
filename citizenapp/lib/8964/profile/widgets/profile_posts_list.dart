@@ -30,7 +30,12 @@ class ProfilePostsTab extends StatefulWidget {
   final String cidNumber;
   final CitizenProfileApi api;
   final String emptyLabel;
-  final SquareSession session;
+
+  /// 可选浏览会话：只用于远端请求和受保护媒体，不是本人本地副本的读取凭证。
+  ///
+  /// 本人身份已经由上层以永久 `cid_number` 判定；断网或 Worker 不可用时会话可能为空，
+  /// 此时仍必须允许本人读取本机已校验的发布副本。
+  final SquareSession? session;
   final bool isSelf;
   final SquarePostCategory? category;
   final SquarePostContentFormat? contentFormat;
@@ -65,7 +70,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       _failedFirst = false;
     });
     var localHasContent = false;
-    if (widget.isSelf && widget.session.cidNumber == widget.cidNumber) {
+    if (widget.isSelf) {
       try {
         final localCopies =
             await widget.api.fetchLocalPublishedPosts(widget.cidNumber);
@@ -249,9 +254,12 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
             final avatarKey = post.author.avatarObjectKey;
             final avatarUrl =
                 avatarKey == null ? null : widget.api.mediaUrl(avatarKey);
-            final avatarHeaders = {
-              'authorization': 'Bearer ${widget.session.sessionToken}',
-            };
+            final session = widget.session;
+            final avatarHeaders = session == null
+                ? null
+                : <String, String>{
+                    'authorization': 'Bearer ${session.sessionToken}',
+                  };
             if (widget.contentFormat == SquarePostContentFormat.article) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -112,7 +112,11 @@ citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本�
 ## S7.1 落地(2026-07-27,完成 ✅)
 **citizenapp 无根单账户核心(派生 //0 + 无根存储),仅主检出 `citizenapp/`,冷钱包/§6 调用方零改:**
 - **派生**:`wallet_manager.dart` 删 bare 根 `_deriveSr25519FromSeed`;新增 `_childMiniSecret`(逐字节移植金标)+`_deriveAccount(seed,index)`,账户0=`//0`。金标 `test/wallet/derivation_golden_test.dart`(//0//1//2 == 冷端,ss58 2027)**spike 全绿**。
-- **无根存储**:`secure_seed_store.dart` 接口改 `putAccountKey/readAccountKey/hasAccountKey/deleteAccountKey`(按 accountId,**删种子/助记词层**);`hardware_bound_seed_vault.dart` blob `wallet_account_key_v1_$accountId`、KEK 仍按 walletIndex(同钱包多账户共 KEK、各账户分 blob)、**仅 strict biometricOnly**;fake 同步。
+- **无根存储**：`secure_seed_store.dart` 接口为
+  `putAccountKey/readAccountKey/hasAccountKey/deleteAccountKey`（按 `account_id`，不保存
+  根种子/助记词）；`hardware_bound_seed_vault.dart` 信封键固定为
+  `account_child_key_{account_id}`，KEK 仍按 `walletIndex`（同钱包多账户共 KEK、各账户
+  独立信封），仅允许 strict biometricOnly；不读取旧键。
 - **wallet_manager**:createWallet/importWallet 只存账户0 child、母种子 finally 清零、助记词一次性返回不落库;`signWithWallet`/`_loadSigningKey` 读 child(生物识别)+校验+清零;**删 `_selfHealSeedFromMnemonic`/`_readSeedHexWithSelfHeal`/`getMnemonic`**(无根无自愈,失效/缺失→`WalletAuthException` 重导入 fail-closed);`getSeedHex`→账户0 child;contact key/`_registerDeviceSubkey` 从 child;`isUsableHotWallet` 用 `hasAccountKey`;clear/delete/rollback 用 `deleteAccountKey`。
 - **UI**:`wallet_page.dart` 删「查看助记词」菜单(唯一 `getMnemonic` 调用方);「查看私钥」留。
 - **三条安全不变量**(逐条核实):①不存种子(母种子仅内存、finally 清零)②不存助记词(无存储层)③签名/读密钥强制 strict 生物识别、取消/失效/缺失 fail-closed。

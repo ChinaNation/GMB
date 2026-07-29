@@ -153,7 +153,7 @@ citizenapp 不采用“首启强制弹出全部权限”的模式，按平台权
 citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 链账户 `account_id` 聊天身份 + Cloudflare 瞬时转发 + WebRTC 设备附件 + 近场无网点对点通信”架构：
 
 - 用户入口：公民端在“多签”Tab 与“交易”Tab 之间提供“聊天”Tab；互联网聊天和近场聊天的消息都在“聊天”Tab 集中显示，用户不选择底层通信模式。聊天页顶栏为“搜索框 + 右上角加号”：搜索框进独立搜索页（会话 / 联系人 / 聊天记录三段）；加号弹出五个入口——扫一扫、收付款、发私信、发群聊、加好友。五者全部复用既有链路（交易扫码统一分派、全 App 唯一用户二维码、通讯录选人、建群、扫码加好友），聊天页不自建重复实现。
-- 聊天账户：CitizenApp 当前链账户 `account_id` 是用户可见聊天身份，也是聊天窗口内发起既有转账功能时的收付款账户；创建钱包时由钱包主私钥一次性绑定 P-256 设备子钥，此后聊天设备绑定和会话登录只使用 P-256 设备子钥，钱包 seed 不进入聊天运行态。
+- 聊天账户：CitizenApp 当前链账户 `account_id` 是用户可见聊天身份，也是聊天窗口内发起既有转账功能时的收付款账户；首次进入需要 CID 的功能时，由当前绑定账户一次性签署 P-256 设备子钥归属证明，此后会话登录只使用 P-256 设备子钥，钱包 child mini-secret 不进入聊天运行态。
 - 互联网聊天：Worker 校验 `account_id` session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
 - 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入 `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；通讯录不复制公开资料。头像下固定按公开昵称、SS58 地址及复制按钮、CID、关注/关注者/帖子三项计数展示；SS58 只从当前绑定规范 `account_id` 即时派生，原始 AccountId 不展示、不复制，CID 单独展示且无复制按钮。
 - 通讯录：联系人关系永久主键是 `cid_number`，本机按当前身份账户隔离保存 `cid_number + account_id + ss58_address + contact_remark + 时间戳`；公开昵称、头像和签名仍以 CID 从公开资料读取，不复制进通讯录。Cloudflare D1 只保存由 CID 当前绑定账户 child 域隔离密钥生成的 AES-256-GCM 单联系人密文和以目标 CID 计算的 HMAC `contact_id`，用于同一身份换设备恢复；属主 CID 写入密文并参与 AAD。Worker 不持有密钥，也不能读取联系人 CID、账户、SS58 或私人备注。扫码添加只接受用户码：先把码内账户经链上双向绑定解析成 CID，收款码不得兼作联系人码。
@@ -529,7 +529,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 广场默认分类为推荐；用户可切换关注、竞选，后续可按产品需要增加最新分类。推荐流初期只做可解释规则，不做黑盒模型。
 - 广场媒体内容不存链上，不改造 CitizenChain 全节点存储媒体；`manifest.json` 存 Cloudflare R2，图片/首图经 Worker 有界校验后由服务端写 Cloudflare Images，视频全部使用绑定精确字节和最长时长的 Cloudflare Stream TUS，经签名 Images delivery / Stream playback URL 访问。
 - CitizenChain 负责发布交易入块、统一链上交易收费、竞选发布权限校验、发布索引和事件；`SquarePost` pallet index 为 `34`、发布 call index 为 `0`。同一 pallet 的订阅 call、状态、价格、扣款和自动续费契约见 P-TX-014/P-STORAGE-006。
-- Cloudflare Worker 负责设备子钥钱包登录、finalized 订阅镜像与权益门禁、链上身份资格校验、加密通讯录密文 CRUD、统一资源限制、D1 原子额度预留、R2/Images/Stream 写入、上传回执、Stream webhook 实际时长/分辨率复核、链上发布事件确认、帖子删除和 feed。登录 Session 不读取 `System.Account` 或余额；链身份/余额只在需要它的业务入口校验。登录挑战先以 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期必须同时命中；并发重放只允许一个 Session，后续 KV 写入失败也不恢复挑战并删除孤立 Session。设备子密钥登记只接受五分钟窗口内的安全整数 `issued_at`，同一账户用条件 UPSERT 保证严格单调更新，拒绝重复与回滚。`citizenapp/cloudflare/src/limits/catalog.ts` 是所有请求体、文件、账户数量、周期用量和出站载荷的唯一硬上限；环境变量只能收紧。`POST /v1/square/uploads/prepare` 在调用媒体提供商前先用未陈旧链时钟校验平台订阅，再原子预留活动上传数、订阅周期图片数和视频秒数；`complete` 核销一次，删除帖子只回收实际存储总量而不返还周期上传额度。
+- Cloudflare Worker 负责设备子钥钱包登录、finalized 订阅镜像与权益门禁、链上身份资格校验、加密通讯录密文 CRUD、统一资源限制、D1 原子额度预留、R2/Images/Stream 写入、上传回执、Stream webhook 实际时长/分辨率复核、链上发布事件确认、帖子删除和 feed。登录 Session 不读取 `System.Account` 或余额；链身份/余额只在需要它的业务入口校验。登录挑战先以 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期必须同时命中；并发重放只允许一个 Session，后续 KV 写入失败也不恢复挑战并删除孤立 Session。设备子密钥登记只接受五分钟窗口内的安全整数 `issued_at`，同一账户用条件 UPSERT 保证严格单调更新，拒绝重复与回滚。`citizenapp/cloudflare/src/limits/catalog.ts` 是所有请求体、文件、账户数量、周期用量和出站载荷的唯一硬上限；环境变量只能收紧。`POST /v1/square/uploads/prepare` 在调用媒体提供商前先用未陈旧链时钟校验平台订阅，再原子预留活动上传数、订阅周期图片数和视频秒数；`complete` 核销一次，删除帖子只回收实际存储总量而不返还周期上传额度。帖子删除、权益到期和注销释放存储总量时，`resource_totals` 扣减必须与对应媒体/内容索引删除处于同一 D1 原子 batch，禁止先释放后删除。
 - 广场用户业务以 `cid_number` 为唯一稳定主键：帖子归属/计数、平台订阅、续费索引、
   创作者套餐和创作者订阅关系均直接使用 CID。`account_id` 只用于当前链交易签名、首次扣款、
   自动续费时由 CID 解析出的当前付款/收款账户及不可变审计；换绑后不得读取或扣取历史账户。
@@ -552,7 +552,11 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - Worker 工程位于 `citizenapp/cloudflare/`，功能目录包括 `auth/`、`membership/`、`contacts/`、`limits/`、`uploads/`、`storage/`、`posts/`、`feeds/`、`chat/` 和 `moderation/`。所有外部方法/path 先匹配路由白名单和正文上限，未知路由不得进入 D1。
 - R2 路径中的 `account_id_hex` 固定为规范 `account_id` 去掉 `0x` 后的 64 位小写十六进制，入口严格校验完整 AccountId，不执行清洗、大小写归一或 SS58 转换。广场 manifest 的 R2 object key 固定使用 `square/{account_id_hex}/posts/{post_id}/manifest.json`；头像、背景和 manifest 只通过同域 Worker 上传。图片不生成 R2 主媒体 key，由 Worker 写 Images；视频只拿 Stream TUS 地址。不存在 R2 PUT 预签名、Images 客户端直传或本地开发代理分支。
 - Worker D1 使用 `chain_clock`、`square_memberships`、`square_creator_tiers`、`square_creator_subscriptions` 和 `chain_transaction_confirmations` 保存可重建 finalized 镜像与最小交易证明，并使用 `resource_reservations`、`resource_usage`、`resource_totals` 强制资源额度；`square_media_assets.resource_key` 指向统一限制表。KV session、session index 和身份缓存写入前同样校验实际 JSON 字节。Cloudflare API token、Stream webhook secret 和链 RPC 地址只放部署环境。
-- 注销只硬删除可清除的身份、社交、鉴权、会话和媒体数据。`chain_transaction_confirmations` 作为 finalized 链交易证明、`topup_orders` 作为充值和财务事实继续保留；`square_login_challenges` 虽在挑战阶段以 `account_id` 为主体，但属于临时鉴权材料，注销时删除。“三表保留 `account_id`”仅表示三张表不改为 CID 归属键，不表示三张表的数据在注销后都保留。
+- 注销按 CID 硬删除该身份在 Cloudflare 的全部数据。`chain_transaction_confirmations`
+  在写入时保存会话 `cid_number`；`topup_orders` 在付款意图签发时保存目标账户 finalized
+  CID（未绑定身份的账户为空）；两表中命中该 CID 的记录与挑战、会话、内容、媒体和关系
+  同批删除。链上/EVM 原始交易事实仍由公链保存。Session 明文 token 只返回客户端，KV
+  键和 D1 `square_sessions` 只保存 SHA-256；`account_id` 仅作当前绑定与签名/收款事实。
 - Worker 本地验证命令固定为 `npm --prefix citizenapp/cloudflare run typecheck`、`npm --prefix citizenapp/cloudflare test`、`npm --prefix citizenapp/cloudflare run db:local`、`npm --prefix citizenapp/cloudflare run dev:local -- --port 8787`。
 - Worker 远端命令只保留 `npm --prefix citizenapp/cloudflare run db:production` 和
   `npm --prefix citizenapp/cloudflare run deploy:production`；`wrangler.toml` 只登记
@@ -699,6 +703,11 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   判据存 `IdentitySyncedAccountStore`，五处门禁并发挂载用 in-flight Future 去重，绑定
   失败不放行且不影响钱包/交易。占号与绑定相距往往只有几秒而身份缓存 45 秒，故
   `device/register` 读到「无 CID」时旁路缓存回源核实一次，不拿占号前的空值拒绝刚上链的身份。
+- 设备子钥生命周期归属整只热钱包：CID 换绑继续复用同一 `walletIndex` 子钥并重签归属
+  证明；删除非末账户不得删除。整钱包删除、末账户级联删除或 `clearWallet()` 必须同时
+  清除账户 child、通讯录密钥、LDK 信封与缓存、钱包 KEK 及 P-256 设备子钥。清理逐项
+  尝试，不能因一个安全存储错误跳过后续密钥，最后以 `WalletLocalCleanupException`
+  汇总残留。
 - 注册身份前的余额闸：门槛 = 链上 `OnchainTransaction.OnchainMinFee + Balances.ExistentialDeposit`，
   两个数现取自链上 metadata。**交易费常量的真源恒为区块链常量库 `primitives::fee_policy`，
   runtime 只把它转发到 metadata（`OnchainMinFee` / `OnchainFeeRate` / `VoteFlatFee`），
@@ -717,18 +726,20 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   连接设备里的外部钱包；运行时禁止从 CDN 加载付款执行代码。
 - USDC 与 USDT 当前都走 Base；币轨、合约、收款地址和套餐由 Worker `config`
   返回，CitizenApp 不把客户端报价当成结算真源。
-- 充值不绑定广场会话、不要求 CID。充值的本质是付款人自掏稳定币给某个公民链账户打
+- 充值不绑定广场会话，也不要求目标账户已绑定 CID。充值的本质是付款人自掏稳定币给某个公民链账户打
   公民币，收款方无需证明账户所有权（同转账）；冷钱包本机没有私钥可签，若要求账户
   鉴权则服务端必须同时接受无签名路径、鉴权即形同虚设。因此 `intent / confirm /
   status` 一律免会话，`/v1/square/topup/` 整前缀在 `request_guard` 中走 IP 限流白名单，
   不进默认拒。**任意钱包与钱包账户（含冷钱包、含他人账户）都能作为充值目标。**
 - 外部钱包连接并返回 `payer_address` 后，CitizenApp 调用 `POST /v1/square/topup/intent`，
-  请求体直接携带充值目标 `account_id`。Worker 用 Web Crypto HMAC 生成短期付款意图，
-  绑定账户、付款地址、币种、链、合约、收款地址、金额、套餐与签发时间。付款意图不写 D1，
-  未付款不产生订单。写接口另按 `account_id` 维度限流 10 次/60 秒。
+  请求体直接携带充值目标 `account_id`。Worker 必须从同一 finalized 链双向绑定严格解析
+  该目标当时的 `cid_number`（链读取失败不得退化为空），再用 Web Crypto HMAC 生成绑定
+  CID、账户、付款地址、币种、链、合约、收款地址、金额、套餐与签发时间的短期付款意图。
+  未绑定身份的目标 CID 记 null；付款意图不写 D1，未付款不产生订单。
 - 外部钱包完成 ERC-20 转账后，CitizenApp 调用 `POST /v1/square/topup/confirm`。凭据是
   Worker 签发的 HMAC 付款意图（不可伪造，非公开交易哈希），Worker 校验意图签名与有效期、
-  当前配置以及 finalized EVM 到账；全部一致才写 `topup_orders`。
+  当前配置以及 finalized EVM 到账；全部一致才把意图中的 `cid_number` 与订单一并写入
+  `topup_orders`。注销只删除命中注销 CID 的订单，不影响无 CID 或其它身份的充值。
 - **抢单防护**：付款人地址、收款地址和金额都是公链公开数据，若无时间序约束，攻击者可
   盯住收款地址入账、用受害者付款地址造一个指向自己账户的意图抢先 confirm 冒领
   （`(chain_id, evm_tx_hash)` 唯一索引先到先得）。故 confirm 强制

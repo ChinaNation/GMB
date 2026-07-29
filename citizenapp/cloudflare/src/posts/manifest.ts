@@ -2,6 +2,7 @@ import { resourceLimit } from '../limits/catalog';
 import { HttpError } from '../shared/http';
 import { isSha256Hex, sha256Hex } from '../shared/hash';
 import type { Env, PreparedUploadRow } from '../types';
+import { uploadObjectKeys } from '../storage/r2_keys';
 
 export interface SquareManifestMediaItem {
   media_kind: 'image' | 'video';
@@ -47,24 +48,13 @@ export interface VerifiedSquarePostManifest {
 /**
  * 从上传记录的服务端对象清单解析唯一 manifest 键。
  *
- * 禁止根据 account_id/post_id 猜路径：对象清单缺失、损坏或出现多个 manifest 都应
- * fail-closed，避免回灌到与 D1 发布事实无关的 R2 对象。
+ * 对象清单必须与 account_id + post_id 生成的唯一规范 manifest 路径逐项完全一致；
+ * 缺失、损坏、额外键或错误路径全部 fail-closed。
  */
-export function manifestObjectKeyFromUpload(upload: Pick<PreparedUploadRow, 'object_keys_json'>): string {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(upload.object_keys_json);
-  } catch {
-    throw new HttpError(409, 'manifest_object_keys_invalid', '上传对象清单不是合法 JSON');
-  }
-  if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== 'string')) {
-    throw new HttpError(409, 'manifest_object_keys_invalid', '上传对象清单不合法');
-  }
-  const keys = parsed.filter((value): value is string => value.endsWith('/manifest.json'));
-  if (keys.length !== 1 || keys[0].trim().length === 0) {
-    throw new HttpError(409, 'manifest_object_missing', '上传对象清单必须包含唯一 manifest');
-  }
-  return keys[0];
+export function manifestObjectKeyFromUpload(
+  upload: Pick<PreparedUploadRow, 'account_id' | 'post_id' | 'object_keys_json'>
+): string {
+  return uploadObjectKeys(upload)[0];
 }
 
 /**

@@ -12,7 +12,7 @@ import {
   streamDetailsToAssetUpdate,
   uploadImageAsset,
 } from '../media/cloudflare_assets';
-import { buildObjectKeyPlan } from '../storage/r2_keys';
+import { buildObjectKeyPlan, uploadObjectKeys } from '../storage/r2_keys';
 import { assertManifestHash, assertPostCategory, estimateUploadBytes, validateUploadItems } from './validation';
 import {
   assertContentFormat,
@@ -62,15 +62,6 @@ interface StreamWebhookBody {
     hls?: string;
     dash?: string;
   };
-}
-
-function parseObjectKeys(row: PreparedUploadRow): string[] {
-  try {
-    const parsed = JSON.parse(row.object_keys_json);
-    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : [];
-  } catch {
-    return [];
-  }
 }
 
 export async function createStorageReceiptId(input: {
@@ -281,12 +272,11 @@ export async function putManifest(request: Request, env: Env): Promise<Response>
   if (!uploadId) throw new HttpError(400, 'invalid_upload_id', '上传任务编号不合法');
 
   const upload = await getPreparedUpload(env, uploadId);
-  const objectKeys = parseObjectKeys(upload);
-  const objectKey = objectKeys.find((key) => key.endsWith('/manifest.json'));
   // 上传对象归属按身份主键 cid_number(非签名账户)。
-  if (upload.cid_number !== session.cid_number || !objectKey) {
+  if (upload.cid_number !== session.cid_number) {
     throw new HttpError(403, 'upload_object_forbidden', '无权写入该上传对象');
   }
+  const [objectKey] = uploadObjectKeys(upload);
   const bytes = await readLimitedBytes(request, 'square_manifest', true);
   const ticket = await validateUploadBytes({
     resource_key: 'square_manifest',
@@ -408,10 +398,7 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
     throw new HttpError(409, 'storage_receipt_missing', '上传任务缺少预生成存储回执');
   }
 
-  const objectKeys = parseObjectKeys(upload);
-  if (objectKeys.length === 0) {
-    throw new HttpError(409, 'object_keys_missing', '上传对象列表异常');
-  }
+  const objectKeys = uploadObjectKeys(upload);
 
   for (const objectKey of objectKeys) {
     const objectMeta = await env.SQUARE_MEDIA.head(objectKey);
@@ -654,28 +641,43 @@ function videoLimitError(asset: MediaAssetRow): string | null {
 }
 
 /** 定时硬删除未完成的上传、R2 manifest 和提供商草稿，释放 Stream 预占分钟。 */
-export async function cleanupExpiredUploads(env: Env): Promise<{ deleted: number }> {
+export async function cleanupExpiredUploads(
+  env: Env
+): Promise<{ deleted: number; failed: number }> {
   const result = await env.DB.prepare(
     `SELECT upload_id, post_id, cid_number, account_id, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads WHERE status = 'prepared' AND expires_at <= ? LIMIT 100`
   ).bind(nowMs()).all<PreparedUploadRow>();
   let deleted = 0;
+  let failed = 0;
   for (const upload of result.results ?? []) {
-    const assets = await loadMediaAssets(env, upload.upload_id);
-    for (const asset of assets) await deleteProviderAsset(env, asset);
-    const objectKeys = parseObjectKeys(upload);
-    if (objectKeys.length > 0) await env.SQUARE_MEDIA.delete(objectKeys);
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM square_media_assets WHERE upload_id = ?').bind(upload.upload_id),
-      env.DB.prepare("DELETE FROM square_uploads WHERE upload_id = ? AND status = 'prepared'").bind(upload.upload_id),
-      env.DB.prepare(
-        "DELETE FROM resource_reservations WHERE reservation_id = ? AND reservation_state = 'reserved'"
-      ).bind(upload.upload_id),
-    ]);
-    deleted += 1;
+    try {
+      // 清单必须在任何外部删除前通过严格验证；损坏时保留 provider/R2/D1 供修复后重试。
+      const objectKeys = uploadObjectKeys(upload);
+      const assets = await loadMediaAssets(env, upload.upload_id);
+      for (const asset of assets) await deleteProviderAsset(env, asset);
+      await env.SQUARE_MEDIA.delete(objectKeys);
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM square_media_assets WHERE upload_id = ?').bind(upload.upload_id),
+        env.DB.prepare("DELETE FROM square_uploads WHERE upload_id = ? AND status = 'prepared'").bind(upload.upload_id),
+        env.DB.prepare(
+          "DELETE FROM resource_reservations WHERE reservation_id = ? AND reservation_state = 'reserved'"
+        ).bind(upload.upload_id),
+      ]);
+      deleted += 1;
+    } catch (error) {
+      failed += 1;
+      console.error(JSON.stringify({
+        event: 'expired_upload_cleanup_failed',
+        cid_number: upload.cid_number,
+        upload_id: upload.upload_id,
+        post_id: upload.post_id,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
   }
-  return { deleted };
+  return { deleted, failed };
 }
 
 async function verifyStreamWebhookSignature(

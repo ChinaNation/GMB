@@ -57,7 +57,11 @@ export async function rebindRevokeRoute(request: Request, env: Env): Promise<Res
     throw new HttpError(403, 'invalid_rebind_authorization', '旧账户换绑授权验证失败');
   }
 
-  const deleted = await revokeRebindOldAccount(env, oldAccountId);
+  const deleted = await revokeRebindOldAccount(
+    env,
+    session.cid_number,
+    oldAccountId
+  );
   return jsonResponse({
     ok: true,
     old_account_id: oldAccountId,

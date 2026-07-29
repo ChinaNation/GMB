@@ -30,22 +30,36 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - `SquarePostSyncService` 在广场获得有效会话后后台启动：首次完整分页，后续按
   Worker `(created_at DESC,post_id DESC)` 扫描到上次最新事实即停止；每页原子落盘，
   全部目标页成功后才更新不含设备时间的检查点。远端内容过期删除不反向删除本地副本。
-- 本人主页先解析本地 manifest 展示正文，再按 `post_id` 合并 Worker 结果；Worker 的作者
-  资料和媒体元数据优先，远端为空或读取失败时仍保留本人本地正文。他人主页和公共 feed
-  不读取本机副本。
+- 本人主页由上层使用永久 `cid_number` 判定本人边界，进入页面后先解析本地 manifest
+  展示正文，再按 `post_id` 合并 Worker 结果；读取本人本地副本不依赖 Bearer session，
+  断网、Worker 故障或会话无法建立时仍可展示。Worker 的作者资料和媒体元数据优先；
+  他人主页和公共 feed 永远不读取本机副本。
 - 本地不保存媒体字节，也不猜测对象键或 URL；manifest 声明过但 Worker 已无对应媒体时，
   页面明确显示“媒体已从云端清理，本机仅保留正文”。
 - 单帖删除和编辑替换旧帖统一走 `SquarePostDeletionCoordinator`：归属只校验会话 CID，
   Worker 删除成功后才删同 CID 本地副本；只有精确 `404/post_not_found` 可视为远端已
   不存在并清理本地残留，权限、会话和网络错误必须保留本地副本。
-- 注销仍先完成服务端硬删除，再按 CID 删除全部本人副本和同步检查点；某项本地清理失败
-  不阻断其余资料、会话、私信和设备子钥清理，也不得把已完成的服务端注销误报为可重试失败。
+- 注销挑战与确认均用 finalized 链身份复核 `session.cid_number → 当前 account_id`；
+  `account_id` 只完成签名授权，Worker 唯一按 CID 删除跨历次换绑账户产生的全部内容、
+  媒体、关系、设备、挑战、会话、finalized 交易最小证明和充值订单。后两类记录必须在
+  创建时固化 `cid_number`，原始链交易事实由公链保存。Session token 只以 SHA-256 进入 KV 键和 D1 强一致
+  CID 注销索引，禁止以 KV 前缀枚举作为完整性依据。服务端硬删除成功后，App 再按 CID 删除全部本人副本和同步
+  检查点；某项本地清理失败不阻断其余资料、会话、私信和设备子钥清理，也不得把已完成的
+  服务端注销误报为可重试失败。
+- 注销中的媒体存储总量释放与 `square_media_assets`、帖子、上传索引删除必须由同一个
+  D1 原子 batch 提交；Images、Stream、R2 或 KV 清理中途失败时不得预先扣减
+  `resource_totals`，重试成功只允许释放一次。
+- 本地 `CitizenProfileCache` v3 以 `cid_number` 为唯一缓存键；注销后的资料缓存必须调用
+  `clear(cid_number)`。`account_id` 只用于清除该账户的 API Session 与 Chat 本地数据，
+  禁止用它删除 CID 资料缓存。
 
 ## Worker 接口（详见 unified-protocols P-API-CITIZENAPP-002）
 - `GET /v1/square/posts/self?limit=5&cursor=...`：必须携带本人 Bearer session 与 P-256
   设备请求证明；Worker 只按 session `cid_number` 返回本人已发布内容的原始 manifest
-  base64、链锚和 Worker 时间。R2 键只取 D1 `object_keys_json`，帖子/上传/manifest 三组
-  哈希或归属任一不一致时整页拒绝；不返回媒体字节、路径、临时 URL，不增加公共浏览量。
+  base64、链锚和 Worker 时间。D1 `object_keys_json` 必须与 `account_id + post_id` 生成的
+  唯一规范 manifest 路径完全一致；空清单、额外键或错误路径均整页拒绝。帖子/上传/
+  manifest 三组哈希或归属任一不一致时同样整页拒绝；不返回媒体字节、路径、临时 URL，
+  不增加公共浏览量。
 - `GET /v1/square/users/:cid_number`：profile + 计数 + 认证 + is_following（公开可读，带 session 反映登录者视角）。
 - `GET /v1/square/users/:cid_number/posts?category=&limit=&cursor=`：按作者分页（all/normal/campaign）。
 - `GET /v1/square/users/:cid_number/follows?type=following|followers`：关注/粉丝列表分页。
@@ -71,7 +85,7 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
   `UserQrPage.userContact` 固定身份码并支持存相册；钱包/账户/聊天入口统一通过
   `openAccountQrPage()`，只有链上身份账户生成 `k=3`，其它账户生成五分钟 `k=4`。
   「我的」tab 原二维码图标已删。
-- `widgets/profile_category_tabs.dart` + `widgets/profile_posts_list.dart`：帖子/竞选/照片/视频/文章五 Tab；照片/视频从帖子 `media_items` 客户端派生（不建表）；帖子 Tab 传 `content_format=normal` 排除文章，文章 Tab 传 `content_format=article` 拉真数据，用 `widgets/square_article_card.dart` 渲染、点开 `pages/square_article_detail_page.dart`。
+- `widgets/profile_category_tabs.dart` + `widgets/profile_posts_list.dart`：帖子/竞选/照片/视频/文章五 Tab；照片/视频从帖子 `media_items` 客户端派生（不建表）；本人 Tab 即使没有 session 也先按页面 CID 读取本地副本，session 只用于远端请求和受保护媒体；他人 Tab 禁止访问本机副本。帖子 Tab 传 `content_format=normal` 排除文章，文章 Tab 传 `content_format=article` 拉真数据，用 `widgets/square_article_card.dart` 渲染、点开 `pages/square_article_detail_page.dart`。
 - 广场发布已合并为**统一发布页** `lib/8964/compose/`（home `_openCompose` 直进，不再底部分流）：
   - `compose_page.dart` 壳：顶栏 取消/草稿/发布（去中间标题）、头像+**类型下拉**（普通 2 项动态/文章、
     认证公民 4 项加竞选动态/竞选文章）、IndexedStack 挂 动态/文章子编辑区、底部会员额度、发布协调
@@ -118,10 +132,16 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - 主页资料媒体经 `mediaUrl(object_key)` → `GET /media/<key>` 渲染 `Image.network`，并携带钱包 session header；缺失或失败回落 `assets/profile_defaults/` 的稳定照片。广场主媒体使用 Images / Stream 短期地址。
 - 广场首页浏览只从 `IdentityBadgeSnapshotStore` 读取当前默认钱包的身份徽章展示信号，不启动 smoldot；用户进入动态/文章发布页时才通过 `SquareIdentityService.loadCurrent(readLiveChain: true)` 读取 finalized 身份，快照不得用于发布资格判断。
 - 若轻节点已被交易、治理或发布等其他主动流程启动并进入 operational，广场首页通过可取消状态监听为当前钱包刷新一次徽章快照；切换默认钱包后按新账户隔离读取，不轮询。
+- 广场首页的信息流 Future 在创建时立即挂只读错误观察器，随后仍由 `FutureBuilder`
+  接收同一个原始 Future 并展示失败态；这消除了 Worker 快速失败发生在首帧监听前的
+  未处理时间窗，不会把前台错误转换成成功或空列表。
+- 广场与关注通知红点属于后台软功能：会话建立、拉取和清读任一失败都捕获到 `Object`
+  边界并静默降级，不得从 `unawaited` 任务逸出影响浏览；信息流失败仍单独显示
+  “广场内容加载失败”。
 
 ## 边界 / 待续
 - 文章长文分类已落地（发布/文章 Tab/详情，链端零改动，见任务卡 20260706-citizenapp-square-article）；广场推荐流暂仍按普通卡显示文章，feed 识别文章卡为后续增强。
-- 通知系统未建（占位页）。
+- 当前通知只覆盖广场/关注红点游标；完整通知中心不在本模块范围。
 
 ## 关联
 - 任务卡：`memory/08-tasks/open/20260706-citizenapp-user-profile-homepage.md`

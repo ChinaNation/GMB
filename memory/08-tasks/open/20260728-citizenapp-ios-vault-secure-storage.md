@@ -37,7 +37,8 @@
 
 - CitizenApp 不再存在业务代码直接实例化裸 `FlutterSecureStorage()`。
 - iOS 创建钱包静默封装，动钱动权每次触发生物识别，后台登录不弹窗。
-- 换 Face ID/Touch ID、取消、锁定、重装和密钥失效路径均有测试及真机证据。
+- 换 Face ID/Touch ID、取消、锁定、重装和密钥失效路径均有自动化测试或原生错误映射；
+  本任务按用户要求不以 iPhone 真机证据作为完成条件。
 
 ## 实施记录
 
@@ -83,7 +84,8 @@
   Runner、RunnerTests 和全部 Pods target 已统一为 16.0，CocoaPods 使用 framework
   集成以消除 Swift/Objective-C 静态模块冲突。
 - Xcode 27 beta 下已完成 CitizenApp `arm64` 模拟器目标的完整 Xcode 构建，
-  结果 `BUILD SUCCEEDED`，三个原生 Swift 文件均参与 Runner 编译。当前 Xcode beta
+  结果 `BUILD SUCCEEDED`，产物 `Runner.app` 的 `MinimumOSVersion` 与 Mach-O
+  `LC_BUILD_VERSION minos` 均为 `16.0`，三个原生 Swift 文件均参与 Runner 编译。当前 Xcode beta
   未安装可运行的 Simulator runtime，且 Flutter 3.41 对 Xcode 27 的多架构
   `lipo -verify_arch` 调用不兼容，因此未执行模拟器 XCTest；不得把该工具链限制写成
   产品兼容分支。

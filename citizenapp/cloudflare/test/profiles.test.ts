@@ -461,6 +461,9 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   const follows = options.follows ?? [];
   const kv = new Map<string, unknown>();
   const sessionToken = options.session?.token ?? 'tok';
+  if (sessionToken !== 'tok') {
+    throw new Error('profiles fixture only supports token=tok');
+  }
   const sessionAccount = options.session?.account_id ?? viewer;
   const session: SessionState = {
     cid_number: cidForAccount(sessionAccount),
@@ -469,7 +472,11 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
     created_at: 0,
     expires_at: Date.now() + 60_000
   };
-  kv.set(`square_session:${sessionToken}`, session);
+  // 本文件所有鉴权请求固定使用 token=tok；KV 键只保存 token 的 SHA-256。
+  kv.set(
+    'square_session:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62',
+    session
+  );
   if (options.identity) {
     const level = options.identity.identity_level;
     // 社交面按身份主键 cid_number 寻址:身份缓存键 = square_identity_cid:<cid>

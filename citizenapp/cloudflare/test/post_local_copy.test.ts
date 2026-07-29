@@ -203,7 +203,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     expect(body.items).toBeUndefined();
   });
 
-  it('只信任 object_keys_json，不根据账户和 post_id 猜测 R2 路径', async () => {
+  it('对象清单与账户/post_id 规范路径不一致时整页 fail-closed', async () => {
     const seeded = await seedPost(harness.env, harness.accountA, {
       post_id: 'sqp_no_key',
       created_at: 1000,
@@ -220,7 +220,7 @@ describe('本人发布内容本地副本回灌 API', () => {
       '/v1/square/posts/self',
     );
     expect(response.status).toBe(409);
-    expect((await responseJson(response)).error_code).toBe('manifest_object_missing');
+    expect((await responseJson(response)).error_code).toBe('upload_object_keys_invalid');
   });
 
   it('帖子与上传归属或链锚不一致时拒绝回灌', async () => {
@@ -310,7 +310,10 @@ async function registerAccount(
     created_at: now,
     expires_at: now + 60_000,
   };
-  await env.SQUARE_CACHE.put(`square_session:${token}`, JSON.stringify(session));
+  await env.SQUARE_CACHE.put(
+    `square_session:${await sha256Hex(token)}`,
+    JSON.stringify(session)
+  );
   await env.SQUARE_CACHE.put(
     `square_identity:${accountId}`,
     JSON.stringify({

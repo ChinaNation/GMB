@@ -217,7 +217,7 @@ async function registerAccount(
   // device_id == 会话 device_key_hash == sha256(p256):子钥挂在 (cid, device_id) 下。
   const deviceId = await sha256Hex(pubkey);
   db.subkeys.set(`${cid}:${deviceId}`, { p256_public_key: pubkey, account_id: accountId });
-  kv.store.set(`square_session:${token}`, {
+  kv.store.set(`square_session:${await sha256Hex(token)}`, {
     cid_number: cid,
     account_id: accountId,
     device_key_hash: deviceId,

@@ -60,7 +60,8 @@ class SquareAccountDeletionService {
     await attempt('广场本人副本', () async {
       await _localPostStore.deleteAllByCid(cidNumber);
     });
-    await attempt('资料缓存', () => _profileCache.clear(accountId));
+    // 资料缓存 v3 的唯一键是 cid_number；account_id 只清理账户级会话与 Chat 数据。
+    await attempt('资料缓存', () => _profileCache.clear(cidNumber));
     await attempt('会话缓存', () async => _api.clearSession(accountId));
     await attempt(
       '私信历史',

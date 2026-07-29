@@ -1113,8 +1113,9 @@ class ChatRuntime {
     required SharedPreferences prefs,
     MlsKeyPackage? initialKeyPackage,
   }) async {
-    // 后台会话握手绝不读 seed / 不弹窗 / 不懒注册：子钥只在钱包创建时静默注册。
-    // 未注册设备（旧格式钱包等）在此直接会话失败，按不可用降级处理，绝不在合并主线程弹 Turnstile。
+    // 后台会话握手绝不读 seed / 不弹窗 / 不懒注册：子钥由门禁在进入需 CID 页面时按需绑定。
+    // 未注册设备（旧格式钱包 / 尚未进过需 CID 页面）在此直接会话失败，按不可用降级处理，
+    // 绝不在合并主线程弹 Turnstile。
     final session = await _squareApiClient.ensureSession(
       accountId: account.accountId,
       signLoginPayload: (payload) => _signSquareLoginPayload(account, payload),

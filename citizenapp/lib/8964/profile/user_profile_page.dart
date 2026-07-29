@@ -257,8 +257,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 注销用户（仅本人）：二次确认 → 主钥签名(生物识别) → 服务端硬删 → 清本地 → 回落空态。
   /// 无冷静期、硬删不可逆；链上数据与本地钱包不受影响。
   Future<void> _openDeleteAccount() async {
-    // 注销 = 账户级鉴权动作：签名 + 会话都按当前绑定钱包账户 account_id（本人视角，
-    // 取 profile.account_id = 该 CID 当前绑定账户，与登录 session 同账户）。
+    // 注销目标始终是页面永久 CID；profile.account_id 只作为该 CID 当前绑定账户完成
+    // 会话与主钥签名授权，Worker 会再用 finalized 链双向绑定复核，不能决定删除范围。
     final selfAccountId = _profile?.accountId.trim() ?? '';
     if (selfAccountId.isEmpty) {
       _snack('资料尚未加载，请稍后再试');
@@ -467,9 +467,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Widget _tabBody(ProfileTab tab) {
     final session = _session;
-    if (session == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
     switch (tab) {
       case ProfileTab.posts:
         return ProfilePostsTab(

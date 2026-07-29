@@ -58,8 +58,9 @@ class HardwareBoundSeedVault implements SecureSeedStore {
   final MethodChannel _channel;
   final VaultBlobStore _blobStore;
 
+  // 账户 child mini-secret 信封按规范 AccountId 独立存储；不保留旧版本键或同义键双读。
   static String _accountBlobKey(String accountId) =>
-      'wallet_account_key_v1_$accountId';
+      'account_child_key_$accountId';
 
   @override
   Future<SecureAuthStatus> authStatus() async {

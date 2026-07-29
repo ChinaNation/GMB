@@ -41,7 +41,10 @@ class ChatStmt {
 
 class SessionKv {
   async get<T>(key: string): Promise<T | null> {
-    if (key === 'square_session:test-session') {
+    if (
+      key ===
+      'square_session:4943e43bc034c8bf90e1c2895796b954d3c34dc90afe838448dee6678fa765f8'
+    ) {
       // 会话 fixture 含身份主键 cid_number + 当前绑定 account_id(设备所有者)。
       return {
         cid_number: SENDER_CID,

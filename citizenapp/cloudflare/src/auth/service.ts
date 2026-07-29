@@ -6,9 +6,13 @@ import { putKvJson } from '../limits/storage';
 import { sha256Hex } from '../shared/hash';
 import { verifyTurnstile } from '../security/turnstile';
 import { verifyWalletSignature } from './wallet_signature';
-import { indexSessionToken } from './session_index';
 import {
-  fetchChainIdentityStateCached,
+  indexIdentitySession,
+  rollbackIdentitySession,
+  sessionCacheKey
+} from './session_index';
+import {
+  fetchChainIdentityState,
   fetchChainIdentityStateFreshIfUnbound
 } from '../chain/identity';
 import {
@@ -46,16 +50,18 @@ interface DeviceRegisterRequest {
   turnstile_token?: unknown;
 }
 
-/// 登录挑战的 SCALE payload：`account_id ‖ challenge_id ‖ expires_at`。
+/// 登录挑战的 SCALE payload：`account_id ‖ cid_number ‖ challenge_id ‖ expires_at`。
 /// 被签消息 = signing_message(OP_SIGN_SQUARE_LOGIN, payload)，由客户端重算摘要后
 /// 用 P-256 设备子钥签名。worker 单侧编码 payload，客户端只 hash+sign，杜绝字段漂移。
 function buildLoginScalePayload(
   accountId: string,
+  cidNumber: string,
   challengeId: string,
   expiresAt: number
 ): Uint8Array {
   return concatBytes(
     scaleString(accountId),
+    scaleString(cidNumber),
     scaleString(challengeId),
     u64Le(expiresAt)
   );
@@ -69,24 +75,31 @@ export async function createLoginChallenge(request: Request, env: Env): Promise<
   } catch {
     throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
   }
+  // 登录挑战从最新 finalized 双向绑定取得唯一身份主键；未绑定账户不能产生无归属挑战。
+  const identity = await fetchChainIdentityState(env, accountId);
+  if (!identity.cid_number) {
+    throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法登录');
+  }
+  const cidNumber = identity.cid_number;
 
   const challengeId = createId('sqc');
   const expiresAt = secondsFromNow(300);
   const signingPayloadHex = bytesToHex(
-    buildLoginScalePayload(accountId, challengeId, expiresAt)
+    buildLoginScalePayload(accountId, cidNumber, challengeId, expiresAt)
   );
 
   await env.DB.prepare(
     `INSERT INTO square_login_challenges
-      (challenge_id, account_id, signing_payload, expires_at, used_at)
-      VALUES (?, ?, ?, ?, NULL)`
+      (challenge_id, cid_number, account_id, signing_payload, expires_at, used_at)
+      VALUES (?, ?, ?, ?, ?, NULL)`
   )
-    .bind(challengeId, accountId, signingPayloadHex, expiresAt)
+    .bind(challengeId, cidNumber, accountId, signingPayloadHex, expiresAt)
     .run();
 
   return jsonResponse({
     ok: true,
     challenge_id: challengeId,
+    cid_number: cidNumber,
     account_id: accountId,
     op_tag: OP_SIGN_SQUARE_LOGIN,
     signing_payload_hex: signingPayloadHex,
@@ -108,7 +121,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   }
 
   const challenge = await env.DB.prepare(
-    `SELECT challenge_id, account_id, signing_payload, expires_at, used_at
+    `SELECT challenge_id, cid_number, account_id, signing_payload, expires_at, used_at
       FROM square_login_challenges
       WHERE challenge_id = ?`
   )
@@ -125,12 +138,15 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(401, 'expired_challenge', '钱包登录挑战已过期');
   }
 
-  // 身份主键 = 该钱包账户链上当前绑定的 cid_number;未绑定 → 不能建会话(访客)。
-  const identity = await fetchChainIdentityStateCached(env, accountId);
+  // Session 签发再次读取最新 finalized 双向绑定；挑战签发后发生换绑时必须拒绝。
+  const identity = await fetchChainIdentityState(env, accountId);
   if (!identity.cid_number) {
     throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法登录');
   }
   const cidNumber = identity.cid_number;
+  if (challenge.cid_number !== cidNumber) {
+    throw new HttpError(401, 'cid_binding_changed', 'CID 当前绑定账户已变更，请重新登录');
+  }
 
   // 后台握手用 P-256 设备子钥（硬件、静默）验签 signing_message(OP_SIGN_SQUARE_LOGIN)。
   // 子钥挂在 (cid_number, account_id) 下(同一身份可多设备);逐个验签,任一匹配即通过。
@@ -169,11 +185,12 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     `UPDATE square_login_challenges
       SET used_at = ?
       WHERE challenge_id = ?
+        AND cid_number = ?
         AND account_id = ?
         AND used_at IS NULL
         AND expires_at > ?`
   )
-    .bind(claimedAt, challenge.challenge_id, accountId, claimedAt)
+    .bind(claimedAt, challenge.challenge_id, cidNumber, accountId, claimedAt)
     .run();
   if ((claimed.meta?.changes ?? 0) !== 1) {
     if (challenge.expires_at <= claimedAt) {
@@ -194,17 +211,16 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     expires_at: secondsFromNow(sessionTtlSeconds)
   };
 
-  const sessionKey = `square_session:${sessionToken}`;
+  const sessionKey = await sessionCacheKey(sessionToken);
   try {
     await putKvJson(env, sessionKey, session, 'session_cache', {
       expirationTtl: sessionTtlSeconds
     });
-    // 记入「账户→token」索引，使注销可定向失效该账户全部会话（零残留）。
-    await indexSessionToken(env, accountId, sessionToken, sessionTtlSeconds);
+    await indexIdentitySession(env, sessionToken, session);
   } catch (error) {
-    // 中文注释：KV/索引失败时烧毁挑战但删除可能已写入的孤立 Session，客户端只能
-    // 重新申请挑战，禁止恢复旧挑战造成并发重放窗口。
-    await env.SQUARE_CACHE.delete(sessionKey).catch(() => undefined);
+    // 中文注释：KV/D1 任一写入失败时烧毁挑战并清除两侧半成品，客户端只能重新
+    // 申请挑战，禁止孤立 Session 或恢复旧挑战造成并发重放窗口。
+    await rollbackIdentitySession(env, sessionToken).catch(() => undefined);
     throw error;
   }
 
