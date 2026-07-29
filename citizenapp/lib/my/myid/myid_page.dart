@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/my/myid/widgets/rebind_account_sheet.dart';
 import 'package:citizenapp/my/myid/widgets/register_identity_sheet.dart';
+import 'package:citizenapp/transaction/onchain-topup/onchain_topup_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -105,6 +106,7 @@ class _MyIdPageState extends State<MyIdPage> {
     if (!mounted) return;
     final choice = await showRegisterIdentitySheet(context, accounts: accounts);
     if (choice == null || !mounted) return;
+    if (!await _ensureAffordable(choice.bindAccountId)) return;
     await _runSubmit(() async {
       final cid = await _myIdService.registerAnonymousCid(
         institution: choice.institution,
@@ -113,6 +115,43 @@ class _MyIdPageState extends State<MyIdPage> {
       return '身份 CID 已注册:$cid';
     });
   }
+
+  /// 注册前的余额闸:占号是**自签自付**的链上交易,余额不够连入池预检都过不了。
+  ///
+  /// 门槛 = 链上 `OnchainMinFee + ExistentialDeposit`,两个数都现取自链上 metadata
+  /// (交易费常量真源恒在区块链常量库,App 侧不留副本)。返回 true 表示可以继续提交。
+  ///
+  /// 三个分支都必须 fail-closed 到「不产生误导」:
+  /// - 读失败 → 只提示重试。既不跳充值(会误导余额充足的用户去充钱),也不硬提交
+  ///   (链上会以「交易无效」之类的含糊原因回绝,用户看不出真因)。
+  /// - 余额不足 → 直接把用户带到**这个绑定账户**的链上充值页;返回后停在身份页,
+  ///   由用户自行再点注册,不自动续跑。
+  /// - 余额充足 → 放行提交。
+  Future<bool> _ensureAffordable(String bindAccountId) async {
+    final ({BigInt requiredFen, BigInt balanceFen}) affordability;
+    try {
+      affordability =
+          await _myIdService.fetchRegistrationAffordability(bindAccountId);
+    } on Object catch (error) {
+      if (!mounted) return false;
+      _showSnack('余额读取失败,请重试:${_describeError(error)}', isError: true);
+      return false;
+    }
+    final requiredFen = affordability.requiredFen;
+    if (affordability.balanceFen >= requiredFen) return true;
+    if (!mounted) return false;
+    _showSnack('余额不足,注册身份至少需要 ${_formatFen(requiredFen)} 元,请先充值');
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OnchainTopupPage(accountId: bindAccountId),
+      ),
+    );
+    return false;
+  }
+
+  /// 分 → 元展示串(两位小数)。
+  static String _formatFen(BigInt fen) =>
+      (fen / BigInt.from(100)).toStringAsFixed(2);
 
   Future<void> _onRebind() async {
     final cid = _state.cidNumber;

@@ -12,9 +12,11 @@ export interface PurgeAccountResult {
   deleted_rows: number;
 }
 
-/// 硬删除某账户在 Cloudflare 的**全部**数据。原则：
+/// 硬删除某账户在 Cloudflare 中可清除的身份、社交、鉴权、会话和媒体数据。边界：
 /// - Chat 不保存消息或附件；注销先断开连接并删除全部设备路由材料。
-/// - 所有包含 A 的账户引用都删除，不保留粉丝、消费记录或影子关联。
+/// - 身份内容和 off-chain 关系按 cid_number 删除，账户级临时鉴权材料按 account_id 删除。
+/// - chain_transaction_confirmations 与 topup_orders 是不可变链交易证明和财务事实，不在注销
+///   删除范围；square_login_challenges 虽以 account_id 为主体，但属于临时鉴权材料，仍删除。
 /// - 会员订阅与注销解耦：注销只删本地数据，不代签链上退订；链上订阅由用户自行取消或欠费即停。
 /// - 媒体提供商失败不得阻塞 Chat 隐私数据硬删除。
 export async function purgeAccount(
@@ -50,7 +52,7 @@ export async function purgeAccount(
           `SELECT upload_id, post_id, cid_number, account_id, media_index, media_kind, provider,
             provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
             declared_duration_seconds, duration_seconds, width, height, error_code,
-            created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
+            created_at, updated_at, ready_at
             FROM square_media_assets WHERE cid_number = ?`
         )
           .bind(cidNumber)
@@ -62,9 +64,9 @@ export async function purgeAccount(
   }
   await releaseStoredMedia(env, mediaRows);
 
-  // 3. R2 只清理当前允许的资料、广场和归档对象；Chat 永远不创建 R2 对象。
-  //    资料包/头像按身份主键 cid 路径(R2 起 profile/{cid_number}/);帖子 manifest 与视频冷归档
-  //    原片按发布/上传时的 account_id 路径(不可变内容)。开发期零用户/无换绑历史,当前 account
+  // 3. R2 只清理当前允许的资料和广场对象；Chat 永远不创建 R2 对象。
+  //    资料包/头像按身份主键 cid 路径(R2 起 profile/{cid_number}/);帖子 manifest
+  //    按发布/上传时的 account_id 路径(不可变内容)。开发期零用户/无换绑历史,当前 account
   //    即唯一发布账户,故按当前段清理完整;跨换绑账户的历史对象前缀清理待生产期身份迁移工具补齐。
   const accountSegment = accountIdPathSegment(accountId);
   let deletedR2 = 0;
@@ -72,9 +74,6 @@ export async function purgeAccount(
     deletedR2 += await deleteR2Prefix(env, `profile/${cidNumber}/`);
   }
   deletedR2 += await deleteR2Prefix(env, `square/${accountSegment}/posts/`);
-  // 视频冷归档的 R2 冷存原片一并硬删（注销才删；退订只归档不删）。
-  deletedR2 += await deleteR2Prefix(env, `archive/${accountSegment}/`);
-
   // 4. D1 批删。注销=删身份:身份内容与 off-chain/镜像表按身份主键 cid_number 删(删该身份跨
   //    换绑账户的**全部**内容);仅账户级鉴权凭证(登录挑战/设备子钥)按当前 account_id 删。
   const bind = (sql: string) => env.DB.prepare(sql).bind(accountId);

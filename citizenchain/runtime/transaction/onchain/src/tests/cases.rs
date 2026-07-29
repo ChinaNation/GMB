@@ -873,3 +873,22 @@ fn charge_transaction_amount_path_routes_fee_to_all_accounts() {
         assert!(has_fee_paid_event());
     });
 }
+
+/// 下发到 metadata 的三项收费参数必须逐字等于费率库真源。
+///
+/// 这三个常量只为把链上收费口径带给客户端（客户端据此预估费用、做余额预检），
+/// 本 pallet 与任何客户端都不得另立交易费常量；本用例即是「只转发、不另立」的守卫：
+/// 一旦有人在 runtime 绑定处改写数字，这里立刻红。
+#[test]
+fn exposed_fee_constants_forward_fee_policy_exactly() {
+    use frame_support::traits::Get;
+
+    let min_fee: u128 = <<Test as crate::pallet::Config>::OnchainMinFee as Get<u128>>::get();
+    let fee_rate: sp_runtime::Perbill =
+        <<Test as crate::pallet::Config>::OnchainFeeRate as Get<sp_runtime::Perbill>>::get();
+    let vote_fee: u128 = <<Test as crate::pallet::Config>::VoteFlatFee as Get<u128>>::get();
+
+    assert_eq!(min_fee, primitives::fee_policy::ONCHAIN_MIN_FEE);
+    assert_eq!(fee_rate, primitives::fee_policy::ONCHAIN_FEE_RATE);
+    assert_eq!(vote_fee, primitives::fee_policy::VOTE_FLAT_FEE);
+}

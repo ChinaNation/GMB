@@ -1,16 +1,33 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/myid_page.dart';
+import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-enum _GateStatus { loading, registered, unregistered, queryFailed, noWallet }
+enum _GateStatus {
+  loading,
+  registered,
+  unregistered,
+  queryFailed,
+  noWallet,
+  bindFailed,
+}
+
+/// 设备子钥按需绑定器(测试可注入);默认走 [MyIdService.ensureDeviceSubkeyBound]。
+typedef DeviceSubkeyBinder = Future<void> Function();
 
 /// CID 注册门:未注册 CID 身份时挡住功能(聊天 / 广场 / 订阅 / 创作者 / 通讯录)并引导
 /// 去注册(决策②:访客无匿名可用面)。
+///
+/// 本门同时是**设备子钥的懒绑定触发点**。子钥只服务这些需 CID 的场景,故不在建钱包时
+/// 注册(那时账户还没有 CID、后端也不收),只用钱包和交易的用户永远不需要它。已注册 CID
+/// 的用户初次进入本门时才绑定(弹一次生物识别),绑定失败按 [_GateStatus.bindFailed]
+/// 拦住功能页并给重试——与身份判定同样 fail-closed,绝不放行。
 ///
 /// 判据单源 = [ResolvedIdentity.isRegistered](占任意 CID 即放行,匿名占号亦放行——是
 /// CID 门非投票身份门),走 [IdentityAccountResolver.resolve] **严格链读路径**:链读失败
@@ -23,6 +40,7 @@ class IdentityRegistrationGate extends StatefulWidget {
     required this.featureLabel,
     required this.child,
     this.resolver,
+    this.subkeyBinder,
     this.healthListenable,
     this.scaffoldTitle,
   });
@@ -42,6 +60,9 @@ class IdentityRegistrationGate extends StatefulWidget {
   /// 判据 resolver(测试注入);默认新建走真链读。
   final IdentityAccountResolver? resolver;
 
+  /// 设备子钥按需绑定器(测试注入);默认走 [MyIdService.ensureDeviceSubkeyBound]。
+  final DeviceSubkeyBinder? subkeyBinder;
+
   /// 链健康信号源(测试注入);默认取 [SmoldotClientManager.instance]。用于区分
   /// 「链未就绪(loading 等自愈)」与「已就绪仍读失败(queryFailed)」。
   final ValueListenable<ChainHealthStatus>? healthListenable;
@@ -51,6 +72,11 @@ class IdentityRegistrationGate extends StatefulWidget {
   @visibleForTesting
   static IdentityAccountResolver? debugResolver;
 
+  /// 全局子钥绑定器覆盖(仅测试):同 [debugResolver],避免页面测试真去绑设备子钥
+  /// (会读硬件金库、弹生物识别、打后端)。生产恒为 null。
+  @visibleForTesting
+  static DeviceSubkeyBinder? debugSubkeyBinder;
+
   @override
   State<IdentityRegistrationGate> createState() =>
       _IdentityRegistrationGateState();
@@ -58,6 +84,7 @@ class IdentityRegistrationGate extends StatefulWidget {
 
 class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
   late final IdentityAccountResolver _resolver = _createResolver();
+  late final DeviceSubkeyBinder _binder = _createSubkeyBinder();
   _GateStatus _status = _GateStatus.loading;
 
   /// 单调递增的判定代际:仅最新一次 resolve 的结果可落地,旧响应(乱序返回 / 瞬断)
@@ -78,6 +105,17 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
       if (debug != null) return debug;
     }
     return IdentityAccountResolver();
+  }
+
+  /// 同 [_createResolver]:生产恒用真绑定器,仅非 release 允许测试注入。
+  DeviceSubkeyBinder _createSubkeyBinder() {
+    final injected = widget.subkeyBinder;
+    if (injected != null) return injected;
+    if (!kReleaseMode) {
+      final debug = IdentityRegistrationGate.debugSubkeyBinder;
+      if (debug != null) return debug;
+    }
+    return MyIdService().ensureDeviceSubkeyBound;
   }
 
   @override
@@ -101,6 +139,7 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
   void _onChainHealthChanged() {
     if (_health.value != ChainHealthStatus.operational) return;
     // 只在「尚未判定成功」态自愈;已 registered/unregistered 由 walletsRevision 驱动。
+    // bindFailed 不自愈:绑定要弹生物识别,只能由用户点「重试」显式发起。
     if (_status == _GateStatus.loading || _status == _GateStatus.queryFailed) {
       _reresolve();
     }
@@ -113,10 +152,18 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
       final resolved = await _resolver.resolve();
       if (resolved == null) {
         next = _GateStatus.noWallet;
+      } else if (!resolved.isRegistered) {
+        next = _GateStatus.unregistered;
       } else {
-        next = resolved.isRegistered
-            ? _GateStatus.registered
-            : _GateStatus.unregistered;
+        // 已有 CID → 放行前确保本设备子钥已绑到当前身份账户(懒绑定,首次会弹一次
+        // 生物识别;已绑则直接返回不弹)。绑定失败不放行。
+        try {
+          await _binder();
+          next = _GateStatus.registered;
+        } on Object catch (error) {
+          AppLog.d('identity gate subkey bind failed: $error');
+          next = _GateStatus.bindFailed;
+        }
       }
     } catch (_) {
       // 链**未就绪**(冷启动 smoldot 未 operational)→ 停在 loading 等就绪自动重判,
@@ -180,6 +227,16 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
           body: '暂时无法确认你的身份状态,请检查网络后重试。',
           bannerTitle: '链上身份读取失败',
           bannerBody: '为保护你的账户,读取失败时不会放行,请重试。',
+          actionLabel: '重试',
+          actionIcon: Icons.refresh,
+          onAction: _retry,
+        ),
+      _GateStatus.bindFailed => _GateView(
+          icon: Icons.phonelink_lock_outlined,
+          title: '设备绑定未完成',
+          body: '使用$featureLabel需要先把本设备绑定到你的身份,请重试并通过验证。',
+          bannerTitle: '本设备尚未绑定',
+          bannerBody: '绑定失败时不会放行;钱包与交易功能不受影响。',
           actionLabel: '重试',
           actionIcon: Icons.refresh,
           onAction: _retry,

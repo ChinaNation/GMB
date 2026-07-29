@@ -362,10 +362,9 @@ class WalletManager {
       await persistLocalDataKeyWithSecret(
           profile.accountId, account0.childMiniSecret);
       await _verifyWalletPersisted(profile);
-      // fail-closed：设备子钥注册必须成功，失败连同钱包一起回滚，绝不留"建了没注册"的中间态。
-      // 注册成功后才由 runCreateWalletFlow 展示助记词、进入 App。
-      await _registerDeviceSubkey(
-          profile.walletIndex, profile.accountId, account0.childMiniSecret);
+      // 设备子钥**不在此注册**：子钥只服务广场 / 聊天 / 通讯录等需 CID 的场景，而建钱包
+      // 这一刻账户必然还没有 CID（后端 device/register 要求已绑 CID）。只用钱包和交易的
+      // 用户全程不需要子钥，故改为进入需 CID 页面时由门禁按需绑定（懒绑定）。
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
@@ -401,10 +400,9 @@ class WalletManager {
       await persistLocalDataKeyWithSecret(
           profile.accountId, account0.childMiniSecret);
         await _verifyWalletPersisted(profile);
-        // fail-closed：导入一律注册本设备子钥（幂等 upsert），失败连同钱包回滚——导入页保留
-        // 助记词供重试。换设备导入必然是本设备新子钥，注册成功即把账户登录迁到本设备。
-        await _registerDeviceSubkey(
-            profile.walletIndex, profile.accountId, account0.childMiniSecret);
+        // 与创建同理，设备子钥不在导入时注册：换设备导入的账户可能早已有 CID，也可能
+        // 从未注册过 CID，一律等进入需 CID 页面时由门禁按需绑定（幂等 upsert，绑定即把
+        // 该身份的登录迁到本设备）。
       } catch (_) {
         await _rollbackWalletCreation(profile.walletIndex);
         rethrow;
@@ -1402,40 +1400,19 @@ class WalletManager {
     return _readAccountKeyOrThrow(walletIndex, profile.accountId);
   }
 
-  /// 注册 P-256 设备子钥（硬绑定）：用**内存里的账户0 child 派生的 sr25519
-  /// keypair** 对绑定证明签名（零额外弹窗）。**fail-closed**：注册失败向上抛，由
-  /// createWallet / importWallet 连同钱包一起回滚——绝不留"建了钱包却没注册"的
-  /// 中间态。registrar 未接线（测试）时跳过。
-  Future<void> _registerDeviceSubkey(
-    int walletIndex,
-    String accountId,
-    List<int> childMiniSecret,
-  ) async {
-    final registrar = _subkeyRegistrar;
-    if (registrar == null) {
-      return;
-    }
-    await registrar(
-      walletIndex: walletIndex,
-      accountId: accountId,
-      signBinding: (message) async {
-        final pair =
-            Keyring.sr25519.fromSeed(Uint8List.fromList(childMiniSecret));
-        pair.ss58Format = _ss58Format;
-        final signature = pair.sign(message);
-        return '0x${_toHex(signature.toList(growable: false))}';
-      },
-    );
-  }
-
-  /// 把设备子钥重新绑定到指定**身份账户** [identityAccountId](CID 换绑后调)。
+  /// 把设备子钥绑定到指定**身份账户** [identityAccountId]。
   ///
-  /// 身份主键 = CID 号,换绑后设备子钥须归属新绑定账户。**P-256 硬件子钥按 walletIndex
-  /// 存、不删不重生**(与 accountId 解耦);只用**身份账户的 child** 重签绑定证明(经
-  /// [signForAccountId],弹一次生物识别)、后端 `device/register` 把 p256 归属到身份账户。
-  /// 见死契约 [[cid-rebind-subkeys-must-auto-migrate]]:换绑 Finalized 后必自动成功更换。
-  /// 无 registrar(未接后端 / 测试)时静默跳过。
-  Future<void> rebindDeviceSubkeyToAccountId(String identityAccountId) async {
+  /// 两种时机共用本方法:
+  /// 1. **首次绑定**——用户初次进入需 CID 的页面(广场 / 聊天 / 通讯录 / 创作者 / 会员)时
+  ///    由 `IdentityRegistrationGate` 按需触发。建钱包时不绑:那时账户还没有 CID,而后端
+  ///    `device/register` 要求已绑 CID;只用钱包和交易的用户也根本不需要子钥。
+  /// 2. **换绑跟随**——CID 换绑后设备子钥须归属新绑定账户。
+  ///
+  /// **P-256 硬件子钥按 walletIndex 存、不删不重生**(与 accountId 解耦);只用**身份账户
+  /// 的 child** 重签绑定证明(经 [signForAccountId],弹一次生物识别)、后端 `device/register`
+  /// 把 p256 归属到身份账户。见死契约 [[cid-rebind-subkeys-must-auto-migrate]]:换绑
+  /// Finalized 后必自动成功更换。无 registrar(未接后端 / 测试)时静默跳过。
+  Future<void> bindDeviceSubkeyToAccountId(String identityAccountId) async {
     final registrar = _subkeyRegistrar;
     if (registrar == null) {
       return;

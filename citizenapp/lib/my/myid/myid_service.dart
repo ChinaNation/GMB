@@ -135,6 +135,7 @@ class MyIdService {
               chainRpc: chainRpc,
               walletManager: walletManager,
             ),
+        _chainRpc = chainRpc ?? ChainRpc(),
         _nowProvider = nowProvider ?? _beijingNow,
         _cidYearProvider = cidYearProvider ?? _utcYear;
 
@@ -146,10 +147,14 @@ class MyIdService {
   final UserContactService _contactService;
   final IdentitySyncedAccountStore _syncedAccountStore;
   final IdentityRebindRevoker _rebindRevoker;
+  final ChainRpc _chainRpc;
 
   /// 换绑本地重建的并发去重:同一时刻只允许一次真正执行,其余调用等待同一 Future
   /// (rebindCidTo 直触发与 getState 对账触发可能并发,防重复触发互相 409 伪失败)。
   Future<void>? _migrationInflight;
+
+  /// 子钥懒绑定的并发去重:五处门禁可能同时挂载,只允许一次真正执行。
+  Future<void>? _subkeyBindInflight;
 
   final DateTime Function() _nowProvider;
   final int Function() _cidYearProvider;
@@ -380,8 +385,11 @@ class MyIdService {
       return;
     }
     if (synced == null) {
-      // 首次:以当前身份账户为基线,不迁移。
-      await _writeSyncedMarker(current);
+      // 尚无基线 = 本设备子钥还没绑过任何身份账户(懒绑定下建钱包不注册子钥)。
+      //
+      // **绝不能在这里写基线**:写了就等于谎称凭证已就绪,`ensureDeviceSubkeyBound`
+      // 会直接短路返回,用户进广场时子钥其实没绑。标记的写入唯一交给真正完成绑定的
+      // [ensureDeviceSubkeyBound] 与换绑迁移收尾,此处只重试待清理项。
       await _retryPendingRebindCleanup(resolved);
       return;
     }
@@ -399,6 +407,59 @@ class MyIdService {
       // 仍失败(网络等)则保留旧标记,下次 getState 再对账补齐,绝不阻断身份页展示。
       AppLog.d('identity rebind reconcile deferred: $e');
     }
+  }
+
+  /// 注册身份前的自付能力测算:返回门槛与该账户当前余额(均为**分**)。
+  ///
+  /// 门槛 = 链上 `OnchainMinFee + ExistentialDeposit`,两个数都现取自链上 metadata——
+  /// 交易费常量真源恒在区块链常量库,App 侧不留任何副本。余额走 `forceFresh` 绕开块内
+  /// 缓存,否则会拿到充值前的旧值,把刚充完钱的用户又踢回充值页。
+  ///
+  /// 链读失败**不吞**:上抛给调用方 fail-closed 处理,绝不静默当成「余额不足」或「充足」。
+  Future<({BigInt requiredFen, BigInt balanceFen})> fetchRegistrationAffordability(
+    String bindAccountId,
+  ) async {
+    final requiredFen = await _chainRpc.fetchMinSelfPayBalanceFen();
+    final balanceYuan =
+        await _chainRpc.fetchFinalizedBalance(bindAccountId, forceFresh: true);
+    return (
+      requiredFen: requiredFen,
+      balanceFen: BigInt.from((balanceYuan * 100).round()),
+    );
+  }
+
+  /// 确保本设备 P-256 子钥已绑定到当前身份账户;未绑则绑(触发一次生物识别)。
+  ///
+  /// **懒绑定**:子钥只服务广场 / 聊天 / 通讯录 / 创作者 / 会员这些需 CID 的场景,故不在
+  /// 建钱包时注册(那时账户还没有 CID,后端也不收),而由 `IdentityRegistrationGate` 在用户
+  /// 初次进入上述页面时调用本方法。只用钱包和交易的用户永远不会走到这里。
+  ///
+  /// 判据是 [IdentitySyncedAccountStore] —— 「本地鉴权凭证已同步到的身份账户」。标记与
+  /// 当前身份账户一致即认为已绑,直接返回,不弹窗;不一致(含首次为空)才真正绑定并推进标记。
+  /// 绑定本身是后端幂等 upsert,重复调用安全。
+  ///
+  /// 并发去重:五处 gate 可能同时挂载,用 [_subkeyBindInflight] 保证同一时刻只跑一次,
+  /// 其余调用等同一个 Future。失败向上抛,由 gate 按 fail-closed 拦住功能页并给重试。
+  Future<void> ensureDeviceSubkeyBound() {
+    final inflight = _subkeyBindInflight;
+    if (inflight != null) return inflight;
+    final future = _doEnsureDeviceSubkeyBound()
+        .whenComplete(() => _subkeyBindInflight = null);
+    _subkeyBindInflight = future;
+    return future;
+  }
+
+  Future<void> _doEnsureDeviceSubkeyBound() async {
+    final resolved = await _identityResolver.resolve();
+    if (resolved == null || !resolved.isRegistered) {
+      // 无热钱包或尚未占到 CID:后端不收未绑 CID 账户的子钥,此处不做无谓尝试。
+      throw const WalletAuthException('当前无已注册身份,无法绑定设备');
+    }
+    final identityAccountId = resolved.accountId;
+    final synced = await _syncedAccountStore.read();
+    if (synced == identityAccountId) return;
+    await _walletManager.bindDeviceSubkeyToAccountId(identityAccountId);
+    await _writeSyncedMarker(identityAccountId);
   }
 
   /// 供 App 生命周期 / 测试显式触发一次对账;自行解析当前身份账户。
@@ -462,7 +523,7 @@ class MyIdService {
     String oldAccountId,
     String newAccountId,
   ) async {
-    await _walletManager.rebindDeviceSubkeyToAccountId(newAccountId);
+    await _walletManager.bindDeviceSubkeyToAccountId(newAccountId);
     await _contactService.migrateContactsToNewIdentity(
       oldAccountId,
       newAccountId,

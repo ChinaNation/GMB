@@ -312,8 +312,7 @@ describe('purgeAccount', () => {
       upload_method: 'worker', resource_key: 'square_image_sd', content_type: 'image/webp',
       byte_size: 1024, asset_state: 'ready', declared_duration_seconds: null,
       duration_seconds: null, width: 100, height: 100, error_code: null,
-      created_at: 1, updated_at: 1, ready_at: 1, archive_state: 'live',
-      archived_at: null, r2_archive_key: null,
+      created_at: 1, updated_at: 1, ready_at: 1,
     }];
     const r2 = new FakeR2([
       `profile/${STANDARD_CID}/profile.json`,

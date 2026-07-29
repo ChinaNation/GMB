@@ -309,14 +309,11 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 自由会员档 | `freedom` | API / D1 / chain enum | 三档 `membership_level` 之一；不得再用身份值 `visitor` 表示会员 |
 | 民主会员档 | `democracy` | API / D1 / chain enum | 三档 `membership_level` 之一；不得使用泛化旧值 `visitor_pro` |
 | 薪火会员档 | `spark` | API / D1 / chain enum | 三档 `membership_level` 之一（ADR-036 取代旧 `voting`/`candidate` 会员档）；与身份解耦，不绑定 `identity_level` |
-| Cloudflare 账户 ID | `CF_ACCOUNT_ID` | Worker secret | R2、Images、Stream 共用的唯一 Cloudflare 账户字段 |
+| Cloudflare 账户 ID | `CF_ACCOUNT_ID` | Worker secret | Images、Stream 共用的唯一 Cloudflare 账户字段 |
 | Cloudflare API Token | `CF_API_TOKEN` | Worker secret | Worker 调用 Images / Stream API 的令牌 |
 | Cloudflare 部署令牌 | `CF_DEPLOY_TOKEN` | CitizenConsole Keychain | Worker、Worker Secret、Routes 与 Pages 最小权限；只允许部署用途 |
 | Cloudflare 数据令牌 | `CF_DATA_TOKEN` | CitizenConsole Keychain | D1、KV、R2 与 Queues 最小权限；只允许数据资源用途 |
 | Cloudflare零信任令牌 | `CF_ZT_TOKEN` | CitizenConsole Keychain | Tunnel、Access 与限定 Zone DNS 最小权限；只允许 Zero Trust 与 DNS 用途 |
-| R2 Access ID | `R2_ACCESS_ID` | Worker secret | 仅供 Worker 内部签发冷归档回灌只读地址 |
-| R2 Secret Key | `R2_SECRET_KEY` | Worker secret | 仅供 Worker 内部签发冷归档回灌只读地址 |
-| R2 Bucket | `R2_BUCKET` | Worker var | R2 bucket 名称 |
 | Images 地址 | `IMAGES_URL` | Worker var | Images delivery 地址前缀 |
 | Stream 地址 | `STREAM_URL` | Worker var | Stream 播放地址前缀 |
 | Stream 回调密钥 | `STREAM_HOOK_SECRET` | Worker secret | Stream webhook 签名密钥 |
@@ -328,8 +325,6 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 资源限制键 | `resource_key` | TypeScript / D1 / API | 指向 `cloudflare/src/limits/catalog.ts` 的统一硬上限项 |
 | 资源预留编号 | `reservation_id` | D1 | 与广场 `upload_id` 同值，标识一次原子额度预留 |
 | 资源预留状态 | `reservation_state` | D1 | 只允许 `reserved` / `used` |
-| 归档开关 | `ARCHIVE_ENABLED` | Worker var | 退订视频归档开关 |
-| 归档等待天数 | `ARCHIVE_LAPSE_DAYS` | Worker var | 权益失效后等待归档的天数 |
 | 启动清单 TTL | `BOOT_TTL_SECONDS` | Worker var | 轻节点启动清单缓存秒数 |
 | 交易广播开关 | `RELAY_ENABLED` | Worker var | 已签名交易广播开关 |
 | 交易广播字节上限 | `RELAY_MAX_BYTES` | Worker var | 单笔已签名交易最大字节数 |
@@ -346,6 +341,17 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 已付权益截止时间 | `paid_until` | runtime / Dart / TypeScript / SQL | runtime 根据共识时间戳和 UTC 真实公历计算的 unix 毫秒独占上界 |
 | 订阅状态 | `subscription_status` | runtime / Dart / TypeScript / SQL | 只允许 `active` / `cancelled` / `terminated` / `suspended` / `creatorPaused` 对应链上枚举 |
 | 订阅挂起原因 | `suspend_reason` | runtime / Dart / TypeScript | 只允许 `needReconsent` / `insufficientBalance` / `identityBindingUnavailable` |
+
+## 5.6 CitizenApp 广场本人本地副本命名
+
+| 中文名称 | English name | 类型 | 使用位置与边界 |
+|---|---|---|---|
+| 广场本人本地副本 | `SquareLocalPost` / `SquareLocalPostEntity` | Dart DTO / Isar entity | 只保存本人已发布内容的规范 manifest 与链锚；归属主键为 `cid_number`，不得使用可淘汰缓存语义命名 |
+| 广场本人本地仓库 | `SquarePostStore` | Dart service | 本人副本唯一 Isar 读写与完整性校验边界；不保存媒体文件、不缓存公共 feed |
+| 广场本人副本同步器 | `SquarePostSyncService` | Dart service | 使用本人回灌接口按 CID 分页补写本地副本；远端删除不得反向删除本地副本 |
+| 广场本人副本同步检查点 | `SquarePostSyncCheckpoint` | Dart DTO / AppKv value | 只保存远端最新 `post_id + created_at`，不保存设备同步时间；不得命名为缓存时间或更新时间 |
+| 规范 manifest 原始字节 | `manifest_bytes_base64` / `manifest_bytes` / `manifestBytes` | HTTP JSON / Isar / Dart 字段 | HTTP JSON 仅以 base64 无损承载，Isar/Dart 保存解码后的原始 UTF-8 JSON 字节；三者均指参与 `content_hash` 计算的同一原始字节，禁止解码重编码后替换 |
+| 广场发布状态 | `post_state` / `postState` | API/D1/Isar 字段 / Dart 字段 | 与 `square_posts.post_state` 同义，本地副本当前只允许 `published`；不得另造泛化 `status` |
 
 ## 6. 新命名登记模板
 

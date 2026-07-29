@@ -246,6 +246,50 @@ void main() {
         lessThan(cardTop(tester, MyIdTier.visitor)));
   });
 
+  testWidgets('余额不足 → 不提交注册，先引导去链上充值', (tester) async {
+    // 占号是自签自付的链上交易，余额不够连入池预检都过不了；先充值再注册。
+    final service = _RegisterFlowService(balanceFen: 0);
+    await tester.pumpWidget(MaterialApp(home: MyIdPage(myIdService: service)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('注册'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认注册'));
+    await tester.pumpAndSettle();
+
+    expect(service.registerCalls, 0);
+    expect(find.textContaining('余额不足'), findsOneWidget);
+  });
+
+  testWidgets('余额读取失败 → 既不提交也不跳充值，只提示重试(fail-closed)',
+      (tester) async {
+    final service = _RegisterFlowService(affordabilityThrows: true);
+    await tester.pumpWidget(MaterialApp(home: MyIdPage(myIdService: service)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('注册'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认注册'));
+    await tester.pumpAndSettle();
+
+    expect(service.registerCalls, 0);
+    expect(find.textContaining('余额读取失败'), findsOneWidget);
+    expect(find.text('链上充值'), findsNothing);
+  });
+
+  testWidgets('余额达标 → 正常提交注册', (tester) async {
+    final service = _RegisterFlowService(balanceFen: 121);
+    await tester.pumpWidget(MaterialApp(home: MyIdPage(myIdService: service)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('注册'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认注册'));
+    await tester.pumpAndSettle();
+
+    expect(service.registerCalls, 1);
+  });
+
   testWidgets('不出现已下线的登记、换钱包和扫码入口', (tester) async {
     await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
     expect(find.text('护照号'), findsNothing);
@@ -337,6 +381,47 @@ void main() {
     await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
     expect(find.byType(RefreshIndicator), findsOneWidget);
   });
+}
+
+/// 驱动注册前余额闸三分支的假 service：可配门槛、余额与链读失败。
+class _RegisterFlowService extends MyIdService {
+  _RegisterFlowService({
+    this.balanceFen = 0,
+    this.affordabilityThrows = false,
+  });
+
+  /// 门槛固定 121 分(链上最低费 10 + ED 111);本用例只驱动余额侧三分支。
+  static const int requiredFen = 121;
+
+  final int balanceFen;
+  final bool affordabilityThrows;
+  int registerCalls = 0;
+
+  @override
+  Future<MyIdState> getState() async =>
+      const MyIdState(tier: MyIdTier.visitor);
+
+  @override
+  Future<List<Account>> listBindableAccounts() async => const <Account>[];
+
+  @override
+  Future<({BigInt balanceFen, BigInt requiredFen})>
+      fetchRegistrationAffordability(String bindAccountId) async {
+    if (affordabilityThrows) throw StateError('smoldot 未就绪');
+    return (
+      requiredFen: BigInt.from(requiredFen),
+      balanceFen: BigInt.from(balanceFen),
+    );
+  }
+
+  @override
+  Future<String> registerAnonymousCid({
+    required String institution,
+    String? bindAccountId,
+  }) async {
+    registerCalls++;
+    return 'GD-CTZN1-8F3A2B';
+  }
 }
 
 class _FakeMyIdService extends MyIdService {

@@ -18,8 +18,11 @@ const EVM_RPC_MAX_RESPONSE_BYTES = resourceLimit('chain_rpc_response').max_bytes
 /// - confirmed:足额到账且已确认 → 可落台账「待支付」并入发币队列。
 /// - pending:交易未上链 / 确认数不足 → 过渡态,不落台账(用户端显示处理中)。
 /// - rejected:到账不符(错额 / 错收款 / 错币 / 交易失败) → 拒绝,不落台账。
+///
+/// `block_time_ms` = 付款交易所在区块的时间戳(毫秒)。抢单防护据此判定「付款意图必须
+/// 先于付款上链存在」,故它是资金安全字段,取不到时整笔按 pending 处理,绝不放行。
 export type EvmVerifyOutcome =
-  | { status: 'confirmed'; payer: string; value: bigint; block_number: bigint }
+  | { status: 'confirmed'; payer: string; value: bigint; block_number: bigint; block_time_ms: number }
   | { status: 'pending' }
   | { status: 'rejected'; reason: string };
 
@@ -51,6 +54,7 @@ interface EvmReceipt {
 
 interface EvmBlock {
   number?: string;
+  timestamp?: string;
 }
 
 export async function verifyErc20Payment(params: VerifyParams): Promise<EvmVerifyOutcome> {
@@ -80,7 +84,32 @@ export async function verifyErc20Payment(params: VerifyParams): Promise<EvmVerif
     return { status: 'pending' };
   }
 
-  return { status: 'confirmed', payer: matched.payer, value: matched.value, block_number: receiptBlock };
+  // 区块时间是抢单防护的判据,取不到就不能放行:按过渡态返回,客户端轮询重试。
+  const blockTimeMs = await fetchBlockTimeMs(params, receiptBlock);
+  if (blockTimeMs === null) {
+    return { status: 'pending' };
+  }
+
+  return {
+    status: 'confirmed',
+    payer: matched.payer,
+    value: matched.value,
+    block_number: receiptBlock,
+    block_time_ms: blockTimeMs,
+  };
+}
+
+/// 取付款交易所在区块的时间戳并换算成毫秒;缺字段或为 0 返回 null(判为不可用)。
+async function fetchBlockTimeMs(params: VerifyParams, receiptBlock: bigint): Promise<number | null> {
+  const block = (await evmRpc(params.rpcUrl, 'eth_getBlockByNumber', [
+    `0x${receiptBlock.toString(16)}`,
+    false,
+  ])) as EvmBlock | null;
+  if (!block || typeof block !== 'object') return null;
+  // EVM 区块时间戳单位是秒,这里统一换算成毫秒,与 Worker 侧 nowMs() 口径一致。
+  const seconds = safeBigInt(block.timestamp);
+  if (seconds === 0n) return null;
+  return Number(seconds) * 1000;
 }
 
 /// 在收据日志里找一条「本币轨合约 + 转入收款地址 + 金额达标」的 Transfer。

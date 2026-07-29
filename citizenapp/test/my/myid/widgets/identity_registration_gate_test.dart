@@ -39,6 +39,21 @@ class _FakeResolver extends IdentityAccountResolver {
   }
 }
 
+/// 可配设备子钥绑定器:记录调用次数,可配成失败。
+///
+/// 生产里这一步会读硬件金库并弹生物识别,测试一律注入假实现;不注入就会真去绑。
+class _FakeBinder {
+  _FakeBinder({this.fail = false});
+
+  bool fail;
+  int calls = 0;
+
+  Future<void> call() async {
+    calls += 1;
+    if (fail) throw StateError('绑定失败');
+  }
+}
+
 Widget _wrap(IdentityRegistrationGate gate) => MaterialApp(home: gate);
 
 void main() {
@@ -46,6 +61,7 @@ void main() {
     await tester.pumpWidget(_wrap(IdentityRegistrationGate(
       featureLabel: '聊天',
       resolver: _FakeResolver(registered: true),
+      subkeyBinder: _FakeBinder().call,
       child: const Text('真功能'),
     )));
     await tester.pumpAndSettle();
@@ -88,6 +104,7 @@ void main() {
       featureLabel: '广场',
       resolver: resolver,
       healthListenable: health,
+      subkeyBinder: _FakeBinder().call,
       child: const Text('真功能'),
     )));
     // loading 态是无限动画的 spinner,不能 pumpAndSettle(永不 settle);用 pump 冲刷
@@ -120,13 +137,17 @@ void main() {
 
   testWidgets('注册成功广播后自动重跑并放行', (tester) async {
     final resolver = _FakeResolver(registered: false);
+    final binder = _FakeBinder();
     await tester.pumpWidget(_wrap(IdentityRegistrationGate(
       featureLabel: '聊天',
       resolver: resolver,
+      subkeyBinder: binder.call,
       child: const Text('真功能'),
     )));
     await tester.pumpAndSettle();
     expect(find.text('注册'), findsOneWidget);
+    // 未注册 CID 时不该去绑子钥:后端不收未绑 CID 账户的子钥。
+    expect(binder.calls, 0);
 
     // 模拟注册成功:判据转已注册 + 广播身份绑定变化 → gate 自动重判放行。
     resolver.registered = true;
@@ -134,5 +155,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('真功能'), findsOneWidget);
     expect(find.text('去注册身份'), findsNothing);
+  });
+
+  testWidgets('放行前先按需绑定设备子钥(懒绑定触发点)', (tester) async {
+    final binder = _FakeBinder();
+    await tester.pumpWidget(_wrap(IdentityRegistrationGate(
+      featureLabel: '广场',
+      resolver: _FakeResolver(registered: true),
+      subkeyBinder: binder.call,
+      child: const Text('真功能'),
+    )));
+    await tester.pumpAndSettle();
+    // 子钥只服务需 CID 的场景,故绑定发生在进入本门时,而不是建钱包时。
+    expect(binder.calls, 1);
+    expect(find.text('真功能'), findsOneWidget);
+  });
+
+  testWidgets('子钥绑定失败 → 不放行,提示重试(fail-closed)', (tester) async {
+    final binder = _FakeBinder(fail: true);
+    await tester.pumpWidget(_wrap(IdentityRegistrationGate(
+      featureLabel: '聊天',
+      resolver: _FakeResolver(registered: true),
+      subkeyBinder: binder.call,
+      child: const Text('真功能'),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('真功能'), findsNothing);
+    expect(find.text('设备绑定未完成'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+
+    // 点重试:绑定恢复后放行。
+    binder.fail = false;
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    expect(binder.calls, 2);
+    expect(find.text('真功能'), findsOneWidget);
   });
 }

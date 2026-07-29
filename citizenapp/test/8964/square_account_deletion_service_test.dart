@@ -5,10 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/services/square_account_deletion_service.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/8964/services/square_post_store.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 
-const _owner = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
+const _owner =
+    '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
+const _cidNumber = 'CN001-CTZN-000000001-2026';
 
 class _FakeApi extends SquareApiClient {
   _FakeApi({this.fail = false});
@@ -59,20 +62,39 @@ class _FakeChatStore extends ChatStore {
   }
 }
 
+class _FakeLocalPostStore implements SquareLocalPostBulkDeletionStore {
+  _FakeLocalPostStore({this.fail = false});
+
+  final bool fail;
+  bool cleared = false;
+  String? deletedCidNumber;
+
+  @override
+  Future<int> deleteAllByCid(String cidNumber) async {
+    cleared = true;
+    deletedCidNumber = cidNumber;
+    if (fail) throw StateError('本地副本清理失败');
+    return 2;
+  }
+}
+
 void main() {
   test('注销成功：服务端删后清齐所有本地数据', () async {
     final api = _FakeApi();
     final cache = _FakeCache();
     final subkey = _FakeSubkey();
     final chatStore = _FakeChatStore();
+    final localPostStore = _FakeLocalPostStore();
     final service = SquareAccountDeletionService(
       apiClient: api,
       profileCache: cache,
       deviceSubkey: subkey,
       chatStore: chatStore,
+      localPostStore: localPostStore,
     );
 
     await service.deleteAccount(
+      cidNumber: _cidNumber,
       accountId: _owner,
       walletIndex: 3,
       signAction: (_) async => '0xSIG',
@@ -84,6 +106,8 @@ void main() {
     expect(api.sessionCleared, isTrue);
     expect(chatStore.cleared, isTrue);
     expect(subkey.deleted, isTrue);
+    expect(localPostStore.cleared, isTrue);
+    expect(localPostStore.deletedCidNumber, _cidNumber);
   });
 
   test('服务端删除失败：本地一律不动（数据一致）', () async {
@@ -91,15 +115,18 @@ void main() {
     final cache = _FakeCache();
     final subkey = _FakeSubkey();
     final chatStore = _FakeChatStore();
+    final localPostStore = _FakeLocalPostStore();
     final service = SquareAccountDeletionService(
       apiClient: api,
       profileCache: cache,
       deviceSubkey: subkey,
       chatStore: chatStore,
+      localPostStore: localPostStore,
     );
 
     await expectLater(
       service.deleteAccount(
+        cidNumber: _cidNumber,
         accountId: _owner,
         walletIndex: 3,
         signAction: (_) async => '0xSIG',
@@ -111,5 +138,37 @@ void main() {
     expect(api.sessionCleared, isFalse);
     expect(chatStore.cleared, isFalse);
     expect(subkey.deleted, isFalse);
+    expect(localPostStore.cleared, isFalse);
+  });
+
+  test('服务端删除成功后即使副本清理失败，其他本地清理仍全部尝试', () async {
+    final api = _FakeApi();
+    final cache = _FakeCache();
+    final subkey = _FakeSubkey();
+    final chatStore = _FakeChatStore();
+    final localPostStore = _FakeLocalPostStore(fail: true);
+    final service = SquareAccountDeletionService(
+      apiClient: api,
+      profileCache: cache,
+      deviceSubkey: subkey,
+      chatStore: chatStore,
+      localPostStore: localPostStore,
+    );
+
+    await expectLater(
+      service.deleteAccount(
+        cidNumber: _cidNumber,
+        accountId: _owner,
+        walletIndex: 3,
+        signAction: (_) async => '0xSIG',
+      ),
+      throwsA(isA<SquareAccountLocalCleanupException>()),
+    );
+
+    expect(localPostStore.cleared, isTrue);
+    expect(cache.cleared, isTrue);
+    expect(api.sessionCleared, isTrue);
+    expect(chatStore.cleared, isTrue);
+    expect(subkey.deleted, isTrue);
   });
 }

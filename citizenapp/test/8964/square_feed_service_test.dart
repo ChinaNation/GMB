@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -175,6 +176,94 @@ void main() {
     await client.deletePost(
       session: _session(),
       postId: 'sqp_old',
+    );
+  });
+
+  test('SquareApiClient 严格解析本人副本原始字节并携带设备请求证明', () async {
+    final manifestBytes = utf8.encode(jsonEncode({
+      'schema': 'citizenapp.square.post.v1',
+      'account_id':
+          '0x8888888888888888888888888888888888888888888888888888888888888888',
+      'post_category': 'normal',
+      'text': '本人原始正文',
+      'media_items': const <Object>[],
+    }));
+    final contentHash = sha256.convert(manifestBytes).toString();
+    final client = SquareApiClient(
+      baseUrl: 'https://square.test',
+      httpClient: MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/v1/square/posts/self');
+        expect(request.url.queryParameters['limit'], '5');
+        expect(request.headers['authorization'], 'Bearer sqs_test');
+        expect(request.headers['x-device-signature'], isNotEmpty);
+        return http.Response(
+          jsonEncode({
+            'ok': true,
+            'items': [
+              {
+                'post_id': 'sqp_self',
+                'cid_number': _session().cidNumber,
+                'account_id': _session().accountId,
+                'post_category': 'normal',
+                'content_format': 'normal',
+                'manifest_bytes_base64': base64Encode(manifestBytes),
+                'content_hash': contentHash,
+                'storage_receipt_id': 'sqr_self',
+                'chain_block': 88,
+                'created_at': 1800000000000,
+                'post_state': 'published',
+              }
+            ],
+            'next_cursor': null,
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    final page = await client.fetchSelfPublishedPostCopies(
+      session: _session(),
+    );
+
+    expect(page.items.single.manifestBytes, orderedEquals(manifestBytes));
+    expect(page.items.single.contentHash, contentHash);
+    expect(page.items.single.createdAt, 1800000000000);
+    expect(page.nextCursor, isNull);
+  });
+
+  test('SquareApiClient 本人副本任一条字段漂移时拒绝整页', () async {
+    final client = SquareApiClient(
+      baseUrl: 'https://square.test',
+      httpClient: MockClient((_) async => http.Response(
+            jsonEncode({
+              'ok': true,
+              'items': [
+                {
+                  'post_id': 'sqp_wrong',
+                  'cid_number': 'OTHER-CID',
+                  'account_id': _session().accountId,
+                  'post_category': 'normal',
+                  'content_format': 'normal',
+                  'manifest_bytes_base64': 'e30=',
+                  'content_hash': '11' * 32,
+                  'storage_receipt_id': 'sqr_wrong',
+                  'chain_block': 88,
+                  'created_at': 1800000000000,
+                  'post_state': 'published',
+                }
+              ],
+              'next_cursor': null,
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          )),
+    );
+
+    await expectLater(
+      client.fetchSelfPublishedPostCopies(session: _session()),
+      throwsA(isA<SquareApiException>()),
     );
   });
 }

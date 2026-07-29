@@ -128,12 +128,25 @@ export async function releaseUploadReservation(env: Env, uploadId: string): Prom
 
 /** 删除帖子只回收当前存储总量，不返还已经消耗的订阅周期上传额度。 */
 export async function releaseStoredMedia(env: Env, assets: MediaAssetRow[]): Promise<void> {
+  await env.DB.batch(storedMediaReleaseStatements(env, assets));
+}
+
+/**
+ * 构造存储总量回收语句，供内容删除与其 D1 行删除放进同一个原子 batch。
+ *
+ * 调用方不得先单独执行这些语句再删除内容行，否则后续失败重试会重复扣减总量。
+ */
+export function storedMediaReleaseStatements(
+  env: Env,
+  assets: MediaAssetRow[],
+  updatedAt: number = nowMs(),
+): D1PreparedStatement[] {
   const imageAssets = assets.filter((asset) => asset.media_kind === 'image');
   const videoAssets = assets.filter((asset) => asset.media_kind === 'video');
-  await env.DB.batch([
-    releaseTotalStatement(env, 'square_image', imageAssets),
-    releaseTotalStatement(env, 'square_video', videoAssets),
-  ]);
+  return [
+    releaseTotalStatement(env, 'square_image', imageAssets, updatedAt),
+    releaseTotalStatement(env, 'square_video', videoAssets, updatedAt),
+  ];
 }
 
 export async function cleanupExpiredReservations(env: Env): Promise<void> {
@@ -159,7 +172,12 @@ function totalStatement(env: Env, key: string, assets: MediaAssetRow[]): D1Prepa
   ).bind(key, byteSize, assets.length, videoSeconds, nowMs());
 }
 
-function releaseTotalStatement(env: Env, key: string, assets: MediaAssetRow[]): D1PreparedStatement {
+function releaseTotalStatement(
+  env: Env,
+  key: string,
+  assets: MediaAssetRow[],
+  updatedAt: number,
+): D1PreparedStatement {
   const byteSize = assets.reduce((sum, asset) => sum + asset.byte_size, 0);
   const videoSeconds = assets
     .filter((asset) => asset.media_kind === 'video')
@@ -168,7 +186,7 @@ function releaseTotalStatement(env: Env, key: string, assets: MediaAssetRow[]): 
     `UPDATE resource_totals SET
       byte_size = MAX(0, byte_size - ?), object_count = MAX(0, object_count - ?),
       video_seconds = MAX(0, video_seconds - ?), updated_at = ? WHERE resource_key = ?`
-  ).bind(byteSize, assets.length, videoSeconds, nowMs(), key);
+  ).bind(byteSize, assets.length, videoSeconds, updatedAt, key);
 }
 
 /** 收入预算是成本熔断，不替代单账户额度；达到阈值时先停止新视频，再停止新媒体。 */

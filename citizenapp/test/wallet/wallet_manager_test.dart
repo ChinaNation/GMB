@@ -210,39 +210,42 @@ void main() {
     });
   });
 
-  group('门禁0 fail-closed：设备子钥注册强绑定', () {
+  group('设备子钥懒绑定：建钱包不注册子钥', () {
     tearDown(() => WalletManager.subkeyRegistrar = null);
 
+    /// 一旦被调用即抛，用来证明建钱包/导入根本不会走到子钥注册。
     Future<void> failingRegistrar({
       required int walletIndex,
       required String accountId,
       required Future<String> Function(Uint8List bindingMessage) signBinding,
     }) async {
-      throw Exception('设备子钥注册失败：网络不可用');
+      throw Exception('建钱包阶段不应注册设备子钥');
     }
 
-    test('createWallet 注册失败 → 整笔回滚，无残留', () async {
+    test('createWallet 不注册子钥：即使 registrar 必抛也照常建成', () async {
+      // 子钥只服务广场 / 聊天 / 通讯录等需 CID 的场景，而建钱包这一刻账户还没有 CID
+      // （后端 device/register 要求已绑 CID）。只用钱包和交易的用户根本不需要子钥，
+      // 更不该因为后端不可用就建不出钱包。
       WalletManager.subkeyRegistrar = failingRegistrar;
       final manager = WalletManager();
-      await expectLater(manager.createWallet(), throwsA(isA<Exception>()));
-      // 钱包未落库、child 无残留 → WalletGate 维持 needsWallet。
-      expect(await manager.getWallets(), isEmpty);
-      expect(fakeStore.accountKeys, isEmpty);
+      final created = await manager.createWallet();
+      expect((await manager.getWallets()).length, 1);
+      expect(fakeStore.accountKeys[created.profile.accountId], isNotNull);
     });
 
-    test('importWallet 注册失败 → 整笔回滚，无残留', () async {
+    test('importWallet 不注册子钥：即使 registrar 必抛也照常导入', () async {
       WalletManager.subkeyRegistrar = failingRegistrar;
       final manager = WalletManager();
-      await expectLater(
-        manager.importWallet(_mnemonicA),
-        throwsA(isA<Exception>()),
-      );
-      expect(await manager.getWallets(), isEmpty);
-      expect(fakeStore.accountKeys, isEmpty);
+      final profile = await manager.importWallet(_mnemonicA);
+      expect((await manager.getWallets()).length, 1);
+      expect(fakeStore.accountKeys[profile.accountId], isNotNull);
     });
 
-    test('createWallet 注册成功 → 落库并用账户0 对绑定证明签名', () async {
+    test('bindDeviceSubkeyToAccountId 才是唯一绑定入口，按身份账户签绑定证明', () async {
       String? seenAccountId;
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      // 建钱包阶段一次都不该调 registrar；绑定只在进入需 CID 页面时由门禁触发。
       WalletManager.subkeyRegistrar = ({
         required int walletIndex,
         required String accountId,
@@ -252,11 +255,8 @@ void main() {
         final signature = await signBinding(Uint8List(32));
         expect(signature.startsWith('0x'), isTrue);
       };
-      final manager = WalletManager();
-      final created = await manager.createWallet();
+      await manager.bindDeviceSubkeyToAccountId(created.profile.accountId);
       expect(seenAccountId, created.profile.accountId);
-      expect((await manager.getWallets()).length, 1);
-      expect(fakeStore.accountKeys[created.profile.accountId], isNotNull);
     });
   });
 

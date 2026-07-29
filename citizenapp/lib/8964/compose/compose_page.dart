@@ -278,7 +278,7 @@ class _SquareComposePageState extends State<SquareComposePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.cleanupWarning ?? '已发布'),
+          content: Text(result.completionWarning ?? '已发布'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );

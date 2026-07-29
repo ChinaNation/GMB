@@ -263,6 +263,47 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
   - 验收：Worker `typecheck` 通过，全量 174 项测试通过；CitizenConsole 27 项通过；CitizenApp 充值定向 11 项通过。本地真实 Wrangler/D1 基线执行 55 条 SQL 成功，真实 HTTP 验证 config 200、无会话 intent 401、有效会话 intent 200、篡改意图 confirm 400，付款前订单数为 0。
   - 边界：未部署 staging/production，未推送 GitHub，未使用真实稳定币或公民币，未修改 runtime。真机 WalletConnect + Base testnet 真实付款 → CitizenConsole 发币 → CitizenApp 到账仍属于下一步验收。
 
+- **2026-07-29 · 充值鉴权与 CID 解耦（完成并真实验收）**
+  - **背景（bug）**：2026-07-28 commit `9aeab195`「修复公民app的用户身份主键」把 Worker 会话身份主键整体切成 `cid_number`，`auth/service.ts` 会话签发加了 `cid_not_bound` 403。充值三个写接口借用广场会话（`requireSession`），于是**未绑定 CID 的账户无法充值**。该提交对 topup 的唯一改动只是给测试假会话补了一行 `cid_number` 让类型过编译，没有任何业务改动——即"充值要不要 CID"从未作为产品决定被审过。
+  - **判据**：充值业务域全程只用 `account_id`——`topup_orders` 表无 cid 列、`orders.ts` 零 `cid_number`、`settlement.ts` 把币打给 `order.account_id`。产品口径也明确充值不属注册门禁范围（`identity_registration_gate.dart` 门禁文案：「未注册用户只能使用钱包、交易等功能」；该 gate 只包广场/聊天/通讯录/创作者/会员五处，钱包与交易 tab 不包）。冷钱包详情页早已挂同一张 `WalletActionCard`（`wallet_page.dart`），充值入口本就为任意钱包准备，是鉴权模型把它挡死。
+  - **用户定稿**：任意钱包与钱包账户（含冷钱包、含他人账户）都能充值；一只热钱包最多 1990 个账户（账户0 + `//1..//1989`）。
+  - **鉴权改为零签名零会话**：充值本质是"给某个链上账户打币"，收款方无需证明所有权（同转账）。冷钱包本机无私钥，若保留账户签名鉴权则服务端必须同时接受无签名路径，签名即形同虚设——故整体去除。`account_id` 由客户端指定，付款鉴权在 EVM 钱包侧由 WalletConnect 完成。
+  - **顺带修复既有抢单漏洞**：`payer_address` 由客户端在 intent 自由指定，`verifyErc20Payment` 只校验 (收款地址/金额≥/付款地址) 三项公链公开数据，`(chain_id, evm_tx_hash)` 唯一索引先到先得——攻击者可用受害者 payer 地址造指向自己账户的 intent 抢先 confirm。**原会话鉴权对此毫无防护**（攻击者用自己的合法会话即可）。
+  - **抢单防护（时间序，不落库）**：要求 `intent.issued_at < 付款交易所在区块的 timestamp`。受害者意图建于付款前必然通过；攻击者只能在交易上链可见后才造意图，必然被拒。`issued_at` 在 HMAC 意图内不可篡改，`evm_verify.ts` 多取一次区块时间戳即可。
+  - **保住 2026-07-25 安全闭环三条边界**：无匿名 submit（改为凭 HMAC 意图自证，意图钉死付款人/收款地址/金额/目标账户/签发时间，不可伪造）、无按公开 tx hash 查询（status 凭 HMAC 意图）、**付款前不写 D1**（故放弃早先的 `topup_intents` 落库方案）。去掉的只有「充值目标必须等于会话账户」这一条。
+  - **预计修改目录**：
+    - `citizenapp/cloudflare/src/topup/`（代码+残留清理）：`orders.ts` 去会话、intent 收 `account_id`、confirm 加时间序抢单闸、status 改 POST 凭意图；`routes.ts` 改 status 分派；`evm_verify.ts` 回传付款区块时间戳。不动 `settlement.ts` / `config.ts`。
+    - `citizenapp/cloudflare/src/security/`（代码+残留清理）：`request_guard.ts` topup 前缀移出默认拒并加 IP 限流；删已不可达的 `requiresDeviceProof` topup 分支；重写过期注释。
+    - `citizenapp/cloudflare/src/limits/`（代码）：`catalog.ts` status 由 GET 改 POST。
+    - `citizenapp/cloudflare/test/`（测试）：`topup.test.ts` 删假会话 mock 与为过类型加的 `cid_number`，补无 CID / 冷钱包账户 / 抢单 / 过期意图 / 错意图查单用例。
+    - `citizenapp/lib/transaction/onchain-topup/`（代码+残留清理）：`topup_api.dart` 删 square 会话依赖与 `_sessionTokenFor` 及两条异常文案，intent 带 `account_id`，confirm/status 只带意图、status 改 POST；`topup_result_page.dart` 调用签名收敛。
+    - `citizenapp/test/transaction/topup/`（测试）：`topup_core_test.dart` 补请求体含 `account_id`、无 `authorization` 头、status 为 POST 的断言。
+    - `memory/08-tasks/`（文档）：本节即改动记录，不新建文件。
+  - **不动**：`settlement/*`（`TOPUP_SETTLE_TOKEN` 鉴权）、citizenchain runtime、`topup_orders` 表结构、社交功能注册门禁、migrations。
+  - **实建**（与上面方案一致，无偏离）：
+    - `evm_verify.ts`：`EvmVerifyOutcome.confirmed` 增 `block_time_ms`，新增 `fetchBlockTimeMs`（`eth_getBlockByNumber` 取 timestamp 换算毫秒）；取不到返回 null → 整笔按 `pending`，绝不放行。
+    - `orders.ts`：删 `requireSession` 导入与三处调用；`IntentBody` 增 `account_id` 并经 `parseAccountId` 校验；新增 `StatusBody`；confirm 删三处 `session.account_id` 比对，账户单源取 `intent.account_id`；新增抢单闸 `intent.issued_at >= outcome.block_time_ms → 409 topup_intent_superseded`；`topupStatusRoute` 改 `(request, env)` 收 POST body，归属判据 `order.intent_id === intent.intent_id`；新增 `enforceTopupWriteLimit`（`topup_write:account_id:{id}` 10/60s）用于 intent 与 confirm。
+    - `routes.ts`：status 分派由 `GET /status/:id` 改 `POST /status`；头注释同步。
+    - `request_guard.ts`：`/v1/square/topup/` 整前缀移出默认拒（IP 限流 60/60s）；删已不可达的 `requiresDeviceProof` topup 分支；重写过期注释。
+    - `limits/catalog.ts`：`GET /topup/status/[^/]+` → `POST /v1/square/topup/status`。
+    - `topup_api.dart`：删 `SquareSession`/`SquareSessionProvider` 依赖与 `_sessionTokenFor` 及 `topup_session_unavailable`/`topup_account_mismatch` 两条文案；`createIntent` 上传 `account_id`；`confirm`/`status` 去掉 accountId 参数与 Bearer；`status` 改 POST 带 `payment_intent`；`_getJson`/`_postJson` 去掉 sessionToken 形参。
+    - `topup_result_page.dart` + `onchain_topup_page.dart`：删已无用的 `accountId` 字段与传参，`status` 改传 `paymentIntent`。
+  - **单测**：Worker `npm run typecheck` 干净、`vitest run` **198/198 全绿**（topup 12/12，新增冷钱包无 CID 充值、抢单拒绝、区块时间缺失不放行、凭意图查单四类用例；删掉假 session mock 与那行为过类型补的 `cid_number`）。Flutter `dart analyze` 零问题、`dart format` 无变更、`flutter test test/transaction/topup/` **13/13**、`test/wallet/` **145/145** 回归绿。
+  - **真实验收**（本地 `wrangler dev --local` + 真实 D1 + 真实 HTTP + 真连 Base 主网 RPC）：
+    1. `GET /topup/config` 200；
+    2. 冷钱包账户（`0x99…99`，无会话无 CID）`POST /intent` 200，解码意图内 `account_id` 精确等于请求指定账户；
+    3. `POST /confirm` 无任何 Authorization 直达 EVM 校验（真连 `mainnet.base.org`），未知 txhash → `{"status":"confirming"}` 200；
+    4. 篡改意图 → 400 `topup_intent_invalid`（**不是** 401 缺会话，证明鉴权层已解耦）；
+    5. `POST /status` 凭意图 → 404 `topup_order_not_found`（非 401）；
+    6. 旧 `GET /status/:id` → 404 `route_not_found`，路由已下线；
+    7. `settlement/pending` 无令牌 401 / 有令牌 200，结算鉴权未被波及；
+    8. 社交路由 `GET /v1/square/membership` 仍 401 `missing_session`，默认拒未被破坏；
+    9. 同一 `account_id` 连打 12 次 intent → 前 10 次 200、第 11/12 次 429；换一个 account_id 立即 200，限流按账户隔离生效。
+  - **残留清理**：全仓 grep `topup_session_unavailable` / `topup_account_mismatch` / `topup_intent_account_mismatch` / `sessionResolver` / `sessionProvider` / `topup/status/` 均零命中；`topup_core_test.dart` 已删无用的 `SquareSession` 导入。
+  - **文档同步**：`memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md` §4.5.1 已按新契约重写（免会话免 CID、目标账户由请求指定、抢单时间序防护、status 改 POST）。
+  - **已知残余风险**：攻击者若能在受害者付款上链**之前**猜中其 EVM 付款地址与套餐金额并预先造好意图，仍可抢单。压制手段为 IP 限流 + 意图 10 分钟 TTL；彻底消除需每笔意图独立收款地址（HD 派生），会改动资金归集方式，不在本次范围。
+  - **另两件独立待办（不在本次范围）**：① 设备子钥注册时机后移到 CID 注册成功之后——现 `createWallet/importWallet` 对子钥注册 fail-closed，而 `device/register` 同样卡 `cid_not_bound`，导致全新用户建不出钱包；② 身份页「确认注册」前的余额检查与充值跳转（注册最低需 1.21 元 = 0.1 元链上最低费 + 1.11 元 ED）。
+
 ## 待用户拍板的遗留小项（不阻塞步骤 1）
 
 - 国储会主账户→发币热钱包补仓的触发方式（手动 / 阈值提醒）。

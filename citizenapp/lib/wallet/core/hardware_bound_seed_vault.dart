@@ -33,9 +33,9 @@ class SecureStorageBlobStore implements VaultBlobStore {
 
 /// [SecureSeedStore] 的硬件绑定后端（信封加密 + auth-bound KEK）——ROOTLESS。
 ///
-/// 账户的 child mini-secret 经原生桥（Android RSA-2048 KEK +
-/// BiometricPrompt.CryptoObject）加密成密文 blob，blob 由 [VaultBlobStore]
-/// 静默持久化：
+/// 账户的 child mini-secret 经原生桥加密成密文 blob：Android 使用 RSA-2048 KEK +
+/// BiometricPrompt.CryptoObject，iOS 使用 Secure Enclave P-256 KEK +
+/// `biometryCurrentSet`。blob 由 [VaultBlobStore] 静默持久化：
 /// - 写（put）：公钥加密，**静默**，不弹生物识别（创建钱包 0 弹窗）。
 /// - 读（read）：私钥解密，**触发一次强生物识别**（唯一的严档金库）。
 ///
@@ -65,7 +65,7 @@ class HardwareBoundSeedVault implements SecureSeedStore {
   Future<SecureAuthStatus> authStatus() async {
     try {
       final res = await _channel.invokeMapMethod<String, dynamic>('authStatus');
-      // 方案 A：创建热钱包要求已录入强生物识别（严档 child 是纯生物档）。
+      // 创建热钱包要求已录入强生物识别；两端严档 child 都不允许设备密码回退。
       final biometric = res?['strongBiometricEnrolled'] == true;
       return biometric
           ? SecureAuthStatus.available

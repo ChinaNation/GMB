@@ -8,8 +8,6 @@ import 'package:http/testing.dart';
 import 'package:citizenapp/transaction/onchain-topup/topup_api.dart';
 import 'package:citizenapp/transaction/onchain-topup/topup_erc20.dart';
 import 'package:citizenapp/transaction/onchain-topup/topup_models.dart';
-import 'package:citizenapp/8964/services/square_api_client.dart'
-    show SquareSession;
 
 void main() {
   group('WalletConnect WebView CSP', () {
@@ -102,15 +100,10 @@ void main() {
   group('TopupApi', () {
     const accountId =
         '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    // 充值已与广场会话解耦:客户端不再持有 / 传递任何 session。
     TopupApi apiWith(MockClient client) => TopupApi(
           baseUrl: 'https://x.test/api',
           httpClient: client,
-          sessionResolver: () async => SquareSession(
-            sessionToken: 'session-token',
-            cidNumber: "CN220-CTZN2-198805200-2026",
-            accountId: accountId,
-            expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
-          ),
         );
 
     test('fetchConfig 走 /v1/square/topup/config', () async {
@@ -131,13 +124,13 @@ void main() {
       expect(config.network, 'testnet');
     });
 
-    test('createIntent 携带会话且不上传 account_id', () async {
+    test('createIntent 上传充值目标 account_id 且不带任何会话头', () async {
       final api = apiWith(MockClient((request) async {
         expect(request.method, 'POST');
         expect(request.url.path, '/api/v1/square/topup/intent');
-        expect(request.headers['authorization'], 'Bearer session-token');
+        expect(request.headers.containsKey('authorization'), isFalse);
         final body = jsonDecode(request.body) as Map<String, dynamic>;
-        expect(body, isNot(contains('account_id')));
+        expect(body['account_id'], accountId);
         return http.Response(
             jsonEncode({
               'ok': true,
@@ -155,26 +148,32 @@ void main() {
       expect(result.token, 'signed-intent');
     });
 
-    test('confirm 未确认 → confirming', () async {
-      final api = apiWith(MockClient((request) async => http.Response(
-          jsonEncode({'ok': true, 'status': 'confirming'}), 200)));
+    test('confirm 未确认 → confirming，且不带会话头', () async {
+      final api = apiWith(MockClient((request) async {
+        expect(request.headers.containsKey('authorization'), isFalse);
+        return http.Response(
+            jsonEncode({'ok': true, 'status': 'confirming'}), 200);
+      }));
       final result = await api.confirm(
-        accountId: accountId,
         paymentIntent: 'signed-intent',
         evmTxHash: '0x${'22' * 32}',
       );
       expect(result.status, TopupOrderStatus.confirming);
     });
 
-    test('status 解析已支付', () async {
+    test('status 走 POST，凭付款意图查单，订单号不入 URL', () async {
       final api = apiWith(MockClient((request) async {
-        expect(request.url.path, '/api/v1/square/topup/status/top_123');
-        expect(request.headers['authorization'], 'Bearer session-token');
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/v1/square/topup/status');
+        expect(request.headers.containsKey('authorization'), isFalse);
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['order_id'], 'top_123');
+        expect(body['payment_intent'], 'signed-intent');
         return http.Response(jsonEncode({'ok': true, 'status': 'paid'}), 200);
       }));
       final status = await api.status(
-        accountId: accountId,
         orderId: 'top_123',
+        paymentIntent: 'signed-intent',
       );
       expect(status, TopupOrderStatus.paid);
     });
@@ -191,9 +190,7 @@ void main() {
           )));
       expect(
         () => api.confirm(
-            accountId: accountId,
-            paymentIntent: 'signed-intent',
-            evmTxHash: '0x${'11' * 32}'),
+            paymentIntent: 'signed-intent', evmTxHash: '0x${'11' * 32}'),
         throwsA(isA<TopupApiException>()
             .having((e) => e.errorCode, 'errorCode', 'topup_payment_invalid')),
       );

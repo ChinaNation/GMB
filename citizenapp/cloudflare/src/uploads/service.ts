@@ -220,9 +220,8 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
           (upload_id, post_id, cid_number, account_id, media_index, media_kind, provider,
             provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
             declared_duration_seconds, duration_seconds, width, height, error_code,
-            created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, NULL,
-            'live', NULL, NULL)`
+            created_at, updated_at, ready_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, NULL)`
       ).bind(
         uploadId,
         postId,
@@ -520,16 +519,6 @@ export async function streamWebhookRoute(request: Request, env: Env): Promise<Re
     )
     .run();
 
-  // 冷归档回灌完成：restoring 资产转码就绪 → 转 live 恢复可播。
-  if (update.asset_state === 'ready') {
-    await env.DB.prepare(
-      `UPDATE square_media_assets SET archive_state = 'live', updated_at = ?
-        WHERE provider = 'cloudflare_stream' AND provider_asset_id = ? AND archive_state = 'restoring'`
-    )
-      .bind(nowMs(), uid)
-      .run();
-  }
-
   return jsonResponse({
     ok: true,
     action: result.meta?.changes ? 'stream_asset_updated' : 'stream_asset_ignored',
@@ -563,7 +552,7 @@ async function loadMediaAsset(env: Env, uploadId: string, mediaIndex: number): P
     `SELECT upload_id, post_id, cid_number, account_id, media_index, media_kind, provider,
         provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
         declared_duration_seconds, duration_seconds, width, height, error_code,
-        created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
+        created_at, updated_at, ready_at
       FROM square_media_assets
       WHERE upload_id = ? AND media_index = ?`
   )
@@ -580,7 +569,7 @@ export async function loadMediaAssets(env: Env, uploadId: string): Promise<Media
     `SELECT upload_id, post_id, cid_number, account_id, media_index, media_kind, provider,
         provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
         declared_duration_seconds, duration_seconds, width, height, error_code,
-        created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
+        created_at, updated_at, ready_at
       FROM square_media_assets
       WHERE upload_id = ?
       ORDER BY media_index ASC`
@@ -595,7 +584,7 @@ async function loadMediaAssetByProvider(env: Env, providerAssetId: string): Prom
     `SELECT upload_id, post_id, cid_number, account_id, media_index, media_kind, provider,
       provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
       declared_duration_seconds, duration_seconds, width, height, error_code,
-      created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
+      created_at, updated_at, ready_at
       FROM square_media_assets WHERE provider = 'cloudflare_stream' AND provider_asset_id = ?`
   ).bind(providerAssetId).first<MediaAssetRow>();
 }

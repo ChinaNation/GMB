@@ -168,7 +168,11 @@ Pixel 8a / Android 16（API 36，adb `3C071JEKB09000`）真机 spike **通过**�
 - 解密：`cipher.init(DECRYPT_MODE, priv, oaepSpec)` 不触发认证；`BiometricPrompt.CryptoObject(cipher)` 承载令牌，`onAuthenticationSucceeded` 里 `result.cryptoObject.cipher.doFinal(ct)` 原子解密。
 - 依赖：`androidx.biometric:biometric:1.1.0`；`MainActivity` 已 `FlutterFragmentActivity`；manifest 加 `USE_BIOMETRIC`。
 
-**iOS 端**：本机无 Xcode/iOS 真机 → Step 0 iOS（flutter_secure_storage `.biometryCurrentSet` 是否逐读弹 Face ID）**待有 Mac+iOS 设备再验**。
+**iOS 端更新（2026-07-29）**：Xcode 27 beta 与 CocoaPods 已就绪，CitizenApp 与
+CitizenWallet 最低版本统一为 iOS 16.0。最终方案不复用 flutter_secure_storage 软桥，
+已实现 Secure Enclave P-256 ECIES 严档 KEK 和 P-256 设备子钥两条原生通道；
+CitizenApp `arm64` 模拟器目标完整构建通过。本任务不执行 iPhone 真机验收，
+Apple 开发者账户不属于当前完成条件。
 
 **Step 1 落地（2026-07-09，Android 生产桥，纯新增未切生产）**：
 - 删 `SpikeBiometricVault.kt` / `lib/spike_main.dart`（spike 转正）。

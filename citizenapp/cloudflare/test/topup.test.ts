@@ -1,6 +1,6 @@
 import { blake2AsU8a } from '@polkadot/util-crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Env, SessionState } from '../src/types';
+import type { Env } from '../src/types';
 import {
   topupConfigRoute,
   topupConfirmRoute,
@@ -39,7 +39,7 @@ describe('topup 稳定币充值后端', () => {
     expect(body.packages).toHaveLength(2);
   });
 
-  it('intent 把会话 account_id 与 payer、报价绑定，客户端不能指定目标账户', async () => {
+  it('intent 把请求指定的 account_id 与 payer、报价绑定', async () => {
     const env = makeEnv(new FakeDb());
     const intent = await createIntent(env, ACCOUNT_ID);
     const payload = JSON.parse(Buffer.from(intent.split('.')[0], 'base64url').toString()) as {
@@ -54,12 +54,23 @@ describe('topup 稳定币充值后端', () => {
     });
   });
 
+  it('无会话、无 CID 的任意账户(含冷钱包)都能充值到自己指定的账户', async () => {
+    const db = new FakeDb();
+    const env = makeEnv(db);
+    // 冷钱包只有公钥、链上无 CID:请求不带任何 Authorization,目标账户由请求体指定。
+    const intent = await createIntent(env, OTHER_ACCOUNT_ID);
+    vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '' }));
+    const order = await (await confirm(env, intent)).json<{ status: string; order_id: string }>();
+    expect(order.status).toBe('pending');
+    expect(db.rows.get(order.order_id)).toMatchObject({ account_id: OTHER_ACCOUNT_ID });
+  });
+
   it('confirm 篡改 intent → 拒绝且不访问 EVM', async () => {
     const env = makeEnv(new FakeDb());
     const intent = await createIntent(env, ACCOUNT_ID);
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-    await expect(confirm(env, `${intent.slice(0, -1)}x`, ACCOUNT_ID)).rejects.toMatchObject({
+    await expect(confirm(env, `${intent.slice(0, -1)}x`)).rejects.toMatchObject({
       code: 'topup_intent_invalid',
     });
     expect(fetch).not.toHaveBeenCalled();
@@ -71,8 +82,8 @@ describe('topup 稳定币充值后端', () => {
     const intent = await createIntent(env, ACCOUNT_ID);
     vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '' }));
 
-    const first = await (await confirm(env, intent, ACCOUNT_ID)).json<{ status: string; order_id: string }>();
-    const second = await (await confirm(env, intent, ACCOUNT_ID)).json<{ status: string; order_id: string }>();
+    const first = await (await confirm(env, intent)).json<{ status: string; order_id: string }>();
+    const second = await (await confirm(env, intent)).json<{ status: string; order_id: string }>();
     expect(first.status).toBe('pending');
     expect(second.order_id).toBe(first.order_id);
     expect(db.rows.size).toBe(1);
@@ -83,15 +94,40 @@ describe('topup 稳定币充值后端', () => {
     });
   });
 
-  it('status 只允许订单所属会话账户读取', async () => {
+  it('抢单防护:付款意图晚于付款上链 → 拒绝入账', async () => {
+    const db = new FakeDb();
+    const env = makeEnv(db);
+    // 模拟攻击者:先看见链上付款(区块时间在过去),之后才造出指向自己账户的意图。
+    const intent = await createIntent(env, OTHER_ACCOUNT_ID);
+    vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '', blockTimeMs: Date.now() - 60_000 }));
+    await expect(confirm(env, intent)).rejects.toMatchObject({ code: 'topup_intent_superseded' });
+    expect(db.rows.size).toBe(0);
+  });
+
+  it('区块时间取不到时按过渡态处理,绝不放行入账', async () => {
+    const db = new FakeDb();
+    const env = makeEnv(db);
+    const intent = await createIntent(env, ACCOUNT_ID);
+    vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '', blockTimeMs: null }));
+    const body = await (await confirm(env, intent)).json<{ status: string }>();
+    expect(body.status).toBe('confirming');
+    expect(db.rows.size).toBe(0);
+  });
+
+  it('status 凭本笔付款意图读取，换一份意图读不到', async () => {
     const db = new FakeDb();
     const env = makeEnv(db);
     const intent = await createIntent(env, ACCOUNT_ID);
     vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '' }));
-    const orderId = (await (await confirm(env, intent, ACCOUNT_ID)).json<{ order_id: string }>()).order_id;
-    await expect(
-      topupStatusRoute(sessionGet(`https://x.test/v1/square/topup/status/${orderId}`, OTHER_ACCOUNT_ID), env, orderId),
-    ).rejects.toMatchObject({ code: 'topup_order_not_found' });
+    const orderId = (await (await confirm(env, intent)).json<{ order_id: string }>()).order_id;
+
+    const own = await (await status(env, orderId, intent)).json<{ order_id: string }>();
+    expect(own.order_id).toBe(orderId);
+
+    const foreignIntent = await createIntent(env, OTHER_ACCOUNT_ID);
+    await expect(status(env, orderId, foreignIntent)).rejects.toMatchObject({
+      code: 'topup_order_not_found',
+    });
   });
 
   it('claim 原子抢占且不自动过期，第二个结算流程不能重复抢占', async () => {
@@ -159,43 +195,50 @@ async function preparedOrder(): Promise<{ env: Env; db: FakeDb; orderId: string 
   const env = makeEnv(db);
   const intent = await createIntent(env, ACCOUNT_ID);
   vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex: '' }));
-  const orderId = (await (await confirm(env, intent, ACCOUNT_ID)).json<{ order_id: string }>()).order_id;
+  const orderId = (await (await confirm(env, intent)).json<{ order_id: string }>()).order_id;
   return { env, db, orderId };
 }
 
+/// 充值三个接口一律不带 Authorization:鉴权已从广场会话解耦,目标账户由请求体指定。
 async function createIntent(env: Env, accountId: string): Promise<string> {
   const response = await topupIntentRoute(
-    sessionPost('https://x.test/v1/square/topup/intent', {
+    post('https://x.test/v1/square/topup/intent', {
+      account_id: accountId,
       token: 'USDC',
       package_id: 'pkg_15',
       payer_address: PAYER,
-      account_id: OTHER_ACCOUNT_ID,
-    }, accountId),
+    }),
     env,
   );
   return (await response.json<{ payment_intent: string }>()).payment_intent;
 }
 
-function confirm(env: Env, paymentIntent: string, accountId: string): Promise<Response> {
+function confirm(env: Env, paymentIntent: string): Promise<Response> {
   return topupConfirmRoute(
-    sessionPost('https://x.test/v1/square/topup/confirm', {
+    post('https://x.test/v1/square/topup/confirm', {
       payment_intent: paymentIntent,
       evm_tx_hash: TX_HASH,
-    }, accountId),
+    }),
     env,
   );
 }
 
-function sessionPost(url: string, body: unknown, accountId: string): Request {
-  return new Request(url, {
-    method: 'POST',
-    headers: { authorization: `Bearer session-${accountId}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+function status(env: Env, orderId: string, paymentIntent: string): Promise<Response> {
+  return topupStatusRoute(
+    post('https://x.test/v1/square/topup/status', {
+      order_id: orderId,
+      payment_intent: paymentIntent,
+    }),
+    env,
+  );
 }
 
-function sessionGet(url: string, accountId: string): Request {
-  return new Request(url, { headers: { authorization: `Bearer session-${accountId}` } });
+function post(url: string, body: unknown): Request {
+  return new Request(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 function settleGet(url: string): Request {
@@ -210,14 +253,25 @@ function settlePost(url: string, body: unknown): Request {
   });
 }
 
-function rpcFetch({ signedExtrinsicHex }: { signedExtrinsicHex: string }) {
+/// [blockTimeMs] = 付款区块时间戳(毫秒);默认取"晚于本用例创建的付款意图",即合法时序。
+/// 传过去的时间用于模拟抢单,传 null 用于模拟区块时间取不到。
+function rpcFetch({
+  signedExtrinsicHex,
+  blockTimeMs = Date.now() + 60_000,
+}: {
+  signedExtrinsicHex: string;
+  blockTimeMs?: number | null;
+}) {
   return vi.fn(async (_url: string, init: RequestInit) => {
     const body = JSON.parse(init.body as string) as { method: string; params: unknown[]; id: number };
     if (body.method === 'eth_getTransactionReceipt') {
       return Response.json({ jsonrpc: '2.0', id: 1, result: confirmedReceipt() });
     }
     if (body.method === 'eth_getBlockByNumber') {
-      return Response.json({ jsonrpc: '2.0', id: 1, result: { number: '0x20' } });
+      // 同一分支同时服务 finalized 高度判定(读 number)与付款区块时间(读 timestamp)。
+      const timestamp =
+        blockTimeMs === null ? undefined : `0x${Math.floor(blockTimeMs / 1000).toString(16)}`;
+      return Response.json({ jsonrpc: '2.0', id: 1, result: { number: '0x20', timestamp } });
     }
     if (body.method === 'chain_getFinalizedHead') {
       return Response.json({ jsonrpc: '2.0', id: body.id, result: BLOCK_HASH });
@@ -302,21 +356,10 @@ function hexBytes(value: string): Uint8Array {
   return Uint8Array.from(Buffer.from(value.slice(2), 'hex'));
 }
 
+/// 充值已不读广场会话,故这里不再桩任何 session 缓存。
 function makeEnv(db: FakeDb): Env {
   return {
     DB: db,
-    SQUARE_CACHE: {
-      get: async (key: string) => {
-        const accountId = key.slice('square_session:session-'.length);
-        return {
-          cid_number: 'CN220-CTZN2-198805200-2026',
-          account_id: accountId,
-          device_key_hash: 'device',
-          created_at: Date.now(),
-          expires_at: Date.now() + 60000,
-        } satisfies SessionState;
-      },
-    },
     TOPUP_NETWORK: 'mainnet',
     TOPUP_RECV_ADDRESS: RECV,
     TOPUP_BASE_RPC_URL: 'https://base-mainnet.example',
@@ -356,6 +399,8 @@ interface Row {
 
 class FakeDb {
   rows = new Map<string, Row>();
+  /// 限流窗口:rate_key → 本窗口计数(充值写接口按 account_id 计数)。
+  rateWindows = new Map<string, number>();
   prepare(sql: string) { return new FakeStmt(this, sql); }
 }
 
@@ -365,6 +410,12 @@ class FakeStmt {
   bind(...args: unknown[]) { this.args = args; return this; }
 
   async first<T>(): Promise<T | null> {
+    if (this.sql.includes('INSERT INTO square_rate_windows')) {
+      const [rateKey, expiresAt] = this.args as [string, number];
+      const count = (this.db.rateWindows.get(rateKey) ?? 0) + 1;
+      this.db.rateWindows.set(rateKey, count);
+      return { request_count: count, expires_at: expiresAt } as T;
+    }
     if (this.sql.includes('WHERE chain_id = ? AND evm_tx_hash = ?')) {
       const [chainId, txHash] = this.args as [number, string];
       return ([...this.db.rows.values()].find((row) => row.chain_id === chainId && row.evm_tx_hash === txHash) ?? null) as T | null;

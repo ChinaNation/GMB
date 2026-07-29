@@ -117,7 +117,6 @@ class SquareMediaItem {
     this.coverUrl,
     this.byteSize,
     this.assetState,
-    this.archiveState,
     this.width,
     this.height,
   });
@@ -127,16 +126,11 @@ class SquareMediaItem {
   final String? coverUrl;
   final int? byteSize;
   final String? assetState;
-  // 视频冷归档态：'archived'=已归档不可播（作者未续订），'restoring'=恢复中；null/'live'=正常。
-  final String? archiveState;
 
   /// 媒体原始像素宽/高（Worker LimitTicket 上传时落库并随 feed 回传）。
   /// 广场卡片据此判横竖屏；缺失时按横屏兜底。
   final int? width;
   final int? height;
-
-  bool get isArchived => archiveState == 'archived';
-  bool get isRestoring => archiveState == 'restoring';
 
   /// 竖屏 = 高严格大于宽；宽高缺失或非正数时按横屏处理。
   bool get isPortrait {

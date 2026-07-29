@@ -37,7 +37,7 @@
 - **R3 会员/创作者/订阅/资源镜像** ✅ 完成 2026-07-28:memberships / creator_tiers / creator_subscriptions / resource_reservations / resource_usage 归属键 account_id→cid_number(镜像表保留 account_id);feed 读会员改按 cid。
 - **R4 通讯录** ✅ 完成 2026-07-28:square_contacts PK (account_id, contact_id)→(cid_number, contact_id),设备子钥鉴权。
 - **R5 chat** ✅ 完成 2026-07-28:chat_devices / chat_keypackages / chat_device_binding_nonces 归属/路由按 cid_number,设备/密钥属 account_id 保留。
-- **R6 收尾** ✅ 完成 2026-07-28:`account/purge` + rebind/revoke 语义重构(按 cid 删身份、去掉"删旧账户数据");保留表 `chain_transaction_confirmations` / `topup_orders` / `square_login_challenges` 归属决策落地(默认保留 account_id=链上事实,如需"我的交易/充值"跨换绑聚合再加 cid 冗余列);全套 e2e 门禁:换绑后同一 cid 社交数据不丢。
+- **R6 收尾** ✅ 完成 2026-07-28:`account/purge` + rebind/revoke 语义重构(按 cid 删身份、去掉"删旧账户数据");`chain_transaction_confirmations` / `topup_orders` / `square_login_challenges` 三表继续以 `account_id` 为业务主体，不改为 CID 归属键；其中前两表是不可变链交易/财务事实，注销后保留，登录挑战属于临时鉴权材料，注销时删除。全套 e2e 门禁:换绑后同一 cid 社交数据不丢。
 
 ## 设计原则定案(用户已答)
 - 设备子钥**属钱包账户**(账户生成);换绑→旧账户+旧子钥作废,新账户重注册子钥;worker 靠链上 CidByAccount 实时校当前绑定,不搞子钥迁移。
@@ -78,10 +78,10 @@ worker `vitest` 全绿 + `tsc` 0;换绑后同一 cid_number 社交数据不丢(�
 - **镜像写入**:citizen_coin `mirrorPlatformState`(cid PK + account 列,ON CONFLICT(cid_number))、creator `replaceCreatorTiers`/`mirrorCreatorSubscription`(cid 主键 + account 列);confirm 路由从 session/body 账户 resolve cid(creator 新增 `resolveBoundCid`)。
 - **charge_due keeper**(reconcile):平台/创作者对账**按 cid 迭代镜像、回链读订阅用当前绑定 account、更新按 cid**(用户定案);creator 复合主键 (subscriber_cid, creator_cid)。
 - **资源用量**:`reserveUploadUsage` 入参 `cid_number`(原 account_id)、`consumeUploadUsage` RETURNING/INSERT 按 cid;uploads/service 调用改传 session.cid_number。
-- **视频冷归档**(archive):`selectLapsedCidNumbers`(JOIN a.cid_number=m.cid_number)、`selectVideoAssets(cid)`、`restoreAccountVideos(cid)`;R2 归档对象 key 仍按每行 account_id(发布签名者路径)。
-- **purge**:memberships/resource_*/creator_* 移入 cid 删除分支(并修 R2 遗留的 resource_* account_id 失效列),补 creator 表删除防孤儿;account_id 分支仅剩 uploads/posts/media/device_subkeys/login_challenges。
+- **权益到期清理**:2026-07-29 已按后续目标态删除旧视频归档与恢复流程；当前只接受同一轮 finalized 链区块时间戳，按 cid_number 清理到期身份的全部广场云端内容。
+- **purge**:memberships/resource_*/creator_* 与 uploads/posts/media 均进入 cid 删除分支，补 creator 表删除防孤儿；account_id 分支只删除账户级 device_subkeys/login_challenges。
 - **链交易验证不变**:verifyTransaction/readSubscriptionAtBlock/readCreatorPlansAtBlock/bindFinalizedTransactionConfirmation 仍按 account_id(链查入口 + chain_transaction_confirmations 保留表)。
-- **测试**:feed/membership/membership_reconcile/creator_reconcile/archive/account/profiles 全改 cid 模型。门禁 `tsc` EXIT=0、`vitest` 29 文件 / 179 测试全绿。残留自审:memberships/creator/resource 零 account_id 归属残留。
+- **测试**:feed/membership/membership_reconcile/creator_reconcile/account/profiles 全改 cid 模型。阶段门禁 `tsc` EXIT=0、`vitest` 29 文件 / 179 测试全绿。残留自审:memberships/creator/resource 零 account_id 归属残留。
 - **⚠️前端**:creator plan 响应字段 `creator_account_id` → `creator_cid_number`(前端须同步)。
 
 ## R4 落地记录(2026-07-28)
@@ -103,12 +103,13 @@ worker `vitest` 全绿 + `tsc` 0;换绑后同一 cid_number 社交数据不丢(�
 - **⚠️前端(chat 契约变更,Flutter 须同步)**:会话发信 `recipient_account_id`→`recipient_cid_number`;KeyPackage 发布体 `account_id`→`cid_number`、拉取路由末段用目标 `cid_number`、领取体 `cid_number`(删 requester 字段);WS 握手头 `x-chat-account-id`→`x-chat-cid-number`;推送唤醒 payload `sender_account_id`→`sender_cid_number`。
 
 ## R6 落地记录(2026-07-28,收尾结题)
-- **注销语义(purgeAccount)**:注销=删身份——身份内容(square_posts/uploads/media_assets)与全部 off-chain/镜像表按 **cid_number** 删(删该身份跨换绑账户的全部内容);媒体 provider 本体按 cid 载入删除;仅账户级鉴权凭证(square_device_subkeys/square_login_challenges)按当前 account_id 删。R2 对象(帖子 manifest/归档原片)按发布 account 段删(dev 无换绑历史故完整,跨账户历史前缀待生产迁移工具)。
+- **注销语义(purgeAccount)**:注销=删身份——身份内容(square_posts/uploads/media_assets)与全部可清除的 off-chain/镜像表按 **cid_number** 删(删该身份跨换绑账户的全部内容);媒体 provider 本体按 cid 载入删除;账户级鉴权凭证(square_device_subkeys/square_login_challenges)按当前 account_id 删。R2 资料和帖子 manifest 按各自现行前缀硬删除。
 - **换绑吊销(revokeRebindOldAccount)**:已确认接线 `rebind/service.ts`;只删旧账户账户级鉴权材料(chat 端到端/登录挑战/设备子钥/会话),**不删** posts/media/memberships/follows/通讯录(按 cid 随身份留存);注释订正对齐实现。
-- **保留表决策(无 schema 改动)**:`chain_transaction_confirmations`(仅按 tx_hash 查,account_id=签名者事实)、`topup_orders`(按 tx/intent/order_id 查 + account_id 订单归属校验,账户级财务记录)、`square_login_challenges`(挑战阶段 cid 未 resolve,主体=待验证账户)——三表保留 account_id,不加 cid。
+- **三表 account_id 归属决策(无 schema 改动)**:`chain_transaction_confirmations`(仅按 tx_hash 查,account_id=签名者事实)、`topup_orders`(按 tx/intent/order_id 查 + account_id 订单归属校验,账户级财务记录)、`square_login_challenges`(挑战阶段 cid 未 resolve,主体=待验证账户)——三表均保留 account_id、不加 cid；这不是“三表注销后全部保留”：前两表作为不可变链交易/财务事实保留，登录挑战作为临时鉴权材料由 `purgeAccount` 删除。
 - **e2e 门禁**:新增 `test/rebind_data_survives.test.ts`——账户 A 写入通讯录密文,"同一 cid + 账户 B"会话按 cid 取回同一密文;会员镜像按 cid 读取跨账户不丢。
 - **全仓最终审计**:剩余 account_id 归属谓词全部合法(chat 设备/密钥属账户、square_device_subkeys 登录凭证、square_login_challenges 主体);社交/身份数据零 account_id 残留;严格命名核验无裸 `account` 缩写(routes.ts 路由段局部 `account`→`accountId`;chain/subscription.ts SCALE 解码器 32B 局部非归属字段不动)。
 - **门禁**:`tsc` EXIT=0、`vitest` 30 文件 / 181 测试全绿。
+- **2026-07-29 B2 注释订正**:`purgeAccount` 顶部契约不再声称删除“全部数据/所有账户引用”，明确前两张不可变事实表保留、登录挑战删除；本项未修改任何删除 SQL、调用顺序或返回值。TypeScript 类型检查和 `account.test.ts` 13 项回归通过。
 
 ## 结题汇总(R1–R6)
 Worker 全库用户数据身份主键 account_id→cid_number 彻底重构完成:

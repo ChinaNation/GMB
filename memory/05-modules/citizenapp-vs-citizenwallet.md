@@ -11,6 +11,7 @@
 | 中文名 | 热钱包 | 冷钱包(软件形态的硬件钱包) |
 | pubspec name | `citizenapp` | `citizenwallet` |
 | 网络连接 | 连链(smoldot 轻节点) / 连 OnChina 后端 | **完全离线** |
+| iOS 最低版本 | 16.0 | 16.0 |
 | 主题 | Light | Dark |
 | 依赖关系 | 不依赖 citizenwallet | 不依赖 citizenapp |
 | 代码共享 | **无** —— 两个独立 Flutter app |

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/8964/services/square_local_post_presenter.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -18,6 +19,7 @@ class ProfilePostsTab extends StatefulWidget {
     required this.api,
     required this.emptyLabel,
     required this.session,
+    required this.isSelf,
     this.category,
     this.contentFormat,
     this.mediaKind,
@@ -29,6 +31,7 @@ class ProfilePostsTab extends StatefulWidget {
   final CitizenProfileApi api;
   final String emptyLabel;
   final SquareSession session;
+  final bool isSelf;
   final SquarePostCategory? category;
   final SquarePostContentFormat? contentFormat;
   final SquareMediaKind? mediaKind;
@@ -40,8 +43,11 @@ class ProfilePostsTab extends StatefulWidget {
 
 class _ProfilePostsTabState extends State<ProfilePostsTab> {
   static const int _pageSize = 20;
+  static const SquareLocalPostPresenter _localPresenter =
+      SquareLocalPostPresenter();
 
   final List<SquarePost> _posts = [];
+  final Map<String, Set<SquareMediaKind>> _unavailableMediaKindsByPostId = {};
   int? _cursor;
   bool _loading = false;
   bool _done = false;
@@ -58,6 +64,39 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       _loading = true;
       _failedFirst = false;
     });
+    var localHasContent = false;
+    if (widget.isSelf && widget.session.cidNumber == widget.cidNumber) {
+      try {
+        final localCopies =
+            await widget.api.fetchLocalPublishedPosts(widget.cidNumber);
+        final presentations = localCopies
+            .map(_localPresenter.present)
+            .where(_matchesLocalFilters)
+            .toList(growable: false);
+        localHasContent = presentations.isNotEmpty;
+        if (!mounted) return;
+        setState(() {
+          _posts
+            ..clear()
+            ..addAll(presentations.map((item) => item.post));
+          _unavailableMediaKindsByPostId
+            ..clear()
+            ..addEntries(
+              presentations
+                  .where((item) => item.unavailableMediaKinds.isNotEmpty)
+                  .map(
+                    (item) => MapEntry(
+                      item.post.postId,
+                      item.unavailableMediaKinds,
+                    ),
+                  ),
+            );
+        });
+      } on Exception {
+        // 本地副本损坏时 fail-closed，但仍继续读取 Worker，不让单机磁盘故障遮住远端内容。
+      }
+    }
+
     try {
       final page = await widget.api.fetchAuthorPosts(
         widget.cidNumber,
@@ -68,9 +107,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       );
       if (!mounted) return;
       setState(() {
-        _posts
-          ..clear()
-          ..addAll(page.posts);
+        _mergeRemotePosts(page.posts);
         _cursor = page.nextCursor;
         _done = page.nextCursor == null;
         _loading = false;
@@ -79,7 +116,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _failedFirst = _posts.isEmpty;
+        _failedFirst = _posts.isEmpty && !localHasContent;
       });
     }
   }
@@ -98,7 +135,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       );
       if (!mounted) return;
       setState(() {
-        _posts.addAll(page.posts);
+        _mergeRemotePosts(page.posts);
         _cursor = page.nextCursor;
         _done = page.nextCursor == null;
         _loading = false;
@@ -107,6 +144,54 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       if (!mounted) return;
       setState(() => _loading = false);
     }
+  }
+
+  bool _matchesLocalFilters(SquareLocalPostPresentation presentation) {
+    final post = presentation.post;
+    if (widget.category != null && post.postCategory != widget.category) {
+      return false;
+    }
+    if (widget.contentFormat != null &&
+        post.contentFormat != widget.contentFormat) {
+      return false;
+    }
+    final mediaKind = widget.mediaKind;
+    return mediaKind == null ||
+        presentation.unavailableMediaKinds.contains(mediaKind);
+  }
+
+  /// 远端资料与媒体元数据优先；远端未返回的本地正文继续保留。
+  ///
+  /// 同一 post_id 的本地媒体声明只在远端缺少对应媒体时保留“云端已清理”标记，
+  /// 不会构造第二套媒体对象或覆盖 Worker 返回的作者资料。
+  void _mergeRemotePosts(List<SquarePost> remotePosts) {
+    final byPostId = <String, SquarePost>{
+      for (final post in _posts) post.postId: post,
+    };
+    for (final remote in remotePosts) {
+      byPostId[remote.postId] = remote;
+      final unavailable = _unavailableMediaKindsByPostId[remote.postId];
+      if (unavailable != null) {
+        final remaining = unavailable.difference(
+          remote.mediaItems.map((media) => media.mediaKind).toSet(),
+        );
+        if (remaining.isEmpty) {
+          _unavailableMediaKindsByPostId.remove(remote.postId);
+        } else {
+          _unavailableMediaKindsByPostId[remote.postId] =
+              Set<SquareMediaKind>.unmodifiable(remaining);
+        }
+      }
+    }
+    final merged = byPostId.values.toList()
+      ..sort((left, right) {
+        final byCreatedAt = right.createdAt.compareTo(left.createdAt);
+        if (byCreatedAt != 0) return byCreatedAt;
+        return right.postId.compareTo(left.postId);
+      });
+    _posts
+      ..clear()
+      ..addAll(merged);
   }
 
   bool _onScroll(ScrollNotification notification) {
@@ -168,20 +253,34 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
               'authorization': 'Bearer ${widget.session.sessionToken}',
             };
             if (widget.contentFormat == SquarePostContentFormat.article) {
-              return SquareArticleCard(
-                post: post,
-                onTap: () => widget.onOpenPost?.call(post),
-                onAuthorTap: () => widget.onOpenPost?.call(post),
-                avatarUrl: avatarUrl,
-                avatarHeaders: avatarHeaders,
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SquareArticleCard(
+                    post: post,
+                    onTap: () => widget.onOpenPost?.call(post),
+                    onAuthorTap: () => widget.onOpenPost?.call(post),
+                    avatarUrl: avatarUrl,
+                    avatarHeaders: avatarHeaders,
+                  ),
+                  if (_hasUnavailableMedia(post.postId))
+                    const _UnavailableMediaNotice(),
+                ],
               );
             }
-            return SquarePostCard(
-              post: post,
-              onTap: () => widget.onOpenPost?.call(post),
-              onAuthorTap: () => widget.onOpenPost?.call(post),
-              avatarUrl: avatarUrl,
-              avatarHeaders: avatarHeaders,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SquarePostCard(
+                  post: post,
+                  onTap: () => widget.onOpenPost?.call(post),
+                  onAuthorTap: () => widget.onOpenPost?.call(post),
+                  avatarUrl: avatarUrl,
+                  avatarHeaders: avatarHeaders,
+                ),
+                if (_hasUnavailableMedia(post.postId))
+                  const _UnavailableMediaNotice(),
+              ],
             );
           },
         ),
@@ -199,10 +298,31 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
         }
       }
     }
+    final unavailable = _posts.any(
+      (post) =>
+          _unavailableMediaKindsByPostId[post.postId]
+              ?.contains(widget.mediaKind) ??
+          false,
+    );
+    if (entries.isEmpty && unavailable) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: _UnavailableMediaNotice()),
+        ),
+      ];
+    }
     if (entries.isEmpty) {
       return [_message(widget.emptyLabel)];
     }
     return [
+      if (unavailable)
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: _UnavailableMediaNotice(),
+          ),
+        ),
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         sliver: SliverGrid(
@@ -226,6 +346,9 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       _footer(),
     ];
   }
+
+  bool _hasUnavailableMedia(String postId) =>
+      _unavailableMediaKindsByPostId[postId]?.isNotEmpty ?? false;
 
   Widget _footer() {
     if (!_loading || _posts.isEmpty) {
@@ -252,6 +375,25 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
         child: Text(
           text,
           style: const TextStyle(color: AppTheme.textTertiary),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnavailableMediaNotice extends StatelessWidget {
+  const _UnavailableMediaNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Text(
+        '媒体已从云端清理，本机仅保留正文',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: AppTheme.textTertiary,
+          fontSize: 12,
         ),
       ),
     );

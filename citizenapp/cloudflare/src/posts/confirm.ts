@@ -13,47 +13,25 @@ import {
 } from '../chain/square_event';
 import { deleteProviderAsset } from '../media/cloudflare_assets';
 import { signedMediaUrls } from '../media/signed_urls';
-import { releaseStoredMedia } from '../limits/usage';
+import { storedMediaReleaseStatements } from '../limits/usage';
 import { HttpError, jsonResponse, readJson, requireSession } from '../shared/http';
 import { nowMs } from '../shared/time';
-import { accountIdPathSegment } from '../storage/r2_keys';
 import { loadMediaAssets } from '../uploads/service';
 import { requireActiveMembership } from '../membership/service';
 import { readProfileDoc } from '../profiles/repository';
 import { assertMembershipLevel, membershipPlan } from '../membership/plans';
 import { assertIdentityCanPublishCategory, assertManifestQuota } from '../uploads/quota';
 import { fetchChainIdentityState } from '../chain/identity';
+import {
+  manifestObjectKeyFromUpload,
+  readVerifiedSquarePostManifest,
+  type SquarePostManifest,
+} from './manifest';
 
 interface ConfirmRequest {
   post_id?: unknown;
   block_hash?: unknown;
   tx_hash?: unknown;
-}
-
-interface SquareManifestMediaItem {
-  media_kind: 'image' | 'video';
-  file_name?: string;
-  content_type?: string;
-  byte_size?: number;
-  sha256?: string;
-}
-
-// 文章正文图文块（内联图按 media_index 引用 media_items）；动态无此字段。
-interface SquareManifestContentBlock {
-  t: 'text' | 'image';
-  text?: string;
-  media_index?: number;
-}
-
-interface SquarePostManifest {
-  schema?: string;
-  account_id?: string;
-  post_category?: 'normal' | 'campaign';
-  content_format?: 'normal' | 'article';
-  title?: string;
-  text?: string;
-  content_blocks?: SquareManifestContentBlock[];
-  media_items?: SquareManifestMediaItem[];
 }
 
 export async function confirmPostRoute(request: Request, env: Env): Promise<Response> {
@@ -96,23 +74,48 @@ export async function deletePostCloudflareData(
     throw new HttpError(403, 'post_owner_mismatch', '登录身份与动态作者不一致');
   }
 
+  return deletePostCloudflareDataByCid(
+    env,
+    session.cid_number,
+    postId,
+    nowMs(),
+  );
+}
+
+/**
+ * 按身份主键硬删除一个内容项。除已发布帖子外，也允许删除尚未发布但已占用
+ * Images/Stream/R2 的上传项，供权益到期清理覆盖完整云端内容。
+ */
+export async function deletePostCloudflareDataByCid(
+  env: Env,
+  cidNumber: string,
+  postId: string,
+  updatedAt: number,
+): Promise<{
+  deleted_media_assets: number;
+  deleted_r2_objects: number;
+}> {
   const upload = await loadUploadForPost(env, postId);
+  if (upload && upload.cid_number !== cidNumber) {
+    throw new HttpError(409, 'content_owner_mismatch', '内容项与身份归属不一致');
+  }
   const mediaAssets = upload ? await loadMediaAssets(env, upload.upload_id) : [];
   const objectKeys = upload ? parseObjectKeys(upload) : [];
 
   for (const asset of mediaAssets) {
     await deleteProviderAsset(env, asset);
   }
-  await releaseStoredMedia(env, mediaAssets);
   for (const objectKey of objectKeys) {
     await env.SQUARE_MEDIA.delete(objectKey);
   }
 
-  // 硬删除：彻底删掉帖子行本身，不留软删残行；链上仅存 content_hash 不受影响。
+  // 外部资源全部删除成功后，再以同一个原子 batch 回收总量并删除 D1 行。
+  // 失败时 D1 索引完整保留，下一轮仍能继续定位；链上 content_hash 不受影响。
   const statements = [
+    ...storedMediaReleaseStatements(env, mediaAssets, updatedAt),
     env.DB.prepare(
       `DELETE FROM square_posts WHERE post_id = ? AND cid_number = ?`
-    ).bind(postId, session.cid_number)
+    ).bind(postId, cidNumber)
   ];
 
   if (upload) {
@@ -166,13 +169,13 @@ export async function confirmPublishedPost(
   }
   const authorCidNumber = event.cid_number;
 
-  const objectKeys = parseObjectKeys(upload);
-  const manifestObjectKey = objectKeys.find((key) => key.endsWith('/manifest.json'));
-  if (!manifestObjectKey) {
-    throw new HttpError(409, 'manifest_object_missing', '上传记录缺少 manifest 对象');
-  }
-  const manifest = await readManifest(env, manifestObjectKey);
-  validateManifest(manifest, upload);
+  const manifestObjectKey = manifestObjectKeyFromUpload(upload);
+  const verifiedManifest = await readVerifiedSquarePostManifest(env, manifestObjectKey, {
+    account_id: upload.account_id,
+    post_category: upload.post_category,
+    content_hashes: [upload.manifest_hash, upload.content_hash],
+  });
+  const manifest = verifiedManifest.manifest;
   const mediaAssets = await loadMediaAssets(env, upload.upload_id);
   const membershipLevel = assertMembershipLevel(membership.membership_level);
   // 发布确认再次按身份档校验分类权限（竞选内容须竞选身份，防上传后身份变化绕过）；
@@ -189,7 +192,7 @@ export async function confirmPublishedPost(
     mediaAssets
   });
   const mediaItems = await manifestMediaItems(env, manifest, mediaAssets);
-  const contentFormat = manifest.content_format === 'article' ? 'article' : 'normal';
+  const contentFormat = verifiedManifest.content_format;
   const title = typeof manifest.title === 'string' ? manifest.title : null;
   const createdAt = nowMs();
 
@@ -250,11 +253,7 @@ export async function confirmPublishedPost(
 
 export async function buildFeedPostItem(env: Env, row: SquarePostFeedItem): Promise<SquarePostFeedItem> {
   const upload = await loadUploadForPost(env, row.post_id);
-  const objectKeys = upload ? parseObjectKeys(upload) : [];
-  const manifestObjectKey =
-    objectKeys.find((key) => key.endsWith('/manifest.json')) ??
-    `square/${accountIdPathSegment(row.account_id)}/posts/${row.post_id}/manifest.json`;
-  const manifest = await readManifest(env, manifestObjectKey).catch(() => null);
+  const manifest = upload ? await readFeedManifest(env, row, upload) : null;
   return {
     ...row,
     // 文章正文图文块随 feed/详情回传（阅读侧按块渲染，内联图 media_index 引用 media_items）。
@@ -263,6 +262,34 @@ export async function buildFeedPostItem(env: Env, row: SquarePostFeedItem): Prom
       ? await manifestMediaItems(env, manifest, await loadMediaAssets(env, upload.upload_id))
       : []
   };
+}
+
+async function readFeedManifest(
+  env: Env,
+  row: SquarePostFeedItem,
+  upload: PreparedUploadRow,
+): Promise<SquarePostManifest | null> {
+  try {
+    const verified = await readVerifiedSquarePostManifest(
+      env,
+      manifestObjectKeyFromUpload(upload),
+      {
+        account_id: row.account_id,
+        post_category: row.post_category,
+        content_format: row.content_format,
+        content_hashes: [
+          row.content_hash,
+          upload.manifest_hash,
+          ...(upload.content_hash ? [upload.content_hash] : []),
+        ],
+      },
+    );
+    return verified.manifest;
+  } catch {
+    // 公共 feed 的 D1 正文仍可展示；损坏 manifest 只禁止文章块/媒体声明进入响应，
+    // 且绝不恢复按账户/post_id 猜 R2 路径的旧兜底。
+    return null;
+  }
 }
 
 function findMatchingEvent(
@@ -343,27 +370,6 @@ function parseObjectKeys(row: PreparedUploadRow): string[] {
   }
 }
 
-async function readManifest(env: Env, objectKey: string): Promise<SquarePostManifest> {
-  const object = await env.SQUARE_MEDIA.get(objectKey);
-  if (!object) {
-    throw new HttpError(409, 'manifest_not_found', 'R2 manifest 不存在');
-  }
-  const data = JSON.parse(await object.text()) as SquarePostManifest;
-  if (data.schema !== 'citizenapp.square.post.v1') {
-    throw new HttpError(409, 'invalid_manifest_schema', 'R2 manifest schema 不合法');
-  }
-  return data;
-}
-
-function validateManifest(manifest: SquarePostManifest, upload: PreparedUploadRow): void {
-  if (manifest.account_id !== upload.account_id) {
-    throw new HttpError(409, 'manifest_account_mismatch', 'manifest 账户标识不一致');
-  }
-  if (manifest.post_category !== upload.post_category) {
-    throw new HttpError(409, 'manifest_category_mismatch', 'manifest 动态分类不一致');
-  }
-}
-
 async function manifestMediaItems(
   env: Env,
   manifest: SquarePostManifest,
@@ -373,7 +379,7 @@ async function manifestMediaItems(
   return Promise.all(items.map(async (item, index) => {
     const asset = mediaAssets[index];
     const mediaKind = item.media_kind === 'video' ? 'video' as const : 'image' as const;
-    const signed = asset && asset.asset_state === 'ready' && asset.archive_state === 'live'
+    const signed = asset && asset.asset_state === 'ready'
       ? await signedMediaUrls(env, asset)
       : { url: '', thumbnail_url: null };
     return {
@@ -389,8 +395,7 @@ async function manifestMediaItems(
       sha256: item.sha256 ?? '',
       duration_seconds: asset?.duration_seconds ?? null,
       width: asset?.width ?? null,
-      height: asset?.height ?? null,
-      archive_state: asset?.archive_state ?? 'live'
+      height: asset?.height ?? null
     };
   }));
 }

@@ -2,7 +2,7 @@ import type { Env, SquareNotifyJob } from './types';
 import { errorResponse } from './shared/http';
 import { routeRequest } from './routes';
 import { fanOutPage } from './feeds/notify_fanout';
-import { runVideoArchiveSweep } from './membership/archive';
+import { runExpiredMembershipContentCleanup } from './membership/expiration_cleanup';
 import { reconcileSubscriptions } from './membership/reconcile';
 import { applyCors, cleanupSecurityState } from './security/request_guard';
 import { cleanupExpiredUploads } from './uploads/service';
@@ -19,19 +19,28 @@ export default {
     }
   },
 
-  // Cron 触发：清理 + 会员镜像对账（每 5 分钟，限流分批、幂等可续跑，由开关控制）；
-  // 退订视频冷归档扫描（每日一次，由 ARCHIVE_ENABLED 开关控制）。
+  // Cron 触发：清理 + 会员镜像对账（每 5 分钟，限流分批、幂等可续跑，由开关控制）。
+  // 每日到期内容清理必须串在同一轮 finalized 对账之后，只接受该区块的链上时间戳。
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const subscriptionJob = reconcileSubscriptions(env).then(async (result) => {
+      if (
+        _controller.cron === '0 3 * * *' &&
+        result.finalized_chain_timestamp !== null
+      ) {
+        await runExpiredMembershipContentCleanup(
+          env,
+          result.finalized_chain_timestamp,
+        );
+      }
+      return result;
+    });
     const jobs: Promise<unknown>[] = [
       cleanupExpiredUploads(env),
       cleanupSecurityState(env),
       cleanupExpiredReservations(env),
       // 平台与创作者共享同一个 finalized 链锚点，只处理已经到期的有限候选。
-      reconcileSubscriptions(env),
+      subscriptionJob,
     ];
-    if (_controller.cron === '0 3 * * *') {
-      jobs.push(runVideoArchiveSweep(env));
-    }
     ctx.waitUntil(Promise.all(jobs).catch((error) => {
         console.error(
           `[scheduled-cleanup] failed: ${error instanceof Error ? error.message : error}`

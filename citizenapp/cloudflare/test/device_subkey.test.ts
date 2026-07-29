@@ -8,15 +8,22 @@ vi.mock('../src/security/turnstile', () => ({
 }));
 // 身份主键 = 该钱包账户链上绑定的 cid_number;注册/登录都先经此解析。
 const TEST_CID = 'CN220-CTZN2-198805200-2026';
+const identityStateOf = (accountId: string) => ({
+  account_id: accountId,
+  identity_level: 'visitor',
+  has_voting_identity: false,
+  has_candidate_identity: false,
+  cid_number: TEST_CID,
+  checked_at: 0
+});
 vi.mock('../src/chain/identity', () => ({
-  fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) => ({
-    account_id: accountId,
-    identity_level: 'visitor',
-    has_voting_identity: false,
-    has_candidate_identity: false,
-    cid_number: TEST_CID,
-    checked_at: 0
-  }))
+  fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) =>
+    identityStateOf(accountId)
+  ),
+  // 子钥注册走「缓存读到无 CID 就旁路回源」的入口(懒绑定下占号与注册相距仅数秒)。
+  fetchChainIdentityStateFreshIfUnbound: vi.fn(
+    async (_env: unknown, accountId: string) => identityStateOf(accountId)
+  )
 }));
 
 import {

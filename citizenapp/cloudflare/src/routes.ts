@@ -40,6 +40,7 @@ import {
 import { signalRoute } from "./moderation/service";
 import { isTopupPath, routeTopup } from "./topup/routes";
 import { confirmPostRoute, deletePostRoute } from "./posts/confirm";
+import { selfPostCopiesRoute } from "./posts/local_copy";
 import { prepareProfileAsset, putProfileAsset } from "./profiles/assets";
 import {
   getUserFollowsRoute,
@@ -167,6 +168,9 @@ export async function routeRequest(
   }
   if (request.method === "POST" && path === "/v1/square/posts/confirm") {
     return confirmPostRoute(request, env);
+  }
+  if (request.method === "GET" && path === "/v1/square/posts/self") {
+    return selfPostCopiesRoute(request, env);
   }
   if (request.method === "DELETE" && path.startsWith("/v1/square/posts/")) {
     return deletePostRoute(request, env, path.slice("/v1/square/posts/".length));

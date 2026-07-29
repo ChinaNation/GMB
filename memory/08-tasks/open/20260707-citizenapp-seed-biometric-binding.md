@@ -8,7 +8,7 @@
 - seed（`wallet.secret.$id.seed_hex.v1`）与助记词（`wallet.secret.$id.mnemonic.v1`）存 `flutter_secure_storage ^9.2.2`，**全项目 5 处实例均无 options**，Android 默认 = Keystore 包 AES 密钥但**未绑定用户认证**；`local_auth` 结果只是 `WalletManager._authenticateIfSupported` 的 UI 布尔值，root/hook 绕过 UI 直接读即解密。
 - `flutter_secure_storage` 不暴露用户认证绑定 → 换后端。
 - 收敛面封闭：seed/助记词读写全在 `WalletManager` 6 私有方法（wallet_manager.dart:556-699）。**另 4 处 `FlutterSecureStorage`（main.dart:156 device_lock、app_lock PIN、user.dart、attestation）存非密钥材料，不纳入绑定**。
-- 平台：iOS 13.0；Android compileSdk 36，minSdk 需 ≥ 23。
+- 平台：iOS 最低版本 16.0；Android compileSdk 36，minSdk 需 ≥ 23。
 
 ## 2. 架构：信封加密 + 双档金库
 

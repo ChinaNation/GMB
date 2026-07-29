@@ -6,10 +6,10 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'topup_api.dart';
 import 'topup_models.dart';
 
-/// 支付结果页(第 3 屏)：用付款前意图确认交易 → 按账户归属订单轮询到账。
+/// 支付结果页(第 3 屏)：用付款前意图确认交易 → 凭同一份意图轮询该订单到账。
 ///
 /// 只有成功/失败两种终态(契合三态台账 paid/exception);出结果前显示「处理中」,
-/// 超时不判失败,只提示仍在确认。
+/// 超时不判失败,只提示仍在确认。付款意图既是确认凭证也是查单凭证,不再需要账户会话。
 enum _Phase { processing, success, failure, unresolved }
 
 class TopupResultPage extends StatefulWidget {
@@ -18,7 +18,6 @@ class TopupResultPage extends StatefulWidget {
     required this.api,
     required this.rail,
     required this.package,
-    required this.accountId,
     required this.evmTxHash,
     required this.paymentIntent,
   });
@@ -26,7 +25,6 @@ class TopupResultPage extends StatefulWidget {
   final TopupApi api;
   final TopupRail rail;
   final TopupPackage package;
-  final String accountId;
   final String evmTxHash;
   final String paymentIntent;
 
@@ -62,7 +60,6 @@ class _TopupResultPageState extends State<TopupResultPage> {
       try {
         if (!submitted) {
           final result = await widget.api.confirm(
-            accountId: widget.accountId,
             paymentIntent: widget.paymentIntent,
             evmTxHash: widget.evmTxHash,
           );
@@ -74,8 +71,8 @@ class _TopupResultPageState extends State<TopupResultPage> {
           }
         } else {
           final status = await widget.api.status(
-            accountId: widget.accountId,
             orderId: orderId!,
+            paymentIntent: widget.paymentIntent,
           );
           if (_settleFromStatus(status)) return;
         }

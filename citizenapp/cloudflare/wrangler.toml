@@ -6,8 +6,8 @@ preview_urls = false
 stream = { binding = "STREAM" }
 routes = [{ pattern = "www.crcfrcn.com/api/*", zone_name = "crcfrcn.com" }]
 
-# CitizenApp Cloudflare 只保留唯一生产环境。API Token、R2 访问密钥、Stream webhook
-# Secret、链 RPC Access 凭据和充值令牌全部由 CitizenConsole 经 Touch ID 注入。
+# CitizenApp Cloudflare 只保留唯一生产环境。API Token、Stream webhook Secret、
+# 链 RPC Access 凭据和充值令牌全部由 CitizenConsole 经 Touch ID 注入。
 
 [[r2_buckets]]
 binding = "SQUARE_MEDIA"
@@ -51,13 +51,10 @@ crons = ["*/5 * * * *", "0 3 * * *"]
 [vars]
 SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
-ARCHIVE_ENABLED = "1"
-ARCHIVE_LAPSE_DAYS = "90"
 MEMBERSHIP_RECONCILE_ENABLED = "1"
 CREATOR_RECONCILE_ENABLED = "1"
 MEMBERSHIP_RECONCILE_BATCH = "50"
 APNS_ENV = "production"
-R2_BUCKET = "citizenapp-square-media"
 IMAGES_URL = "https://imagedelivery.net/UOEmEDe-GxX_DiS70z3GIg"
 STREAM_URL = "https://customer-e3w478wvlbq2nl3g.cloudflarestream.com"
 MEDIA_TTL_SECONDS = "300"

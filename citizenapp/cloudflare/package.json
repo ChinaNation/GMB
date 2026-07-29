@@ -15,8 +15,7 @@
     "deploy:production": "wrangler deploy"
   },
   "dependencies": {
-    "@polkadot/util-crypto": "^14.0.3",
-    "aws4fetch": "^1.0.20"
+    "@polkadot/util-crypto": "^14.0.3"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

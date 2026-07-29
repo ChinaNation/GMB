@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmPublishedPost,
   deletePostCloudflareData,
+  deletePostCloudflareDataByCid,
 } from "../src/posts/confirm";
 import type {
   Env,
@@ -23,6 +24,7 @@ import {
   fetchChainStorage,
   fetchFinalizedChainStorage,
 } from "../src/chain/rpc";
+import { sha256Hex } from "../src/shared/hash";
 
 const accountIdBytes = Uint8Array.from(
   Array.from({ length: 32 }, (_, index) => index + 1),
@@ -63,14 +65,30 @@ describe("square chain confirmation", () => {
 
   it("confirms completed upload and writes published post", async () => {
     const db = new FakeDb();
+    const manifestText = JSON.stringify({
+      schema: "citizenapp.square.post.v1",
+      account_id: accountId,
+      post_category: "normal",
+      text: "普通动态",
+      media_items: [
+        {
+          media_kind: "image",
+          file_name: "a.webp",
+          content_type: "image/webp",
+          byte_size: 1024,
+          sha256: "aa".repeat(32),
+        },
+      ],
+    });
+    const actualContentHash = await sha256Hex(manifestText);
     const upload: PreparedUploadRow = {
       upload_id: "squ_test",
       post_id: postId,
       cid_number: sessionCid,
       account_id: accountId,
       post_category: "normal",
-      manifest_hash: contentHash.slice(2),
-      content_hash: contentHash.slice(2),
+      manifest_hash: actualContentHash,
+      content_hash: actualContentHash,
       storage_receipt_id: storageReceiptId,
       estimated_bytes: 1024,
       object_keys_json: JSON.stringify([
@@ -105,30 +123,13 @@ describe("square chain confirmation", () => {
         created_at: 1,
         updated_at: 2,
         ready_at: 2,
-        archive_state: "live",
-        archived_at: null,
-        r2_archive_key: null,
       },
     ]);
     const env = {
       DB: db,
       SQUARE_MEDIA: new FakeR2({
         [`square/${accountId.slice(2)}/posts/${postId}/manifest.json`]:
-          JSON.stringify({
-            schema: "citizenapp.square.post.v1",
-            account_id: accountId,
-            post_category: "normal",
-            text: "普通动态",
-            media_items: [
-              {
-                media_kind: "image",
-                file_name: "a.webp",
-                content_type: "image/webp",
-                byte_size: 1024,
-                sha256: "aa".repeat(32),
-              },
-            ],
-          }),
+          manifestText,
       }),
       SQUARE_CACHE: {},
       IMAGES_URL: "https://imagedelivery.net/test",
@@ -146,6 +147,7 @@ describe("square chain confirmation", () => {
           result: buildEventsHex({
             cidNumber: sessionCid,
             postCategory: "normal",
+            contentHash: `0x${actualContentHash}`,
           }),
         }),
       ),
@@ -313,6 +315,82 @@ describe("square chain confirmation", () => {
       code: "post_not_found",
     });
   });
+
+  it("hard-deletes an upload-only content item after membership expiry", async () => {
+    const db = new FakeDb();
+    const manifestKey = `square/${accountId.slice(2)}/posts/${postId}/manifest.json`;
+    const upload = completedUpload(manifestKey);
+    db.uploads.set(postId, upload);
+    db.mediaAssets.set(upload.upload_id, [imageAsset(upload.upload_id)]);
+    const r2 = new FakeR2({ [manifestKey]: "{}" });
+    const env = {
+      DB: db,
+      SQUARE_MEDIA: r2,
+      CF_ACCOUNT_ID: "account",
+      CF_API_TOKEN: "token",
+    } as unknown as Env;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ success: true, result: {} })),
+    );
+
+    await deletePostCloudflareDataByCid(
+      env,
+      sessionCid,
+      postId,
+      10_000,
+    );
+
+    expect(db.uploads.has(postId)).toBe(false);
+    expect(db.mediaAssets.get(upload.upload_id)).toEqual([]);
+    expect(r2.deletedKeys).toEqual([manifestKey]);
+  });
+
+  it("keeps D1 cleanup indexes when provider deletion fails", async () => {
+    const db = new FakeDb();
+    const manifestKey = `square/${accountId.slice(2)}/posts/${postId}/manifest.json`;
+    const upload = completedUpload(manifestKey);
+    db.uploads.set(postId, upload);
+    db.mediaAssets.set(upload.upload_id, [imageAsset(upload.upload_id)]);
+    db.posts.set(postId, {
+      post_id: postId,
+      account_id: accountId,
+      cid_number: sessionCid,
+      post_category: "normal",
+      content_format: "normal",
+      title: null,
+      text: "保留到重试",
+      content_hash: contentHash,
+      storage_receipt_id: storageReceiptId,
+      chain_block: 88,
+      created_at: 1,
+      post_state: "published",
+    });
+    const r2 = new FakeR2({ [manifestKey]: "{}" });
+    const env = {
+      DB: db,
+      SQUARE_MEDIA: r2,
+      CF_ACCOUNT_ID: "account",
+      CF_API_TOKEN: "token",
+    } as unknown as Env;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { success: false, errors: [{ message: "provider unavailable" }] },
+          { status: 503 },
+        )),
+    );
+
+    await expect(
+      deletePostCloudflareDataByCid(env, sessionCid, postId, 10_000),
+    ).rejects.toMatchObject({ code: "images_delete_failed" });
+
+    expect(db.posts.has(postId)).toBe(true);
+    expect(db.uploads.has(postId)).toBe(true);
+    expect(db.mediaAssets.get(upload.upload_id)).toHaveLength(1);
+    expect(r2.deletedKeys).toEqual([]);
+  });
 });
 
 function chainRpcEnv(overrides: Partial<Env> = {}): Env {
@@ -379,15 +457,13 @@ function imageAsset(uploadId: string): MediaAssetRow {
     created_at: 1,
     updated_at: 2,
     ready_at: 2,
-    archive_state: "live",
-    archived_at: null,
-    r2_archive_key: null,
   };
 }
 
 function buildEventsHex(input: {
   cidNumber: string;
   postCategory?: "normal" | "campaign";
+  contentHash?: string;
 }): string {
   const chunks = [
     Uint8Array.of(0x00),
@@ -397,7 +473,7 @@ function buildEventsHex(input: {
     compactBytes(input.cidNumber),
     accountIdBytes,
     Uint8Array.of(input.postCategory === "normal" ? 0 : 1),
-    bytes(contentHash),
+    bytes(input.contentHash ?? contentHash),
     compactBytes(storageReceiptId),
     u64Le(1800000000000),
     u32Le(88),
@@ -539,7 +615,14 @@ class FakeR2 {
   async get(key: string) {
     const value = this.objects[key];
     if (!value) return null;
+    const bytes = new TextEncoder().encode(value);
     return {
+      size: bytes.byteLength,
+      body: { cancel: async () => undefined },
+      arrayBuffer: async () => bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      ),
       text: async () => value,
     };
   }

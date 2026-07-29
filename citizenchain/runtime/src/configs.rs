@@ -295,9 +295,18 @@ impl pallet_transaction_payment::Config for Runtime {
     type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+    /// 链上交易费率下发到 metadata 的转发值；真源恒为 `primitives::fee_policy`。
+    pub const RuntimeOnchainFeeRate: Perbill = primitives::fee_policy::ONCHAIN_FEE_RATE;
+}
+
 impl onchain::pallet::Config for Runtime {
     type Currency = Balances;
     type MaxTransferRemarkLen = ConstU32<99>;
+    // 三项收费参数只做转发，不在此处另立数字；客户端从 metadata 读取后自行预估费用。
+    type OnchainMinFee = ConstU128<{ primitives::fee_policy::ONCHAIN_MIN_FEE }>;
+    type OnchainFeeRate = RuntimeOnchainFeeRate;
+    type VoteFlatFee = ConstU128<{ primitives::fee_policy::VOTE_FLAT_FEE }>;
 }
 
 pub struct RuntimeNrcAccountProvider;

@@ -563,6 +563,48 @@ class PublicInstitutionSubscriptionEntity {
   late int subscribedAtMillis;
 }
 
+/// 本人已发布广场内容的设备本地副本。
+///
+/// 归属主键固定为 [cidNumber]；[accountId] 只记录发布时链上签名账户这一不可变事实，
+/// CID 换绑后不得迁移或改写本行。正文、标题和文章图文块均以 [manifestBytes] 中的
+/// 规范 manifest 为唯一内容真源，避免再拆一套本地正文字段造成漂移。
+///
+/// 本表不保存图片、视频、封面、媒体路径或临时签名 URL；这些资源始终只在
+/// Cloudflare。已发布内容是公开信息，因此不进入 Chat/通讯录的本地隐私加密域。
+@collection
+class SquareLocalPostEntity {
+  Id id = Isar.autoIncrement;
+
+  /// Worker 分配且链上发布事件已确认的帖子编号。
+  @Index(unique: true, replace: true)
+  late String postId;
+
+  /// 内容归属的永久公民 CID；本人副本查询和注销清理均只按此字段。
+  @Index()
+  late String cidNumber;
+
+  /// 发布时的链上签名账户事实，不作为归属、换绑或删除索引。
+  late String accountId;
+
+  late String postCategory;
+  late String contentFormat;
+
+  /// 发布时参与 content_hash 计算的原始 UTF-8 JSON 字节，禁止读取后重编码再落盘。
+  late List<byte> manifestBytes;
+
+  /// 链上 SquarePostPublished 事件锚定的 manifest SHA-256（小写裸 hex）。
+  late String contentHash;
+  late String storageReceiptId;
+  int? chainBlock;
+
+  /// 使用 Worker 返回的服务端创建时间，仅用于稳定排序；禁止写设备当前时间。
+  @Index()
+  late int createdAt;
+
+  /// 与 Worker `square_posts.post_state` 同义；本地只接受 `published`。
+  late String postState;
+}
+
 /// Chat 会话本地索引。
 ///
 /// 聊天明文只允许在公民手机本地保存；Cloudflare 瞬时转发与近场 transport
@@ -1043,6 +1085,7 @@ class WalletIsar {
         existing.chatConversationEntitys;
         existing.chatRouteCacheEntitys;
         existing.accountEntitys;
+        existing.squareLocalPostEntitys;
         return _prepareOpened(existing);
       } catch (_) {
         // schema 不完整，关闭旧实例后重新打开
@@ -1063,6 +1106,7 @@ class WalletIsar {
       AdminDivisionEntitySchema,
       PublicInstitutionEntitySchema,
       PublicInstitutionSubscriptionEntitySchema,
+      SquareLocalPostEntitySchema,
       ChatConversationEntitySchema,
       ChatMessageEntitySchema,
       ChatOutboundQueueEntitySchema,

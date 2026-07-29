@@ -14,9 +14,6 @@ export type MediaUploadMethod = 'worker' | 'tus';
 
 export type MediaAssetState = 'prepared' | 'uploaded' | 'processing' | 'ready' | 'error';
 
-// 视频冷归档态：live=Stream 可播 / archived=已移入 R2 冷存不可播 / restoring=重订后回灌中。
-export type MediaArchiveState = 'live' | 'archived' | 'restoring';
-
 /// 广场发帖通知扇出队列消息：一条 = 一次发帖事件，或一页续跑（cursor 空=首页）。
 /// author_name 入队时读一次作者展示名、续跑复用，避免每页重读；cursor 为 keyset 续跑游标。
 export interface SquareNotifyJob {
@@ -37,10 +34,8 @@ interface WorkerSecretsAndOptionalVars {
   FCM_PROJECT?: string;
   FCM_EMAIL?: string;
   FCM_KEY?: string;
-  // Cloudflare 账户由 R2 冷归档、Images、Stream 共用；S3 密钥只用于内部归档读取。
+  // Cloudflare 账户只用于 Images / Stream 服务端 API。
   CF_ACCOUNT_ID?: string;
-  R2_ACCESS_ID?: string;
-  R2_SECRET_KEY?: string;
   // Worker 通过 Access + Tunnel 调用权威节点回环 RPC；URL 和服务令牌只放远端 Secret。
   CHAIN_URL?: string;
   CHAIN_ID?: string;
@@ -193,10 +188,6 @@ export interface MediaAssetRow {
   created_at: number;
   updated_at: number;
   ready_at: number | null;
-  // 视频冷归档：仅视频行使用，图片恒 'live'。
-  archive_state: MediaArchiveState;
-  archived_at: number | null;
-  r2_archive_key: string | null;
 }
 
 export interface SquarePostRow {
@@ -233,8 +224,6 @@ export interface SquareFeedMediaItem {
   duration_seconds?: number | null;
   width?: number | null;
   height?: number | null;
-  // 视频冷归档态：archived=已归档不可播（作者未续订），restoring=恢复中；缺省视为 live。
-  archive_state?: MediaArchiveState;
 }
 
 export interface SquarePostFeedItem extends SquarePostRow {

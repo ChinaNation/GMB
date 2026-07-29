@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:citizenapp/ui/app_theme.dart';
 import 'topup_api.dart';
@@ -137,7 +138,6 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
           api: _api,
           rail: rail,
           package: package,
-          accountId: widget.accountId,
           evmTxHash: web.txHash,
           paymentIntent: web.paymentIntent,
         ),
@@ -147,6 +147,13 @@ class _OnchainTopupPageState extends State<OnchainTopupPage> {
 }
 
 /// 单条币轨卡片(USDC · Base / USDT · Arbitrum)。
+/// 币种 → 币标资源。币轨由 Worker config 下发,未登记的币种回退 USDC 底图,
+/// 绝不因为多了一条币轨就崩页。
+String _tokenIconAsset(String token) =>
+    token.toUpperCase() == 'USDT'
+        ? 'assets/icons/usdt.svg'
+        : 'assets/icons/usdc.svg';
+
 class _RailCard extends StatelessWidget {
   const _RailCard({required this.rail, required this.onTap});
 
@@ -167,15 +174,12 @@ class _RailCard extends StatelessWidget {
             decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
             child: Row(
               children: [
-                Container(
+                // 币标用各币种官方形态(SVG 自带圆形底色),两条币轨一眼可分;
+                // 原来两卡共用同一个 Material 图标,看不出是哪种稳定币。
+                SvgPicture.asset(
+                  _tokenIconAsset(rail.token),
                   width: 44,
                   height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withAlpha(26),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.paid_outlined,
-                      size: 22, color: AppTheme.primary),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

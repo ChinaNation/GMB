@@ -1,6 +1,6 @@
 import type { Env } from '../types';
-import { HttpError, jsonResponse, readJson, requireSession } from '../shared/http';
-import { createId } from '../shared/ids';
+import { HttpError, jsonResponse, readJson } from '../shared/http';
+import { assertAccountId, createId } from '../shared/ids';
 import { nowMs } from '../shared/time';
 import {
   findPackage,
@@ -17,6 +17,7 @@ import {
   type TopupToken,
 } from './config';
 import { verifyErc20Payment } from './evm_verify';
+import { enforceRateLimit } from '../security/request_guard';
 
 /// 充值订单三态台账(仅此三种):
 /// pending=稳定币已确认、公民币待发 / paid=公民币已发 / exception=异常、交人工。
@@ -47,6 +48,7 @@ export interface TopupOrderRow {
 }
 
 interface IntentBody {
+  account_id?: unknown;
   token?: unknown;
   package_id?: unknown;
   payer_address?: unknown;
@@ -55,6 +57,11 @@ interface IntentBody {
 interface ConfirmBody {
   payment_intent?: unknown;
   evm_tx_hash?: unknown;
+}
+
+interface StatusBody {
+  order_id?: unknown;
+  payment_intent?: unknown;
 }
 
 interface PaymentIntent {
@@ -102,10 +109,14 @@ export async function topupConfigRoute(_request: Request, env: Env): Promise<Res
 }
 
 /// POST /v1/square/topup/intent — 钱包连接后、付款前创建短期付款意图。
-/// account_id 只取 Bearer 会话；客户端不能在请求体中指定或更换充值目标。
+///
+/// 充值 = 付款人自掏稳定币给某个公民链账户打公民币,收款方无需证明账户所有权(同转账),
+/// 故本接口不做账户鉴权:`account_id` 即充值目标,由客户端指定,任意钱包账户(含冷钱包、
+/// 含他人账户)均可作目标。付款鉴权发生在外部 EVM 钱包侧。防滥用靠 IP 限流 + 意图 TTL。
 export async function topupIntentRoute(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
   const body = await readJson<IntentBody>(request);
+  const accountId = parseAccountId(body.account_id);
+  await enforceTopupWriteLimit(env, accountId);
   if (!isTopupToken(body.token)) {
     throw new HttpError(400, 'topup_token_invalid', '不支持的充值币种');
   }
@@ -119,7 +130,7 @@ export async function topupIntentRoute(request: Request, env: Env): Promise<Resp
   const issuedAt = nowMs();
   const intent: PaymentIntent = {
     intent_id: createId('tpi'),
-    account_id: session.account_id,
+    account_id: accountId,
     payer_address: payerAddress,
     token: rail.token,
     package_id: pkg.package_id,
@@ -139,15 +150,15 @@ export async function topupIntentRoute(request: Request, env: Env): Promise<Resp
 }
 
 /// POST /v1/square/topup/confirm — 付款后提交交易哈希。
-/// Worker 同时核验会话、HMAC 意图和最终 EVM 事实后才创建三态订单。
+///
+/// 凭据是 Worker 用 `TOPUP_INTENT_SECRET` 签发的 HMAC 意图(不可伪造,内部钉死付款人、
+/// 收款地址、金额、充值目标和签发时间),不是公开的 tx hash,也不需要账户会话。
+/// Worker 核验意图与最终 EVM 事实后才创建三态订单。
 export async function topupConfirmRoute(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
   const body = await readJson<ConfirmBody>(request);
   const encodedIntent = typeof body.payment_intent === 'string' ? body.payment_intent.trim() : '';
   const intent = await verifyIntent(env, encodedIntent);
-  if (intent.account_id !== session.account_id) {
-    throw new HttpError(403, 'topup_intent_account_mismatch', '付款意图不属于当前钱包');
-  }
+  await enforceTopupWriteLimit(env, intent.account_id);
   if (intent.expires_at <= nowMs()) {
     throw new HttpError(409, 'topup_intent_expired', '付款意图已过期，请重新发起');
   }
@@ -160,7 +171,7 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
 
   const existing = await findOrderByTx(env, intent.chain_id, txHash);
   if (existing) {
-    if (existing.intent_id !== intent.intent_id || existing.account_id !== session.account_id) {
+    if (existing.intent_id !== intent.intent_id) {
       throw new HttpError(409, 'topup_txhash_claimed', '该链上付款已绑定其它付款意图');
     }
     return orderResponse(existing, true);
@@ -181,6 +192,20 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
   }
   if (outcome.status === 'rejected') {
     throw new HttpError(400, 'topup_payment_invalid', `未确认到有效到账:${outcome.reason}`);
+  }
+
+  // 抢单防护:付款意图必须先于付款上链存在。
+  //
+  // 付款人地址、收款地址和金额都是公链上人人可见的数据,若不设时间序,攻击者可以盯住
+  // 收款地址的入账,用受害者的付款地址造一个指向自己账户的意图,抢先 confirm 冒领这笔
+  // 公民币((chain_id, evm_tx_hash) 唯一索引先到先得)。合法用户的意图必然建在付款之前,
+  // 而攻击者只能在交易上链、可被观察到之后才造得出意图,故按签发时间早于区块时间判定。
+  if (intent.issued_at >= outcome.block_time_ms) {
+    throw new HttpError(
+      409,
+      'topup_intent_superseded',
+      '付款意图晚于该笔链上付款,不予入账',
+    );
   }
 
   const orderId = createId('top');
@@ -210,7 +235,7 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
   if ((inserted.meta?.changes ?? 0) !== 1) {
     const raced = await findOrderByTx(env, intent.chain_id, txHash)
       ?? await findOrderByIntent(env, intent.intent_id);
-    if (raced && raced.intent_id === intent.intent_id && raced.account_id === session.account_id) {
+    if (raced && raced.intent_id === intent.intent_id) {
       return orderResponse(raced, true);
     }
     throw new HttpError(409, 'topup_payment_already_bound', '付款或付款意图已被处理');
@@ -223,18 +248,20 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
   });
 }
 
-/// GET /v1/square/topup/status/:orderId — 只允许订单所属账户查询。
-export async function topupStatusRoute(
-  request: Request,
-  env: Env,
-  orderId: string,
-): Promise<Response> {
-  const session = await requireSession(request, env);
+/// POST /v1/square/topup/status — 只允许持有该笔付款意图的一方查询。
+///
+/// 用 POST 而非 GET:凭据是 HMAC 付款意图,不能出现在 URL 里。归属判据取
+/// `order.intent_id === intent.intent_id`(比只比账户更严,且天然覆盖账户归属)。
+export async function topupStatusRoute(request: Request, env: Env): Promise<Response> {
+  const body = await readJson<StatusBody>(request);
+  const orderId = typeof body.order_id === 'string' ? body.order_id.trim() : '';
   if (!/^top_[0-9a-f]{32}$/.test(orderId)) {
     throw new HttpError(400, 'topup_order_id_invalid', '充值订单 ID 不合法');
   }
+  const encodedIntent = typeof body.payment_intent === 'string' ? body.payment_intent.trim() : '';
+  const intent = await verifyIntent(env, encodedIntent);
   const order = await findOrderById(env, orderId);
-  if (!order || order.account_id !== session.account_id) {
+  if (!order || order.intent_id !== intent.intent_id) {
     throw new HttpError(404, 'topup_order_not_found', '充值订单不存在');
   }
   return orderResponse(order, false);
@@ -272,6 +299,20 @@ function orderResponse(order: TopupOrderRow, deduplicated: boolean): Response {
     coin_fen: order.coin_fen,
     ...(deduplicated ? { deduplicated: true } : {}),
   });
+}
+
+function parseAccountId(value: unknown): string {
+  try {
+    return assertAccountId(value);
+  } catch {
+    throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
+  }
+}
+
+/// 充值写接口的账户维度限流。会话取消后 guard 只剩 IP 维度,这里补一层按充值目标
+/// 计数,避免单一目标账户被大量意图/确认打爆。
+function enforceTopupWriteLimit(env: Env, accountId: string): Promise<void> {
+  return enforceRateLimit(env, `topup_write:account_id:${accountId}`, 10, 60);
 }
 
 function normalizeAddress(value: unknown): string {

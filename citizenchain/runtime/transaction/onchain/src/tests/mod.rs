@@ -106,6 +106,15 @@ impl fullnode_issuance::Config for Test {
 impl crate::pallet::Config for Test {
     type Currency = Balances;
     type MaxTransferRemarkLen = frame_support::traits::ConstU32<99>;
+    // 与 runtime 同口径：只转发 `primitives::fee_policy`，测试也不另立数字。
+    type OnchainMinFee =
+        frame_support::traits::ConstU128<{ primitives::fee_policy::ONCHAIN_MIN_FEE }>;
+    type OnchainFeeRate = TestOnchainFeeRate;
+    type VoteFlatFee = frame_support::traits::ConstU128<{ primitives::fee_policy::VOTE_FLAT_FEE }>;
+}
+
+frame_support::parameter_types! {
+    pub const TestOnchainFeeRate: sp_runtime::Perbill = primitives::fee_policy::ONCHAIN_FEE_RATE;
 }
 
 struct MockNrcAccountProvider;

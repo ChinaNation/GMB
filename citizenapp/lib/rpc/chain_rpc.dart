@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:polkadart/polkadart.dart'
     show Hasher, RuntimeMetadata, RuntimeVersion;
+import 'package:polkadart/scale_codec.dart' show ByteInput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
@@ -263,6 +264,46 @@ class ChainRpc {
   }
 
   RuntimeMetadata? _cachedMetadata;
+
+  /// 读一个链上 pallet 常量(`#[pallet::constant]`)的解码值。
+  ///
+  /// **这是客户端取链上协议参数的唯一入口。** 交易费率、最低费、投票费、ED 这类值的
+  /// 真源恒在链上(费率库 `primitives::fee_policy`,经 runtime 转发到 metadata),
+  /// App 侧一律现取现用,**绝不在 Dart 里另立常量副本**。
+  ///
+  /// metadata 已按 [_cachedMetadata] 缓存,重复读取不产生额外网络往返。
+  /// 常量不存在(链未下发)时抛 [StateError],由调用方 fail-closed 处理,不得静默兜默认值。
+  Future<Object?> fetchPalletConstant(String pallet, String name) async {
+    final metadata = await fetchMetadata();
+    final constant = metadata.chainInfo.constants[pallet]?[name];
+    if (constant == null) {
+      throw StateError('链上未下发常量 $pallet.$name');
+    }
+    return constant.type.decode(ByteInput(constant.bytes));
+  }
+
+  /// 读 `u128` 类型的链上常量(金额单位:分)。
+  Future<BigInt> fetchPalletConstantU128(String pallet, String name) async {
+    final value = await fetchPalletConstant(pallet, name);
+    if (value is BigInt) return value;
+    if (value is int) return BigInt.from(value);
+    throw StateError('链上常量 $pallet.$name 不是整数类型: ${value.runtimeType}');
+  }
+
+  /// 账户自付一笔最低链上交易所需的余额门槛(分)。
+  ///
+  /// `= OnchainTransaction.OnchainMinFee + Balances.ExistentialDeposit`。
+  /// 链端扣费用 `Preservation::Preserve`(扣完必须保住 ED),所以只够最低费是不够的,
+  /// 必须连 ED 一起备足,否则入池预检 `can_withdraw` 直接判 `InvalidTransaction::Payment`。
+  ///
+  /// 两个加数都现取自链上 metadata,App 侧不留任何副本。
+  Future<BigInt> fetchMinSelfPayBalanceFen() async {
+    final minFee =
+        await fetchPalletConstantU128('OnchainTransaction', 'OnchainMinFee');
+    final existentialDeposit =
+        await fetchPalletConstantU128('Balances', 'ExistentialDeposit');
+    return minFee + existentialDeposit;
+  }
 
   /// 提交已签名的 extrinsic,返回交易哈希(32 字节)。
   ///

@@ -296,6 +296,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     try {
       await SquareAccountDeletionService().deleteAccount(
+        cidNumber: widget.cidNumber,
         accountId: selfAccountId,
         walletIndex: walletIndex,
         // 动钱动权 → sr25519 **身份账户**主钥对 0x1D 摘要签名（selfAccountId = 当前绑定
@@ -304,6 +305,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
         signAction: (message) async =>
             '0x${bytesToHex(await walletManager.signForAccountId(selfAccountId, message))}',
       );
+    } on SquareAccountLocalCleanupException catch (e) {
+      // Worker 已经完成不可逆注销；此时不能误报“注销失败”诱导用户重复提交。
+      if (mounted) _snack(e.toString());
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+      return;
     } on SquareApiException catch (e) {
       if (mounted) _snack('注销失败：${e.message}');
       return;
@@ -472,6 +480,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           contentFormat: SquarePostContentFormat.normal,
           emptyLabel: '还没有帖子',
           session: session,
+          isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
       case ProfileTab.campaign:
@@ -482,6 +491,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           category: SquarePostCategory.campaign,
           emptyLabel: '还没有竞选内容',
           session: session,
+          isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
       case ProfileTab.photos:
@@ -492,6 +502,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           mediaKind: SquareMediaKind.image,
           emptyLabel: '还没有照片',
           session: session,
+          isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
       case ProfileTab.videos:
@@ -502,6 +513,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           mediaKind: SquareMediaKind.video,
           emptyLabel: '还没有视频',
           session: session,
+          isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
       case ProfileTab.articles:
@@ -512,6 +524,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           contentFormat: SquarePostContentFormat.article,
           emptyLabel: '还没有文章',
           session: session,
+          isSelf: widget.isSelf,
           onOpenPost: _openArticle,
         );
     }

@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// 链读桩：只为验证「缓存读到无 CID 时是否回源」这条时序，不打真链。
+const chainCidHex = vi.fn<() => Promise<string | null>>();
+vi.mock("../src/chain/rpc", () => ({
+  fetchFinalizedHead: vi.fn(async () => "0x" + "11".repeat(32)),
+  fetchChainStorage: vi.fn(async () => chainCidHex()),
+}));
+
 import {
   cidRecordIsActive,
+  fetchChainIdentityStateFreshIfUnbound,
   decodeCandidateIdentity,
   decodeCidNumber,
   decodeVotingIdentity,
@@ -102,4 +111,46 @@ function candidateIdentity(options: { familyName?: string } = {}): Uint8Array {
     ...u32(20000131),
     ...u32(1),
   ]);
+}
+
+describe("身份缓存旁路（子钥懒绑定时序）", () => {
+  /// 缓存里没有 CID 就必须回源核实一次。
+  ///
+  /// 真实时序：用户占号 finalized 后几秒就进广场触发子钥绑定，而身份缓存 45 秒，
+  /// 缓存里还留着占号前的空值。若直接采信，用户会被自己刚上链的身份挡在门外。
+  it("缓存无 CID 时回源链读", async () => {
+    chainCidHex.mockClear();
+    chainCidHex.mockResolvedValue(null);
+    const env = envWithCachedIdentity({ cid_number: null });
+    await fetchChainIdentityStateFreshIfUnbound(env, ACCOUNT_ID);
+    expect(chainCidHex).toHaveBeenCalled();
+  });
+
+  /// 正面结论不会凭空消失，继续走缓存，不为一次判定多打一次链。
+  it("缓存已有 CID 时直接采信，不再回源", async () => {
+    chainCidHex.mockClear();
+    const env = envWithCachedIdentity({ cid_number: "GD-CTZN1-CACHED" });
+    const state = await fetchChainIdentityStateFreshIfUnbound(env, ACCOUNT_ID);
+    expect(state.cid_number).toBe("GD-CTZN1-CACHED");
+    expect(chainCidHex).not.toHaveBeenCalled();
+  });
+});
+
+const ACCOUNT_ID = `0x${"77".repeat(32)}`;
+
+function envWithCachedIdentity(patch: { cid_number: string | null }): never {
+  const cached = JSON.stringify({
+    account_id: ACCOUNT_ID,
+    identity_level: "visitor",
+    has_voting_identity: false,
+    has_candidate_identity: false,
+    checked_at: 0,
+    ...patch,
+  });
+  return {
+    SQUARE_CACHE: {
+      get: async () => cached,
+      put: async () => {},
+    },
+  } as never;
 }

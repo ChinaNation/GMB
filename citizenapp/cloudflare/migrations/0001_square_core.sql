@@ -202,9 +202,6 @@ CREATE TABLE square_media_assets (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   ready_at INTEGER,
-  archive_state TEXT NOT NULL DEFAULT 'live',
-  archived_at INTEGER,
-  r2_archive_key TEXT,
   PRIMARY KEY(upload_id, media_index)
 );
 CREATE UNIQUE INDEX idx_square_media_provider_asset
@@ -213,8 +210,6 @@ CREATE INDEX idx_square_media_post
   ON square_media_assets(post_id, media_index);
 CREATE INDEX idx_square_media_state
   ON square_media_assets(asset_state, updated_at);
-CREATE INDEX idx_square_media_archive
-  ON square_media_assets(cid_number, archive_state);
 
 CREATE TABLE square_posts (
   post_id TEXT PRIMARY KEY,

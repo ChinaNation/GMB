@@ -26,7 +26,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::TypeInfo;
-    use sp_runtime::{traits::Zero, RuntimeDebug};
+    use sp_runtime::{traits::Zero, Perbill, RuntimeDebug};
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
@@ -39,6 +39,23 @@ pub mod pallet {
         /// 普通转账备注最大 UTF-8 字节数。
         #[pallet::constant]
         type MaxTransferRemarkLen: Get<u32>;
+
+        // ── 以下三项把链上收费参数下发到 metadata,供客户端预估费用 ──
+        //
+        // 费率真源恒为 `primitives::fee_policy`,runtime 绑定时**只做转发**,本 pallet
+        // 与任何客户端都不得另立交易费常量(全仓交易费常量只有区块链常量库一处)。
+        // 客户端据此自行计算 `max(amount × OnchainFeeRate, OnchainMinFee)`,不再复刻数字。
+        /// 链上交易单笔最低费(分)。
+        #[pallet::constant]
+        type OnchainMinFee: Get<u128>;
+
+        /// 链上交易费率,按交易金额计费。
+        #[pallet::constant]
+        type OnchainFeeRate: Get<Perbill>;
+
+        /// 实际投票统一费(分/票)。
+        #[pallet::constant]
+        type VoteFlatFee: Get<u128>;
     }
 
     /// 普通转账金额类型。

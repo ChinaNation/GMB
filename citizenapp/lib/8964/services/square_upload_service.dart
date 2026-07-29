@@ -116,7 +116,7 @@ class SquareUploadService implements SquareContentUploader {
       'schema': 'citizenapp.square.post.v1',
       'account_id': accountId,
       'post_category': postCategory.workerValue,
-      // 普通帖不写 content_format/title，保持旧 manifest 形状；文章才带。
+      // 普通动态的唯一规范形态省略 content_format/title；文章才显式写入。
       if (contentFormat != SquarePostContentFormat.normal)
         'content_format': contentFormat.workerValue,
       if (trimmedTitle.isNotEmpty) 'title': trimmedTitle,

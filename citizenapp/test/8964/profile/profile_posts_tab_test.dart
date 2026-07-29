@@ -1,20 +1,64 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
+import 'package:citizenapp/8964/services/square_post_store.dart';
 
 import 'fake_profile.dart';
 
 Widget _page(FakeProfileApi api) => MaterialApp(
       home: UserProfilePage(
-        cidNumber: kOwner,
+        cidNumber: fakeSession().cidNumber,
         isSelf: true,
         api: api,
         cache: FakeProfileCache(),
         sessionProvider: FakeSessionProvider(fakeSession()),
       ),
     );
+
+SquareLocalPost _localPost({
+  String postId = 'local-1',
+  String text = '本机保留的正文',
+}) {
+  final bytes = Uint8List.fromList(
+    utf8.encode(
+      jsonEncode({
+        'schema': SquarePostStore.manifestSchema,
+        'account_id': kOwner,
+        'post_category': 'normal',
+        'content_format': 'normal',
+        'text': text,
+        'media_items': [
+          {
+            'media_kind': 'image',
+            'file_name': 'photo.jpg',
+            'content_type': 'image/jpeg',
+            'byte_size': 123,
+            'sha256': 'a' * 64,
+          },
+        ],
+      }),
+    ),
+  );
+  return SquareLocalPost(
+    postId: postId,
+    cidNumber: fakeSession().cidNumber,
+    accountId: kOwner,
+    postCategory: 'normal',
+    contentFormat: 'normal',
+    manifestBytes: bytes,
+    contentHash: sha256.convert(bytes).toString(),
+    storageReceiptId: 'receipt-1',
+    chainBlock: 88,
+    createdAt: 1700000000000,
+    postState: SquarePostStore.publishedState,
+  );
+}
 
 void main() {
   testWidgets('posts tab renders normal author posts', (tester) async {
@@ -117,5 +161,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('还没有帖子'), findsOneWidget);
+  });
+
+  testWidgets('本人主页远端失败时仍展示本地正文并明确提示媒体已清理', (tester) async {
+    final api = FakeProfileApi(
+      sampleProfile(),
+      localPosts: [_localPost()],
+      throwOnAuthorPosts: true,
+    );
+
+    await tester.pumpWidget(_page(api));
+    await tester.pumpAndSettle();
+
+    expect(find.text('本机保留的正文'), findsOneWidget);
+    expect(find.text('媒体已从云端清理，本机仅保留正文'), findsOneWidget);
+    expect(find.text('加载失败，下拉重试'), findsNothing);
+  });
+
+  testWidgets('同一 post_id 的 Worker 内容覆盖本地展示内容', (tester) async {
+    final api = FakeProfileApi(
+      sampleProfile(),
+      localPosts: [_localPost(text: '本地旧展示')],
+      authorPosts: [samplePost(id: 'local-1', text: 'Worker 最新展示')],
+    );
+
+    await tester.pumpWidget(_page(api));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Worker 最新展示'), findsOneWidget);
+    expect(find.text('本地旧展示'), findsNothing);
   });
 }

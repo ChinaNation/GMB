@@ -5,6 +5,7 @@ import 'package:citizenapp/8964/compose/compose_page.dart';
 import 'package:citizenapp/8964/compose/compose_type.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/8964/services/square_post_deletion_coordinator.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
@@ -26,11 +27,13 @@ class SquarePostDetailPage extends StatefulWidget {
     required this.post,
     this.api,
     this.sessionProvider,
+    this.deletionCoordinator,
   });
 
   final SquarePost post;
   final SquareApiClient? api;
   final SquareSessionProvider? sessionProvider;
+  final SquarePostDeleteCoordinator? deletionCoordinator;
 
   @override
   State<SquarePostDetailPage> createState() => _SquarePostDetailPageState();
@@ -39,6 +42,7 @@ class SquarePostDetailPage extends StatefulWidget {
 class _SquarePostDetailPageState extends State<SquarePostDetailPage> {
   late final SquareApiClient _api;
   late final SquareSessionProvider _sessionProvider;
+  late final SquarePostDeleteCoordinator _deletionCoordinator;
   bool _deleting = false;
 
   SquarePost get post => widget.post;
@@ -48,6 +52,8 @@ class _SquarePostDetailPageState extends State<SquarePostDetailPage> {
     super.initState();
     _api = widget.api ?? SquareApiClient();
     _sessionProvider = widget.sessionProvider ?? SquareSessionProvider.instance;
+    _deletionCoordinator = widget.deletionCoordinator ??
+        SquarePostDeletionCoordinator(remoteDeletion: _api);
   }
 
   @override
@@ -175,10 +181,15 @@ class _SquarePostDetailPageState extends State<SquarePostDetailPage> {
       if (session == null) {
         throw const SquareApiException('请先选择默认热钱包');
       }
-      if (session.accountId != post.author.accountId) {
+      final authorCidNumber = post.author.cidNumber;
+      if (authorCidNumber == null || authorCidNumber.isEmpty) {
         throw const SquareApiException('只能删除本人动态');
       }
-      await _api.deletePost(session: session, postId: post.postId);
+      await _deletionCoordinator.delete(
+        session: session,
+        cidNumber: authorCidNumber,
+        postId: post.postId,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

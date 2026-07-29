@@ -2,6 +2,10 @@
 
 - 状态：done
 - 创建：2026-07-10
+- 当前状态说明：本文件只保留 2026-07-10 的历史实施记录；其中“退订视频冷归档/重订回灌”
+  已于 2026-07-29 被
+  `memory/08-tasks/open/20260728-square-local-copy-membership-purge.md` 的 finalized
+  权益到期彻底删除规则取代，不再构成当前代码、配置或产品契约。
 - 取代：~~20260710-honor-membership-tier~~（荣誉/紫色档作废，已删卡）
 - 触达面：citizenapp/cloudflare（Worker·真源）、citizenapp/lib（App）、citizenweb（官网，可能零改）；**链零改动**（会员纯链下）
 

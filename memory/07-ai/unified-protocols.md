@@ -292,6 +292,18 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `POST /v1/square/uploads/stream/webhook` 请求：Cloudflare Stream webhook 原始 JSON + `Webhook-Signature`；响应：`action`、`provider_asset_id`、`asset_state`。本接口不需要 Bearer，必须用 `STREAM_HOOK_SECRET` 校验签名。
   - `storage_until` 当前不由上传完成接口返回；CitizenApp 发布交易使用 `GET /v1/square/membership` 的 finalized 镜像字段 `membership.paid_until` 作为链上 `storage_until`，且 Worker 在准备上传前已经用未陈旧链时钟执行平台订阅门禁。
   - `POST /v1/square/posts/confirm` 请求：Bearer `session_token`，`post_id`、`block_hash`、可选 `tx_hash`；响应：`post`
+  - `GET /v1/square/posts/self?limit=5&cursor=...`：Bearer `session_token` + P-256
+    设备请求证明；只按 session 的身份主键 `cid_number` 分页返回本人
+    `post_state=published` 内容。响应为 `items[]`、`next_cursor`，单项固定包含
+    `post_id`、`cid_number`、`account_id`、`post_category`、`content_format`、
+    `manifest_bytes_base64`、64 位小写 `content_hash`、`storage_receipt_id`、
+    `chain_block`、Worker `created_at`、`post_state=published`。排序与游标唯一使用
+    `(created_at DESC,post_id DESC)`，每页最多 5 条；不计入公共 feed 浏览量。
+    Worker 只从 `square_uploads.object_keys_json` 取唯一 manifest 键，不接受客户端对象键，
+    也不根据账户或帖子编号猜路径；返回前必须验证 `square_posts.content_hash`、
+    `square_uploads.content_hash`、`manifest_hash` 与 R2 原始字节 SHA-256 全部一致，并复核
+    CID、发布账户、分类、内容形态、存储回执和完成状态。任一项缺失或损坏时整页
+    fail-closed，不返回部分结果；接口不返回媒体字节、对象键、临时 URL 或设备时间。
   - `DELETE /v1/square/posts/{post_id}` 请求：Bearer `session_token`；响应：`post_id`、`post_state = deleted`、`cleanup{deleted_media_assets,deleted_r2_objects}`。仅作者本人可调用；Worker 删除 Cloudflare Images / Stream provider asset、R2 manifest、D1 媒体索引、上传任务和帖子行，不保留软删残行；链上 `SquarePosts`、发布事件和 0.1 元发布费记录不改写。
   - `GET /v1/square/feed/recommended` 请求：可选 Bearer `session_token`、`limit`；响应：`posts[]`
   - `GET /v1/square/feed/following` 请求：可选 Bearer `session_token`、`limit`；响应：`posts[]`
@@ -310,7 +322,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `POST /v1/square/profile/assets/prepare` 请求：Bearer `session_token`，`kind`(`avatar`/`banner`)、`content_type`、`byte_size`、`sha256`；头像最多 512KiB/1024×1024，背景最多 1536KiB/1920×720；响应本人 `object_key`、`content_hash` 与同域 Worker `upload_url`。
   - `PUT /v1/square/profile/assets?object_key=...&byte_size=...&sha256=...`：Bearer + P-256 设备请求签名；Worker 校验真实字节、MIME、文件头、尺寸和 sha256 后覆盖固定 R2 对象键。
   - `GET /v1/square/media/{object_key}`：必须有钱包 Bearer session；只允许本人资料命名空间中的固定头像/背景键且校验已存大小。该只读图片请求不要求 P-256 签名，以支持 `Image.network` 携带 session header 渲染。
-- R2 资料路径分段 = **身份主键 `cid_number`**（换绑后头像/资料随身份保留，不丢）；入口先经 `assertCidNumber` 校验（禁 `/`、`.`、控制字符等路径穿越）。帖子 manifest / 视频冷归档原片的 R2 路径分段仍用发布时 `account_id` 的 64 位小写十六进制（不可变内容，`account_id_hex` 去 `0x`）。
+- R2 资料路径分段 = **身份主键 `cid_number`**（换绑后头像/资料随身份保留，不丢）；入口先经 `assertCidNumber` 校验（禁 `/`、`.`、控制字符等路径穿越）。帖子 manifest 的 R2 路径分段使用发布时 `account_id` 的 64 位小写十六进制（不可变内容，`account_id_hex` 去 `0x`）。
 - 用户公开资料 R2 契约：`profile/{cid_number}/profile.json`（schema `citizenapp.square.profile.v1`：`cid_number`、`display_name`、`bio`、`avatar_object_key`、`avatar_content_hash`、`banner_object_key`、`banner_content_hash`、`updated_at`）。计数与认证不入 profile.json，响应时由 D1/链上派生。头像/背景固定对象键分别为 `profile/{cid_number}/avatar` 与 `profile/{cid_number}/banner`。
 - Feed item 字段：
   - `post_id`
@@ -322,12 +334,16 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `text`
   - `content_hash`
   - `storage_receipt_id`
-  - `manifest_url`
-  - `cover_url`
   - `media_items[]`
   - `created_at`
   - `chain_block`
-  - `author_state`
+  - `post_state`
+  - `content_blocks`
+  - `display_name`
+  - `avatar_object_key`
+  - `identity_level`
+  - `membership_level`
+  - `membership_active`
 - Feed media item 字段：
   - `media_kind`: `image` / `video`
   - `object_key`
@@ -335,8 +351,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `provider`
   - `provider_asset_id`
   - `asset_state`
-  - `playback_hls_url`
-  - `playback_dash_url`
+  - `thumbnail_url`
   - `content_type`
   - `byte_size`
   - `sha256`
@@ -351,7 +366,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `schema`: 固定为 `citizenapp.square.post.v1`
   - `account_id`
   - `post_category`
-  - `content_format`（可选，`normal`/`article`；**仅文章写入**，普通帖不带 → 默认 normal，保持旧 manifest 形状与哈希）
+  - `content_format`（可选，`normal`/`article`；文章写入，普通帖省略并唯一按 `normal` 解释）
   - `title`（可选，文章标题 10–50 字；普通帖不带）
   - `text`（动态正文 ≤300 字；文章正文按会员计划校验，自由 20000 字，民主 / 投票 / 竞选 30000 字）
   - `media_items[]`（动态最多 9 张图 + 1 个视频；文章 `[0]`=首图，`[1..]`=正文图，自由正文图最多 50 张，民主 / 投票 / 竞选最多 100 张）
@@ -375,7 +390,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `chain_transaction_confirmations`: 以 `tx_hash` 为主键，保存首次绑定的钱包、区块、extrinsic 序号、动作、规范化 `request_hash`、链时间和确认时间；相同请求幂等，任何改绑拒绝。**保留 account_id**：finalized 交易签名者是链上不可变事实。
   - `square_contacts`: 复合主键 `(cid_number,contact_id)`；`ciphertext`、`nonce`、`mac`、`updated_at`。属主 cid 只从 session 派生，换绑后密文随身份保留。
   - `square_uploads`: `upload_id`、`post_id`、`cid_number`（归属）、`account_id`（发起账户）、`post_category`、`manifest_hash`、`content_hash`、`storage_receipt_id`、`estimated_bytes`、`object_keys_json`、`status`、`created_at`、`completed_at`
-  - `square_media_assets`: `upload_id`、`post_id`、`cid_number`（归属）、`account_id`（上传账户）、`media_index`、`media_kind`、`provider`、`provider_asset_id`、`upload_method`、`resource_key`、`content_type`、`byte_size`、`asset_state`、`declared_duration_seconds`、`duration_seconds`、`width`、`height`、`error_code`、`created_at`、`updated_at`、`ready_at`、`archive_state`、`archived_at`、`r2_archive_key`
+  - `square_media_assets`: `upload_id`、`post_id`、`cid_number`（归属）、`account_id`（上传账户）、`media_index`、`media_kind`、`provider`、`provider_asset_id`、`upload_method`、`resource_key`、`content_type`、`byte_size`、`asset_state`、`declared_duration_seconds`、`duration_seconds`、`width`、`height`、`error_code`、`created_at`、`updated_at`、`ready_at`
   - `square_posts`: `post_id`、`cid_number`（NOT NULL，发布者身份主键，由链上 `SquarePostPublished` 事件镜像）、`account_id`（发布时链上签名者）、`post_category`、`content_format`、`title`、`text`、`content_hash`、`storage_receipt_id`、`chain_block`、`created_at`、`post_state`
   - `square_follows`: 复合主键 `(follower_cid_number,followed_cid_number)`；`created_at`、`notify_enabled`（关注即默认开发帖通知）
   - `square_notify_reads`: `cid_number` 主键；`last_seen_square_at`、`last_seen_following_at`（双游标红点）
@@ -394,18 +409,20 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `SQUARE_API_URL`：CitizenApp 编译期 define，用于显式覆盖广场、聊天和链启动清单 Worker API 根地址；默认直连 production Worker，本地调试可显式传 `http://127.0.0.1:8787`。
   - `CHAIN_URL`：Access 保护的链 RPC HTTPS 地址，只允许作为 Cloudflare 远端 Secret，不写入仓库和 CitizenApp。
   - `CHAIN_ID`、`CHAIN_SECRET`：Worker 调用 Access 应用的服务令牌，必须与 URL 成套配置为远端 Secret；当前代码只允许内部固定方法 `state_getStorage`、`author_submitExtrinsic`、`chain_getHeader`、`chain_getBlock`、`chain_getBlockHash`，用于 finalized storage、签名交易中继和 finalized 交易包含证明，不提供通用代理。
-  - `CF_ACCOUNT_ID`、`R2_ACCESS_ID`、`R2_SECRET_KEY`、`R2_BUCKET`：只供 Worker 内部把退订视频从 R2 冷归档回灌 Stream；不得签发用户上传 URL。
+  - `CF_ACCOUNT_ID`：Worker 调用 Images / Stream API 的 Cloudflare 账户 ID；必须与 `CF_API_TOKEN` 成套配置，不得下发 CitizenApp。
   - `CF_API_TOKEN`：Worker 校验图片后写 Images、签发 Stream TUS 和管理媒体；必须使用 Cloudflare Secret，不得下发 CitizenApp。
   - `IMAGES_URL`：Cloudflare Images delivery 地址前缀，不含 asset id 和 variant。
   - `STREAM_URL`：Cloudflare Stream 播放地址前缀。
   - `STREAM_HOOK_SECRET`：Stream webhook 签名 secret；必须使用 Cloudflare secret。
   - `MEMBERSHIP_RECONCILE_ENABLED`、`CREATOR_RECONCILE_ENABLED`：平台和创作者镜像对账默认开关；运行期 KV 开关可以收紧或恢复默认，但不能改变链上真源。
   - `MEMBERSHIP_RECONCILE_BATCH`：单轮镜像对账上限，只控制 Worker 读取量，不改变权益规则。
+  - 权益到期清理没有设备时间、等待天数或独立开关；它只接收同一轮订阅对账读到的 finalized 区块 `Timestamp.Now`，并以 `paid_until` 判断是否删除。
   - `VITE_API_URL`：官网构建时可选 Worker API 根地址；未设置时使用 production Worker 默认地址。
 - CitizenApp 本地缓存字段：
   - `SquareDraft`: `account_id`、`post_category`、`text`、`media_drafts[]`、`draft_state`、`updated_at_millis`、`last_error`、可选 `upload_id/post_id/content_hash/storage_receipt_id/storage_until/tx_hash/block_hash_hex`；当前落地复用 `AppKvEntity`，不新增 Isar schema。
   - `SquareUploadTask`: 当前不落独立 Isar schema；发布中的上传状态由 `SquareDraft` 和 Worker `square_uploads.status` 表达。
-  - `SquarePostCache`: `post_id`、`account_id`、`cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`manifest_url`、`cover_url`、`cached_at`
+  - `SquareLocalPost`: `post_id`、`cid_number`（本人副本归属主键）、`account_id`（发布时签名账户事实）、`post_category`、`content_format`、`manifest_bytes`（参与链上 `content_hash` 的原始 UTF-8 JSON 字节）、`content_hash`、`storage_receipt_id`、`chain_block`、`created_at`、`post_state`。本地只接受 `post_state=published`；写入和读取都必须重新校验 manifest SHA-256、schema、账户、分类与内容形态。`created_at` 只使用 Worker 返回值，禁止写设备时间；CID 换绑不迁移或改写；不保存媒体文件、路径、封面、临时 URL、`cached_at` 或整个公共 feed。当前实现为 Isar `SquareLocalPostEntity` + `SquarePostStore`。
+  - `SquarePostSyncCheckpoint`: 复用 `AppKvEntity`，按 CID 只保存最近一次完整同步看到的远端最新 `post_id + created_at`；不保存设备同步时间。首次完整分页，后续从顶部扫描到旧检查点；一页必须原子落盘，失败不推进检查点。回灌是只增补流程，远端帖子因删除或权益到期消失时不得反向删除本地副本。
   - `SquareFeedCursor`: `account_id`、`feed_kind`、`cursor`、`updated_at`
   - `SquareUserSignalCache`: `account_id`、`post_id`、`signal_type`、`created_at`、`synced`
   - `ContactCache`: 以 `contact_book_by_account:<identity_account_id>` 隔离保存解密后的 `cid_number`、`account_id`、`ss58_address`、`contact_remark`、`created_at`、`updated_at`，复用 `AppKvEntity`，不是公开资料真源。
@@ -1107,6 +1124,12 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 区块链节点不承担聊天投递、密钥池或设备配对。
 - 编码：外层 Protobuf；OpenMLS 标准 wire bytes 放入 `mls_wire_message`；链内 SCALE 不作为 Chat 主协议。
 - 当前实现状态：Dart Protobuf、OpenMLS Rust FFI、Isar 本地消息库、Cloudflare 瞬时密文转发、WebRTC 附件和无内容推送后台收发均已落地；`ChatRuntime.ensureReady(accountId)` 对同一账户/设备执行 single-flight，登录与设备登记只使用硬件 P-256 设备子钥，钱包 seed 和 CitizenWallet 均不进入聊天运行态。
+- iOS 硬件边界：`org.citizenapp/device_subkey` 按 `walletIndex` 在 Secure Enclave 生成
+  P-256 私钥，访问控制仅为 `privateKeyUsage`，允许后台静默 ECDSA-SHA256；原生通道返回
+  65 字节未压缩公钥裸 hex 与 DER 签名裸 hex，Dart 在内部转 `r||s`，进入 Worker wire
+  边界时再按 ADR-041 添加唯一 `0x`。`org.citizenapp/hw_seed_vault` 使用另一命名域的
+  Secure Enclave P-256 KEK，`biometryCurrentSet + privateKeyUsage` 只保护账户 child
+  mini-secret 的 `ios-se-v1:` ECIES-AES-GCM 信封；两类私钥不得复用。
 - 签名/验签规则：
   - `ChatRoute` 是 Chat 模块内部路由缓存，不是第二套通讯录，不得替代“我的通讯录”联系人详情。
   - 公民端发消息必须读取用户资料中的聊天账户；未设置聊天账户不得发送。

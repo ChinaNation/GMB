@@ -45,6 +45,8 @@ export interface ReconcileResult {
 export interface SubscriptionReconcileResult {
   platform: ReconcileResult;
   creator: ReconcileResult;
+  /// 本轮对账读取的 finalized 区块时间戳；未读取链时为 null。
+  finalized_chain_timestamp: number | null;
 }
 
 const EMPTY_RESULT: ReconcileResult = { scanned: 0, updated: 0, failed: 0 };
@@ -59,7 +61,11 @@ export async function reconcileSubscriptions(
     reconcileEnabled(env, CREATOR_RECONCILE_FLAG_KEY, env.CREATOR_RECONCILE_ENABLED),
   ]);
   if ((!platformEnabled && !creatorEnabled) || !isChainRpcConfigured(env)) {
-    return { platform: { ...EMPTY_RESULT }, creator: { ...EMPTY_RESULT } };
+    return {
+      platform: { ...EMPTY_RESULT },
+      creator: { ...EMPTY_RESULT },
+      finalized_chain_timestamp: null,
+    };
   }
 
   const point = await deps.finalizedPoint(env);
@@ -70,7 +76,7 @@ export async function reconcileSubscriptions(
     observedAt: point.observedAt,
   });
 
-  // 已取消订阅无需点读链：权益在链上 paid_until 到达时自然失效，归档起点固定为该时间。
+  // 已取消订阅无需点读链：权益在链上 paid_until 到达时自然失效，清理边界固定为该时间。
   await env.DB.prepare(
     `UPDATE square_memberships
       SET entitlement_lapsed_at = paid_until
@@ -86,7 +92,11 @@ export async function reconcileSubscriptions(
       ? reconcileCreatorCandidates(env, point, deps, reconcileBatchSize(env))
       : Promise.resolve({ ...EMPTY_RESULT }),
   ]);
-  return { platform, creator };
+  return {
+    platform,
+    creator,
+    finalized_chain_timestamp: point.chainTimestamp,
+  };
 }
 
 /** 单模块测试与人工诊断入口；生产 Cron 使用 reconcileSubscriptions 避免重复读链。 */

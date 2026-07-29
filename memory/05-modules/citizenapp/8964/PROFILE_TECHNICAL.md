@@ -10,24 +10,53 @@
 ## 数据分层
 ```
 链上 citizenchain   发帖索引/哈希/回执、交易                        ← 不动
-R2   (Worker)        profile/{account_id_hex}/profile.json + 头像/背景对象 = 唯一公开资料源
+R2   (Worker)        profile/{cid_number}/profile.json + 头像/背景对象 = 唯一公开资料源
 D1   (Worker)        square_posts / square_follows / 计数聚合
 本地 (App assets)    profile_defaults 只提供稳定展示兜底；不成为公开资料真源
-本地 (SharedPrefs)   仅离线缓存 + 草稿；旧本地头像/背景迁移到 R2 后清空
+本地 (SharedPrefs)   公开资料离线缓存；旧本地头像/背景迁移到 R2 后清空
+本地 (Isar/AppKv)    本人已发布规范 manifest 副本 + 草稿；不保存公共 feed 或永久媒体副本
 ```
 
+### 本人已发布内容本地副本
+
+- `SquareLocalPostEntity` / `SquarePostStore` 是本人已发布内容唯一 Isar 边界；
+  `cid_number` 是归属主键，`account_id` 只记录发布时签名账户事实，CID 换绑不迁移。
+- 正文、标题、文章图文块和媒体声明只保存在原始 `manifest_bytes` 中，不拆第二套本地正文字段；
+  写入与读取均重新验证 SHA-256、当前 schema、账户、分类和内容形态，损坏数据 fail-closed。
+- 本地仅接受 Worker 已确认的 `post_state=published`；`created_at` 由 Worker 提供，仓库不读取
+  设备时间。图片、视频、封面、文件路径和临时签名 URL 始终不进入本表。
+- Worker 确认发布后，`SquarePublishService` 使用发布阶段保留的原始 manifest 和 Worker
+  发布锚立即写本地；本地失败不回滚远端成功、不提示用户重试，只显示完成告警并调度回灌。
+- `SquarePostSyncService` 在广场获得有效会话后后台启动：首次完整分页，后续按
+  Worker `(created_at DESC,post_id DESC)` 扫描到上次最新事实即停止；每页原子落盘，
+  全部目标页成功后才更新不含设备时间的检查点。远端内容过期删除不反向删除本地副本。
+- 本人主页先解析本地 manifest 展示正文，再按 `post_id` 合并 Worker 结果；Worker 的作者
+  资料和媒体元数据优先，远端为空或读取失败时仍保留本人本地正文。他人主页和公共 feed
+  不读取本机副本。
+- 本地不保存媒体字节，也不猜测对象键或 URL；manifest 声明过但 Worker 已无对应媒体时，
+  页面明确显示“媒体已从云端清理，本机仅保留正文”。
+- 单帖删除和编辑替换旧帖统一走 `SquarePostDeletionCoordinator`：归属只校验会话 CID，
+  Worker 删除成功后才删同 CID 本地副本；只有精确 `404/post_not_found` 可视为远端已
+  不存在并清理本地残留，权限、会话和网络错误必须保留本地副本。
+- 注销仍先完成服务端硬删除，再按 CID 删除全部本人副本和同步检查点；某项本地清理失败
+  不阻断其余资料、会话、私信和设备子钥清理，也不得把已完成的服务端注销误报为可重试失败。
+
 ## Worker 接口（详见 unified-protocols P-API-CITIZENAPP-002）
+- `GET /v1/square/posts/self?limit=5&cursor=...`：必须携带本人 Bearer session 与 P-256
+  设备请求证明；Worker 只按 session `cid_number` 返回本人已发布内容的原始 manifest
+  base64、链锚和 Worker 时间。R2 键只取 D1 `object_keys_json`，帖子/上传/manifest 三组
+  哈希或归属任一不一致时整页拒绝；不返回媒体字节、路径、临时 URL，不增加公共浏览量。
 - `GET /v1/square/users/:cid_number`：profile + 计数 + 认证 + is_following（公开可读，带 session 反映登录者视角）。
 - `GET /v1/square/users/:cid_number/posts?category=&limit=&cursor=`：按作者分页（all/normal/campaign）。
 - `GET /v1/square/users/:cid_number/follows?type=following|followers`：关注/粉丝列表分页。
 - `PUT /v1/square/profile`：本人写 display_name/bio/头像背景 key（返回与 GET 同构）。
 - `POST /v1/square/profile/assets/prepare` + `PUT /v1/square/profile/assets`：
-  每个账户固定使用 `profile/{account_id_hex}/avatar` 与
-  `profile/{account_id_hex}/banner` 两个对象键，并由同域 Worker 校验实际字节、MIME、
+  每个身份固定使用 `profile/{cid_number}/avatar` 与
+  `profile/{cid_number}/banner` 两个对象键，并由同域 Worker 校验实际字节、MIME、
   图片文件头、尺寸与 sha256 后覆盖写 R2；头像 512KiB/1024×1024，背景
   1536KiB/1920×720，并发上传也不可能增加对象数。内容不上链。
-  `account_id_hex` 固定为严格规范 `account_id` 去掉 `0x` 后的 64 位小写十六进制，
-  不接受 SS58、大小写归一或任意字符串清洗。
+  `cid_number` 只从 Worker session 派生并经统一路径校验，不接受客户端上传属主、
+  SS58、AccountId 或任意字符串清洗。
 - `GET /v1/square/media/<object_key>`：必须携带钱包 Bearer session，只允许读取固定头像/背景键；`Image.network` 使用 session header，服务端不要求该只读图片请求附加 P-256 签名。
 - 关注/取关复用已有 `POST/DELETE /v1/square/follows`。
 

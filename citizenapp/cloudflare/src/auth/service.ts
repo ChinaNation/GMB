@@ -7,7 +7,10 @@ import { sha256Hex } from '../shared/hash';
 import { verifyTurnstile } from '../security/turnstile';
 import { verifyWalletSignature } from './wallet_signature';
 import { indexSessionToken } from './session_index';
-import { fetchChainIdentityStateCached } from '../chain/identity';
+import {
+  fetchChainIdentityStateCached,
+  fetchChainIdentityStateFreshIfUnbound
+} from '../chain/identity';
 import {
   assertP256PublicKeyHex,
   buildDeviceBindingSigningMessage,
@@ -259,7 +262,11 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
 
   // 身份主键 = 该钱包账户链上当前绑定的 cid_number(占即绑,匿名亦可)。
   // 未绑定 CID 的账户是访客,不能注册社交身份的设备子钥。
-  const identity = await fetchChainIdentityStateCached(env, accountId);
+  //
+  // 子钥是**懒绑定**的:用户占完号后初次进广场 / 聊天才来注册,距离占号上链往往只有
+  // 几秒,而身份缓存 45 秒。读到「无 CID」必须旁路缓存回源核实一次,否则会拿占号前的
+  // 空值拒绝刚刚上链的身份。
+  const identity = await fetchChainIdentityStateFreshIfUnbound(env, accountId);
   if (!identity.cid_number) {
     throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法注册设备子钥');
   }

@@ -75,6 +75,31 @@ export async function fetchChainIdentityStateCached(
   }
 }
 
+/// 缓存里读到「未绑定 CID」时旁路缓存重读一次链;缓存已有 CID 则直接采信。
+///
+/// 「无 CID」是个会迅速翻转的**负面**结论:用户刚在链上占完号就进广场,
+/// 45 秒缓存里还留着占号前的空值,拿它去拒绝刚刚上链的身份是错的。正面结论
+/// (已有 CID)不会凭空消失,继续走缓存,不额外打链。
+///
+/// 只给「据此做拒绝决定」的写路径用(如设备子钥注册);展示路径仍用
+/// [fetchChainIdentityStateCached],不为一次渲染多打一次链。
+export async function fetchChainIdentityStateFreshIfUnbound(
+  env: Env,
+  accountId: string,
+): Promise<ChainIdentityState> {
+  const cached = await fetchChainIdentityStateCached(env, accountId);
+  if (cached.cid_number) return cached;
+  const fresh = await fetchChainIdentityState(env, accountId);
+  try {
+    await putKvJson(env, `square_identity:${accountId}`, fresh, "identity_cache", {
+      expirationTtl: IDENTITY_CACHE_TTL_SECONDS,
+    });
+  } catch {
+    // 缓存写失败忽略，本次判定仍用刚读到的链上真值。
+  }
+  return fresh;
+}
+
 /// 未绑定/无有效身份的身份主键 cid_number 的默认态(account_id 空)。
 function visitorIdentityStateByCid(cidNumber: string): ChainIdentityState {
   return {

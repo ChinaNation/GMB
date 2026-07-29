@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/8964/services/square_post_store.dart';
 import 'package:citizenapp/chat/chat_media_limits.dart';
 import 'package:citizenapp/signer/signing.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
@@ -828,6 +829,101 @@ class SquareApiClient
     return _parsePost(post);
   }
 
+  /// 拉取本人已发布内容的规范 manifest 原始字节。
+  ///
+  /// 请求沿用 [_getJson] 的 Bearer + P-256 设备证明；响应逐字段严格解析，任何一项
+  /// 缺失、类型漂移或 CID 越界都会拒绝整页，不把部分结果交给本地仓库。
+  Future<SquareLocalPostPage> fetchSelfPublishedPostCopies({
+    required SquareSession session,
+    String? cursor,
+    int limit = 5,
+  }) async {
+    if (limit < 1 || limit > 5) {
+      throw const SquareApiException('本人副本回灌 limit 必须为 1..5');
+    }
+    final params = <String, String>{'limit': '$limit'};
+    if (cursor != null) {
+      if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(cursor)) {
+        throw const SquareApiException('本人副本回灌 cursor 不合法');
+      }
+      params['cursor'] = cursor;
+    }
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .join('&');
+    final data = await _getJson(
+      '/v1/square/posts/self?$query',
+      session: session,
+    );
+    final rawItems = data['items'];
+    if (rawItems is! List || rawItems.length > limit) {
+      throw const SquareApiException('本人副本回灌 items 不合法');
+    }
+    final items = <SquareLocalPost>[];
+    for (final rawItem in rawItems) {
+      if (rawItem is! Map<String, dynamic>) {
+        throw const SquareApiException('本人副本回灌条目不合法');
+      }
+      final cidNumber = _requireExactString(rawItem, 'cid_number');
+      if (cidNumber != session.cidNumber) {
+        throw const SquareApiException('本人副本回灌 CID 与当前会话不一致');
+      }
+      final postCategory = _requireExactString(rawItem, 'post_category');
+      if (postCategory != 'normal' && postCategory != 'campaign') {
+        throw const SquareApiException('本人副本回灌 post_category 不合法');
+      }
+      final contentFormat = _requireExactString(rawItem, 'content_format');
+      if (contentFormat != 'normal' && contentFormat != 'article') {
+        throw const SquareApiException('本人副本回灌 content_format 不合法');
+      }
+      final contentHash = _requireExactString(rawItem, 'content_hash');
+      if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(contentHash)) {
+        throw const SquareApiException('本人副本回灌 content_hash 不合法');
+      }
+      final postState = _requireExactString(rawItem, 'post_state');
+      if (postState != SquarePostStore.publishedState) {
+        throw const SquareApiException('本人副本回灌只允许 published');
+      }
+      final chainBlockValue = rawItem['chain_block'];
+      if (chainBlockValue != null &&
+          (chainBlockValue is! int || chainBlockValue < 0)) {
+        throw const SquareApiException('本人副本回灌 chain_block 不合法');
+      }
+      final createdAt = rawItem['created_at'];
+      if (createdAt is! int || createdAt <= 0) {
+        throw const SquareApiException('本人副本回灌 created_at 不合法');
+      }
+      items.add(
+        SquareLocalPost(
+          postId: _requireExactString(rawItem, 'post_id'),
+          cidNumber: cidNumber,
+          accountId: _requireExactString(rawItem, 'account_id'),
+          postCategory: postCategory,
+          contentFormat: contentFormat,
+          manifestBytes: _decodeManifestBase64(
+            _requireExactString(rawItem, 'manifest_bytes_base64'),
+          ),
+          contentHash: contentHash,
+          storageReceiptId: _requireExactString(rawItem, 'storage_receipt_id'),
+          chainBlock: chainBlockValue as int?,
+          createdAt: createdAt,
+          postState: postState,
+        ),
+      );
+    }
+
+    final rawNextCursor = data['next_cursor'];
+    if (rawNextCursor != null &&
+        (rawNextCursor is! String ||
+            !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(rawNextCursor))) {
+      throw const SquareApiException('本人副本回灌 next_cursor 不合法');
+    }
+    return SquareLocalPostPage(
+      items: List<SquareLocalPost>.unmodifiable(items),
+      nextCursor: rawNextCursor as String?,
+    );
+  }
+
   @override
   Future<void> deletePost({
     required SquareSession session,
@@ -1340,10 +1436,7 @@ class SquareApiClient
 
   SquareMediaItem _parseMediaItem(Map<String, dynamic> data) {
     final url = data['url']?.toString() ?? data['object_key']?.toString() ?? '';
-    final coverUrl = data['thumbnail_url']?.toString() ??
-        data['cover_url']?.toString() ??
-        data['cover_object_key']?.toString() ??
-        '';
+    final coverUrl = data['thumbnail_url']?.toString() ?? '';
     return SquareMediaItem(
       mediaKind: data['media_kind'] == 'video'
           ? SquareMediaKind.video
@@ -1352,7 +1445,6 @@ class SquareApiClient
       coverUrl: coverUrl.isEmpty ? null : _resolveMediaUrl(coverUrl),
       byteSize: _nullableInt(data['byte_size']),
       assetState: data['asset_state']?.toString(),
-      archiveState: data['archive_state']?.toString(),
       // 横竖屏判定所需原始尺寸；Worker feed 已随 media_items 回传。
       width: _nullableInt(data['width']),
       height: _nullableInt(data['height']),
@@ -1402,6 +1494,36 @@ class SquareApiClient
     final value = data[key];
     if (value is String && value.isNotEmpty) return value;
     throw SquareApiException('广场服务响应缺少 $key');
+  }
+
+  static String _requireExactString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value is String && value.isNotEmpty && value.trim() == value) {
+      return value;
+    }
+    throw SquareApiException('广场服务响应字段 $key 不合法');
+  }
+
+  static Uint8List _decodeManifestBase64(String value) {
+    if (value.isEmpty ||
+        !RegExp(
+          r'^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$',
+        ).hasMatch(value)) {
+      throw const SquareApiException('manifest_bytes_base64 不合法');
+    }
+    try {
+      final bytes = base64Decode(value);
+      if (bytes.isEmpty ||
+          bytes.length > 256 * 1024 ||
+          base64Encode(bytes) != value) {
+        throw const SquareApiException('manifest_bytes_base64 不合法');
+      }
+      return Uint8List.fromList(bytes);
+    } on SquareApiException {
+      rethrow;
+    } on Object {
+      throw const SquareApiException('manifest_bytes_base64 不合法');
+    }
   }
 
   static int _asInt(Object? value) {

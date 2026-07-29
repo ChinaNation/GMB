@@ -57,6 +57,94 @@ void main() {
     );
   }
 
+  group('子钥懒绑定 ensureDeviceSubkeyBound', () {
+    setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
+    test('未注册 CID 时拒绝绑定:后端不收未绑 CID 账户的子钥', () async {
+      final wallet = _FakeWalletManager(const _AliceWallet());
+      final service = MyIdService(
+        walletManager: wallet,
+        identityResolver: _FakeIdentityResolver(_unregisteredIdentity(_validAccountId)),
+        chainRpc: _FakeChainRpc(),
+        divisionStore: _FakeDivisionStore(),
+        badgeSnapshotStore: _FakeBadgeStore(),
+      );
+      await expectLater(
+        service.ensureDeviceSubkeyBound(),
+        throwsA(isA<WalletAuthException>()),
+      );
+      expect(wallet.subkeyRebindCalls, 0);
+    });
+
+    test('首次进入需 CID 页面时绑定一次并推进标记;再次进入不重复弹窗', () async {
+      final wallet = _FakeWalletManager(const _AliceWallet());
+      final service = MyIdService(
+        walletManager: wallet,
+        identityResolver: _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+        chainRpc: _FakeChainRpc(),
+        divisionStore: _FakeDivisionStore(),
+        badgeSnapshotStore: _FakeBadgeStore(),
+      );
+      await service.ensureDeviceSubkeyBound();
+      expect(wallet.subkeyRebindCalls, 1);
+      expect(await IdentitySyncedAccountStore().read(), _validAccountId);
+
+      // 标记已与身份账户一致 → 直接短路,不再绑、不再弹生物识别。
+      await service.ensureDeviceSubkeyBound();
+      expect(wallet.subkeyRebindCalls, 1);
+    });
+
+    test('绑定失败不推进标记,下次仍会重试', () async {
+      final wallet =
+          _FakeWalletManager(const _AliceWallet(), failFirstSubkeyRebind: true);
+      final service = MyIdService(
+        walletManager: wallet,
+        identityResolver: _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+        chainRpc: _FakeChainRpc(),
+        divisionStore: _FakeDivisionStore(),
+        badgeSnapshotStore: _FakeBadgeStore(),
+      );
+      await expectLater(service.ensureDeviceSubkeyBound(), throwsA(isA<Object>()));
+      expect(await IdentitySyncedAccountStore().read(), isNull);
+
+      await service.ensureDeviceSubkeyBound();
+      expect(wallet.subkeyRebindCalls, 2);
+      expect(await IdentitySyncedAccountStore().read(), _validAccountId);
+    });
+  });
+
+  group('注册前余额闸 fetchRegistrationAffordability', () {
+    test('门槛取自链上常量,余额旁路缓存读取', () async {
+      final rpc = _FakeChainRpc()
+        ..minSelfPayFen = BigInt.from(121)
+        ..balanceYuan = 1.21;
+      final service = MyIdService(
+        walletManager: _FakeWalletManager(const _AliceWallet()),
+        chainRpc: rpc,
+        divisionStore: _FakeDivisionStore(),
+        badgeSnapshotStore: _FakeBadgeStore(),
+      );
+      final result =
+          await service.fetchRegistrationAffordability(_validAccountId);
+      expect(result.requiredFen, BigInt.from(121));
+      expect(result.balanceFen, BigInt.from(121));
+    });
+
+    test('链读失败必须上抛,绝不静默当成余额充足或不足', () async {
+      final rpc = _FakeChainRpc()..balanceThrows = true;
+      final service = MyIdService(
+        walletManager: _FakeWalletManager(const _AliceWallet()),
+        chainRpc: rpc,
+        divisionStore: _FakeDivisionStore(),
+        badgeSnapshotStore: _FakeBadgeStore(),
+      );
+      await expectLater(
+        service.fetchRegistrationAffordability(_validAccountId),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
   test('无默认热钱包时为访客并提示创建钱包', () async {
     final state = await buildService(wallet: null).getState();
     expect(state.tier, MyIdTier.visitor);
@@ -564,7 +652,7 @@ class _FakeWalletManager extends WalletManager {
   final WalletProfile? _wallet;
   final List<Account> accounts;
 
-  /// true 时 [rebindDeviceSubkeyToAccountId] 首次抛错、之后成功,用于验证换绑本地
+  /// true 时 [bindDeviceSubkeyToAccountId] 首次抛错、之后成功,用于验证换绑本地
   /// 重建中断后意图留存 + 续跑补齐(死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
   final bool failFirstSubkeyRebind;
   int subkeyRebindCalls = 0;
@@ -583,7 +671,7 @@ class _FakeWalletManager extends WalletManager {
   }
 
   @override
-  Future<void> rebindDeviceSubkeyToAccountId(String identityAccountId) async {
+  Future<void> bindDeviceSubkeyToAccountId(String identityAccountId) async {
     subkeyRebindCalls++;
     if (failFirstSubkeyRebind && subkeyRebindCalls == 1) {
       throw StateError('设备子钥重绑首次失败(模拟网络抖动)');
@@ -685,6 +773,14 @@ ResolvedIdentity _registeredIdentity(String accountId) => ResolvedIdentity(
       ),
     );
 
+/// 未注册身份(有热钱包、无 CID):懒绑定必须在这种态下拒绝绑定子钥。
+ResolvedIdentity _unregisteredIdentity(String accountId) => ResolvedIdentity(
+      accountId: accountId,
+      ss58Address: _validAddress,
+      accountIndex: 0,
+      snapshot: null,
+    );
+
 /// 记录占号 / 换绑调用参数的假 RPC(不上链),验证 service 编排把账户与 CID 传对。
 class _FakeIdentityRpc extends CitizenIdentityRpc {
   _FakeIdentityRpc();
@@ -743,6 +839,26 @@ class _FakeChainRpc extends ChainRpc {
   /// 「有 CID 且绑定闭环、但无 voting」,用来驱动 reader 的匿名已注册分支。
   final bool hasCid;
   int _readIndex = 0;
+
+  /// 链上下发的自付门槛(分)与账户余额(元),供注册前余额闸用例驱动三分支。
+  BigInt minSelfPayFen = BigInt.from(121);
+  double balanceYuan = 0.0;
+  bool balanceThrows = false;
+
+  @override
+  Future<BigInt> fetchMinSelfPayBalanceFen() async {
+    if (balanceThrows) throw StateError('metadata 未就绪');
+    return minSelfPayFen;
+  }
+
+  @override
+  Future<double> fetchFinalizedBalance(String publicKey,
+      {bool forceFresh = false}) async {
+    if (balanceThrows) throw StateError('smoldot 未就绪');
+    // 余额闸必须旁路块内缓存,否则刚充完钱的用户会被拿旧值再踢回充值页。
+    expect(forceFresh, isTrue);
+    return balanceYuan;
+  }
 
   @override
   Future<({Uint8List blockHash, int blockNumber})>

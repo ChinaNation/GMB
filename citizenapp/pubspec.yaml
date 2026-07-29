@@ -91,5 +91,7 @@ flutter:
     - assets/icons/government-line.svg
     - assets/icons/bank.svg
     - assets/icons/gmb-mark.png
+    - assets/icons/usdc.svg
+    - assets/icons/usdt.svg
     - assets/icons/icons8-96.png
     - assets/icons/icons8-64.png

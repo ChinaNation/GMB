@@ -13,6 +13,7 @@ import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
+import 'package:citizenapp/8964/services/square_post_sync_service.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
@@ -67,6 +68,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
   String? _identityAddress;
 
   final SquareApiClient _squareApi = SquareApiClient();
+  final SquarePostSyncService _postSyncService = SquarePostSyncService();
 
   /// 最近一次 feed 加载的 session token，供卡片头像鉴权头复用。
   String? _feedSessionToken;
@@ -444,6 +446,13 @@ class _SquareHomePageState extends State<SquareHomePage> {
       if (session == null) {
         throw const SquareApiException('需要钱包账户才能浏览广场');
       }
+      // 会话和链上当前绑定均已通过后再后台回灌本人副本；不阻塞公共 feed 首屏。
+      // 同步失败只保留本地既有内容，下次启动/刷新继续从未推进的检查点重试。
+      unawaited(
+        _postSyncService.sync(session).catchError((Object error) {
+          AppLog.d('[SquareHomePage] local post sync failed: $error');
+        }),
+      );
     }
     final posts = await _feedSource.fetchFeed(
       feedKind: _selectedFeed,

@@ -4,6 +4,7 @@ import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/8964/services/square_post_store.dart';
 
 const String kOwner =
     '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
@@ -88,16 +89,20 @@ class FakeProfileApi extends CitizenProfileApi {
   FakeProfileApi(
     this.result, {
     this.authorPosts = const [],
+    this.localPosts = const [],
     this.follows = const [],
     this.throwOnFollow = false,
     this.throwOnProfile = false,
+    this.throwOnAuthorPosts = false,
   }) : super();
 
   final CitizenProfile result;
   final List<SquarePost> authorPosts;
+  final List<SquareLocalPost> localPosts;
   final List<SquareFollowEntry> follows;
   final bool throwOnFollow;
   final bool throwOnProfile;
+  final bool throwOnAuthorPosts;
   int calls = 0;
   int followCalls = 0;
   int unfollowCalls = 0;
@@ -126,12 +131,23 @@ class FakeProfileApi extends CitizenProfileApi {
     int? cursor,
     SquareSession? session,
   }) async {
+    if (throwOnAuthorPosts) {
+      throw const SquareApiException('author posts failed');
+    }
     final filtered = authorPosts
         .where((post) => category == null || post.postCategory == category)
         .where((post) =>
             contentFormat == null || post.contentFormat == contentFormat)
         .toList();
     return (posts: filtered, nextCursor: null);
+  }
+
+  @override
+  Future<List<SquareLocalPost>> fetchLocalPublishedPosts(
+      String cidNumber) async {
+    return localPosts
+        .where((post) => post.cidNumber == cidNumber)
+        .toList(growable: false);
   }
 
   @override
