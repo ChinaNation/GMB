@@ -18,8 +18,10 @@ dependencies:
   crypto: ^3.0.3
   pointycastle: ^4.0.0
   # 存储
-  isar: ^3.1.0+1
-  isar_flutter_libs: ^3.1.0+1
+  # Isar 3.1 上游预编译 libisar.so 只有 4 KB ELF 对齐；统一切换到
+  # 16 KB 对齐的社区维护分支，保持现有 3.x API、集合与数据库格式。
+  isar_community: ^3.3.2
+  isar_community_flutter_libs: ^3.3.2
   flutter_secure_storage: ^10.3.1
   shared_preferences: ^2.5.5
   path_provider: ^2.1.6
@@ -38,7 +40,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   build_runner: ^2.4.11
-  isar_generator: ^3.1.0+1
+  isar_community_generator: ^3.3.2
 
 flutter:
   uses-material-design: true

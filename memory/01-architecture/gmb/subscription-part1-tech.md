@@ -149,8 +149,12 @@ RenewalIndex<(SubscriberCidNumber, IssuerKey<CidNumber>)> -> due_at
 
 ## 8. runtime 自动续费
 
-1. 续费在 `on_idle(remaining_weight)` 执行（Timestamp inherent 已于其前写入，可读本块共识时间戳）；不再用 `on_finalize` 固定处理量，也不静态预留最坏权重。
-2. runtime 从最早到期项开始处理 `due_at <= now`，单块处理量按**当块剩余权重**动态排空（`limit = min(remaining/单笔权重, MaxSubscriptionRenewalsPerBlock backstop)`）；超大同刻促发多块分摊。
+1. 续费在 `on_initialize` 执行并使用上一块已确认时间；正常出块时最多延后一个区块，
+   绝不提前扣款。余额变化因此进入 NodeGuard 的 finalize 前状态，不会被误判为原生发行；
+   每块仍受 `MaxSubscriptionRenewalsPerBlock` 硬上限约束，并按实际处理笔数记账。
+2. runtime 从最早到期项开始处理 `due_at <= previous_confirmed_timestamp`，单块最多处理
+   `MaxSubscriptionRenewalsPerBlock` 项，返回权重按实际处理笔数计算；超出硬上限的同刻到期项
+   在后续区块继续。
 3. 每次续费先由 `subscriber_cid_number` 解析并复核当前双向绑定账户，只能从当前账户
    扣款；绑定缺失、CID inactive 或双向不一致时转
    `Suspended(IdentityBindingUnavailable)`，绝不回退扣历史账户。

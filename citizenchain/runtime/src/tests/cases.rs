@@ -1346,9 +1346,8 @@ fn runtime_square_post_campaign_rejects_anonymous_active_cid() {
     new_test_ext().execute_with(|| {
         let signer_account_id = AccountId::new([43u8; 32]);
         let cid_number = real_cid_number("SQUARE-ANON-CAMPAIGN", "CTZN", "1");
-        let bounded_cid_number: citizen_identity::CidNumberBound = cid_number
-            .try_into()
-            .expect("cid number should fit");
+        let bounded_cid_number: citizen_identity::CidNumberBound =
+            cid_number.try_into().expect("cid number should fit");
         assert_ok!(CitizenIdentity::self_occupy_cid(
             RuntimeOrigin::signed(signer_account_id.clone()),
             bounded_cid_number,

@@ -1552,14 +1552,8 @@ mod finalize_issuance_tests {
         // 只应核对 finalize 自身变化，不能把合法订阅续费误判成原生发行。
         let state = BTreeMap::from([
             (total_key.clone(), 1_000u128.encode()),
-            (
-                payer_key.clone(),
-                account(900, 1, NEW_BALANCES_FLAGS),
-            ),
-            (
-                payee_key.clone(),
-                account(100, 1, NEW_BALANCES_FLAGS),
-            ),
+            (payer_key.clone(), account(900, 1, NEW_BALANCES_FLAGS)),
+            (payee_key.clone(), account(100, 1, NEW_BALANCES_FLAGS)),
         ]);
         let delta = BTreeMap::from([
             (payer_key, Some(account(900, 1, NEW_BALANCES_FLAGS))),

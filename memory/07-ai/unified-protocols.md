@@ -789,6 +789,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
     `account_id` 扣款，创作者收款按创作者 CID 解析当前绑定 `account_id`。绑定缺失、
     inactive 或双向不一致时 fail-closed，禁止扣取或支付历史账户。
   - `subscribe` 建立持续自动扣款授权，直到订阅者签名取消；续费和周期推进由 runtime 内部执行，不存在外部 call 或再次签名。
+  - 自动续费在 `on_initialize` 使用上一块已确认 `Timestamp.Now` 处理：正常出块最多延后
+    一个区块、绝不提前扣款；付款与收款余额变化必须进入 NodeGuard 的 finalize 前状态。
   - `propose_set_platform_price` 由 OnChina 生成 QR_V1/k=1 请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后通过统一提交入口上链；业务 pallet 只创建统一内部投票提案。
 - 禁止兼容：
   - 不兼容旧 `SubscriptionPlan::Level/CreatorPrice/Terms` tag。
@@ -831,6 +833,9 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - Terminated 由余额不足、真实转账失败或套餐失效产生，不再调度且不重试。
   - `Suspended` 保留订阅关系但退出调度，订阅者重新签名后才能恢复。
   - `CreatorPaused` 保留订阅关系和调度，创作者恢复有效平台会员后自动继续。
+  - runtime 在 `on_initialize` 读取上一块已确认时间，从最早到期项开始处理；单块最多处理
+    `MaxSubscriptionRenewalsPerBlock` 项并按实际处理数返回权重，余额变化发生在 NodeGuard
+    finalize 前。
 - 生产者：`square-post` subscribe、cancel、change、set plans、runtime 自动续费和平台调价终态回调。
 - 消费者：CitizenApp finalized 链读、Cloudflare finalized 镜像和对账器。
 - 禁止事项：
@@ -839,6 +844,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 禁止在 CitizenApp 或 Cloudflare 计算并提交订阅公历到期时间。
   - 禁止使用区块高度、固定天数或固定毫秒推导 `paid_until`。
   - 禁止 App、Cloudflare、keeper 或任意外部账户提交续费；runtime 只处理有界到期索引。
+  - 禁止在 `on_finalize` 或 NodeGuard finalize 后阶段执行订阅付款、创作者收款等业务转账。
 - 必跑测试：runtime storage key/value 金标、Cloudflare 解码、CitizenApp 解码、TryRuntime pre/post 不变量。
 
 ### P-QR-002：QR_V1 / k=1 sign_request

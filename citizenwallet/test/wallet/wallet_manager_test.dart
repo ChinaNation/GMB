@@ -4,6 +4,7 @@
 // 导入对齐金标、删钱包/账户连带清 seed/助记词、重复导入拒绝、种子/助记词密文落库、
 // getMasterMnemonic 取回、getAccountPrivateKey 单账户隔离。
 // 生物识别经 WalletManager.debugAuthGate 注入为放行；SecureStorage 用 mock。
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -63,6 +64,73 @@ void main() {
     WalletManager.debugAuthGate = null;
     SecretCipher.clearCache();
     await WalletIsar.instance.resetForTest();
+  });
+
+  test('Isar 最终 schema 指纹固定，依赖升级不得静默改库', () {
+    expect(WalletEntitySchema.id, 495311719639707741);
+    expect(
+      WalletEntitySchema.properties.keys,
+      {
+        'createdAtMillis',
+        'masterId',
+        'sortOrder',
+        'source',
+        'walletIndex',
+        'walletName',
+      },
+    );
+    expect(WalletEntitySchema.indexes.keys, {'walletIndex', 'masterId'});
+
+    expect(AccountEntitySchema.id, -996322080142432925);
+    expect(
+      AccountEntitySchema.properties.keys,
+      {
+        'accountId',
+        'accountIndex',
+        'accountName',
+        'createdAtMillis',
+        'masterId',
+        'ss58Address',
+      },
+    );
+    expect(
+      AccountEntitySchema.indexes.keys,
+      {'masterId_accountIndex', 'accountId', 'ss58Address'},
+    );
+
+    expect(AppKvEntitySchema.id, -4757328183228885293);
+    expect(
+      AppKvEntitySchema.properties.keys,
+      {'boolValue', 'intValue', 'key', 'stringValue'},
+    );
+    expect(AppKvEntitySchema.indexes.keys, {'key'});
+  });
+
+  test('community 引擎启动前幂等清理 Isar 3.1 旧锁文件', () async {
+    const directory = '/tmp/gmb-citizenwallet-isar31-compat';
+    const databaseName = 'legacy_lock_cleanup_test';
+    final testDirectory = Directory(directory);
+    final legacyLock = File('$directory/$databaseName.isar.lock');
+    try {
+      await testDirectory.create(recursive: true);
+      await legacyLock.writeAsString('');
+
+      await WalletIsar.instance.cleanupLegacyLockFileForTest(
+        directory,
+        databaseName,
+      );
+      expect(await legacyLock.exists(), isFalse);
+
+      // 第二次调用仍应成功，避免升级后每次启动出现残留清理异常。
+      await WalletIsar.instance.cleanupLegacyLockFileForTest(
+        directory,
+        databaseName,
+      );
+    } finally {
+      if (await testDirectory.exists() && await testDirectory.list().isEmpty) {
+        await testDirectory.delete();
+      }
+    }
   });
 
   test('createWallet 建钱包 + 账户0(//0)，masterId == 账户0 accountId', () async {

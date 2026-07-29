@@ -86,7 +86,7 @@ const WalletEntitySchema = CollectionSchema(
   getId: _walletEntityGetId,
   getLinks: _walletEntityGetLinks,
   attach: _walletEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _walletEntityEstimateSize(
@@ -1495,7 +1495,7 @@ const AccountEntitySchema = CollectionSchema(
   getId: _accountEntityGetId,
   getLinks: _accountEntityGetLinks,
   attach: _accountEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _accountEntityEstimateSize(
@@ -3135,7 +3135,7 @@ const AppKvEntitySchema = CollectionSchema(
   getId: _appKvEntityGetId,
   getLinks: _appKvEntityGetLinks,
   attach: _appKvEntityAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _appKvEntityEstimateSize(

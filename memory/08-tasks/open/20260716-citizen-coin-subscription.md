@@ -92,7 +92,7 @@
 - [x] 第 4 步：完成 Cloudflare/D1 finalized 镜像、对账和权益门禁。
 - [x] 第 5 步：完成 OnChina 平台调价、机构工作台隔离与 CitizenWallet 一次签名响应回扫。
 - [x] 第 5.5 步（runtime 二次确认）：平台订阅机构 CID 收敛为创世常量 `CITIZENCHAIN_FOUNDATION`，删除 `PlatformCidNumber` 死存储，创世（genesis_build）播种三档默认价；开发期零用户、重新创世模型，不做任何迁移，迁移机制整块直接删除；联动 OnChina 读取端（技术方案见第 17 节，执行记录见 17.8）。
-- [x] 第 5.6 步（runtime 二次确认）：订阅生命周期重构——挂起态（改价未再签名/余额不足）、换挡立即折算（升档扣差、降档延时）、创作者掉会员暂停粉丝续扣可恢复、续费扩容（on_idle 按块权重排空、删 64 固定上限）、补齐治理调价测试（技术方案见第 18 节）。
+- [x] 第 5.6 步（runtime 二次确认）：订阅生命周期重构——挂起态（改价未再签名/余额不足）、换挡立即折算（升档扣差、降档延时）、创作者掉会员暂停粉丝续扣可恢复、续费扩容（`on_initialize` 有界处理、删 64 固定上限）、补齐治理调价测试（技术方案见第 18 节）。
 - [ ] 第 6 步：完成跨端真实运行态验收、残留总清理和任务归档。
 
 每一步都必须先输出技术方案并取得确认；执行后立即更新文档、完善中文注释、清理残留，再输出下一步技术方案。
@@ -418,7 +418,9 @@ Review 采纳的四项决策 + 出块参数确定后，对 square-post 订阅生
 
 ### 18.5 续费扩容（#6）
 
-- 续费排空从 `on_finalize` 固定 64 改为 `on_idle(n, remaining_weight)` 按当块剩余块权重尽量排空：每笔用基准权重估算，循环处理到期任务至剩余权重不足留安全边际；附高位硬 backstop 常量。
+- 续费排空最终从 finalize 阶段移至 `on_initialize` 有界处理：读取上一块已确认时间，
+  最多延后一个区块且不提前扣款；每笔按基准权重记账并受高位硬上限约束，余额变化进入
+  NodeGuard finalize 前状态。
 - 删除 `on_initialize` 静态最坏权重预留。
 - `benchmarking.rs` 补单笔续费权重基准，落地 `SubstrateWeight`。
 - 挂起/缺钱订阅已退出调度、不占每块预算；稳态每块仅数百，超大同刻促发按块权重数万/块、多块分摊（138 万同刻约数十块≈1–5 小时排空，期间未扣到者短暂掉权、扣到即恢复）。
@@ -434,7 +436,8 @@ Review 采纳的四项决策 + 出块参数确定后，对 square-post 订阅生
 ### 18.7 风险与前置
 
 - `SubscriptionState` 新增字段（`authorized_price_fen`、`suspend_reason` 等）→ SCALE 布局变更 → **五端金标向量重生 + 五端解码同步**。开发期零用户、重新创世，无迁移。
-- `on_idle` 读时间戳：inherent 已于 `on_idle` 前写入，可用 `now_ms`。
+- 续费最终在 `on_initialize` 使用上一块已确认时间；最多延后一个区块，禁止在
+  NodeGuard finalize 后阶段产生订阅业务转账。
 - 平台/创作者换挡折算共用同一原语；平台周期恒月、创作者按所选月/季/年。
 
 ### 18.8 分步实施顺序（每子步：出方案 → 确认 → 执行 → 更文档/清残留 → 出下一子步方案）
@@ -443,7 +446,7 @@ Review 采纳的四项决策 + 出块参数确定后，对 square-post 订阅生
 - **5.6b 换挡立即折算**：`do_change_subscription_plan` 改为升档扣差 / 降档延时的即时折算原语 + 测试。
 - **5.6c 挂起与恢复**：续费判定改价未签名 / 余额不足 → `Suspended` 退出调度；再签名 / 充值再签恢复；平台治理改价自动续不挂起 + 测试。
 - **5.6d 创作者掉会员暂停粉丝**：判定创作者非有效平台会员 → 粉丝 `CreatorPaused` 暂停、可恢复（含恢复触发机制设计）+ 测试。
-- **5.6e 续费扩容 + 治理测试**：`on_idle` 按块权重排空、删固定 64 与静态预留、权重基准；补齐 `proposal.rs` 治理调价执行路径测试；残留清理。
+- **5.6e 续费扩容 + 治理测试**：`on_initialize` 按实际处理量记账、删固定 64、保留高位硬上限；补齐 `proposal.rs` 治理调价执行路径测试；残留清理。
 - **5.7 五端解码同步（收尾）**：citizenapp / cloudflare / onchina / citizenwallet 按新 `SubscriptionState` 布局与状态同步；纳入第 6 步或单列。
 
 ### 18.9 子步 5.6a 执行记录（2026-07-19）
@@ -482,10 +485,14 @@ Review 采纳的四项决策 + 出块参数确定后，对 square-post 订阅生
 
 ### 18.13 子步 5.6e 执行记录（2026-07-19）
 
-- 续费扩容：`lib.rs` Hooks 删 `on_initialize`/`on_finalize`，改 `on_idle(n, remaining_weight)` 按当块剩余权重排空（`limit = min(remaining/per, backstop)`；`()` 未计量权重时按 backstop 排空，兼容测试）；`weights.rs` `on_initialize(renewals)` → `process_one_due()`（85M+8r/7w）；`configs.rs` `MaxSubscriptionRenewalsPerBlock` `64 → 50_000`；`benchmarking.rs` 加 `process_one_due` 基准（受并行 votingengine 阻断未跑）。
+- 续费扩容最终状态：`lib.rs` Hooks 使用 `on_initialize`，以上一块已确认时间有界排空；
+  `weights.rs` 使用 `process_one_due()`（85M+8r/7w）按实际笔数记账；`configs.rs`
+  `MaxSubscriptionRenewalsPerBlock` 为 `50_000`；`benchmarking.rs` 包含
+  `process_one_due` 基准。该阶段选择用于保证自动转账属于 NodeGuard finalize 前业务变化。
 - 残留清理：`billing.rs` `charge_and_schedule` 删恒真的 `reset_started_at`，`started_at` 恒取 `now`。
 - 治理测试（#3 可测部分）：`propose_platform_price_rejects_zero_price`、`propose_platform_price_rejects_non_foundation_institution`（验证 5.5 的 `is_citizenchain_foundation_identity` 断言）。**完整「投票通过→执行→改价」路径需 votingengine 集成夹具（测试 runtime impl `votingengine::Config`），当前受并行 votingengine 未提交改动阻断，列为跟进项。**
-- 测试夹具：`finalize_at` 改调 `on_idle(block, Weight::MAX)`。
+- 测试夹具最终使用 `initialize_at` 调用 `on_initialize(block)`，验证续费余额变化发生在
+  finalize 前。
 - 验收：`cargo test -p square-post` 23/23 绿；`cargo check -p citizenchain`、`--features try-runtime`、`-p onchina` 通过；`on_initialize`/`on_finalize`/`reset_started_at` 零残留。
 
 **链端子步 5.6a–5.6e 全部完成。** 剩 5.7 客户端解码同步。
@@ -551,7 +558,7 @@ Review 采纳的四项决策 + 出块参数确定后，对 square-post 订阅生
 
 - **全栈全绿**：`cargo test -p square-post` 23/23；`cargo check -p square-post --features runtime-benchmarks` 通过（votingengine 修复已解锁，我加的 `process_one_due` 基准有效）；`cargo test -p citizenchain --lib genesis` 14/14（`genesis_build` 播种完好）；cloudflare `vitest run` 26 文件 155 测试全绿 + `tsc` 通过；citizenapp `membership_page_test` 15/15、`subscription_rpc_test`/`creator_api_test` 全绿 + `analyze` 无问题。
 - **残留审计（全仓零命中）**：`BillingKeeper`/`charge_due`/外部 renew、`stripe`/`prepaid`/`usdc` 旧支付、`pending_plan`/`SubscriptionPaymentFailed`/`SubscriptionPlanChangePending`。
-- **架构文档同步**：`memory/01-architecture/gmb/subscription-part1-tech.md` 更新为最终 as-built——状态枚举加 `Suspended/CreatorPaused` + `SuspendReason`、`SubscriptionState` 去 `pending_plan` 加 `authorized_price_fen`/`suspend_reason`；存储去 `PlatformCidNumber`/`MigrationBlocked`（平台 CID＝创世常量）；续费改 `on_idle` 按块权重排空；换套餐改即时折算；失败按原因分流为挂起/暂停/终止。
+- **架构文档同步**：`memory/01-architecture/gmb/subscription-part1-tech.md` 更新为最终 as-built——状态枚举加 `Suspended/CreatorPaused` + `SuspendReason`、`SubscriptionState` 去 `pending_plan` 加 `authorized_price_fen`/`suspend_reason`；存储去 `PlatformCidNumber`/`MigrationBlocked`（平台 CID＝创世常量）；续费在 `on_initialize` 使用上一块已确认时间有界处理；换套餐改即时折算；失败按原因分流为挂起/暂停/终止。
 - **治理完整路径集成测试**：判定不宜在 square-post 单测搭重型 votingengine mock（Config ~74 关联类型 + 并行改为岗位授权/`VotePlanOf`）；应放 runtime 级集成套件（所有 pallet 真实）——列为跟进项，归属 votingengine 集成套件。
 
 ### 尚未完成（需运行环境/跨团队）

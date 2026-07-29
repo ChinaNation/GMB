@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter/foundation.dart' show kReleaseMode, visibleForTesting;
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:sr25519/sr25519.dart' as sr;

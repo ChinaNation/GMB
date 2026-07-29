@@ -2,7 +2,8 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:isar/isar.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
 part 'wallet_isar.g.dart';
@@ -103,7 +104,10 @@ class WalletIsar {
     }
   }
 
-  /// 只打开创世前最终 schema；旧业务库直接删除重建，不执行 migration。
+  /// 只打开最终 schema。
+  ///
+  /// Isar 引擎升级不得改变集合、字段或索引 id；现有 `citizenwallet` 业务库必须
+  /// 原地打开。助记词、seed 与私钥位于 secure storage，不属于本库。
   Future<Isar> _openFinalSchema() async {
     await ensureTestCoreInitialized();
     final dir = await _resolveDirectory();
@@ -115,9 +119,29 @@ class WalletIsar {
     final name = _isFlutterTest()
         ? 'citizenwallet_${Isolate.current.hashCode}'
         : 'citizenwallet';
+    await _deleteLegacyLockFile(dir, name);
     final isar = await Isar.open(schemas, name: name, directory: dir);
     return isar;
   }
+
+  /// 清理 Isar 3.1 遗留的空锁文件。
+  ///
+  /// community 引擎使用 `<name>.isar-lck`，旧 `<name>.isar.lock` 不再参与互斥；
+  /// App 升级会重启进程，因此打开新引擎前可幂等删除该残留，不触碰业务数据库。
+  Future<void> _deleteLegacyLockFile(String directory, String name) async {
+    final separator = Platform.pathSeparator;
+    final legacyLock = File('$directory$separator$name.isar.lock');
+    if (await legacyLock.exists()) {
+      await legacyLock.delete();
+    }
+  }
+
+  @visibleForTesting
+  Future<void> cleanupLegacyLockFileForTest(
+    String directory,
+    String name,
+  ) =>
+      _deleteLegacyLockFile(directory, name);
 
   Future<void> ensureTestCoreInitialized() async {
     if (!_isFlutterTest()) {
@@ -199,7 +223,7 @@ class WalletIsar {
         .where((dir) => dir.path
             .split(Platform.pathSeparator)
             .last
-            .startsWith('isar_flutter_libs-'))
+            .startsWith('isar_community_flutter_libs-'))
         .toList(growable: false)
       ..sort((a, b) => b.path.compareTo(a.path));
 

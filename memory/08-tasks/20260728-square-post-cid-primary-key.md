@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 执行中
+- 已完成
 - 用户已于 2026-07-28 确认方案并完成 runtime 二次确认。
 
 ## 任务目标
@@ -84,6 +84,18 @@
 - `citizenchain/runtime/misc/square-post/tests/fixtures/subscription_scale_vectors.json`
 - `citizenchain/runtime/src/configs.rs`
 
+### P0 续费时序修复二次确认（2026-07-29）
+
+用户另行确认以下 4 个 Runtime 路径，用于把自动续费移出 finalize 后阶段并补齐隔离测试：
+
+- `citizenchain/runtime/misc/square-post/src/lib.rs`
+- `citizenchain/runtime/misc/square-post/src/weights.rs`
+- `citizenchain/runtime/misc/square-post/src/tests/mod.rs`
+- `citizenchain/runtime/src/tests/cases.rs`
+
+NodeGuard 只新增“initialize 阶段零和业务转账不得误判为 finalize 发行”的隔离测试，
+不放宽生产校验。清算行继续属于明确禁止修改范围。
+
 ## 验收标准
 
 - 未绑定 CID 不得发帖或订阅。
@@ -101,3 +113,30 @@
 ## 执行记录
 
 - 2026-07-28：完成只读审计、业务边界纠正、方案确认和 runtime 二次确认。
+- 2026-07-29：SquarePost 帖子、订阅、续费索引、创作者套餐及跨端读写已彻底收敛为
+  CID 用户主键；无 storage migration、旧键读取或双轨兼容。
+- 2026-07-29：隔离双节点初验定位 P0：自动续费在 finalize 后改变账户余额时，
+  NodeGuard 会按安全设计拒绝候选区块。按二次确认把续费改为 `on_initialize` 使用上一块
+  已确认时间，正常出块最多延后一个区块且不提前扣款；生产 NodeGuard 规则保持不变。
+- 2026-07-29：代码级验收已通过：SquarePost 27/27、runtime 51/51、NodeGuard finalize
+  24/24、Worker 193/193、CitizenApp 926 通过/5 跳过；runtime benchmark feature、
+  Rust 格式、TypeScript typecheck 和 Flutter analyze 均通过。
+- 2026-07-29：全新导出的 `citizenchain-fresh` 规范创建两个独立 base path 节点，
+  第一节点真实 PoW 出块、第二节点零挖矿同步；完成两个匿名 CID 占号、普通帖子发布、
+  匿名 Campaign 拒绝、三条订阅、创作者套餐及 Alice→Bob、Charlie→Dave 换绑。
+  换绑后两节点共同最佳块 #13 为
+  `0x1fc18383c190ba429da0310be452c8586930e2ac70bccae9bf0fc87ceacd9e80`，
+  订阅与套餐仍以 CID 存在，绑定分别为 Bob 和 Dave。
+- 2026-07-29：同一链数据库以 `libfaketime +40d` 重启。#14
+  `0xeadd71d37d62658bb71ee5f9a541f6f55d40c883612b304b23567ea6d207397b`
+  只写入新共识时间，续费事件为 0；#15
+  `0x09d654ea86aed7aa316879860d0d9a64ab7d0951ad034eb6f4d6e84dedacc3df`
+  在 `on_initialize` 产生 3 条 `SubscriptionCharged` 并被 NodeGuard 接受，第二节点同步
+  到同一哈希。Bob 支付平台 199900 + 创作者 10000，Dave 支付平台 199900 并收到
+  创作者款 10000；含 Bob 两笔发帖费后余额变化为 Alice 0、Bob -209920、
+  Charlie 0、Dave -189900。三个 `paid_until` 均推进，CID 绑定、创作者套餐不变，
+  发帖计数按订阅者 CID 从 1 增至 3。
+- 2026-07-29：该 fresh spec 的 GRANDPA finalized head 在本地单验证者测试配置中未越过
+  创世块，故 P0 NodeGuard 验收使用“两节点共同最佳 PoW 区块哈希 + 同一状态读取”证明
+  候选块被完整校验并导入，不虚报 finalized。临时链目录已移入废纸篓，可恢复；
+  验收专用 `libfaketime` 与其 `coreutils` 依赖已卸载。

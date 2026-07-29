@@ -8,8 +8,10 @@
 - **#5 unified-protocols.md 回写 ✅ 已完成**:广场/资料/关注端点(cid 路由 + entries)、D1 全表字段(15+ 表 cid 归属 + 保留表说明)、chat HTTP/DO/D1/proto/验签规则(recipient_cid_number、(cid,device_id) 验签、删 requester、profile R2 key→cid)全部改到位;`:498`/`:1075`/`:1079` 把已修缺陷写成规范的三处已订正。**其余 05-modules 下 CHAT_TECHNICAL/USER_TECHNICAL/PROFILE_TECHNICAL、subscription-part1-tech.md 仍待回写**(下同,未做)。
 - **#1 换绑吊销时序 ✅ 已完成**:新账户会话代吊销、旧账户换绑授权验签、安全
   outbox 重试、路由资源登记、CID 级 DO/nonce 保护均已落地并通过自动与本地运行态验收。
-- **#2 链上订阅账户键**:用户已明确否决迁移钩子和兼容方案，目标改为全链用户业务
-  唯一主键 `cid_number`、`account_id` 仅作可换绑签名/付款凭证；另步实施。
+- **#2 链上订阅账户键 ✅ 已完成**:SquarePost 帖子、订阅、续费索引、创作者套餐和
+  跨端读写均已直接使用 `cid_number`；无迁移、无旧键、无兼容。P0 续费时序修复和
+  双节点 +40 天换绑续费验收已完成，详见
+  `memory/08-tasks/20260728-square-post-cid-primary-key.md`。
 - **#4 生产 D1 重建**:并入创世部署流程处理(见下),本卡记录。
 
 ## P0 — 发版前必须执行(否则线上必炸)
@@ -65,10 +67,17 @@
     `POST /v1/square/rebind/revoke` 无会话返回 `missing_session`(401)，不再是白名单
     `route_not_found`(404)。临时验收状态已删除，未触碰现有开发/正式数据。
 
-### 3. 链上订阅是账户键,换绑不跟随(「换绑不丢」在会员项不成立)
-citizenchain `runtime/misc/square-post` 的 `Subscriptions` 键 = `(AccountId, Issuer)`,`RenewalSchedule`/`RenewalIndex`/`CreatorPlans` 同为账户键;而 `self_rebind_cid_account_id` 只调 `rebind_account_id()` 改 CitizenIdentity 双向绑定,**不动 SquarePost 任何 storage**。
-- 后果:worker 镜像按 cid 存活(e2e 断言成立),但链上真源留在旧账户,`RenewalSchedule` 继续从**旧账户**扣款——而换绑的典型动机正是旧私钥泄漏。
-- **候选修法**:链上加订阅迁移 extrinsic / 订阅改 cid 键 / 明确接受并文档化。需产品决策。
+### 3. 链上订阅账户键问题（已按 CID 终态解决）
+
+SquarePost 的 `Subscriptions`、`RenewalSchedule`、`RenewalIndex`、`CreatorPlans` 已全部直接
+使用 `cid_number` 用户键；`account_id` 仅保留为当前签名、实际付款/收款或不可变交易审计。
+换绑不迁移 storage、不读取旧键、不保留兼容分支；自动续费每次由 CID 解析并双向复核当前
+绑定账户，旧账户不得再扣。正式链未创世，使用新 storage 重新创世。
+
+P0 真实链验收发现续费若发生在 finalize 后阶段会被 NodeGuard 误判为未经登记发行；
+终态改为 `on_initialize` 使用上一块已确认时间处理，最多延后一个区块，所有付款与收款
+余额变化均进入 finalize 前状态。该修复只涉及 SquarePost 和 NodeGuard 隔离测试，未修改
+清算行 storage、RPC 或支付流程。
 
 ### 4. 通讯录孤儿密文累积
 `contactId = HMAC-SHA256(peer_account_id, key=indexKey)`,`indexKey` 由账户派生 → 换绑后同一联系人的 contact_id 变 → 客户端重加密写**新行**,旧行既不被吊销删(R4 定案不删 contacts)也无「按 cid 清理不在列表内的行」接口。每次换绑该 cid 下行数翻倍,且旧行用**已泄漏的旧密钥**加密仍留在服务端。

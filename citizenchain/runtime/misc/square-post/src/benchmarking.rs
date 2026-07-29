@@ -59,7 +59,7 @@ mod benchmarks {
         );
     }
 
-    /// 单笔到期续费处理路径（on_idle 按此估算每块可排空笔数）。
+    /// 单笔到期续费处理路径（on_initialize 按实际处理笔数记账）。
     #[benchmark]
     fn process_one_due() {
         let subscriber_account_id: T::AccountId = whitelisted_caller();

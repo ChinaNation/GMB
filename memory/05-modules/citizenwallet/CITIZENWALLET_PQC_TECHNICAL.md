@@ -29,6 +29,20 @@
   “删除重建”口径用于现行钱包数据或安全材料。
 - Secure Storage、Android Keystore、iOS Keychain 中的 seed、助记词密文、PIN
   派生材料和私钥保护材料不属于 Isar 业务数据，业务库重建不得删除或改写它们。
+- CitizenWallet 的 Isar 引擎固定使用 `isar_community`、
+  `isar_community_flutter_libs`、`isar_community_generator` 3.3.2。旧 Isar 3.1
+  预编译 `libisar.so` 只有 4 KB ELF 对齐，禁止恢复；community 引擎的
+  arm64-v8a/x86_64 `libisar.so` 必须保持 `0x4000` 或更高。
+- Isar 引擎升级不得改变 `WalletEntity`、`AccountEntity`、`AppKvEntity` 的
+  Collection ID、字段或索引。3.1 业务库已用非敏感测试数据验证可由 community 3.3.2
+  原地打开、按索引读取并继续写入；生成 schema 只允许更新引擎版本字符串。
+- community 引擎使用 `<name>.isar-lck`；启动前幂等删除 Isar 3.1 遗留的空
+  `<name>.isar.lock`。该清理只处理旧锁文件，不删除 `<name>.isar` 业务库或任何
+  secure storage 数据。
+- Android 发布产物必须同时验证两层：APK 用 Build-Tools 35+ 执行 16 KB ZIP
+  alignment 检查；APK/AAB 内 arm64-v8a 与 x86_64 每个 `.so` 的 ELF `LOAD` 段不得
+  出现 `0x1000`。普通 4 KB 真机或模拟器只能验证升级安装和冷启动，不能冒充 16 KB
+  内核运行态。
 
 ## CI 与发布边界
 
