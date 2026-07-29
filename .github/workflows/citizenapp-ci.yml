@@ -99,7 +99,7 @@ jobs:
           submodules: recursive
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi
 

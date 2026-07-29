@@ -97,7 +97,7 @@ jobs:
           fi
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@1.97.1
 
       - name: 安装 Node.js
         # 固定使用 Node.js 24,与项目 package.json engines 和 GitHub Actions node24 运行时一致。

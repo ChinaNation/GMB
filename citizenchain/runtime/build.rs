@@ -28,6 +28,8 @@ pub const WASM_BINARY_BLOATY: Option<&[u8]> = Some(include_bytes!("{wasm_path_st
         eprintln!("使用 CI WASM: {wasm_path_str}");
     } else if std::env::var("WASM_BUILD_FROM_SOURCE").is_ok() {
         // ── WASM CI 专用：从源码编译 WASM（仅 WASM CI workflow 使用）──
+        // WASM 链接参数（`--allow-undefined`）由 citizenchain/.cargo/config.toml 的
+        // `[env] WASM_BUILD_RUSTFLAGS` 统一注入，此处不重复设置。
         substrate_wasm_builder::WasmBuilder::build_using_defaults();
     } else {
         // ── 普通桌面端打包：不内置 runtime WASM。
