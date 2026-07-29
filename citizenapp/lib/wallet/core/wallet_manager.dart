@@ -10,6 +10,7 @@ import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
@@ -160,6 +161,17 @@ class WalletManager {
   @visibleForTesting
   static set debugContactKeyStore(VaultBlobStore store) =>
       _contactKeyStore = store;
+
+  /// 本地静止态数据密钥（LDK）信封金库。
+  ///
+  /// LDK 一次生成、终身不变，由账户 child 派生的 KEK 包裹后落地；换绑只重 wrap，
+  /// 已落盘的聊天/MLS/附件/通讯录密文一个字节都不用重写。日常读走
+  /// [_localDataKeyCacheName] 静默缓存，不重复触发生物识别（与通讯录钥同一策略）。
+  static LocalDataKeyVault get _localKeyVault =>
+      LocalDataKeyVault(_LocalKeyBlobStoreAdapter(_contactKeyStore));
+
+  static String _localDataKeyCacheName(String accountId) =>
+      'citizenapp_local_data_key_cache_$accountId';
 
   /// 钱包创建后注册 P-256 设备子钥的钩子（app 启动注入；为空则跳过，用于测试 /
   /// 未接后端）。「每次动钱动权都验证」现由硬件金库读 child 时的原子生物识别实现，
@@ -346,6 +358,9 @@ class WalletManager {
     );
     try {
       await _persistContactKeys(profile.accountId, account0.childMiniSecret);
+      // 本地静止态数据密钥（LDK）与通讯录钥同批预置：此刻 child 在手，零额外生物识别。
+      await persistLocalDataKeyWithSecret(
+          profile.accountId, account0.childMiniSecret);
       await _verifyWalletPersisted(profile);
       // fail-closed：设备子钥注册必须成功，失败连同钱包一起回滚，绝不留"建了没注册"的中间态。
       // 注册成功后才由 runCreateWalletFlow 展示助记词、进入 App。
@@ -382,6 +397,9 @@ class WalletManager {
       );
       try {
         await _persistContactKeys(profile.accountId, account0.childMiniSecret);
+      // 本地静止态数据密钥（LDK）与通讯录钥同批预置：此刻 child 在手，零额外生物识别。
+      await persistLocalDataKeyWithSecret(
+          profile.accountId, account0.childMiniSecret);
         await _verifyWalletPersisted(profile);
         // fail-closed：导入一律注册本设备子钥（幂等 upsert），失败连同钱包回滚——导入页保留
         // 助记词供重试。换设备导入必然是本设备新子钥，注册成功即把账户登录迁到本设备。
@@ -1089,6 +1107,143 @@ class WalletManager {
     }
   }
 
+  /// 读取指定**身份账户**的本地静止态数据密钥（LDK），供聊天正文 / MLS 状态 /
+  /// 附件 / 通讯录本地 KV 的落盘加密使用。
+  ///
+  /// 先读静默缓存；缓存缺失才回落到"读 child(触发一次生物识别) → 解包 → 回填缓存"。
+  /// 钱包创建 / 导入时 child 本就在手，已由 [persistLocalDataKeyWithSecret] 预置，
+  /// 正常使用路径不会弹生物识别。
+  Future<LocalDataKey> ensureLocalDataKeyForAccountId(String accountId) async {
+    final cached = await _readCachedLocalDataKey(accountId);
+    if (cached != null) return cached;
+
+    final account = await getAccountByAccountId(accountId);
+    if (account == null) {
+      throw const WalletAuthException('本地数据密钥账户不存在');
+    }
+    final profile = await _requireHotWalletProfileByMasterId(account.masterId);
+    final childHex =
+        await _readAccountKeyOrThrow(profile.walletIndex, accountId);
+    final child = Uint8List.fromList(_hexToBytes(childHex));
+    try {
+      final ldk = await _localKeyVault.ensureForAccount(
+        accountId: accountId,
+        accountSecret: child,
+      );
+      await _writeCachedLocalDataKey(accountId, ldk);
+      return ldk;
+    } finally {
+      child.fillRange(0, child.length, 0);
+    }
+  }
+
+  /// 钱包创建 / 导入时预置 LDK（child 已在手，零额外生物识别）。
+  static Future<void> persistLocalDataKeyWithSecret(
+    String accountId,
+    List<int> accountSecret,
+  ) async {
+    final ldk = await _localKeyVault.ensureForAccount(
+      accountId: accountId,
+      accountSecret: accountSecret,
+    );
+    await _writeCachedLocalDataKey(accountId, ldk);
+  }
+
+  /// CID 换绑：把 LDK 重新 wrap 到新身份账户。
+  ///
+  /// **LDK 本身不变**，因此聊天 / MLS / 附件 / 通讯录已落盘的密文继续可解，
+  /// 不需要全盘重加密（死契约 [[cid-rebind-subkeys-must-auto-migrate]] 的 O(1) 落法）。
+  Future<void> rewrapLocalDataKeyForRebind({
+    required String oldAccountId,
+    required String newAccountId,
+  }) async {
+    final vault = _localKeyVault;
+    var ldk = await _readCachedLocalDataKey(oldAccountId);
+
+    final account = await getAccountByAccountId(newAccountId);
+    if (account == null) {
+      throw const WalletAuthException('换绑目标账户不存在');
+    }
+    final profile = await _requireHotWalletProfileByMasterId(account.masterId);
+    final newChildHex =
+        await _readAccountKeyOrThrow(profile.walletIndex, newAccountId);
+    final newChild = Uint8List.fromList(_hexToBytes(newChildHex));
+    try {
+      if (ldk != null) {
+        // 缓存命中：只需用新账户 child wrap 一次，无需再解旧账户。
+        await vault.writeForAccount(
+          accountId: newAccountId,
+          accountSecret: newChild,
+          ldk: ldk,
+        );
+      } else {
+        // 缓存缺失：回落到解旧账户再重 wrap（需旧账户 child）。
+        final oldAccount = await getAccountByAccountId(oldAccountId);
+        List<int>? oldChild;
+        if (oldAccount != null) {
+          try {
+            final oldProfile =
+                await _requireHotWalletProfileByMasterId(oldAccount.masterId);
+            oldChild = _hexToBytes(await _readAccountKeyOrThrow(
+                oldProfile.walletIndex, oldAccountId));
+          } on Exception {
+            // 旧账户 child 已不可读（钱包被删 / 金库条目已清）：换绑仍须成功，
+            // 退化为给新账户新建一把 LDK。旧密文随旧账户一起作废，属预期。
+            oldChild = null;
+          }
+        }
+        ldk = oldChild == null
+            ? await vault.ensureForAccount(
+                accountId: newAccountId,
+                accountSecret: newChild,
+              )
+            : await vault.rewrapForRebind(
+                oldAccountId: oldAccountId,
+                oldAccountSecret: oldChild,
+                newAccountId: newAccountId,
+                newAccountSecret: newChild,
+              );
+      }
+      await _writeCachedLocalDataKey(newAccountId, ldk);
+    } finally {
+      newChild.fillRange(0, newChild.length, 0);
+    }
+
+    if (newAccountId != oldAccountId) {
+      await vault.deleteForAccount(oldAccountId);
+      await _contactKeyStore.delete(_localDataKeyCacheName(oldAccountId));
+    }
+  }
+
+  /// 删除某账户的 LDK（wrap 与缓存一并清除）。
+  ///
+  /// 删后该账户名下本地密文永久不可读，仅在钱包删除等确认不再需要数据时调用。
+  Future<void> deleteLocalDataKeyForAccountId(String accountId) async {
+    await _localKeyVault.deleteForAccount(accountId);
+    await _contactKeyStore.delete(_localDataKeyCacheName(accountId));
+  }
+
+  static Future<LocalDataKey?> _readCachedLocalDataKey(String accountId) async {
+    final raw = await _contactKeyStore.read(_localDataKeyCacheName(accountId));
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final bytes = base64Decode(raw);
+      if (bytes.length != 32) return null;
+      return LocalDataKey(Uint8List.fromList(bytes));
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static Future<void> _writeCachedLocalDataKey(
+    String accountId,
+    LocalDataKey ldk,
+  ) =>
+      _contactKeyStore.write(
+        _localDataKeyCacheName(accountId),
+        base64Encode(ldk.bytes),
+      );
+
   static String _contactKeyName(String accountId) =>
       'citizenapp_contacts_key_$accountId';
 
@@ -1634,4 +1789,22 @@ class _Account0 {
   void dispose() {
     childMiniSecret.fillRange(0, childMiniSecret.length, 0);
   }
+}
+
+/// 把钱包侧的 [VaultBlobStore] 适配成 `lib/security` 的 [LocalKeyBlobStore]。
+///
+/// 方向固定为「钱包依赖安全基座」：基座不反向依赖钱包模块，便于独立单测。
+class _LocalKeyBlobStoreAdapter implements LocalKeyBlobStore {
+  const _LocalKeyBlobStoreAdapter(this._inner);
+
+  final VaultBlobStore _inner;
+
+  @override
+  Future<String?> read(String key) => _inner.read(key);
+
+  @override
+  Future<void> write(String key, String value) => _inner.write(key, value);
+
+  @override
+  Future<void> delete(String key) => _inner.delete(key);
 }
