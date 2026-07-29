@@ -31,6 +31,10 @@ openmls_rust_crypto = "0.5.1"
 openmls_basic_credential = "0.5.0"
 openmls_traits = "0.5.0"
 openmls_memory_storage = { version = "0.5.0", features = ["persistence"] }
+# MLS 本地状态(设备签名私钥 + 群 ratchet 秘密)落盘信封加密。
+# 用 RustCrypto 官方实现，禁止自造 AEAD。
+aes-gcm = "0.10"
+base64 = "0.22"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"

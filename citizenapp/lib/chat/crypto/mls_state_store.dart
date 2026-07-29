@@ -1,40 +1,76 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:citizenapp/security/local_cipher.dart';
 
 import 'mls_session.dart';
 
 /// 公民 Chat 的 MLS 本地状态目录。
 ///
-/// OpenMLS provider storage 由 Rust native 写入该目录；Dart 只管理目录位置
-/// 和 application 早于 Welcome 到达时的 pending 队列。
+/// OpenMLS provider storage 由 Rust native 写入该目录；Dart 只管理目录位置、
+/// 下传状态信封密钥，以及 application 早于 Welcome 到达时的 pending 队列。
+///
+/// 该目录下**一律不得出现明文**：`openmls_storage.bin` / `device.bin` 由 Rust
+/// 用 [stateKey] 做 AES-256-GCM 信封；`pending_inbound.bin` 由本类同钥加密。
 class MlsStateStore {
-  const MlsStateStore(this.directory);
+  const MlsStateStore(this.directory, {required this.stateKey});
 
   final Directory directory;
 
+  /// MLS 本地状态密钥（32 字节，来自 `LocalKeyPurpose.mls` 子钥）。
+  final Uint8List stateKey;
+
   String get path => directory.path;
+
+  /// 下传给 Rust native 的小写 hex 形式。
+  String get stateKeyHex =>
+      stateKey.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+  static const String _pendingAad = 'citizenapp.local/mls|pending_inbound';
 
   Future<void> ensureReady() async {
     if (!directory.existsSync()) {
       await directory.create(recursive: true);
     }
+    _purgeLegacyPlaintext();
   }
 
-  File get _pendingFile => File('${directory.path}/pending_inbound.json');
+  File get _pendingFile => File('${directory.path}/pending_inbound.bin');
+
+  /// 清除历史遗留的**明文** pending 队列。
+  ///
+  /// 旧 `pending_inbound.json` 明文保存待处理 envelope，留在磁盘上等于加密白做。
+  /// 开发期零用户，直接删除、不做迁移与兼容读取。
+  void _purgeLegacyPlaintext() {
+    final legacy = File('${directory.path}/pending_inbound.json');
+    if (legacy.existsSync()) {
+      legacy.deleteSync();
+    }
+  }
 
   Future<void> queuePendingInbound(MlsWireMessage message) async {
     await ensureReady();
     final existing = await readPendingInbound();
     existing.add(message);
     final encoded = existing.map(_wireMessageToJson).toList();
-    await _pendingFile.writeAsString(jsonEncode(encoded), flush: true);
+    await _writePending(encoded);
   }
 
   Future<List<MlsWireMessage>> readPendingInbound() async {
     if (!_pendingFile.existsSync()) {
       return [];
     }
-    final raw = await _pendingFile.readAsString();
+    final blob = await _pendingFile.readAsString();
+    if (blob.trim().isEmpty) {
+      return [];
+    }
+    // 解密失败必须抛出：静默返回空会让早到的 application message 被悄悄丢弃。
+    final raw = await LocalCipher.decryptString(
+      key: stateKey,
+      blob: blob,
+      aad: _pendingAad,
+    );
     if (raw.trim().isEmpty) {
       return [];
     }
@@ -44,8 +80,17 @@ class MlsStateStore {
 
   Future<void> clearPendingInbound() async {
     if (_pendingFile.existsSync()) {
-      await _pendingFile.writeAsString('[]', flush: true);
+      await _writePending(const <Map<String, Object?>>[]);
     }
+  }
+
+  Future<void> _writePending(List<Map<String, Object?>> items) async {
+    final blob = await LocalCipher.encryptString(
+      key: stateKey,
+      plaintext: jsonEncode(items),
+      aad: _pendingAad,
+    );
+    await _pendingFile.writeAsString(blob, flush: true);
   }
 }
 

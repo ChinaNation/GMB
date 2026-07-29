@@ -35,6 +35,77 @@
 - 媒体展示期间可能产生临时明文字节，必须限定生命周期并在异常路径清理。
 - CID 换绑时必须重封装本地密文，不得依赖已泄漏旧账户密钥。
 
+## 实施记录
+
+> 执行线程：线程 A。文件边界见 `20260728-square-local-copy-membership-purge.md`（线程 B）。
+> **`citizenapp/lib/isar/` 归线程 A**，第 3 步会改其 schema，线程 B 若要加广场帖子
+> collection 须先协调，否则两线程会互相覆盖 Isar schema。
+
+### 第 1 步：本地静止态加密基座（2026-07-29 完成，提交 bf017a8e）
+
+**设计定案：信封（LDK）而非直接派生。** 若照通讯录钥直接从账户 child 派生本地加密钥，
+CID 换绑就要把整个聊天历史 + MLS 状态 + 全部附件重新加密一遍（手机上可能数 GB，
+必然卡死或中断）。改为：
+
+```text
+账户 child mini-secret
+      │ HKDF(info="citizenapp.local/kek", salt=sha256(accountId))
+      ▼
+    KEK ── AES-256-GCM wrap/unwrap ──► LDK(32B 随机，终身不变)
+                                         │ HKDF(info=用途域)
+                                         ▼
+                  chat / chat-index / mls / attachment / contacts-local 五把子钥
+```
+
+换绑只重 wrap 一次 LDK（O(1)），**已落盘密文一个字节都不用重写**，死契约
+`cid-rebind-subkeys-must-auto-migrate` 以 O(1) 成本满足。
+
+**实施中发现的 UX 缺陷及对策**：LDK 每次解包都需账户 child，而读 child 会触发生物识别
+→ 每次开聊天都要按指纹，不可接受。沿用通讯录钥既有对策：**wrap 是持久真源与换绑迁移用，
+日常读走静默缓存**；钱包创建/导入时 child 本就在手，预置 LDK 零额外弹窗。
+
+- 新增 `lib/security/local_cipher.dart`（AES-256-GCM，12B 随机 nonce，
+  单串 `base64(nonce||ct||mac)`，**AAD 必填**防串位重放；错误密钥/AAD 不符/篡改/
+  非法 base64/长度不足一律抛 `LocalCipherException`，绝不静默返回空）
+- 新增 `lib/security/local_data_key.dart`（`LocalKeyPurpose` 五用途域、子钥派生、信封金库）
+- `lib/wallet/core/wallet_manager.dart` 加 4 个公开入口 + blob store 适配器
+  （方向固定「钱包依赖安全基座」，基座不反向依赖钱包）；创建/导入两处预置 LDK。
+  **未改动任何既有通讯录派生逻辑。**
+- 验收：analyze 零问题；`test/security/` 25/25；`test/security/ + test/wallet/` 169/169
+
+### 第 2 步：MLS 私钥与群秘密加密（2026-07-29 完成）
+
+风险最高的一项优先做：拿到 `openmls_storage.json` 即可解密并伪造全部聊天，
+只加密正文而不管它等于门没锁。
+
+**关键实现选择**：上游 `MemoryStorage` 的 `save_to_file`/`load_from_file` 硬绑 `&File`，
+**只能把明文直接写盘**。但 `MemoryStorage.values` 是公开字段，故改为自己序列化到
+内存缓冲再整体 AEAD 加密落盘 —— **全程无明文触盘**，无需临时明文文件。
+
+- `rust/src/chat_mls.rs`：新增 `seal_state`/`open_state`（AES-256-GCM，
+  `nonce||ct||tag`）、`parse_state_key`、`atomic_write`、`purge_legacy_plaintext_state`；
+  `load_provider`/`save_provider`/`ensure_device_signer` 全部带密钥；
+  8 个请求结构体加 `state_key_hex`。
+- **原子写入**：`atomic_write` 先写 `.tmp` + `sync_all`，再 `rename` 覆盖。
+  MLS 状态写坏会导致该设备**全部群与会话不可读**，必须原子替换。
+- 文件改名并加密：`openmls_storage.json`→`.bin`、`device.json`→`.bin`、
+  `pending_inbound.json`→`.bin`（后者由 Dart `MlsStateStore` 用同钥加密）。
+- **旧明文一律直接删除，零迁移零兼容**（用户 2026-07-29 决定：开发期零用户）。
+  Rust 侧 `purge_legacy_plaintext_state`、Dart 侧 `_purgeLegacyPlaintext`。
+- 密钥走 `LocalKeyPurpose.mls` 子钥，Dart 经 FFI 下传 hex，**Rust 侧只收密钥、
+  不接触钱包种子**；storage 与 device 用**不同 AAD 域**，防两个文件被对调。
+- `rust/Cargo.toml` 显式加 `aes-gcm`（RustCrypto 官方实现，禁自造 AEAD）+ `base64`；
+  两者本已在 lock 中，无新增下载。
+- Dart：`mls_state_store.dart` 增 `stateKey`/`stateKeyHex` 并加密 pending 队列；
+  `mls_native.dart` 9 处 payload 下传密钥；`chat_runtime.dart` 从 LDK 取 mls 子钥。
+- 验收：`cargo test` **13/13**（含真实三方群会话往返、信封往返、错误密钥/错误 AAD/
+  篡改拒绝、nonce 随机、旧明文清除、原子写不留临时文件）；
+  `flutter analyze lib/ test/` 零问题；`flutter test test/security/ test/chat/` **186 通过**。
+
+**与本卡原风险条目的偏差（须知悉）**：卡里写「OpenMLS 状态迁移失败……」预设有迁移，
+实际按用户决定**不做迁移**，旧明文直接删除；对应地，`atomic_write` 仍按卡要求实现，
+用于防止正常写入过程崩溃导致状态损坏。
+
 ## 完成标准
 
 - Isar 和 App 私有目录不再保存联系人、聊天正文、会话摘要、MLS 秘密或附件明文。

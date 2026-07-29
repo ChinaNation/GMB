@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,6 +15,10 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/isar_test_env.dart';
 import '../support/smoldot_native_probe.dart';
 
+/// MLS 本地状态信封测试密钥（固定 32 字节，仅测试用）。
+final Uint8List _testStateKey =
+    Uint8List.fromList(List<int>.generate(32, (i) => i));
+
 void main() {
   useIsolatedIsar();
 
@@ -23,8 +28,8 @@ void main() {
       () async {
     final root = await Directory.systemTemp.createTemp('gmb-chat-native-');
     addTearDown(() => root.delete(recursive: true));
-    final aliceStore = MlsStateStore(Directory('${root.path}/alice'));
-    final bobStore = MlsStateStore(Directory('${root.path}/bob'));
+    final aliceStore = MlsStateStore(Directory('${root.path}/alice'), stateKey: _testStateKey);
+    final bobStore = MlsStateStore(Directory('${root.path}/bob'), stateKey: _testStateKey);
     const alice = ChatDevice(
       accountId:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
@@ -93,11 +98,11 @@ void main() {
     );
     final aliceCrypto = NativeMlsCrypto(
       identity: alice,
-      stateStore: MlsStateStore(Directory('${root.path}/alice')),
+      stateStore: MlsStateStore(Directory('${root.path}/alice'), stateKey: _testStateKey),
     );
     final bobCrypto = NativeMlsCrypto(
       identity: bob,
-      stateStore: MlsStateStore(Directory('${root.path}/bob')),
+      stateStore: MlsStateStore(Directory('${root.path}/bob'), stateKey: _testStateKey),
     );
     final keyPackage = await bobCrypto.createKeyPackage(bob);
     final relayed = <List<int>>[];

@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../8964/services/square_api_client.dart';
 import '../my/myid/identity_account_cache.dart';
 import '../wallet/core/device_subkey.dart';
+import '../security/local_data_key.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/chat_device_binding.dart';
 import 'crypto/mls_boundary.dart';
@@ -1280,8 +1281,12 @@ class ChatRuntime {
     final dir = await getApplicationDocumentsDirectory();
     final safeWallet = _safePath(accountId);
     final safeDevice = _safePath(deviceId);
+    // MLS 状态（设备签名私钥 + 群 ratchet 秘密）落盘必须加密：取本地数据密钥的
+    // mls 用途子钥，Rust native 与 Dart pending 队列共用同一把。
+    final ldk = await _walletManager.ensureLocalDataKeyForAccountId(accountId);
     return MlsStateStore(
       Directory('${dir.path}/chat/mls/$safeWallet/$safeDevice'),
+      stateKey: await ldk.subkey(LocalKeyPurpose.mls),
     );
   }
 }

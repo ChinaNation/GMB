@@ -1,8 +1,13 @@
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/chat/crypto/mls_session.dart';
 import 'package:citizenapp/chat/crypto/mls_state_store.dart';
+
+/// MLS 本地状态信封测试密钥（固定 32 字节，仅测试用）。
+final Uint8List _testStateKey =
+    Uint8List.fromList(List<int>.generate(32, (i) => i));
 
 void main() {
   test('outbound message yields Welcome before application', () {
@@ -37,7 +42,7 @@ void main() {
         await dir.delete(recursive: true);
       }
     });
-    final store = MlsStateStore(dir);
+    final store = MlsStateStore(dir, stateKey: _testStateKey);
 
     const pending = MlsWireMessage(
       wireBytes: [0xaa, 0xbb],
