@@ -14,6 +14,9 @@ const _accountId =
     '0x625e25364c7b68e0a83065ccb40afed43f8fe933e669b24f3d69a57eddb3b715';
 const _payloadHex = '73712d616374696f6e';
 
+/// Worker 登录响应按链上绑定下发身份主键 CID 号；缺失即会话不完整。
+const _cidNumber = 'CN220-CTZN2-198805200-2026';
+
 void main() {
   test('deleteAccount 钉死 op_tag 0x1D，走 challenge→sign→confirm', () async {
     Uint8List? signedMessage;
@@ -39,6 +42,7 @@ void main() {
             jsonEncode({
               'ok': true,
               'session_token': 'sqs_test',
+              'cid_number': _cidNumber,
               'expires_at': 4102444800000,
             }),
             200,
@@ -116,6 +120,7 @@ void main() {
               jsonEncode({
                 'ok': true,
                 'session_token': 'sqs_test',
+                'cid_number': _cidNumber,
                 'expires_at': 4102444800000,
               }),
               200,

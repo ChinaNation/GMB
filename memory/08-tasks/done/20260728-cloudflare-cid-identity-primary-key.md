@@ -1,6 +1,6 @@
 # Cloudflare Worker 身份主键 account_id → cid_number 彻底重构
 
-状态:✅ **DONE**(2026-07-28,R1–R6 全部落地;门禁 tsc EXIT=0 + vitest 30 文件/181 测试全绿;待前端 Flutter 同步)
+状态:✅ **DONE**(2026-07-28,R1–R6 worker + F1–F4 前端 Flutter 全部落地;门禁:worker tsc 0 + vitest 181 全绿,Flutter analyze 0 + 913 测试全绿)
 所属模块:citizenapp/cloudflare(Worker/D1/广场·聊天·会员·通讯录 BFF)
 
 ## 背景(用户揪出)
@@ -115,4 +115,14 @@ Worker 全库用户数据身份主键 account_id→cid_number 彻底重构完成
 - R1 会话/登录/设备子钥;R2 广场社交闭包(posts/uploads/media/follows/notify/signals/browse/profiles/feeds);R3 会员/创作者/订阅/资源镜像;R4 通讯录;R5 chat(设备/密钥/nonce/路由/DO/推送);R6 注销/换绑语义 + 保留表 + e2e。
 - 15+ 张用户数据表全按 cid_number 归属;account_id 仅作链上镜像/凭证表的"当前绑定/签名者"保留列。
 - 换绑不丢:社交/身份数据随 cid 存续,旧账户鉴权材料吊销、新账户重注册子钥/设备。
-- **待前端 Flutter 同步**(汇总):关注列表 `accounts`→`entries`(cid_number 项);feed/profile 作者身份主键=cid;creator plan 响应 `creator_cid_number`;chat 全契约(见 R5 前端条)。前端接入按 [[dto-field-rename-bump-cache-version]] bump 缓存版本+形状校验。
+- **前端 Flutter 同步(F1–F4)已完成**,见下节。
+
+## 前端同步 F1–F4 落地记录(2026-07-28,D1a 彻底收敛)
+用户拍板 **D1a**:社交面端到端统一按身份主键 cid_number 寻址(不做"双接受"兼容)。
+
+- **F1 worker cid 寻址收敛**:`chain/identity.ts` 抽出 `readChainIdentityByCid` 共享读并新增 `fetchChainIdentityStateByCidCached`(按 cid 读 WalletAccountByCid→当前绑定 account_id + CidRegistry active + 投票/竞选公开字段,KV 缓存键 `square_identity_cid:`);`fetchChainIdentityState`(按 account)复用它并保留双向绑定校验。`/v1/square/users/:cid[/posts|/follows]` 路由参数改 cid(`parseCidNumber`),posts 响应 `account_id`→`cid_number`,profile 响应 `account_id` 语义改为"该 cid 当前绑定账户"。`feeds/follows.ts` 关注/取关/通知入参与响应 `followed_account_id`→`followed_cid_number`(去 resolveFollowedCid)。门禁 tsc 0 + vitest 181 全绿。
+- **F2 Flutter 广场/社交**:`square_api_client` 三接口 URL 传目标 cid、`fetchFollows` 响应键 `accounts`→`entries`、关注/取关/通知按 cid;`SquareFollowEntry.accountId`→`cidNumber`;`UserProfilePage` 主键 `accountId`→`cidNumber`(feed 作者点击/关注列表/通讯录入口全传 cid);创作者订阅/DM/QR 等**链上交易入参**从 profile 响应的 `account_id` 取(链验签仍按 account);资料缓存前缀 v2→v3 且缓存键改 cid。
+- **F3 Flutter chat**:传输层 `recipient_cid_number`/`cid_number`/`targetCidNumber`(领取删 requester);新增 `lib/chat/identity/peer_cid_resolver.dart`(进程缓存→链读 `CitizenIdentityChainReader.readByAccountId`→回写 `UserContact.cidNumber`;未绑定 CID **显式抛错 fail-closed**);`UserContact` 加 `cidNumber` 字段;群扇出 `_resolveRecipientCids` 建 per-member 映射;Isar `ChatOutboundQueueEntity`/`ChatOutgoingMediaEntity` 加 `recipientCidNumber`(build_runner 重生成);推送唤醒读 `sender_cid_number`;WS 身份由 session 表达(前端无改)。**MLS 身份分离铁律**:`MlsKeyPackage` 同时存 `accountId`(MLS 成员名册对齐,绝不被 cid 覆盖)与 `cidNumber`(路由);proto `ChatEnvelope` 内嵌 `recipient_account_id` 保留供 MLS/归属。
+- **F4 creator + 会话主键**:`CreatorPlan.creatorAccountId`→`creatorCidNumber`(唯一 cid 真源=worker plan 响应);**`SquareSession` 新增必填 `cidNumber`**(worker 登录响应本已下发 `cid_number`,本端 cid 不再需链读)——`nickname_publisher` 等"读本人云端资料"改用 `session.cidNumber`;通讯录页资料改按 cid 索引并解析。
+- **门禁**:worker `tsc` EXIT=0 + `vitest` 181 全绿;Flutter `dart analyze lib/ test/` **No issues found** + `flutter test` **913 通过**(~5 skip = libsmoldot 原生库跳过)。
+- **最终审计**:前端残留的 `recipient_account_id`(proto 内嵌/注释)、`creator_account_id`(订阅确认入参)、QR 收款方字段均为**设计保留**;裸 `account` 仅剩 `_ChatAccountContext.account`(账户上下文对象,非 ID 字符串),`group_flow` 循环变量已改 `accountId`。严格 Substrate 命名达成。

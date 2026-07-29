@@ -191,6 +191,7 @@ class _LegislationTabState extends State<LegislationTab> {
       onTap: _openConstitution,
       borderRadius: BorderRadius.circular(12),
       child: Container(
+        key: const ValueKey<String>('citizen-constitution-card'),
         decoration: BoxDecoration(
           color: AppTheme.surfaceCard,
           borderRadius: BorderRadius.circular(12),
@@ -198,19 +199,30 @@ class _LegislationTabState extends State<LegislationTab> {
               Border.all(color: AppTheme.primaryDark.withValues(alpha: 0.22)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Row(
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            _iconChip(_constitutionIcon, size: 38),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text('公民宪法',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.primaryDark)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _iconChip(_constitutionIcon, size: 38),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: AppTheme.textTertiary,
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right,
-                size: 20, color: AppTheme.textTertiary),
+            const Text(
+              '《公民宪法》',
+              key: ValueKey<String>('citizen-constitution-title'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.primaryDark,
+              ),
+            ),
           ],
         ),
       ),

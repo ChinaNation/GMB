@@ -598,10 +598,10 @@ class ChatGroupFlow {
     Iterable<String> identities,
     String creatorAccountId,
   ) {
-    final accounts = accountIdsFromMemberIdentities(identities);
+    final accountIds = accountIdsFromMemberIdentities(identities);
     return {
-      for (final account in accounts)
-        account: account == creatorAccountId
+      for (final accountId in accountIds)
+        accountId: accountId == creatorAccountId
             ? GroupMemberRole.admin
             : GroupMemberRole.member,
     };

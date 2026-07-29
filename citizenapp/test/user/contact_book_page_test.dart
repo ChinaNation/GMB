@@ -21,12 +21,17 @@ const _accountId =
 const _contactAddress = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
 const _contactAccountId =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
+
+/// 联系人身份主键 CID 号。通讯录已缓存 cid_number 时页面直接用它索引公开资料，
+/// 不再回退链读（account_id 仍是通讯录/收款寻址主键，二者语义分离）。
+const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 const _contact = UserContact(
   accountId: _contactAccountId,
   ss58Address: _contactAddress,
   contactName: '张三',
   createdAt: 1,
   updatedAt: 2,
+  cidNumber: _contactCidNumber,
 );
 const _profile = CitizenProfile(
   accountId: _contactAccountId,
@@ -34,7 +39,7 @@ const _profile = CitizenProfile(
   bio: '建设一个可信、自由的社会',
   avatarObjectKey: null,
   bannerObjectKey: null,
-  cidNumber: 'CID-1',
+  cidNumber: _contactCidNumber,
   isCertified: true,
   identityLevel: 'voting',
   membershipLevel: 'voting',
@@ -93,7 +98,7 @@ class _FakeProfileApi extends CitizenProfileApi {
 
   @override
   Future<CitizenProfile> fetchProfile(
-    String accountId, {
+    String cidNumber, {
     SquareSession? session,
   }) async =>
       profile;
@@ -124,7 +129,7 @@ Widget _page({
         service: _FakeContacts(),
         profileApi: _FakeProfileApi(profile),
         sessionProvider: _FakeSessionProvider(),
-        initialProfiles: {_contactAccountId: profile},
+        initialProfiles: {_contactCidNumber: profile},
         directChatOpener: directChatOpener,
         transferOpener: transferOpener,
       ),
