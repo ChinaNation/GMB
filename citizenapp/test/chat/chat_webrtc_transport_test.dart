@@ -34,6 +34,9 @@ Map<String, dynamic> _startHeader({
       byteSize: byteSize,
     );
 
+/// WebRTC 信令与附件回调按对端身份主键 CID 号路由；钱包账户 account_id 不做路由键。
+const _peerCidNumber = 'CN220-CTZN2-100000002-2026';
+
 void main() {
   test('附件起始帧只包含设备间传输字段', () {
     final frame = _startHeader(byteSize: 4);
@@ -121,7 +124,7 @@ void main() {
     var onAttachmentCalls = 0;
     var ackCalls = 0;
     final transport = _transport(root.path, ({
-      required senderAccountId,
+      required senderCidNumber,
       required conversationId,
       required attachmentId,
       required fileName,
@@ -140,14 +143,14 @@ void main() {
 
     await transport.handleIncomingFrame(
       buffer: buffer,
-      peerAccountId: 'peer',
+      peerCidNumber: _peerCidNumber,
       transferId: 't-reject',
       message: RTCDataChannelMessage(jsonEncode(_startHeader(byteSize: 100))),
       sendAck: ack,
     );
     await transport.handleIncomingFrame(
       buffer: buffer,
-      peerAccountId: 'peer',
+      peerCidNumber: _peerCidNumber,
       transferId: 't-reject',
       message: RTCDataChannelMessage(jsonEncode({'kind': 'attachment_end'})),
       sendAck: ack,
@@ -164,7 +167,7 @@ void main() {
     int? gotSize;
     var ackCalls = 0;
     final transport = _transport(root.path, ({
-      required senderAccountId,
+      required senderCidNumber,
       required conversationId,
       required attachmentId,
       required fileName,
@@ -180,14 +183,14 @@ void main() {
 
     await transport.handleIncomingFrame(
       buffer: buffer,
-      peerAccountId: 'peer',
+      peerCidNumber: _peerCidNumber,
       transferId: 't-ok',
       message: RTCDataChannelMessage(jsonEncode(_startHeader(byteSize: 5))),
       sendAck: ack,
     );
     await transport.handleIncomingFrame(
       buffer: buffer,
-      peerAccountId: 'peer',
+      peerCidNumber: _peerCidNumber,
       transferId: 't-ok',
       message: RTCDataChannelMessage.fromBinary(
         Uint8List.fromList(const [104, 101, 108, 108, 111]), // "hello"
@@ -196,7 +199,7 @@ void main() {
     );
     await transport.handleIncomingFrame(
       buffer: buffer,
-      peerAccountId: 'peer',
+      peerCidNumber: _peerCidNumber,
       transferId: 't-ok',
       message: RTCDataChannelMessage(jsonEncode({'kind': 'attachment_end'})),
       sendAck: ack,
@@ -236,7 +239,7 @@ void main() {
     final transport = _transport(
         root.path,
         ({
-          required senderAccountId,
+          required senderCidNumber,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -252,7 +255,7 @@ void main() {
     int? reported;
     await transport.handleIncomingFrame(
       buffer: buffer,
-      peerAccountId: 'peer',
+      peerCidNumber: _peerCidNumber,
       transferId: 't-resume',
       message: RTCDataChannelMessage(jsonEncode(_startHeader(byteSize: 10))),
       sendAck: () async {},

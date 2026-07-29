@@ -24,6 +24,7 @@ import 'chat_payload.dart';
 import 'chat_push_service.dart';
 import 'group/group_flow.dart';
 import 'group/group_model.dart';
+import 'identity/peer_cid_resolver.dart';
 import 'media/chat_relay_media.dart';
 import 'media/media_resend.dart';
 import 'proto/chat_envelope.pb.dart';
@@ -154,9 +155,11 @@ class ChatRuntime {
     ChatPushService? pushService,
     ChatPushTokenProvider? pushTokenProvider,
     IdentityAccountCache? identityAccountCache,
+    ChatCidResolver? cidResolver,
   })  : _store = store ?? ChatStore(),
         _walletManager = walletManager ?? WalletManager(),
         _identityAccountCache = identityAccountCache,
+        _cidResolver = cidResolver ?? PeerCidResolver().resolve,
         _preferences = preferences,
         _squareApiClient = squareApiClient ?? SquareApiClient(),
         _loginSigner = loginSigner,
@@ -181,6 +184,10 @@ class ChatRuntime {
   final ChatStore _store;
   final WalletManager _walletManager;
   final IdentityAccountCache? _identityAccountCache;
+
+  /// 对端钱包账户 account_id → 身份主键 CID 号解析器（路由用；解析失败即抛错，
+  /// 绝不静默错投）。默认走 [PeerCidResolver]（链读 + 会话内缓存），测试可注入。
+  final ChatCidResolver _cidResolver;
 
   /// 身份账户单源(CID 绑定账户);chat 自身 accountId 一律取此,walletIndex 保持钱包级。
   IdentityAccountCache get _identityCache =>
@@ -269,11 +276,13 @@ class ChatRuntime {
   }) async {
     final context = await _readyContext(await _readAccount());
     final flow = _messageFlow(context);
+    final peerCidNumber = await _cidResolver(peerAccountId);
     try {
       return await flow.sendText(
         conversationId: conversationId,
         senderAccountId: context.account.accountId,
         recipientAccountId: peerAccountId,
+        recipientCidNumber: peerCidNumber,
         senderDeviceId: context.deviceId,
         text: text,
       );
@@ -282,21 +291,20 @@ class ChatRuntime {
         rethrow;
       }
       final packages = await context.transport.fetchKeyPackages(
-        accountId: peerAccountId,
-        requesterAccountId: context.account.accountId,
+        targetCidNumber: peerCidNumber,
       );
       if (packages.isEmpty) {
         throw StateError('对方没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        accountId: peerAccountId,
+        targetCidNumber: peerCidNumber,
         keyPackageId: packages.first.keyPackageId,
-        requesterAccountId: context.account.accountId,
       );
       return flow.sendText(
         conversationId: conversationId,
         senderAccountId: context.account.accountId,
         recipientAccountId: peerAccountId,
+        recipientCidNumber: peerCidNumber,
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
         text: text,
@@ -311,24 +319,26 @@ class ChatRuntime {
   }) async {
     final context = await _readyContext(await _readAccount());
     final flow = _messageFlow(context);
+    final peerCidNumber = await _cidResolver(peerAccountId);
     // 登记/清除"待设备投递":对方离线时字节发不出,留 pending 由上线补发。缓存路径
     // 不持久化(补发时按当前 Documents 重算),只存 conversationId/attachmentId/fileName。
     Future<void> recordPending(String attachmentId) =>
         _store.recordOutgoingMedia(
           attachmentId: attachmentId,
-          recipientAccountId: peerAccountId,
+          recipientCidNumber: peerCidNumber,
           conversationId: conversationId,
           fileName: media.fileName,
           contentType: media.contentType,
           byteSize: media.byteSize,
         );
     Future<void> markDelivered(String attachmentId) =>
-        _store.deleteOutgoingMedia(attachmentId, peerAccountId);
+        _store.deleteOutgoingMedia(attachmentId, peerCidNumber);
     try {
       return await flow.sendMedia(
         conversationId: conversationId,
         senderAccountId: context.account.accountId,
         recipientAccountId: peerAccountId,
+        recipientCidNumber: peerCidNumber,
         senderDeviceId: context.deviceId,
         media: media,
         sendDeviceAttachment: _guardedDeviceSender(context),
@@ -342,21 +352,20 @@ class ChatRuntime {
         rethrow;
       }
       final packages = await context.transport.fetchKeyPackages(
-        accountId: peerAccountId,
-        requesterAccountId: context.account.accountId,
+        targetCidNumber: peerCidNumber,
       );
       if (packages.isEmpty) {
         throw StateError('对方没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        accountId: peerAccountId,
+        targetCidNumber: peerCidNumber,
         keyPackageId: packages.first.keyPackageId,
-        requesterAccountId: context.account.accountId,
       );
       return flow.sendMedia(
         conversationId: conversationId,
         senderAccountId: context.account.accountId,
         recipientAccountId: peerAccountId,
+        recipientCidNumber: peerCidNumber,
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
         media: media,
@@ -372,7 +381,7 @@ class ChatRuntime {
   /// 包住 WebRTC 字节发送,把 attachmentId 计入在途集合(去重防双传),结束即移除。
   ChatAttachmentDeviceSender _guardedDeviceSender(_ChatAccountContext context) {
     return ({
-      required recipientAccountId,
+      required recipientCidNumber,
       required conversationId,
       required attachmentId,
       required fileName,
@@ -381,11 +390,11 @@ class ChatRuntime {
       required byteSize,
     }) async {
       final inFlightKey =
-          MediaResend.inFlightKey(attachmentId, recipientAccountId);
+          MediaResend.inFlightKey(attachmentId, recipientCidNumber);
       _mediaBytesInFlight.add(inFlightKey);
       try {
         await context.webrtc.sendAttachment(
-          recipientAccountId: recipientAccountId,
+          recipientCidNumber: recipientCidNumber,
           conversationId: conversationId,
           attachmentId: attachmentId,
           fileName: fileName,
@@ -428,11 +437,13 @@ class ChatRuntime {
   }) async {
     final context = await _readyContext(await _readAccount());
     final flow = _messageFlow(context);
+    final peerCidNumber = await _cidResolver(peerAccountId);
     try {
       return await flow.sendSticker(
         conversationId: conversationId,
         senderAccountId: context.account.accountId,
         recipientAccountId: peerAccountId,
+        recipientCidNumber: peerCidNumber,
         senderDeviceId: context.deviceId,
         packId: packId,
         stickerId: stickerId,
@@ -442,21 +453,20 @@ class ChatRuntime {
         rethrow;
       }
       final packages = await context.transport.fetchKeyPackages(
-        accountId: peerAccountId,
-        requesterAccountId: context.account.accountId,
+        targetCidNumber: peerCidNumber,
       );
       if (packages.isEmpty) {
         throw StateError('对方没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        accountId: peerAccountId,
+        targetCidNumber: peerCidNumber,
         keyPackageId: packages.first.keyPackageId,
-        requesterAccountId: context.account.accountId,
       );
       return flow.sendSticker(
         conversationId: conversationId,
         senderAccountId: context.account.accountId,
         recipientAccountId: peerAccountId,
+        recipientCidNumber: peerCidNumber,
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
         packId: packId,
@@ -573,16 +583,17 @@ class ChatRuntime {
       sendMemberAttachment: _guardedDeviceSender(context),
       uploadRelayMedia: _relayUploader(context),
       saveLocalAttachment: _copySentAttachmentToCache,
-      recordPendingMember: (attachmentId, member) => _store.recordOutgoingMedia(
+      recordPendingMember: (attachmentId, memberCidNumber) =>
+          _store.recordOutgoingMedia(
         attachmentId: attachmentId,
-        recipientAccountId: member,
+        recipientCidNumber: memberCidNumber,
         conversationId: groupId,
         fileName: media.fileName,
         contentType: media.contentType,
         byteSize: media.byteSize,
       ),
-      markMemberDelivered: (attachmentId, member) =>
-          _store.deleteOutgoingMedia(attachmentId, member),
+      markMemberDelivered: (attachmentId, memberCidNumber) =>
+          _store.deleteOutgoingMedia(attachmentId, memberCidNumber),
     );
   }
 
@@ -594,23 +605,24 @@ class ChatRuntime {
   ) async {
     final packages = <MlsKeyPackage>[];
     for (final accountId in inviteeAccountIds) {
+      final cidNumber = await _cidResolver(accountId);
       final available = await context.transport.fetchKeyPackages(
-        accountId: accountId,
-        requesterAccountId: context.account.accountId,
+        targetCidNumber: cidNumber,
       );
       if (available.isEmpty) {
         throw StateError('对方 $accountId 没有可用 Chat KeyPackage');
       }
       final consumed = await context.transport.consumeKeyPackage(
-        accountId: accountId,
+        targetCidNumber: cidNumber,
         keyPackageId: available.first.keyPackageId,
-        requesterAccountId: context.account.accountId,
       );
+      // MLS 名册按 account_id 对齐;Worker 响应缺 account_id 时兜底补回被邀请账户。
       packages.add(
         consumed.accountId.isNotEmpty
             ? consumed
             : MlsKeyPackage(
                 accountId: accountId,
+                cidNumber: cidNumber,
                 deviceId: consumed.deviceId,
                 keyPackageId: consumed.keyPackageId,
                 keyPackageBytes: consumed.keyPackageBytes,
@@ -630,10 +642,12 @@ class ChatRuntime {
       store: _store,
       accountId: context.account.accountId,
       localDeviceId: context.deviceId,
-      deliverer: (envelope, _) {
+      cidResolver: _cidResolver,
+      deliverer: (envelope, _, recipientCidNumber) {
         return ChatFlow.deliverWithTransport(
           transport: context.transport,
           envelope: envelope,
+          recipientCidNumber: recipientCidNumber,
         );
       },
     );
@@ -746,16 +760,17 @@ class ChatRuntime {
 
   /// 重试发送设备本机队列中的密文,并补发待设备投递的媒体字节。
   /// 密文成功转交在线接收设备后立即删队列项;媒体字节收到 WebRTC ack 后删待投递行。
-  Future<int> retryOutgoing({String? recipientAccountId}) async {
+  Future<int> retryOutgoing({String? recipientCidNumber}) async {
     final context = await _readyContext(await _readAccount());
     final queued = await _store.readQueuedEnvelopes(
-      recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
     );
     var sent = 0;
     for (final item in queued) {
       final result = await context.transport.sendEncryptedEnvelope(
         envelopeId: item.envelopeId,
         envelopeBytes: item.envelopeBytes,
+        recipientCidNumber: item.recipientCidNumber,
       );
       await _store.markOutgoingDelivery(
         envelopeId: item.envelopeId,
@@ -765,11 +780,11 @@ class ChatRuntime {
       if (result.state == ChatMessageDeliveryState.sent) sent += 1;
     }
     // 媒体字节补发**只在明确对端时(peer_ready 确知在线)**触发,且**不阻塞**:
-    // 绝不在无差别的轮询/实时启动(recipientAccountId==null)路径对离线对端反复整块
+    // 绝不在无差别的轮询/实时启动(recipientCidNumber==null)路径对离线对端反复整块
     // 重连重发(每条阻塞 45 秒、无退避),那会拖垮轮询与后台唤醒窗口。
-    if (recipientAccountId != null) {
-      unawaited(
-          _resendPendingMedia(context, recipientAccountId: recipientAccountId));
+    if (recipientCidNumber != null) {
+      unawaited(_resendPendingMedia(context,
+          recipientCidNumber: recipientCidNumber));
     }
     return sent;
   }
@@ -779,10 +794,10 @@ class ChatRuntime {
   /// (不用持久化的绝对路径,避免容器 UUID 变更后误判丢失)。
   Future<void> _resendPendingMedia(
     _ChatAccountContext context, {
-    required String recipientAccountId,
+    required String recipientCidNumber,
   }) async {
     final pending = await _store.readPendingOutgoingMedia(
-      recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
     );
     if (pending.isEmpty) return;
     final dir = await getApplicationDocumentsDirectory();
@@ -798,7 +813,7 @@ class ChatRuntime {
       ),
       cacheFileExists: (path) => File(path).exists(),
       sendBytes: (media, path) => context.webrtc.sendAttachment(
-        recipientAccountId: media.recipientAccountId,
+        recipientCidNumber: media.recipientCidNumber,
         conversationId: media.conversationId,
         attachmentId: media.attachmentId,
         fileName: media.fileName,
@@ -807,14 +822,14 @@ class ChatRuntime {
         byteSize: media.byteSize,
       ),
       deletePending: (media) => _store.deleteOutgoingMedia(
-          media.attachmentId, media.recipientAccountId),
+          media.attachmentId, media.recipientCidNumber),
     );
   }
 
   /// 门③:接收端落盘二次门控。委托给可单测的 [ChatFlow.acceptReceivedMediaToCache]
   /// (超限删临时不入缓存;否则移入缓存)。
   Future<void> _saveReceivedAttachmentToCache({
-    required String senderAccountId,
+    required String senderCidNumber,
     required String conversationId,
     required String attachmentId,
     required String fileName,
@@ -879,13 +894,17 @@ class ChatRuntime {
           return;
         }
         if (type == 'gmb_chat_signal_v1') {
-          final sender = message['sender_account_id'];
+          // Worker 按身份主键投递信令：发件人以 CID 号标识（与推送/路由同口径）。
+          final senderCidNumber = message['sender_cid_number'];
           final signal = message['signal'];
-          if (sender is! String || signal is! Map<String, dynamic>) return;
+          if (senderCidNumber is! String ||
+              signal is! Map<String, dynamic>) {
+            return;
+          }
           if (signal['kind'] == 'peer_ready') {
-            await retryOutgoing(recipientAccountId: sender);
+            await retryOutgoing(recipientCidNumber: senderCidNumber);
           } else {
-            await context.webrtc.handleSignal(sender, signal);
+            await context.webrtc.handleSignal(senderCidNumber, signal);
           }
         }
       },
@@ -893,10 +912,10 @@ class ChatRuntime {
     );
     if (stopSocket == null) return null;
 
-    Future<void> notifySenderReady(String senderAccountId) async {
-      if (senderAccountId.isEmpty) return;
+    Future<void> notifySenderReady(String senderCidNumber) async {
+      if (senderCidNumber.isEmpty) return;
       await context.transport.sendSignal(
-        recipientAccountId: senderAccountId,
+        recipientCidNumber: senderCidNumber,
         signal: const {'kind': 'peer_ready'},
       );
     }
@@ -1157,8 +1176,24 @@ class ChatRuntime {
             identity.devicePublicKey.toLowerCase()) {
       throw StateError('OpenMLS native 返回的 Chat 设备公钥与本机身份不一致');
     }
-    await transport.publishKeyPackage(keyPackage);
+    await transport.publishKeyPackage(
+      keyPackage,
+      cidNumber: await _readSelfCidNumber(),
+    );
     await prefs.setInt(cacheKey, keyPackage.expiresAtMillis);
+  }
+
+  /// 本身份主键 CID 号(发布本机 KeyPackage 时按 CID 归档)。
+  ///
+  /// 取自身份账户单源 [IdentityAccountCache] 的链上闭环快照;未绑定 CID(纯访客/
+  /// 未注册)则抛错——无 CID 不能参与聊天路由,fail-closed。
+  Future<String> _readSelfCidNumber() async {
+    final resolved = await _identityCache.resolve();
+    final cidNumber = resolved?.snapshot?.cidNumber ?? '';
+    if (cidNumber.isEmpty) {
+      throw StateError('当前身份尚未绑定 CID，无法发布聊天密钥');
+    }
+    return cidNumber;
   }
 
   Future<String> _signSquareLoginPayload(
@@ -1224,10 +1259,11 @@ class ChatRuntime {
     return ChatFlow(
       crypto: context.crypto,
       store: _store,
-      deliverer: (envelope, _) {
+      deliverer: (envelope, _, recipientCidNumber) {
         return ChatFlow.deliverWithTransport(
           transport: context.transport,
           envelope: envelope,
+          recipientCidNumber: recipientCidNumber,
         );
       },
     );

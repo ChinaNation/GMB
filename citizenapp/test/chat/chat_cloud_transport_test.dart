@@ -9,6 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+/// 钱包账户 account_id（MLS 名册/归属）与身份主键 cid_number（寻址路由）语义分离。
+const _bobAccountId =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
+
 void main() {
   test('未配置服务时密文保留在发送设备队列', () async {
     final envelope = _sampleEnvelope();
@@ -21,6 +26,7 @@ void main() {
     final result = await transport.sendEncryptedEnvelope(
       envelopeId: envelope.envelopeId,
       envelopeBytes: envelope.writeToBuffer(),
+      recipientCidNumber: _bobCidNumber,
     );
 
     expect(result.transportType, ChatTransportType.cloudflare);
@@ -36,18 +42,20 @@ void main() {
       expect(body.keys, {
         'envelope_id',
         'sender_device_id',
-        'recipient_account_id',
+        'recipient_cid_number',
         'recipient_device_id',
         'envelope',
       });
-      expect(body['recipient_account_id'],
-          '0x2222222222222222222222222222222222222222222222222222222222222222');
+      // 路由键是收件人身份主键 CID 号；钱包账户 account_id 只在 proto 内嵌供 MLS/归属。
+      expect(body['recipient_cid_number'], _bobCidNumber);
+      expect(body.containsKey('recipient_account_id'), isFalse);
       return _json({'ok': true, 'delivery_state': 'sent'});
     });
 
     final result = await transport.sendEncryptedEnvelope(
       envelopeId: envelope.envelopeId,
       envelopeBytes: envelope.writeToBuffer(),
+      recipientCidNumber: _bobCidNumber,
     );
 
     expect(result.state, ChatMessageDeliveryState.sent);
@@ -62,6 +70,7 @@ void main() {
     final result = await transport.sendEncryptedEnvelope(
       envelopeId: envelope.envelopeId,
       envelopeBytes: envelope.writeToBuffer(),
+      recipientCidNumber: _bobCidNumber,
     );
 
     expect(result.state, ChatMessageDeliveryState.queued);
@@ -91,18 +100,21 @@ void main() {
   test('KeyPackage 消费响应不保留消费状态', () async {
     final transport = _transport((request) async {
       expect(request.url.path, '/v1/chat/keypackages/consume');
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      // 领取按目标身份主键 CID 号寻址，不带领取方账户。
+      expect(body['cid_number'], _bobCidNumber);
       return _json({'ok': true, 'key_package': _keyPackageJson()});
     });
 
     final package = await transport.consumeKeyPackage(
-      accountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      targetCidNumber: _bobCidNumber,
       keyPackageId: 'kp-bob',
-      requesterAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
     );
 
     expect(package.keyPackageBytes, [1, 2, 3]);
+    // account_id 是 MLS 名册身份，cid_number 是寻址主键，二者语义分离且都要解出。
+    expect(package.accountId, _bobAccountId);
+    expect(package.cidNumber, _bobCidNumber);
   });
 
   test('WebRTC 只向 Worker 发送瞬时信令', () async {
@@ -111,12 +123,12 @@ void main() {
       paths.add(request.url.path);
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       expect(body['signal'], {'kind': 'offer'});
+      expect(body['recipient_cid_number'], _bobCidNumber);
       return _json({'ok': true, 'delivery_state': 'sent'});
     });
 
     final sent = await transport.sendSignal(
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       signal: const {'kind': 'offer'},
     );
 
@@ -144,8 +156,7 @@ ChatEnvelope _sampleEnvelope() => ChatEnvelope(
       conversationId: 'dm:alice:bob',
       senderAccountId:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientAccountId: _bobAccountId,
       senderDeviceId: 'alice-phone',
       mlsWireMessage: [1, 2, 3],
       createdAtMillis: Int64(1),
@@ -153,9 +164,10 @@ ChatEnvelope _sampleEnvelope() => ChatEnvelope(
       mlsMessageKind: MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION,
     );
 
+/// Worker 真实响应形状：同时下发 MLS 名册身份 account_id 与寻址主键 cid_number。
 Map<String, dynamic> _keyPackageJson() => {
-      'account_id':
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      'account_id': _bobAccountId,
+      'cid_number': _bobCidNumber,
       'device_id': 'bob-phone',
       'device_public_key': 'aabb',
       'key_package_id': 'kp-bob',

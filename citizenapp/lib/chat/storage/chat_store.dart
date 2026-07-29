@@ -35,12 +35,14 @@ class ChatStoredMessage {
 class ChatQueuedEnvelope {
   const ChatQueuedEnvelope({
     required this.envelopeId,
-    required this.recipientAccountId,
+    required this.recipientCidNumber,
     required this.envelopeBytes,
   });
 
   final String envelopeId;
-  final String recipientAccountId;
+
+  /// 收件人身份主键 CID 号（路由键；proto envelope 内嵌 account_id 供 MLS/归属）。
+  final String recipientCidNumber;
   final List<int> envelopeBytes;
 }
 
@@ -49,7 +51,7 @@ class ChatQueuedEnvelope {
 class ChatPendingMedia {
   const ChatPendingMedia({
     required this.attachmentId,
-    required this.recipientAccountId,
+    required this.recipientCidNumber,
     required this.conversationId,
     required this.fileName,
     required this.contentType,
@@ -57,7 +59,9 @@ class ChatPendingMedia {
   });
 
   final String attachmentId;
-  final String recipientAccountId;
+
+  /// 收件人身份主键 CID 号（WebRTC 补发按 CID 路由信令）。
+  final String recipientCidNumber;
   final String conversationId;
   final String fileName;
   final String contentType;
@@ -333,6 +337,7 @@ class ChatStore {
   Future<void> saveOutgoingEnvelope({
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
+    required String recipientCidNumber,
     required ChatMessageKind messageKind,
     required ChatMessageDeliveryState deliveryState,
     String? plaintext,
@@ -364,7 +369,7 @@ class ChatStore {
         ChatOutboundQueueEntity()
           ..envelopeId = envelope.envelopeId
           ..conversationId = envelope.conversationId
-          ..recipientAccountId = envelope.recipientAccountId
+          ..recipientCidNumber = recipientCidNumber
           ..envelopeBytesHex = _bytesToHex(envelopeBytes)
           ..deliveryState = deliveryState.name
           ..attemptCount = 0
@@ -377,6 +382,7 @@ class ChatStore {
   Future<void> queueOutgoingEnvelope({
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
+    required String recipientCidNumber,
     required ChatMessageDeliveryState deliveryState,
   }) {
     return _walletIsar.writeTxn((isar) async {
@@ -384,7 +390,7 @@ class ChatStore {
         ChatOutboundQueueEntity()
           ..envelopeId = envelope.envelopeId
           ..conversationId = envelope.conversationId
-          ..recipientAccountId = envelope.recipientAccountId
+          ..recipientCidNumber = recipientCidNumber
           ..envelopeBytesHex = _bytesToHex(envelopeBytes)
           ..deliveryState = deliveryState.name
           ..attemptCount = 0
@@ -520,24 +526,24 @@ class ChatStore {
 
   /// 读取发送设备上的待重试密文；Cloudflare 不提供远程补拉。
   Future<List<ChatQueuedEnvelope>> readQueuedEnvelopes({
-    String? recipientAccountId,
+    String? recipientCidNumber,
   }) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatOutboundQueueEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final matched = recipientAccountId == null
+      final matched = recipientCidNumber == null
           ? rows
           : rows
-              .where((row) => row.recipientAccountId == recipientAccountId)
+              .where((row) => row.recipientCidNumber == recipientCidNumber)
               .toList(growable: false);
       matched.sort((a, b) => a.updatedAtMillis.compareTo(b.updatedAtMillis));
       return matched
           .map(
             (row) => ChatQueuedEnvelope(
               envelopeId: row.envelopeId,
-              recipientAccountId: row.recipientAccountId,
+              recipientCidNumber: row.recipientCidNumber,
               envelopeBytes: _hexToBytes(row.envelopeBytesHex),
             ),
           )
@@ -548,7 +554,7 @@ class ChatStore {
   /// 登记一条待设备投递的媒体(字节未送达对方设备,留待上线补发)。
   Future<void> recordOutgoingMedia({
     required String attachmentId,
-    required String recipientAccountId,
+    required String recipientCidNumber,
     required String conversationId,
     required String fileName,
     required String contentType,
@@ -557,9 +563,9 @@ class ChatStore {
     return _walletIsar.writeTxn((isar) async {
       await isar.chatOutgoingMediaEntitys.putByPendingKey(
         ChatOutgoingMediaEntity()
-          ..pendingKey = '$attachmentId|$recipientAccountId'
+          ..pendingKey = '$attachmentId|$recipientCidNumber'
           ..attachmentId = attachmentId
-          ..recipientAccountId = recipientAccountId
+          ..recipientCidNumber = recipientCidNumber
           ..conversationId = conversationId
           ..fileName = fileName
           ..contentType = contentType
@@ -571,33 +577,33 @@ class ChatStore {
 
   /// 字节已送达某成员设备(收到 WebRTC ack)后删除该 (媒体, 成员) 待投递行。
   Future<void> deleteOutgoingMedia(
-      String attachmentId, String recipientAccountId) {
+      String attachmentId, String recipientCidNumber) {
     return _walletIsar.writeTxn((isar) async {
       await isar.chatOutgoingMediaEntitys
-          .deleteByPendingKey('$attachmentId|$recipientAccountId');
+          .deleteByPendingKey('$attachmentId|$recipientCidNumber');
     });
   }
 
   /// 读取待设备投递的媒体(可按对端过滤),供上线补发。
   Future<List<ChatPendingMedia>> readPendingOutgoingMedia({
-    String? recipientAccountId,
+    String? recipientCidNumber,
   }) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatOutgoingMediaEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final matched = recipientAccountId == null
+      final matched = recipientCidNumber == null
           ? rows
           : rows
-              .where((row) => row.recipientAccountId == recipientAccountId)
+              .where((row) => row.recipientCidNumber == recipientCidNumber)
               .toList(growable: false);
       matched.sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
       return matched
           .map(
             (row) => ChatPendingMedia(
               attachmentId: row.attachmentId,
-              recipientAccountId: row.recipientAccountId,
+              recipientCidNumber: row.recipientCidNumber,
               conversationId: row.conversationId,
               fileName: row.fileName,
               contentType: row.contentType,
@@ -812,6 +818,9 @@ class ChatStore {
   }
 
   /// 群发出:一条逻辑消息 + N 条按收件人的出站队列(投递/重试复用 1:1 路径)。
+  ///
+  /// [recipientCidByAccountId] 把每个成员账户映射到其身份主键 CID 号（队列路由键）；
+  /// envelope 内嵌 account_id 仍供 MLS/归属。
   Future<void> saveOutgoingGroupMessage({
     required String groupId,
     required String senderAccountId,
@@ -821,6 +830,7 @@ class ChatStore {
     required String payload,
     required int createdAtMillis,
     required List<ChatEnvelope> envelopes,
+    required Map<String, String> recipientCidByAccountId,
   }) {
     return _walletIsar.writeTxn((isar) async {
       await _touchGroupConversationInTxn(
@@ -850,11 +860,17 @@ class ChatStore {
           ..createdAtMillis = createdAtMillis,
       );
       for (final envelope in envelopes) {
+        final recipientCidNumber =
+            recipientCidByAccountId[envelope.recipientAccountId];
+        if (recipientCidNumber == null || recipientCidNumber.isEmpty) {
+          throw StateError(
+              '群出站队列缺少收件人 CID 映射: ${envelope.recipientAccountId}');
+        }
         await isar.chatOutboundQueueEntitys.putByEnvelopeId(
           ChatOutboundQueueEntity()
             ..envelopeId = envelope.envelopeId
             ..conversationId = groupId
-            ..recipientAccountId = envelope.recipientAccountId
+            ..recipientCidNumber = recipientCidNumber
             ..envelopeBytesHex = _bytesToHex(envelope.writeToBuffer())
             ..deliveryState = ChatMessageDeliveryState.queued.name
             ..attemptCount = 0

@@ -25,12 +25,18 @@ class SquareApiException implements Exception {
 class SquareSession {
   const SquareSession({
     required this.sessionToken,
+    required this.cidNumber,
     required this.accountId,
     required this.expiresAt,
     this.signRequest,
   });
 
   final String sessionToken;
+
+  /// 本会话的身份主键 CID 号（Worker 登录响应下发；广场/聊天一切归属与寻址的主键）。
+  final String cidNumber;
+
+  /// 本会话当前绑定的钱包账户 account_id（签名/链上交易用；换绑后由新账户重新登录）。
   final String accountId;
   final int expiresAt;
   final SquareDeviceSigner? signRequest;
@@ -466,12 +472,17 @@ class SquareApiClient
     });
     final token = session['session_token'];
     final expiresAt = session['expires_at'];
-    if (token is! String || expiresAt is! int) {
+    // 身份主键由 Worker 按链上绑定解析后随登录响应下发；缺失即会话不完整（未绑定 CID
+    // 的账户在 Worker 侧已被拒绝建会话）。
+    final cidNumber = session['cid_number'];
+    if (token is! String || expiresAt is! int ||
+        cidNumber is! String || cidNumber.isEmpty) {
       throw const SquareApiException('广场登录态响应不完整');
     }
 
     final next = SquareSession(
       sessionToken: token,
+      cidNumber: cidNumber,
       accountId: accountId,
       expiresAt: expiresAt,
       signRequest: signLoginPayload,
@@ -842,13 +853,14 @@ class SquareApiClient
     return '$baseUrl/v1/square/media/$encoded';
   }
 
-  /// 拉取某账户的用户主页资料（公开可读；带 session 时附带 is_following）。
+  /// 拉取某身份（cid_number）的用户主页资料（公开可读；带 session 时附带 is_following）。
+  /// 响应 profile 含 `account_id`（该身份当前绑定钱包账户，展示用，可能空串）+ `cid_number`。
   Future<CitizenProfile> fetchUserProfile({
-    required String accountId,
+    required String cidNumber,
     SquareSession? session,
   }) async {
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(accountId)}',
+      '/v1/square/users/${Uri.encodeComponent(cidNumber)}',
       session: session,
     );
     final profile = data['profile'];
@@ -858,9 +870,10 @@ class SquareApiClient
     return CitizenProfile.fromJson(profile);
   }
 
-  /// 按作者分页拉帖。[category]/[contentFormat] 为空表示不过滤；[cursor] 为上一页 nextCursor。
+  /// 按作者身份主键 cid_number 分页拉帖。[category]/[contentFormat] 为空表示不过滤；
+  /// [cursor] 为上一页 nextCursor。
   Future<({List<SquarePost> posts, int? nextCursor})> fetchAuthorPosts({
-    required String accountId,
+    required String cidNumber,
     SquarePostCategory? category,
     SquarePostContentFormat? contentFormat,
     int limit = 20,
@@ -881,7 +894,7 @@ class SquareApiClient
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(accountId)}/posts?$query',
+      '/v1/square/users/${Uri.encodeComponent(cidNumber)}/posts?$query',
       session: session,
     );
     final posts = data['posts'];
@@ -987,37 +1000,39 @@ class SquareApiClient
     return CitizenProfile.fromJson(profile);
   }
 
-  /// 关注一个账户（写接口带 session；accountId 由 Worker 从 session 派生）。
+  /// 关注一个身份（写接口带 session；关注者 cid 由 Worker 从 session 派生，
+  /// 请求体只带目标身份主键 followed_cid_number）。
   Future<void> followUser({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
   }) async {
     await _postJson(
       '/v1/square/follows',
-      {'followed_account_id': followedAccountId},
+      {'followed_cid_number': followedCidNumber},
       session: session,
     );
   }
 
-  /// 取消关注一个账户。
+  /// 取消关注一个身份（路径末段 = 目标身份主键 cid_number）。
   Future<void> unfollowUser({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
   }) async {
     await _deleteJson(
-      '/v1/square/follows/${Uri.encodeComponent(followedAccountId)}',
+      '/v1/square/follows/${Uri.encodeComponent(followedCidNumber)}',
       session: session,
     );
   }
 
   /// 开/关对某关注的发帖通知（通知归属挂在关注关系上；须已关注，未关注 Worker 回 409）。
+  /// 路径前段 = 目标身份主键 cid_number。
   Future<void> setNotify({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
     required bool enabled,
   }) async {
     await _putJson(
-      '/v1/square/follows/${Uri.encodeComponent(followedAccountId)}/notify',
+      '/v1/square/follows/${Uri.encodeComponent(followedCidNumber)}/notify',
       {'enabled': enabled},
       session: session,
     );
@@ -1046,9 +1061,10 @@ class SquareApiClient
     );
   }
 
-  /// 拉取关注/粉丝列表。
-  Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows({
-    required String accountId,
+  /// 拉取关注/粉丝列表（路由末段 = 目标身份主键 cid_number；列表项为身份主键
+  /// cid_number）。
+  Future<({List<SquareFollowEntry> entries, int? nextCursor})> fetchFollows({
+    required String cidNumber,
     required String type,
     int limit = 20,
     int? cursor,
@@ -1062,15 +1078,15 @@ class SquareApiClient
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(accountId)}/follows?$query',
+      '/v1/square/users/${Uri.encodeComponent(cidNumber)}/follows?$query',
       session: session,
     );
-    final accounts = data['accounts'];
-    if (accounts is! List) {
-      throw const SquareApiException('关注列表响应缺少账户列表');
+    final rawEntries = data['entries'];
+    if (rawEntries is! List) {
+      throw const SquareApiException('关注列表响应缺少 entries 列表');
     }
     return (
-      accounts: accounts
+      entries: rawEntries
           .whereType<Map<String, dynamic>>()
           .map(SquareFollowEntry.fromJson)
           .toList(growable: false),

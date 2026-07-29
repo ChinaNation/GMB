@@ -119,6 +119,10 @@ void main() {
       find.byKey(const ValueKey<String>('transaction-entry-divider')),
       findsOneWidget,
     );
+    final entryDivider = tester.getSize(
+      find.byKey(const ValueKey<String>('transaction-entry-divider')),
+    );
+    expect(entryDivider.height, closeTo(52 * 2 / 3, 0.01));
     expect(find.text('扫一扫'), findsOneWidget);
     expect(find.text('多签账户'), findsOneWidget);
     expect(find.byIcon(Icons.share_outlined), findsOneWidget);
@@ -253,8 +257,7 @@ void main() {
     final addressField = tester.widget<TextField>(
       find.byWidgetPredicate(
         (widget) =>
-            widget is TextField &&
-            widget.decoration?.hintText == '输入或粘贴 SS58 地址',
+            widget is TextField && widget.decoration?.hintText == '请输入账户',
       ),
     );
     expect(addressField.controller?.text, recipient);

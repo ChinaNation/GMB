@@ -25,6 +25,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'tok',
+        cidNumber: "CN220-CTZN2-198805200-2026",
         accountId: _owner,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 600000,
       );
@@ -213,6 +214,7 @@ void main() {
     );
     final session = SquareSession(
       sessionToken: 'tok',
+      cidNumber: "CN220-CTZN2-198805200-2026",
       accountId: _owner,
       expiresAt: 9999999999999,
       signRequest: (_) async {

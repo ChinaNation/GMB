@@ -14,7 +14,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 class ProfilePostsTab extends StatefulWidget {
   const ProfilePostsTab({
     super.key,
-    required this.accountId,
+    required this.cidNumber,
     required this.api,
     required this.emptyLabel,
     required this.session,
@@ -24,7 +24,8 @@ class ProfilePostsTab extends StatefulWidget {
     this.onOpenPost,
   });
 
-  final String accountId;
+  /// 作者身份主键 cid_number（按 cid 分页拉该身份的帖子）。
+  final String cidNumber;
   final CitizenProfileApi api;
   final String emptyLabel;
   final SquareSession session;
@@ -59,7 +60,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
     });
     try {
       final page = await widget.api.fetchAuthorPosts(
-        widget.accountId,
+        widget.cidNumber,
         category: widget.category,
         contentFormat: widget.contentFormat,
         limit: _pageSize,
@@ -88,7 +89,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
     setState(() => _loading = true);
     try {
       final page = await widget.api.fetchAuthorPosts(
-        widget.accountId,
+        widget.cidNumber,
         category: widget.category,
         contentFormat: widget.contentFormat,
         limit: _pageSize,

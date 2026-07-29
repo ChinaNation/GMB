@@ -18,7 +18,7 @@ class _NullIdentityCache extends IdentityAccountCache {
 
 Widget _wrap({required bool isSelf}) => MaterialApp(
       home: UserProfilePage(
-        accountId: kOwner,
+        cidNumber: kOwner,
         isSelf: isSelf,
         api: FakeProfileApi(sampleProfile()),
         cache: FakeProfileCache(),

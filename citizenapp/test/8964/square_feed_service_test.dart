@@ -11,6 +11,7 @@ import 'package:citizenapp/8964/services/square_api_client.dart';
 // 缺失即抛「设备请求签名器缺失」。测试用固定假签名占位；MockClient 不校验签名头。
 SquareSession _session() => SquareSession(
       sessionToken: 'sqs_test',
+      cidNumber: "CN220-CTZN2-198805200-2026",
       accountId:
           '0x8888888888888888888888888888888888888888888888888888888888888888',
       expiresAt: 1800000000000,

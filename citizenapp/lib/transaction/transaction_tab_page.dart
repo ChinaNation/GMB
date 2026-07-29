@@ -73,6 +73,9 @@ class TransactionTabPage extends StatelessWidget {
 class _TransactionEntryGroup extends StatelessWidget {
   const _TransactionEntryGroup({required this.children});
 
+  // 原 52dp 竖线缩短三分之一，只改变视觉长度，不改变双入口卡片高度与点击区域。
+  static const double _dividerHeight = 52 * 2 / 3;
+
   final List<_TransactionEntryTile> children;
 
   @override
@@ -86,7 +89,7 @@ class _TransactionEntryGroup extends StatelessWidget {
             if (i != children.length - 1)
               const SizedBox(
                 key: ValueKey<String>('transaction-entry-divider'),
-                height: 52,
+                height: _dividerHeight,
                 child: VerticalDivider(
                   width: 1,
                   thickness: 0.5,

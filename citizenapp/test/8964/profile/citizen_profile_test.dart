@@ -49,6 +49,7 @@ http.Response _ok(Map<String, dynamic> body) => http.Response(
 // 测试用固定假签名占位，MockClient 不校验签名头。
 SquareSession _session() => SquareSession(
       sessionToken: 'tok',
+      cidNumber: "CN220-CTZN2-198805200-2026",
       accountId: _owner,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       signRequest: (_) async => 'test-device-signature',
@@ -121,13 +122,16 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
+    // 缓存主键 = 身份主键 cid_number（_profileJson 的 cid_number）。
+    const cid = 'CN001-CTZN-000000001-2026';
+
     test('round-trips a profile through local storage', () async {
       const cache = CitizenProfileCache();
       final profile = CitizenProfile.fromJson(_profileJson());
 
-      expect(await cache.read(_owner), isNull);
+      expect(await cache.read(cid), isNull);
       await cache.write(profile);
-      final loaded = await cache.read(_owner);
+      final loaded = await cache.read(cid);
 
       expect(loaded, isNotNull);
       expect(loaded!.displayName, '轻节点');
@@ -137,8 +141,8 @@ void main() {
     test('clear removes the cached profile', () async {
       const cache = CitizenProfileCache();
       await cache.write(CitizenProfile.fromJson(_profileJson()));
-      await cache.clear(_owner);
-      expect(await cache.read(_owner), isNull);
+      await cache.clear(cid);
+      expect(await cache.read(cid), isNull);
     });
   });
 
@@ -152,8 +156,8 @@ void main() {
         return _ok({'ok': true, 'profile': _profileJson(isFollowing: true)});
       }));
 
-      final profile =
-          await client.fetchUserProfile(accountId: _owner, session: _session());
+      final profile = await client.fetchUserProfile(
+          cidNumber: _owner, session: _session());
 
       expect(authHeader, 'Bearer tok');
       expect(profile.isFollowing, isTrue);
@@ -181,7 +185,7 @@ void main() {
       }));
 
       final page = await client.fetchAuthorPosts(
-        accountId: _owner,
+        cidNumber: _owner,
         category: SquarePostCategory.campaign,
         limit: 2,
       );
@@ -214,7 +218,7 @@ void main() {
         });
       }));
 
-      final page = await client.fetchAuthorPosts(accountId: _owner);
+      final page = await client.fetchAuthorPosts(cidNumber: _owner);
       final post = page.posts.single;
 
       expect(post.contentFormat, SquarePostContentFormat.article);
@@ -229,7 +233,7 @@ void main() {
       }));
 
       await client.fetchAuthorPosts(
-        accountId: _owner,
+        cidNumber: _owner,
         contentFormat: SquarePostContentFormat.article,
       );
 

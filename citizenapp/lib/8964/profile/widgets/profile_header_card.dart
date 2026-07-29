@@ -14,7 +14,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 class ProfileHeaderCard extends StatelessWidget {
   const ProfileHeaderCard({
     super.key,
-    required this.accountId,
+    required this.cidNumber,
     required this.profile,
     required this.actions,
     this.fallbackName = '',
@@ -26,7 +26,9 @@ class ProfileHeaderCard extends StatelessWidget {
     this.creatorSubscribeButton,
   });
 
-  final String accountId;
+  /// 主页身份主键 cid_number（默认昵称/头像的稳定派生种子）。展示用的当前绑定
+  /// 钱包账户从 [profile].accountId 取。
+  final String cidNumber;
   final CitizenProfile? profile;
 
   /// 本人钱包名称是昵称真源；他人资料使用公开镜像。两者缺失时由账户稳定
@@ -59,7 +61,7 @@ class ProfileHeaderCard extends StatelessWidget {
   bool get _membershipActive => profile?.membershipActive ?? false;
 
   String get _name {
-    return ProfilePresentation.forAccountId(accountId).resolveDisplayName(
+    return ProfilePresentation.forAccountId(cidNumber).resolveDisplayName(
       walletName: fallbackName,
       publicName: profile?.displayName,
     );
@@ -103,8 +105,8 @@ class ProfileHeaderCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 _AddressRow(
-                  accountId: accountId,
-                  cidNumber: profile?.cidNumber,
+                  accountId: profile?.accountId ?? '',
+                  cidNumber: profile?.cidNumber ?? cidNumber,
                 ),
                 if (bio.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -158,7 +160,7 @@ class ProfileHeaderCard extends StatelessWidget {
               membershipActive: _membershipActive,
               imageUrl: avatarUrl,
               imageHeaders: avatarHeaders,
-              seed: accountId,
+              seed: cidNumber,
               borderColor: AppTheme.surfaceCard,
               borderWidth: 4,
               borderRadius: 14,

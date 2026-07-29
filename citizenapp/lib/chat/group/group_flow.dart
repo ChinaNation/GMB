@@ -32,10 +32,10 @@ String newGroupId(String creatorAccountId) {
   return 'grp:$creatorAccountId:${_nonce()}';
 }
 
-/// 登记/清除某成员的待投递群媒体(离线补发按成员;键 attachmentId+成员)。
+/// 登记/清除某成员的待投递群媒体(离线补发按成员;键 attachmentId+成员 CID)。
 typedef GroupMemberMediaRecorder = Future<void> Function(
   String attachmentId,
-  String memberAccountId,
+  String memberCidNumber,
 );
 
 class ChatGroupFlow {
@@ -43,18 +43,24 @@ class ChatGroupFlow {
     required MlsGroupCrypto crypto,
     required ChatStore store,
     required ChatEnvelopeDeliverer deliverer,
+    required ChatCidResolver cidResolver,
     required String accountId,
     required String localDeviceId,
     this.defaultTtlMillis = 30 * 24 * 60 * 60 * 1000,
   })  : _crypto = crypto,
         _store = store,
         _deliverer = deliverer,
+        _cidResolver = cidResolver,
         _accountId = accountId,
         _localDeviceId = localDeviceId;
 
   final MlsGroupCrypto _crypto;
   final ChatStore _store;
   final ChatEnvelopeDeliverer _deliverer;
+
+  /// 成员钱包账户 account_id → 身份主键 CID 号解析器(扇出/队列/信令按 CID 路由;
+  /// 名册按 account_id 对齐,二者语义分离)。
+  final ChatCidResolver _cidResolver;
 
   /// 本机聊天账户与设备 ID(入站处理判定自身、代提交退群移除的 fanout 发送者）。
   final String _accountId;
@@ -360,14 +366,17 @@ class ChatGroupFlow {
     if (relay != null) {
       return results;
     }
-    // ≤100MB:对每个成员逐个 WebRTC 直传(离线按成员留 pending 补发)。
-    final members =
-        group.memberAccountIds.where((account) => account != senderAccountId);
+    // ≤100MB:对每个成员逐个 WebRTC 直传(离线按成员留 pending 补发)。成员名册是
+    // account_id;进 WebRTC 前解析成 CID 号(信令/pending 均按 CID 路由)。
+    final members = group.memberAccountIds
+        .where((account) => account != senderAccountId)
+        .toList(growable: false);
     for (final member in members) {
-      await recordPendingMember?.call(attachmentId, member);
+      final memberCidNumber = await _cidResolver(member);
+      await recordPendingMember?.call(attachmentId, memberCidNumber);
       try {
         await sendMemberAttachment(
-          recipientAccountId: member,
+          recipientCidNumber: memberCidNumber,
           conversationId: groupId,
           attachmentId: attachmentId,
           fileName: media.fileName,
@@ -375,7 +384,7 @@ class ChatGroupFlow {
           sourcePath: media.sourcePath,
           byteSize: media.byteSize,
         );
-        await markMemberDelivered?.call(attachmentId, member);
+        await markMemberDelivered?.call(attachmentId, memberCidNumber);
       } on Exception {
         // 该成员离线/直连失败:留 pending,peer_ready 补发。
       }
@@ -401,6 +410,7 @@ class ChatGroupFlow {
     final recipients = group.memberAccountIds
         .where((account) => account != senderAccountId)
         .toList();
+    final recipientCidByAccountId = await _resolveRecipientCids(recipients);
     final messageId = '$groupId-msg-$nowMillis-${_nonce()}';
     final envelopes = GroupFanout.fanOut(
       wire: wire,
@@ -420,10 +430,15 @@ class ChatGroupFlow {
       payload: payload,
       createdAtMillis: nowMillis,
       envelopes: envelopes,
+      recipientCidByAccountId: recipientCidByAccountId,
     );
     final results = <ChatDeliveryResult>[];
     for (final envelope in envelopes) {
-      final result = await _deliverer(envelope, envelope.writeToBuffer());
+      final result = await _deliverer(
+        envelope,
+        envelope.writeToBuffer(),
+        recipientCidByAccountId[envelope.recipientAccountId]!,
+      );
       await _store.markOutgoingDelivery(
         envelopeId: envelope.envelopeId,
         state: result.state,
@@ -602,6 +617,7 @@ class ChatGroupFlow {
     required String tag,
   }) async {
     final messageId = '$groupId-$tag-$nowMillis-${_nonce()}';
+    final recipientCidByAccountId = await _resolveRecipientCids(recipients);
     final envelopes = GroupFanout.fanOut(
       wire: wire,
       recipientAccountIds: recipients,
@@ -613,18 +629,33 @@ class ChatGroupFlow {
     );
     for (final envelope in envelopes) {
       final bytes = envelope.writeToBuffer();
+      final recipientCidNumber =
+          recipientCidByAccountId[envelope.recipientAccountId]!;
       await _store.queueOutgoingEnvelope(
         envelope: envelope,
         envelopeBytes: bytes,
+        recipientCidNumber: recipientCidNumber,
         deliveryState: ChatMessageDeliveryState.queued,
       );
-      final result = await _deliverer(envelope, bytes);
+      final result = await _deliverer(envelope, bytes, recipientCidNumber);
       await _store.markOutgoingDelivery(
         envelopeId: envelope.envelopeId,
         state: result.state,
         errorMessage: result.errorMessage,
       );
     }
+  }
+
+  /// 把收件人 account_id 列表逐一解析成身份主键 CID 号(扇出/队列/信令路由键)。
+  /// 任一成员未绑定 CID 即抛错,绝不静默错投。
+  Future<Map<String, String>> _resolveRecipientCids(
+    List<String> recipientAccountIds,
+  ) async {
+    final map = <String, String>{};
+    for (final accountId in recipientAccountIds) {
+      map[accountId] = await _cidResolver(accountId);
+    }
+    return map;
   }
 
   Future<ChatGroup> _requireGroup(String groupId) async {

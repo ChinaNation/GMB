@@ -23540,9 +23540,9 @@ const ChatOutboundQueueEntitySchema = CollectionSchema(
       name: r'lastError',
       type: IsarType.string,
     ),
-    r'recipientAccountId': PropertySchema(
+    r'recipientCidNumber': PropertySchema(
       id: 6,
-      name: r'recipientAccountId',
+      name: r'recipientCidNumber',
       type: IsarType.string,
     ),
     r'updatedAtMillis': PropertySchema(
@@ -23621,7 +23621,7 @@ int _chatOutboundQueueEntityEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
-  bytesCount += 3 + object.recipientAccountId.length * 3;
+  bytesCount += 3 + object.recipientCidNumber.length * 3;
   return bytesCount;
 }
 
@@ -23637,7 +23637,7 @@ void _chatOutboundQueueEntitySerialize(
   writer.writeString(offsets[3], object.envelopeBytesHex);
   writer.writeString(offsets[4], object.envelopeId);
   writer.writeString(offsets[5], object.lastError);
-  writer.writeString(offsets[6], object.recipientAccountId);
+  writer.writeString(offsets[6], object.recipientCidNumber);
   writer.writeLong(offsets[7], object.updatedAtMillis);
 }
 
@@ -23655,7 +23655,7 @@ ChatOutboundQueueEntity _chatOutboundQueueEntityDeserialize(
   object.envelopeId = reader.readString(offsets[4]);
   object.id = id;
   object.lastError = reader.readStringOrNull(offsets[5]);
-  object.recipientAccountId = reader.readString(offsets[6]);
+  object.recipientCidNumber = reader.readString(offsets[6]);
   object.updatedAtMillis = reader.readLong(offsets[7]);
   return object;
 }
@@ -24857,13 +24857,13 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdEqualTo(
+      QAfterFilterCondition> recipientCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -24871,7 +24871,7 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdGreaterThan(
+      QAfterFilterCondition> recipientCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -24879,7 +24879,7 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -24887,7 +24887,7 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdLessThan(
+      QAfterFilterCondition> recipientCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -24895,7 +24895,7 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -24903,7 +24903,7 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdBetween(
+      QAfterFilterCondition> recipientCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -24912,7 +24912,7 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -24923,13 +24923,13 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdStartsWith(
+      QAfterFilterCondition> recipientCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -24937,13 +24937,13 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdEndsWith(
+      QAfterFilterCondition> recipientCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -24952,10 +24952,10 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
           QAfterFilterCondition>
-      recipientAccountIdContains(String value, {bool caseSensitive = true}) {
+      recipientCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -24964,10 +24964,10 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
           QAfterFilterCondition>
-      recipientAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      recipientCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -24975,20 +24975,20 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdIsEmpty() {
+      QAfterFilterCondition> recipientCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterFilterCondition> recipientAccountIdIsNotEmpty() {
+      QAfterFilterCondition> recipientCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: '',
       ));
     });
@@ -25144,16 +25144,16 @@ extension ChatOutboundQueueEntityQuerySortBy
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
-      sortByRecipientAccountId() {
+      sortByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.asc);
+      return query.addSortBy(r'recipientCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
-      sortByRecipientAccountIdDesc() {
+      sortByRecipientCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.desc);
+      return query.addSortBy(r'recipientCidNumber', Sort.desc);
     });
   }
 
@@ -25273,16 +25273,16 @@ extension ChatOutboundQueueEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
-      thenByRecipientAccountId() {
+      thenByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.asc);
+      return query.addSortBy(r'recipientCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
-      thenByRecipientAccountIdDesc() {
+      thenByRecipientCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.desc);
+      return query.addSortBy(r'recipientCidNumber', Sort.desc);
     });
   }
 
@@ -25349,9 +25349,9 @@ extension ChatOutboundQueueEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QDistinct>
-      distinctByRecipientAccountId({bool caseSensitive = true}) {
+      distinctByRecipientCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'recipientAccountId',
+      return query.addDistinctBy(r'recipientCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -25415,9 +25415,9 @@ extension ChatOutboundQueueEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, String, QQueryOperations>
-      recipientAccountIdProperty() {
+      recipientCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'recipientAccountId');
+      return query.addPropertyName(r'recipientCidNumber');
     });
   }
 
@@ -25476,9 +25476,9 @@ const ChatOutgoingMediaEntitySchema = CollectionSchema(
       name: r'pendingKey',
       type: IsarType.string,
     ),
-    r'recipientAccountId': PropertySchema(
+    r'recipientCidNumber': PropertySchema(
       id: 7,
-      name: r'recipientAccountId',
+      name: r'recipientCidNumber',
       type: IsarType.string,
     )
   },
@@ -25514,14 +25514,14 @@ const ChatOutgoingMediaEntitySchema = CollectionSchema(
         )
       ],
     ),
-    r'recipientAccountId': IndexSchema(
-      id: -724506175959594251,
-      name: r'recipientAccountId',
+    r'recipientCidNumber': IndexSchema(
+      id: -230271759585326356,
+      name: r'recipientCidNumber',
       unique: false,
       replace: false,
       properties: [
         IndexPropertySchema(
-          name: r'recipientAccountId',
+          name: r'recipientCidNumber',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -25547,7 +25547,7 @@ int _chatOutgoingMediaEntityEstimateSize(
   bytesCount += 3 + object.conversationId.length * 3;
   bytesCount += 3 + object.fileName.length * 3;
   bytesCount += 3 + object.pendingKey.length * 3;
-  bytesCount += 3 + object.recipientAccountId.length * 3;
+  bytesCount += 3 + object.recipientCidNumber.length * 3;
   return bytesCount;
 }
 
@@ -25564,7 +25564,7 @@ void _chatOutgoingMediaEntitySerialize(
   writer.writeLong(offsets[4], object.createdAtMillis);
   writer.writeString(offsets[5], object.fileName);
   writer.writeString(offsets[6], object.pendingKey);
-  writer.writeString(offsets[7], object.recipientAccountId);
+  writer.writeString(offsets[7], object.recipientCidNumber);
 }
 
 ChatOutgoingMediaEntity _chatOutgoingMediaEntityDeserialize(
@@ -25582,7 +25582,7 @@ ChatOutgoingMediaEntity _chatOutgoingMediaEntityDeserialize(
   object.fileName = reader.readString(offsets[5]);
   object.id = id;
   object.pendingKey = reader.readString(offsets[6]);
-  object.recipientAccountId = reader.readString(offsets[7]);
+  object.recipientCidNumber = reader.readString(offsets[7]);
   return object;
 }
 
@@ -25858,45 +25858,45 @@ extension ChatOutgoingMediaEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterWhereClause> recipientAccountIdEqualTo(String recipientAccountId) {
+      QAfterWhereClause> recipientCidNumberEqualTo(String recipientCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'recipientAccountId',
-        value: [recipientAccountId],
+        indexName: r'recipientCidNumber',
+        value: [recipientCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
           QAfterWhereClause>
-      recipientAccountIdNotEqualTo(String recipientAccountId) {
+      recipientCidNumberNotEqualTo(String recipientCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'recipientAccountId',
+              indexName: r'recipientCidNumber',
               lower: [],
-              upper: [recipientAccountId],
+              upper: [recipientCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'recipientAccountId',
-              lower: [recipientAccountId],
+              indexName: r'recipientCidNumber',
+              lower: [recipientCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'recipientAccountId',
-              lower: [recipientAccountId],
+              indexName: r'recipientCidNumber',
+              lower: [recipientCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'recipientAccountId',
+              indexName: r'recipientCidNumber',
               lower: [],
-              upper: [recipientAccountId],
+              upper: [recipientCidNumber],
               includeUpper: false,
             ));
       }
@@ -26765,13 +26765,13 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdEqualTo(
+      QAfterFilterCondition> recipientCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -26779,7 +26779,7 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdGreaterThan(
+      QAfterFilterCondition> recipientCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -26787,7 +26787,7 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -26795,7 +26795,7 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdLessThan(
+      QAfterFilterCondition> recipientCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -26803,7 +26803,7 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -26811,7 +26811,7 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdBetween(
+      QAfterFilterCondition> recipientCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -26820,7 +26820,7 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -26831,13 +26831,13 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdStartsWith(
+      QAfterFilterCondition> recipientCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -26845,13 +26845,13 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdEndsWith(
+      QAfterFilterCondition> recipientCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -26860,10 +26860,10 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
           QAfterFilterCondition>
-      recipientAccountIdContains(String value, {bool caseSensitive = true}) {
+      recipientCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -26872,10 +26872,10 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
           QAfterFilterCondition>
-      recipientAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      recipientCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -26883,20 +26883,20 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdIsEmpty() {
+      QAfterFilterCondition> recipientCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterFilterCondition> recipientAccountIdIsNotEmpty() {
+      QAfterFilterCondition> recipientCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: '',
       ));
     });
@@ -27010,16 +27010,16 @@ extension ChatOutgoingMediaEntityQuerySortBy
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
-      sortByRecipientAccountId() {
+      sortByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.asc);
+      return query.addSortBy(r'recipientCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
-      sortByRecipientAccountIdDesc() {
+      sortByRecipientCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.desc);
+      return query.addSortBy(r'recipientCidNumber', Sort.desc);
     });
   }
 }
@@ -27139,16 +27139,16 @@ extension ChatOutgoingMediaEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
-      thenByRecipientAccountId() {
+      thenByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.asc);
+      return query.addSortBy(r'recipientCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
-      thenByRecipientAccountIdDesc() {
+      thenByRecipientCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.desc);
+      return query.addSortBy(r'recipientCidNumber', Sort.desc);
     });
   }
 }
@@ -27206,9 +27206,9 @@ extension ChatOutgoingMediaEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QDistinct>
-      distinctByRecipientAccountId({bool caseSensitive = true}) {
+      distinctByRecipientCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'recipientAccountId',
+      return query.addDistinctBy(r'recipientCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -27272,9 +27272,9 @@ extension ChatOutgoingMediaEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, String, QQueryOperations>
-      recipientAccountIdProperty() {
+      recipientCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'recipientAccountId');
+      return query.addPropertyName(r'recipientCidNumber');
     });
   }
 }

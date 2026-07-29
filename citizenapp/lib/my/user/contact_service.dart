@@ -23,6 +23,7 @@ class UserContact {
     required this.contactName,
     required this.createdAt,
     required this.updatedAt,
+    this.cidNumber,
   });
 
   final String accountId;
@@ -31,12 +32,17 @@ class UserContact {
   final int createdAt;
   final int updatedAt;
 
+  /// 联系人身份主键 CID 号（链读 [readByAccountId] 缓存）。null = 尚未解析；
+  /// account_id 仍是通讯录/收款寻址主键，cid_number 仅供聊天路由与资料页免再链读。
+  final String? cidNumber;
+
   UserContact copyWith({
     String? accountId,
     String? ss58Address,
     String? contactName,
     int? createdAt,
     int? updatedAt,
+    String? cidNumber,
   }) {
     return UserContact(
       accountId: accountId ?? this.accountId,
@@ -44,6 +50,7 @@ class UserContact {
       contactName: contactName ?? this.contactName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      cidNumber: cidNumber ?? this.cidNumber,
     );
   }
 
@@ -53,6 +60,7 @@ class UserContact {
         'contact_name': contactName,
         'created_at': createdAt,
         'updated_at': updatedAt,
+        if (cidNumber != null && cidNumber!.isNotEmpty) 'cid_number': cidNumber,
       };
 
   factory UserContact.fromJson(Map<String, dynamic> json) {
@@ -72,12 +80,14 @@ class UserContact {
     if (createdAt <= 0 || updatedAt <= 0) {
       throw const FormatException('通讯录时间戳不合法');
     }
+    final cidNumber = json['cid_number']?.toString().trim();
     return UserContact(
       accountId: accountId,
       ss58Address: UserContactService.normalizeSs58Address(ss58Address),
       contactName: contactName,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      cidNumber: (cidNumber == null || cidNumber.isEmpty) ? null : cidNumber,
     );
   }
 }
@@ -240,6 +250,27 @@ class UserContactService {
   /// 返回通讯录当前所属的身份账户，供扫码页做“不能添加自己”校验。
   Future<String> getAccountId() async =>
       await _requireIdentityAccountId();
+
+  /// 把链读得到的 [cidNumber] 缓存进对应联系人的 `cid_number`（本地派生缓存，
+  /// **不产生待同步/上云**：cid_number 是从链上派生的缓存，非用户编辑数据）。
+  ///
+  /// 联系人不存在、无身份账户或值未变时安静返回。供 [PeerCidResolver] 回写。
+  Future<void> cacheContactCidNumber(
+    String contactAccountId,
+    String cidNumber,
+  ) async {
+    if (cidNumber.trim().isEmpty || !isAccountIdText(contactAccountId)) {
+      return;
+    }
+    final accountId = await _identityCache.accountId();
+    if (accountId == null || accountId.isEmpty) return;
+    final contacts = (await _readContacts(accountId)).toList(growable: true);
+    final index =
+        contacts.indexWhere((item) => item.accountId == contactAccountId);
+    if (index < 0 || contacts[index].cidNumber == cidNumber) return;
+    contacts[index] = contacts[index].copyWith(cidNumber: cidNumber);
+    await _writeContacts(accountId, contacts);
+  }
 
   Future<ContactImportResult> addContact({
     required String ss58Address,

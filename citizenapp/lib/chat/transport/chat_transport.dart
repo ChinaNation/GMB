@@ -28,8 +28,13 @@ class ChatDeliveryResult {
 abstract class ChatTransport {
   ChatTransportType get type;
 
+  /// 投递密文 Envelope。
+  ///
+  /// [recipientCidNumber] 是收件人身份主键 CID 号，作为 Worker 路由键（内嵌 proto
+  /// envelope 仍保留 `recipient_account_id` 供 MLS/归属，二者语义分离）。
   Future<ChatDeliveryResult> sendEncryptedEnvelope({
     required String envelopeId,
     required List<int> envelopeBytes,
+    required String recipientCidNumber,
   });
 }

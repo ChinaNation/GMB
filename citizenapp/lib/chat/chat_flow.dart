@@ -10,15 +10,27 @@ import 'proto/chat_envelope.pb.dart';
 import 'storage/chat_store.dart';
 import 'transport/chat_transport.dart';
 
+/// 投递一个密文 Envelope。[recipientCidNumber] 是收件人身份主键 CID 号（路由键）；
+/// envelope 内嵌 `recipient_account_id` 仍供 MLS/归属，二者语义分离。
 typedef ChatEnvelopeDeliverer = Future<ChatDeliveryResult> Function(
   ChatEnvelope envelope,
   List<int> envelopeBytes,
+  String recipientCidNumber,
 );
+
+/// 把收件人钱包账户 account_id 解析成其身份主键 CID 号（路由用）。
+///
+/// 前端联系人/群名册只有 account_id；进传输层前必须解析成 cid_number。解析失败
+/// （对方未绑定 CID）应显式抛错，绝不静默错投。见 memory
+/// `citizenapp-cid-identity-master-key`。
+typedef ChatCidResolver = Future<String> Function(String accountId);
 
 /// 把本机源文件字节经 WebRTC 流式发给对端设备。传路径而非整块字节:大文件
 /// (最大 5GB)绝不整块进内存,由发送端 openRead 分片 + 背压推送。
+///
+/// [recipientCidNumber] 为对端身份主键 CID 号（WebRTC 信令按 CID 路由）。
 typedef ChatAttachmentDeviceSender = Future<void> Function({
-  required String recipientAccountId,
+  required String recipientCidNumber,
   required String conversationId,
   required String attachmentId,
   required String fileName,
@@ -178,6 +190,7 @@ class ChatFlow {
     required String conversationId,
     required String senderAccountId,
     required String recipientAccountId,
+    required String recipientCidNumber,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
     required String text,
@@ -195,6 +208,7 @@ class ChatFlow {
       conversationId: conversationId,
       senderAccountId: senderAccountId,
       recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
       messageKind: ChatMessageKind.text,
@@ -207,6 +221,7 @@ class ChatFlow {
     required String conversationId,
     required String senderAccountId,
     required String recipientAccountId,
+    required String recipientCidNumber,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
     required String packId,
@@ -227,6 +242,7 @@ class ChatFlow {
       conversationId: conversationId,
       senderAccountId: senderAccountId,
       recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
       messageKind: ChatMessageKind.sticker,
@@ -244,6 +260,7 @@ class ChatFlow {
     required String conversationId,
     required String senderAccountId,
     required String recipientAccountId,
+    required String recipientCidNumber,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
     required ChatMediaDraft media,
@@ -308,6 +325,7 @@ class ChatFlow {
       conversationId: conversationId,
       senderAccountId: senderAccountId,
       recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
       messageKind: media.kind,
@@ -331,7 +349,7 @@ class ChatFlow {
     // 媒体字节由 WebRTC DTLS 端到端传输;Cloudflare 只转发 SDP/ICE,不收字节。
     try {
       await sendDeviceAttachment(
-        recipientAccountId: recipientAccountId,
+        recipientCidNumber: recipientCidNumber,
         conversationId: conversationId,
         attachmentId: attachmentId,
         fileName: media.fileName,
@@ -353,6 +371,7 @@ class ChatFlow {
     required String conversationId,
     required String senderAccountId,
     required String recipientAccountId,
+    required String recipientCidNumber,
     required String senderDeviceId,
     required int nowMillis,
     required ChatMessageKind messageKind,
@@ -376,6 +395,7 @@ class ChatFlow {
         await _store.saveOutgoingEnvelope(
           envelope: envelope,
           envelopeBytes: envelopeBytes,
+          recipientCidNumber: recipientCidNumber,
           messageKind: messageKind,
           deliveryState: ChatMessageDeliveryState.queued,
           plaintext: payload,
@@ -384,11 +404,12 @@ class ChatFlow {
         await _store.queueOutgoingEnvelope(
           envelope: envelope,
           envelopeBytes: envelopeBytes,
+          recipientCidNumber: recipientCidNumber,
           deliveryState: ChatMessageDeliveryState.queued,
         );
       }
 
-      final result = await _deliverer(envelope, envelopeBytes);
+      final result = await _deliverer(envelope, envelopeBytes, recipientCidNumber);
       await _store.markOutgoingDelivery(
         envelopeId: envelope.envelopeId,
         state: result.state,
@@ -453,10 +474,12 @@ class ChatFlow {
   static Future<ChatDeliveryResult> deliverWithTransport({
     required ChatTransport transport,
     required ChatEnvelope envelope,
+    required String recipientCidNumber,
   }) {
     return transport.sendEncryptedEnvelope(
       envelopeId: envelope.envelopeId,
       envelopeBytes: envelope.writeToBuffer(),
+      recipientCidNumber: recipientCidNumber,
     );
   }
 

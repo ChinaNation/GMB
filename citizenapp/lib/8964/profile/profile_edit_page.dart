@@ -24,7 +24,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 class CitizenProfileEditPage extends StatefulWidget {
   const CitizenProfileEditPage({
     super.key,
-    required this.accountId,
+    required this.cidNumber,
     this.initialProfile,
     this.api,
     this.sessionProvider,
@@ -32,7 +32,9 @@ class CitizenProfileEditPage extends StatefulWidget {
     this.imagePicker,
   });
 
-  final String accountId;
+  /// 主页身份主键 cid_number（仅用于默认头像/背景的稳定派生；实际保存写本机
+  /// 默认钱包与自己的 display_name）。
+  final String cidNumber;
   final CitizenProfile? initialProfile;
   final CitizenProfileApi? api;
   final SquareSessionProvider? sessionProvider;
@@ -290,7 +292,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
   Widget build(BuildContext context) {
     final avatarKey = widget.initialProfile?.avatarObjectKey;
     final bannerKey = widget.initialProfile?.bannerObjectKey;
-    final defaults = ProfilePresentation.forAccountId(widget.accountId);
+    final defaults = ProfilePresentation.forAccountId(widget.cidNumber);
     return Scaffold(
       appBar: AppBar(
         title: const Text('编辑资料'),

@@ -70,9 +70,11 @@ class NicknamePublisher {
     } on Exception {
       return;
     }
+    if (session == null) return;
     final CitizenProfile profile;
     try {
-      profile = await _api.fetchProfile(wallet.accountId, session: session);
+      // 资料按身份主键 cid_number 寻址；本钱包自己的 CID 由 Worker 随会话下发。
+      profile = await _api.fetchProfile(session.cidNumber, session: session);
     } on Exception {
       return;
     }
@@ -89,13 +91,13 @@ class NicknamePublisher {
     await _writeInt(_syncedAtKey(wallet.accountId), profile.updatedAt);
   }
 
-  /// 读云端昵称；无资料 / 无网返回 null。
+  /// 按身份主键 cid_number 读云端昵称；无资料 / 无网返回 null。
   Future<String?> resolveRemote(
-    String accountId, {
+    String cidNumber, {
     SquareSession? session,
   }) async {
     try {
-      final profile = await _api.fetchProfile(accountId, session: session);
+      final profile = await _api.fetchProfile(cidNumber, session: session);
       final name = profile.displayName.trim();
       return name.isEmpty ? null : name;
     } on Exception {

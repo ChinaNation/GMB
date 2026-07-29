@@ -17,6 +17,7 @@ import 'chat_ui_adapter.dart';
 import 'chat_flow.dart';
 import 'chat_media_limits.dart';
 import 'chat_payload.dart';
+import 'identity/peer_cid_resolver.dart';
 import 'compose/media_source_sheet.dart';
 import 'compose/sticker_panel.dart';
 import 'media/media_compressor.dart';
@@ -627,11 +628,21 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  void _openPeerProfile() {
-    Navigator.of(context).push<void>(
+  Future<void> _openPeerProfile() async {
+    // 资料页按身份主键 cid_number 寻址；chat 的 peerUserId 是对端钱包账户 account_id，
+    // 进资料页前链读解析成其 cid_number。解析失败（对方未绑定 CID / 无网）时回落
+    // account_id，资料页自会降级为默认展示，不阻断进入。
+    var cidNumber = widget.peerUserId;
+    try {
+      cidNumber = await PeerCidResolver().resolve(widget.peerUserId);
+    } catch (_) {
+      // 保持回落值。
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => UserProfilePage(
-          accountId: widget.peerUserId,
+          cidNumber: cidNumber,
           isSelf: false,
         ),
       ),

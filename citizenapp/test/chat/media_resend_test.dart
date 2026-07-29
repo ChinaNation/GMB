@@ -2,9 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/chat/media/media_resend.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
 
+/// 待投递媒体按收件人身份主键 CID 号登记与去重（不是钱包账户 account_id）。
+const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
+
 ChatPendingMedia _pending(String id) => ChatPendingMedia(
       attachmentId: id,
-      recipientAccountId: 'bob',
+      recipientCidNumber: _bobCidNumber,
       conversationId: 'conv',
       fileName: '$id.jpg',
       contentType: 'image/jpeg',
@@ -61,7 +64,7 @@ void main() {
 
   test('在途中的媒体被跳过(去重):不重发、不删、不动在途集合', () async {
     // 在途去重按 (attachmentId, recipient) 复合键。
-    final inFlight = {MediaResend.inFlightKey('att-1', 'bob')};
+    final inFlight = {MediaResend.inFlightKey('att-1', _bobCidNumber)};
     final sent = <String>[];
     final deleted = <String>[];
     await MediaResend.run(
@@ -74,6 +77,6 @@ void main() {
     );
     expect(sent, isEmpty);
     expect(deleted, isEmpty);
-    expect(inFlight, {MediaResend.inFlightKey('att-1', 'bob')});
+    expect(inFlight, {MediaResend.inFlightKey('att-1', _bobCidNumber)});
   });
 }

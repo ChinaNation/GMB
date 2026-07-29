@@ -10,6 +10,11 @@
    “公民链”和“最终区块 N”必须使用同一状态色。
 6. CitizenApp 其他页面不得再显示任何链连接状态条或状态卡片；链状态后台读取、交易
    门禁和失败原因仍保留，唯一可见的全局链状态只在交易 Tab 顶栏。
+7. “扫一扫 / 多签账户”双入口中间竖线高度在原 52dp 基础上缩短三分之一，其他尺寸和
+   交互不变。
+8. 链上支付收款地址输入框占位文案从“输入或粘贴 SS58 地址”改为“请输入账户”，不改
+   SS58 输入、预填或校验逻辑。
+9. 公民 Tab 共用机构详情页把“身份ID”统一改为“身份CID号”，`cid_number` 数据不变。
 
 ## 唯一目标状态
 
@@ -35,6 +40,7 @@
 - `citizenapp/lib/transaction/onchain-transaction/`：调整共用支付面板的链状态放置方式，隔离交易 Tab 与独立链上支付页。
 - `citizenapp/lib/ui/widgets/`：提供无卡片、无竖线的交易顶栏链状态展示，保留真实轮询和回调。
 - `citizenapp/lib/citizen/`：删除公民标题并上移五段子 Tab。
+- `citizenapp/lib/citizen/institution/`：统一机构详情页“身份CID号”展示文案。
 - `citizenapp/test/ui/`、`citizenapp/test/citizen/`：覆盖新顶栏结构、最终区块展示、旧竖线删除和公民标题删除。
 - `memory/01-architecture/citizenapp/`、`memory/05-modules/citizenapp/`：更新 UI 与链状态技术口径，清理旧固定标题/卡片描述。
 
@@ -42,7 +48,7 @@
 
 - 不修改 `citizenapp/lib/qr/pages/qr_scan_page.dart` 或任何扫码签名 UI。
 - 不修改扫码协议、签名逻辑、交易状态真源、钱包选择逻辑和公民子页面业务。
-- 不修改扫一扫/多签账户卡片的竖线、图标、尺寸或交互。
+- 扫一扫/多签账户卡片只修改中间竖线高度；图标、卡片尺寸、点击区域和交互不变。
 - 不修改底部五个主 Tab。
 - 不涉及 `citizenchain/runtime/`。
 
@@ -77,3 +83,12 @@
     内容区不再出现旧链状态卡片，扫一扫/多签账户卡片正常上移；
   - 公民页顶部直接显示五段二级导航，无“公民”标题，安全区、选中态和提案摘要正常；
   - 未发现文字裁切、横向溢出、卡片错位或底部导航异常。
+- 2026-07-28 三项 UI 微调已落地：
+  - 扫一扫/多签账户中间竖线精确改为 `52 × 2 / 3`，卡片和点击区域不变；
+  - 收款地址占位文案改为“请输入账户”；
+  - 共用 `InstitutionDetailPage` 的“身份ID”改为“身份CID号”。
+- 相关生产代码、测试和文档格式化通过，目标源码静态断言和 `git diff --check` 通过。
+  定向 widget test 与 profile 真机包当前被工作区内另一组尚未收口的 Chat/CID 改造阻断：
+  `app_isar.g.dart` 仍访问已改名的 `recipientAccountId`，`chat_runtime.dart` /
+  `group_flow.dart` 的 CID 参数接口也未同步；编译在加载本任务测试前失败。本任务没有修改
+  或重新生成这些范围外文件，待该改造收口后必须补跑定向测试和 Pixel 8a 页面验收。

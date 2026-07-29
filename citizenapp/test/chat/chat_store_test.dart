@@ -5,6 +5,14 @@ import 'package:citizenapp/chat/storage/chat_store.dart';
 
 import '../support/isar_test_env.dart';
 
+/// 钱包账户 account_id（信封内嵌，供 MLS/归属）与身份主键 cid_number（出站队列/
+/// 待投递媒体的路由键）语义分离，测试两者不可混用。
+const _bobAccountId =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
+const _carolAccountId = 'carol-wallet';
+const _carolCidNumber = 'CN220-CTZN2-100000003-2026';
+
 void main() {
   useIsolatedIsar();
 
@@ -20,8 +28,7 @@ void main() {
       envelopeId: 'env-store',
       senderAccountId:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientAccountId: _bobAccountId,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 10,
       ttlMillis: 60000,
@@ -30,6 +37,7 @@ void main() {
     await store.saveOutgoingEnvelope(
       envelope: envelope,
       envelopeBytes: envelope.writeToBuffer(),
+      recipientCidNumber: _bobCidNumber,
       messageKind: ChatMessageKind.text,
       deliveryState: ChatMessageDeliveryState.queued,
       plaintext: 'hi',
@@ -77,8 +85,7 @@ void main() {
       envelopeId: 'env-delete',
       senderAccountId:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientAccountId: _bobAccountId,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 10,
       ttlMillis: 60000,
@@ -92,7 +99,7 @@ void main() {
       envelopeId: 'env-keep',
       senderAccountId:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId: 'carol-wallet',
+      recipientAccountId: _carolAccountId,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 20,
       ttlMillis: 60000,
@@ -101,6 +108,7 @@ void main() {
     await store.saveOutgoingEnvelope(
       envelope: targetEnvelope,
       envelopeBytes: targetEnvelope.writeToBuffer(),
+      recipientCidNumber: _bobCidNumber,
       messageKind: ChatMessageKind.text,
       deliveryState: ChatMessageDeliveryState.queued,
       plaintext: 'delete me',
@@ -113,6 +121,7 @@ void main() {
     await store.saveOutgoingEnvelope(
       envelope: keptEnvelope,
       envelopeBytes: keptEnvelope.writeToBuffer(),
+      recipientCidNumber: _carolCidNumber,
       messageKind: ChatMessageKind.text,
       deliveryState: ChatMessageDeliveryState.sent,
       plaintext: 'keep me',
@@ -136,8 +145,7 @@ void main() {
     final store = ChatStore();
     await store.recordOutgoingMedia(
       attachmentId: 'att-1',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       conversationId: 'conv-a',
       fileName: 'p.jpg',
       contentType: 'image/jpeg',
@@ -145,7 +153,7 @@ void main() {
     );
     await store.recordOutgoingMedia(
       attachmentId: 'att-2',
-      recipientAccountId: 'carol-wallet',
+      recipientCidNumber: _carolCidNumber,
       conversationId: 'conv-b',
       fileName: 'v.mp4',
       contentType: 'video/mp4',
@@ -154,16 +162,14 @@ void main() {
     expect(await store.outgoingMediaCount(), 2);
 
     final forBob = await store.readPendingOutgoingMedia(
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
     );
     expect(forBob.single.attachmentId, 'att-1');
     expect(forBob.single.fileName, 'p.jpg');
     expect(forBob.single.conversationId, 'conv-a');
     expect(forBob.single.byteSize, 100);
 
-    await store.deleteOutgoingMedia('att-1',
-        '0x2222222222222222222222222222222222222222222222222222222222222222'); // 收到 ack 后删除
+    await store.deleteOutgoingMedia('att-1', _bobCidNumber); // 收到 ack 后删除
     expect(await store.outgoingMediaCount(), 1);
 
     // 删会话 conv-b 连带清理其待投递媒体,不留孤儿。
@@ -173,10 +179,14 @@ void main() {
 
   test('群媒体:同一 attachmentId 发多成员各占一行,按成员删', () async {
     final store = ChatStore();
-    for (final member in ['b-wallet', 'c-wallet', 'd-wallet']) {
+    for (final memberCidNumber in [
+      'CN220-CTZN2-100000004-2026',
+      'CN220-CTZN2-100000005-2026',
+      'CN220-CTZN2-100000006-2026',
+    ]) {
       await store.recordOutgoingMedia(
         attachmentId: 'att-grp',
-        recipientAccountId: member,
+        recipientCidNumber: memberCidNumber,
         conversationId: 'grp:a:n',
         fileName: 'g.jpg',
         contentType: 'image/jpeg',
@@ -185,10 +195,10 @@ void main() {
     }
     expect(await store.outgoingMediaCount(), 3);
     // 仅 c 收到 ack → 删 c 的行,b/d 待投递保留。
-    await store.deleteOutgoingMedia('att-grp', 'c-wallet');
+    await store.deleteOutgoingMedia('att-grp', 'CN220-CTZN2-100000005-2026');
     expect(await store.outgoingMediaCount(), 2);
-    final forB =
-        await store.readPendingOutgoingMedia(recipientAccountId: 'b-wallet');
+    final forB = await store.readPendingOutgoingMedia(
+        recipientCidNumber: 'CN220-CTZN2-100000004-2026');
     expect(forB.single.attachmentId, 'att-grp');
   });
 
@@ -204,8 +214,7 @@ void main() {
       envelopeId: 'env-own',
       senderAccountId:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientAccountId: _bobAccountId,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 1,
       ttlMillis: 60000,
@@ -213,14 +222,14 @@ void main() {
     await store.saveOutgoingEnvelope(
       envelope: envelope,
       envelopeBytes: envelope.writeToBuffer(),
+      recipientCidNumber: _bobCidNumber,
       messageKind: ChatMessageKind.text,
       deliveryState: ChatMessageDeliveryState.queued,
       plaintext: 'hi',
     );
     await store.recordOutgoingMedia(
       attachmentId: 'att-own',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       conversationId: 'conv-own',
       fileName: 'p.jpg',
       contentType: 'image/jpeg',
@@ -237,8 +246,7 @@ void main() {
     final store = ChatStore();
     const sender =
         '0x1111111111111111111111111111111111111111111111111111111111111111';
-    const peer =
-        '0x2222222222222222222222222222222222222222222222222222222222222222';
+    const peer = _bobAccountId;
 
     Future<void> save({
       required String envelopeId,
@@ -262,6 +270,7 @@ void main() {
       await store.saveOutgoingEnvelope(
         envelope: envelope,
         envelopeBytes: envelope.writeToBuffer(),
+        recipientCidNumber: _bobCidNumber,
         messageKind: ChatMessageKind.text,
         deliveryState: ChatMessageDeliveryState.sent,
         plaintext: plaintext,

@@ -641,7 +641,8 @@ class ChatOutboundQueueEntity {
   @Index()
   late String conversationId;
 
-  late String recipientAccountId;
+  /// 收件人身份主键 CID 号（Worker 路由键；proto envelope 内嵌 account_id 供 MLS/归属）。
+  late String recipientCidNumber;
   late String envelopeBytesHex;
   late String deliveryState;
   late int attemptCount;
@@ -662,7 +663,7 @@ class ChatOutboundQueueEntity {
 class ChatOutgoingMediaEntity {
   Id id = Isar.autoIncrement;
 
-  /// 唯一键 = "<attachmentId>|<recipientAccountId>"。群里同一媒体发 N 成员需 N 行,
+  /// 唯一键 = "<attachmentId>|<recipientCidNumber>"。群里同一媒体发 N 成员需 N 行,
   /// 故不再以 attachmentId 单键唯一。
   @Index(unique: true, replace: true)
   late String pendingKey;
@@ -670,8 +671,9 @@ class ChatOutgoingMediaEntity {
   @Index()
   late String attachmentId;
 
+  /// 收件人身份主键 CID 号（WebRTC 补发按 CID 路由信令）。
   @Index()
-  late String recipientAccountId;
+  late String recipientCidNumber;
 
   late String conversationId;
   late String fileName;

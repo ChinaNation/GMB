@@ -31,7 +31,7 @@ Widget _wrap({
 }) {
   return MaterialApp(
     home: UserProfilePage(
-      accountId: kOwner,
+      cidNumber: kOwner,
       isSelf: isSelf,
       api: api,
       cache: cache ?? FakeProfileCache(),
@@ -263,7 +263,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UserProfilePage(
-          accountId: kOwner,
+          cidNumber: kOwner,
           isSelf: false,
           api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
           cache: FakeProfileCache(),
@@ -291,7 +291,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: UserProfilePage(
-          accountId: kOwner,
+          cidNumber: kOwner,
           isSelf: false,
           api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
           cache: FakeProfileCache(),

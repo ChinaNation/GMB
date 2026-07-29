@@ -119,6 +119,9 @@ fee = max(amount_fen * 0.001, 10 fen)
 
 - `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/transaction/transaction_tab_page.dart` 在顶栏链状态下方、链上支付表单上方插入扫码支付入口；`chainStatusInHeader=true` 只允许交易 Tab 把真实链状态放入原页面标题位置。通讯录进入的独立“链上支付”页只显示标题，`ChainProgressBanner` 继续在零尺寸状态下读取链状态并驱动提交门禁，不显示内容区状态卡片；onchain 模块自身不 import `offchain` 或 `multisig`
 - `OnchainPaymentPage.initialToAddress` 只用于从通讯录等入口预填收款地址，不得触发付款钱包切换、金额填写、签名或自动提交。
+- 交易页“扫一扫 / 多签账户”双入口卡片只把中间竖线从 52dp 缩短三分之一至
+  `52 × 2 / 3`，卡片、点击区域、图标和入口逻辑不变；链上支付收款地址输入框的占位
+  文案统一为“请输入账户”，实际输入和校验仍使用 SS58 地址。
 - `lib/transaction/onchain-transaction/` 不放治理提案、投票、多签、链下支付、清算行、钱包密钥管理、二维码协议底座，也不提供“交易/金融”聚合入口
 - 新增普通链上支付 UI / model / service 时才进入 `lib/transaction/onchain-transaction/`
 - 若新增能力需要 pallet index / call index，必须先确认是否仍属于“普通链上支付”；否则放回对应业务模块

@@ -14,20 +14,20 @@ class CitizenProfileApi {
   /// R2 object_key → 钱包 session 保护的资料媒体 URL。
   String mediaUrl(String objectKey) => _client.mediaUrl(objectKey);
 
-  /// 拉取主页资料；[session] 存在时响应附带 is_following。
+  /// 拉取主页资料（按身份主键 cid_number）；[session] 存在时响应附带 is_following。
   Future<CitizenProfile> fetchProfile(
-    String accountId, {
+    String cidNumber, {
     SquareSession? session,
   }) {
     return _client.fetchUserProfile(
-      accountId: accountId,
+      cidNumber: cidNumber,
       session: session,
     );
   }
 
-  /// 按作者分页拉帖。[category]/[contentFormat] 为空表示不过滤。
+  /// 按作者身份主键 cid_number 分页拉帖。[category]/[contentFormat] 为空表示不过滤。
   Future<({List<SquarePost> posts, int? nextCursor})> fetchAuthorPosts(
-    String accountId, {
+    String cidNumber, {
     SquarePostCategory? category,
     SquarePostContentFormat? contentFormat,
     int limit = 20,
@@ -35,7 +35,7 @@ class CitizenProfileApi {
     SquareSession? session,
   }) {
     return _client.fetchAuthorPosts(
-      accountId: accountId,
+      cidNumber: cidNumber,
       category: category,
       contentFormat: contentFormat,
       limit: limit,
@@ -44,51 +44,51 @@ class CitizenProfileApi {
     );
   }
 
-  /// 关注一个账户。
+  /// 关注一个身份（目标身份主键 cid_number）。
   Future<void> followUser({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
   }) {
     return _client.followUser(
       session: session,
-      followedAccountId: followedAccountId,
+      followedCidNumber: followedCidNumber,
     );
   }
 
-  /// 取消关注一个账户。
+  /// 取消关注一个身份（目标身份主键 cid_number）。
   Future<void> unfollowUser({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
   }) {
     return _client.unfollowUser(
       session: session,
-      followedAccountId: followedAccountId,
+      followedCidNumber: followedCidNumber,
     );
   }
 
-  /// 开/关对某关注的发帖通知（须已关注）。
+  /// 开/关对某关注的发帖通知（须已关注；目标身份主键 cid_number）。
   Future<void> setNotify({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
     required bool enabled,
   }) {
     return _client.setNotify(
       session: session,
-      followedAccountId: followedAccountId,
+      followedCidNumber: followedCidNumber,
       enabled: enabled,
     );
   }
 
-  /// 拉取关注/粉丝列表。
-  Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows(
-    String accountId, {
+  /// 拉取关注/粉丝列表（目标身份主键 cid_number；列表项也是 cid_number）。
+  Future<({List<SquareFollowEntry> entries, int? nextCursor})> fetchFollows(
+    String cidNumber, {
     required String type,
     int limit = 20,
     int? cursor,
     SquareSession? session,
   }) {
     return _client.fetchFollows(
-      accountId: accountId,
+      cidNumber: cidNumber,
       type: type,
       limit: limit,
       cursor: cursor,

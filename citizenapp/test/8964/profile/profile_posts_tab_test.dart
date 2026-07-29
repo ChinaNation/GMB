@@ -8,7 +8,7 @@ import 'fake_profile.dart';
 
 Widget _page(FakeProfileApi api) => MaterialApp(
       home: UserProfilePage(
-        accountId: kOwner,
+        cidNumber: kOwner,
         isSelf: true,
         api: api,
         cache: FakeProfileCache(),

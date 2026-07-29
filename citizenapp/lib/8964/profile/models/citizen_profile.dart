@@ -138,19 +138,20 @@ class CitizenProfile {
   }
 }
 
-/// 关注/粉丝列表的一行（对应 Worker follows 列表项）。
+/// 关注/粉丝列表的一行（对应 Worker follows 列表项 `entries`，项 = 身份主键
+/// cid_number + created_at）。
 class SquareFollowEntry {
   const SquareFollowEntry({
-    required this.accountId,
+    required this.cidNumber,
     required this.createdAt,
   });
 
-  final String accountId;
+  final String cidNumber;
   final int createdAt;
 
   factory SquareFollowEntry.fromJson(Map<String, dynamic> json) {
     return SquareFollowEntry(
-      accountId: _asString(json['account_id']),
+      cidNumber: _asString(json['cid_number']),
       createdAt: _asInt(json['created_at']),
     );
   }

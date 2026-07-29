@@ -390,7 +390,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
   }
 
-  // ──── ① 机构信息卡(全称/身份ID/主账户/余额/法代/所属地;非法人 +所属上级法人)────
+  // ── ① 机构信息卡(全称/身份CID号/主账户/余额/法代/所属地;非法人 +所属上级法人) ──
 
   Widget _infoCard(Institution inst) {
     final mainSs58 = _accounts.isNotEmpty ? _accounts.first.ss58Address : '—';
@@ -412,7 +412,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             const Divider(height: 18),
             _infoTile(
                 icon: Icons.badge_outlined,
-                label: '身份ID',
+                label: '身份CID号',
                 value: inst.cidNumber),
             const Divider(height: 18),
             _infoTile(

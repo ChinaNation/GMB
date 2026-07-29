@@ -40,6 +40,7 @@ class _FakeApi extends SquareApiClient {
     await signLoginPayload(Uint8List.fromList(const [1, 2, 3]));
     return SquareSession(
       sessionToken: 'tok-$accountId',
+      cidNumber: "CN220-CTZN2-198805200-2026",
       accountId: accountId,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
     );

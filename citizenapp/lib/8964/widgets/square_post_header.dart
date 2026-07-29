@@ -49,7 +49,9 @@ class SquarePostHeader extends StatelessWidget {
             child: Row(
               children: [
                 ProfileAvatar(
-                  seed: author.accountId,
+                  // 头像稳定种子按身份主键 cid_number（与资料页一致，换绑不变）；
+                  // cid 缺失（本地草稿等）回落当前账户。
+                  seed: author.cidNumber ?? author.accountId,
                   size: 40,
                   imageUrl: avatarUrl,
                   imageHeaders: avatarHeaders,

@@ -114,6 +114,35 @@ class _FakeGroupCrypto implements MlsGroupCrypto {
       );
 }
 
+/// 群名册按钱包账户 account_id 对齐；扇出/出站队列/WebRTC 信令按身份主键
+/// cid_number 路由。测试注入解析器，避免真链读，且未登记账户显式抛错
+/// （与真实 PeerCidResolver 的 fail-loud 语义一致）。
+const _acctA =
+    '0x3333333333333333333333333333333333333333333333333333333333333333';
+const _acctB =
+    '0x4444444444444444444444444444444444444444444444444444444444444444';
+const _acctC = 'acctC';
+const _acctD = 'acctD';
+const _cidA = 'CN220-CTZN2-100000003-2026';
+const _cidB = 'CN220-CTZN2-100000004-2026';
+const _cidC = 'CN220-CTZN2-100000005-2026';
+const _cidD = 'CN220-CTZN2-100000006-2026';
+
+const _cidByAccountId = <String, String>{
+  _acctA: _cidA,
+  _acctB: _cidB,
+  _acctC: _cidC,
+  _acctD: _cidD,
+};
+
+Future<String> _fakeCidResolver(String accountId) async {
+  final cidNumber = _cidByAccountId[accountId];
+  if (cidNumber == null) {
+    throw StateError('测试未登记该账户的 CID: $accountId');
+  }
+  return cidNumber;
+}
+
 ChatMediaDraft _mediaDraft(int byteSize) => ChatMediaDraft(
       kind: ChatMessageKind.image,
       fileName: 'g.jpg',
@@ -125,6 +154,7 @@ ChatMediaDraft _mediaDraft(int byteSize) => ChatMediaDraft(
 Future<ChatDeliveryResult> _okDeliverer(
   ChatEnvelope envelope,
   List<int> bytes,
+  String recipientCidNumber,
 ) async =>
     ChatDeliveryResult(
       envelopeId: envelope.envelopeId,
@@ -152,11 +182,14 @@ void main() {
             '0x3333333333333333333333333333333333333333333333333333333333333333',
         localDeviceId: 'devA');
     final delivered = <ChatEnvelope>[];
+    final deliveredCidNumbers = <String>[];
     Future<ChatDeliveryResult> deliverer(
       ChatEnvelope envelope,
       List<int> bytes,
+      String recipientCidNumber,
     ) async {
       delivered.add(envelope);
+      deliveredCidNumbers.add(recipientCidNumber);
       return ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
@@ -168,6 +201,7 @@ void main() {
       crypto: crypto,
       store: store,
       deliverer: deliverer,
+      cidResolver: _fakeCidResolver,
       accountId:
           '0x3333333333333333333333333333333333333333333333333333333333333333',
       localDeviceId: 'devA',
@@ -200,9 +234,12 @@ void main() {
       '0x4444444444444444444444444444444444444444444444444444444444444444',
       'acctC'
     });
+    // 信封内嵌 account_id 供 MLS/归属,投递路由键是各成员的身份主键 CID 号。
+    expect(deliveredCidNumbers.toSet(), {_cidB, _cidC});
 
     // 群发文本 → 扇给 B、C,落 1 条逻辑消息。
     delivered.clear();
+    deliveredCidNumbers.clear();
     final results = await flow.sendGroupText(
       groupId: groupId,
       senderAccountId:
@@ -217,6 +254,7 @@ void main() {
     });
     // 同一份密文扇 2 封。
     expect(delivered[0].mlsWireMessage, delivered[1].mlsWireMessage);
+    expect(deliveredCidNumbers.toSet(), {_cidB, _cidC});
     final afterSend = await store.readMessages(groupId);
     final outgoing = afterSend.where((m) => m.direction == 'outgoing').toList();
     expect(outgoing.length, 1);
@@ -249,6 +287,7 @@ void main() {
 
     // 删除 C → 名册剩 A、B;Commit 扇给删前成员 B、C(减自己)。
     delivered.clear();
+    deliveredCidNumbers.clear();
     await flow.removeMembers(
       groupId: groupId,
       actorAccountId:
@@ -276,6 +315,7 @@ void main() {
     Future<ChatDeliveryResult> deliverer(
       ChatEnvelope envelope,
       List<int> bytes,
+      String recipientCidNumber,
     ) async =>
         ChatDeliveryResult(
           envelopeId: envelope.envelopeId,
@@ -286,6 +326,7 @@ void main() {
       crypto: crypto,
       store: store,
       deliverer: deliverer,
+      cidResolver: _fakeCidResolver,
       accountId:
           '0x3333333333333333333333333333333333333333333333333333333333333333',
       localDeviceId: 'devA',
@@ -325,11 +366,12 @@ void main() {
     final flow = ChatGroupFlow(
       crypto: crypto,
       store: store,
-      deliverer: (envelope, bytes) async => ChatDeliveryResult(
+      deliverer: (envelope, bytes, recipientCidNumber) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
       ),
+      cidResolver: _fakeCidResolver,
       accountId:
           '0x3333333333333333333333333333333333333333333333333333333333333333',
       localDeviceId: 'devA',
@@ -384,11 +426,12 @@ void main() {
     final flow = ChatGroupFlow(
       crypto: crypto,
       store: store,
-      deliverer: (envelope, bytes) async => ChatDeliveryResult(
+      deliverer: (envelope, bytes, recipientCidNumber) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
       ),
+      cidResolver: _fakeCidResolver,
       accountId:
           '0x4444444444444444444444444444444444444444444444444444444444444444',
       localDeviceId: 'devB',
@@ -436,7 +479,7 @@ void main() {
     final flow = ChatGroupFlow(
       crypto: crypto,
       store: store,
-      deliverer: (envelope, bytes) async {
+      deliverer: (envelope, bytes, recipientCidNumber) async {
         delivered.add(envelope);
         return ChatDeliveryResult(
           envelopeId: envelope.envelopeId,
@@ -444,6 +487,7 @@ void main() {
           state: ChatMessageDeliveryState.sent,
         );
       },
+      cidResolver: _fakeCidResolver,
       accountId:
           '0x3333333333333333333333333333333333333333333333333333333333333333',
       localDeviceId: 'devA',
@@ -492,6 +536,7 @@ void main() {
         crypto: crypto,
         store: store,
         deliverer: _okDeliverer,
+        cidResolver: _fakeCidResolver,
         accountId:
             '0x3333333333333333333333333333333333333333333333333333333333333333',
         localDeviceId: 'devA',
@@ -526,7 +571,7 @@ void main() {
         senderDeviceId: 'devA',
         media: _mediaDraft(50 * 1024 * 1024),
         sendMemberAttachment: ({
-          required recipientAccountId,
+          required recipientCidNumber,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -534,7 +579,7 @@ void main() {
           required sourcePath,
           required byteSize,
         }) async {
-          webrtcTo.add(recipientAccountId);
+          webrtcTo.add(recipientCidNumber);
         },
         uploadRelayMedia: ({
           required conversationId,
@@ -551,15 +596,9 @@ void main() {
         markMemberDelivered: (attachmentId, member) async {},
       );
 
-      expect(webrtcTo.toSet(), {
-        '0x4444444444444444444444444444444444444444444444444444444444444444',
-        'acctC'
-      }); // 每成员各一次
+      expect(webrtcTo.toSet(), {_cidB, _cidC}); // 每成员各一次(按成员 CID 路由)
       expect(relayUploads, 0);
-      expect(pending.toSet(), {
-        '0x4444444444444444444444444444444444444444444444444444444444444444',
-        'acctC'
-      });
+      expect(pending.toSet(), {_cidB, _cidC});
     });
 
     test('>100MB → 中转一次上传,不走 WebRTC', () async {
@@ -575,7 +614,7 @@ void main() {
         senderDeviceId: 'devA',
         media: _mediaDraft(200 * 1024 * 1024),
         sendMemberAttachment: ({
-          required recipientAccountId,
+          required recipientCidNumber,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -583,7 +622,7 @@ void main() {
           required sourcePath,
           required byteSize,
         }) async {
-          webrtcTo.add(recipientAccountId);
+          webrtcTo.add(recipientCidNumber);
         },
         uploadRelayMedia: ({
           required conversationId,

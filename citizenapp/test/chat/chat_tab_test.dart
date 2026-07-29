@@ -900,7 +900,7 @@ class _FakeRuntime extends ChatRuntime {
   }
 
   @override
-  Future<int> retryOutgoing({String? recipientAccountId}) async {
+  Future<int> retryOutgoing({String? recipientCidNumber}) async {
     syncCount += 1;
     return 0;
   }

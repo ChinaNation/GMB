@@ -102,7 +102,9 @@ class SquareAuthor {
   }
 
   String get title {
-    return ProfilePresentation.forAccountId(accountId).resolveDisplayName(
+    // 默认昵称稳定种子按身份主键 cid_number（与资料页/头像一致）；cid 缺失回落账户。
+    return ProfilePresentation.forAccountId(cidNumber ?? accountId)
+        .resolveDisplayName(
       publicName: displayName,
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
@@ -32,12 +34,13 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// 折叠虚化头部 + 圆角方形头像/背景（R2）+ 认证勾 + 展示名/地址/签名/计数 +
 /// 三图标（本人 通知/聊天/关注 · 他人 关注/消息）+ ⋮（二维码/编辑资料）+
-/// 帖子/竞选/照片/视频/文章五 Tab。身份 = 默认热钱包地址；cache-first 加载，
-/// 关注复用登录 session 静默签名，公开资料只进 R2、不上链。
+/// 帖子/竞选/照片/视频/文章五 Tab。身份主键 = CID 号（cid_number）；cache-first
+/// 加载，关注复用登录 session 静默签名，公开资料只进 R2、不上链。链上订阅/私信/
+/// 二维码需要的钱包账户 account_id 从已拉取的 profile.account_id（当前绑定账户）取。
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({
     super.key,
-    required this.accountId,
+    required this.cidNumber,
     required this.isSelf,
     this.initialProfile,
     this.api,
@@ -47,8 +50,8 @@ class UserProfilePage extends StatefulWidget {
     this.viewerAccountLoader,
   });
 
-  /// 主页身份 = 默认热钱包地址。
-  final String accountId;
+  /// 主页身份主键 = CID 号（cid_number）。资料/关注/帖子全按此 cid 寻址。
+  final String cidNumber;
 
   /// 本人主页（可编辑资料）还是他人主页。
   final bool isSelf;
@@ -103,7 +106,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _directChat = widget.onOpenDirectChat ?? openDirectChat;
     _profile = widget.initialProfile;
     _loadWalletName();
-    _resolveOwnAccount();
+    // 「他人视角看的其实是自己」判定需要目标当前绑定账户（profile.account_id），
+    // 故在资料加载后（_load）再算；注入了初始资料时先算一次。
+    if (_profile != null) {
+      _resolveOwnAccount(_profile!.accountId);
+    }
     _load();
   }
 
@@ -121,17 +128,21 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  /// 判定「他人视角看的其实是自己账户」：浏览者默认钱包地址 == 本页 accountId。
+  /// 判定「他人视角看的其实是自己账户」：浏览者身份账户 == 目标当前绑定钱包账户
+  /// （[targetAccountId] = profile.account_id）。身份主键是 cid，但浏览者手上只有
+  /// 自己的账户（IdentityAccountCache），故用「账户是否一致」判定同一身份。
   /// 本人视角（isSelf）按钮本就隐藏，无需判定；判定失败按非本人处理，不阻塞主页。
-  Future<void> _resolveOwnAccount() async {
-    if (widget.isSelf) return;
+  Future<void> _resolveOwnAccount(String? targetAccountId) async {
+    if (widget.isSelf || _isOwnAccount) return;
+    final target = targetAccountId?.trim() ?? '';
+    if (target.isEmpty) return;
     // 浏览者身份账户 = CID 绑定账户（单源 IdentityAccountCache），与本人身份展示同口径。
     final loadViewer = widget.viewerAccountLoader ??
         () async => IdentityAccountCache.instance.accountId();
     try {
       final viewer = (await loadViewer())?.trim() ?? '';
       if (!mounted) return;
-      if (viewer.isNotEmpty && viewer == widget.accountId) {
+      if (viewer.isNotEmpty && viewer == target) {
         setState(() => _isOwnAccount = true);
       }
     } on Exception {
@@ -142,17 +153,19 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _load() async {
     // 先渲染缓存（若无注入资料），再后台刷新回刷 + 写回缓存。
     if (_profile == null) {
-      final cached = await _cache.read(widget.accountId);
+      final cached = await _cache.read(widget.cidNumber);
       if (cached != null && mounted) {
         setState(() => _profile = cached);
+        unawaited(_resolveOwnAccount(cached.accountId));
       }
     }
     final session = await _ensureSession();
     try {
       // 带 session 拉取 → is_following 反映当前登录者视角。
-      final fresh = await _api.fetchProfile(widget.accountId, session: session);
+      final fresh = await _api.fetchProfile(widget.cidNumber, session: session);
       if (!mounted) return;
       setState(() => _profile = fresh);
+      unawaited(_resolveOwnAccount(fresh.accountId));
       await _cache.write(fresh);
     } on Exception {
       // 网络/服务异常保留缓存或占位，不覆盖已展示内容。
@@ -196,12 +209,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
       if (wasFollowing) {
         await _api.unfollowUser(
           session: session,
-          followedAccountId: widget.accountId,
+          followedCidNumber: widget.cidNumber,
         );
       } else {
         await _api.followUser(
           session: session,
-          followedAccountId: widget.accountId,
+          followedCidNumber: widget.cidNumber,
         );
       }
     } on Exception {
@@ -233,7 +246,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     try {
       await _api.setNotify(
         session: session,
-        followedAccountId: widget.accountId,
+        followedCidNumber: widget.cidNumber,
         enabled: !wasNotifying,
       );
     } on Exception {
@@ -247,7 +260,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final updated = await Navigator.of(context).push<CitizenProfile>(
       MaterialPageRoute<CitizenProfile>(
         builder: (_) => CitizenProfileEditPage(
-          accountId: widget.accountId,
+          cidNumber: widget.cidNumber,
           initialProfile: _profile,
           api: _api,
           sessionProvider: _sessionProvider,
@@ -262,6 +275,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 注销用户（仅本人）：二次确认 → 主钥签名(生物识别) → 服务端硬删 → 清本地 → 回落空态。
   /// 无冷静期、硬删不可逆；链上数据与本地钱包不受影响。
   Future<void> _openDeleteAccount() async {
+    // 注销 = 账户级鉴权动作：签名 + 会话都按当前绑定钱包账户 account_id（本人视角，
+    // 取 profile.account_id = 该 CID 当前绑定账户，与登录 session 同账户）。
+    final selfAccountId = _profile?.accountId.trim() ?? '';
+    if (selfAccountId.isEmpty) {
+      _snack('资料尚未加载，请稍后再试');
+      return;
+    }
     final walletManager = WalletManager();
     final walletIndex = await walletManager.getDefaultWalletIndex();
     if (!mounted) return;
@@ -294,13 +314,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     try {
       await SquareAccountDeletionService().deleteAccount(
-        accountId: widget.accountId,
+        accountId: selfAccountId,
         walletIndex: walletIndex,
-        // 动钱动权 → sr25519 **身份账户**主钥对 0x1D 摘要签名（widget.accountId 即身份账户，
-        // 按 accountId 精确取硬件金库 child，弹一次生物识别）。walletIndex 仅供门控与
-        // 删除本机设备子钥（设备子钥按 walletIndex 存，与身份账户解耦）。
+        // 动钱动权 → sr25519 **身份账户**主钥对 0x1D 摘要签名（selfAccountId = 当前绑定
+        // 身份账户，按 accountId 精确取硬件金库 child，弹一次生物识别）。walletIndex 仅供
+        // 门控与删除本机设备子钥（设备子钥按 walletIndex 存，与身份账户解耦）。
         signAction: (message) async =>
-            '0x${bytesToHex(await walletManager.signForAccountId(widget.accountId, message))}',
+            '0x${bytesToHex(await walletManager.signForAccountId(selfAccountId, message))}',
       );
     } on SquareApiException catch (e) {
       if (mounted) _snack('注销失败：${e.message}');
@@ -325,20 +345,32 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void _openQrCode() {
+    // 名片码载荷 = 钱包账户 account_id（加好友/转账用），取该身份当前绑定账户。
+    final accountId = _profile?.accountId.trim() ?? '';
+    if (accountId.isEmpty) {
+      _snack('资料尚未加载，请稍后再试');
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UserQrPage(
           contactName: _displayName,
-          accountId: widget.accountId,
+          accountId: accountId,
         ),
       ),
     );
   }
 
   void _openChatWithUser() {
+    // DM 目标标识暂用 profile.account_id（当前绑定账户）；chat 模块迁移 cid 后再对齐。
+    final peerAccountId = _profile?.accountId.trim() ?? '';
+    if (peerAccountId.isEmpty) {
+      _snack('资料尚未加载，请稍后再试');
+      return;
+    }
     _directChat(
       context,
-      peerAccountId: widget.accountId,
+      peerAccountId: peerAccountId,
       title: _displayName,
     );
   }
@@ -352,7 +384,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => FollowsListPage(
-          accountId: widget.accountId,
+          cidNumber: widget.cidNumber,
           type: type,
           session: session,
           api: _api,
@@ -370,7 +402,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 本人钱包名是昵称真源，后端 display_name 是公开镜像；均缺失时使用
   /// 按账户稳定选择的本地昵称，账户本身永远不会出现在昵称位置。
   String get _displayName {
-    return ProfilePresentation.forAccountId(widget.accountId).resolveDisplayName(
+    return ProfilePresentation.forAccountId(widget.cidNumber).resolveDisplayName(
       walletName: widget.isSelf ? _walletName : null,
       publicName: _profile?.displayName,
     );
@@ -389,7 +421,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Widget _bannerWidget() {
     final fallback = Image.asset(
-      ProfilePresentation.forAccountId(widget.accountId).bannerAsset,
+      ProfilePresentation.forAccountId(widget.cidNumber).bannerAsset,
       fit: BoxFit.cover,
     );
     final url = _mediaUrl(_profile?.bannerObjectKey);
@@ -399,6 +431,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
       headers: _mediaHeaders,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => fallback,
+    );
+  }
+
+  /// 他人主页的「订阅 TA」按钮：链上订阅需要创作者钱包账户 account_id，从已拉取的
+  /// profile.account_id（当前绑定账户）取。本人主页、资料未就绪或目标未绑定账户时不显示。
+  /// 用绑定账户做 ValueKey，账户变化时重建 State 触发重新加载订阅态。
+  Widget? _creatorSubscribeButton() {
+    if (widget.isSelf) return null;
+    final creatorAccountId = _profile?.accountId.trim() ?? '';
+    if (creatorAccountId.isEmpty) return null;
+    return CreatorSubscribeButton(
+      key: ValueKey<String>('creator-subscribe:$creatorAccountId'),
+      creatorAccountId: creatorAccountId,
+      enabled: !_isOwnAccount,
     );
   }
 
@@ -439,7 +485,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.posts:
         return ProfilePostsTab(
           key: ValueKey('posts:$_postsRevision'),
-          accountId: widget.accountId,
+          cidNumber: widget.cidNumber,
           api: _api,
           category: SquarePostCategory.normal,
           contentFormat: SquarePostContentFormat.normal,
@@ -450,7 +496,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.campaign:
         return ProfilePostsTab(
           key: ValueKey('campaign:$_postsRevision'),
-          accountId: widget.accountId,
+          cidNumber: widget.cidNumber,
           api: _api,
           category: SquarePostCategory.campaign,
           emptyLabel: '还没有竞选内容',
@@ -460,7 +506,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.photos:
         return ProfilePostsTab(
           key: ValueKey('photos:$_postsRevision'),
-          accountId: widget.accountId,
+          cidNumber: widget.cidNumber,
           api: _api,
           mediaKind: SquareMediaKind.image,
           emptyLabel: '还没有照片',
@@ -470,7 +516,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.videos:
         return ProfilePostsTab(
           key: ValueKey('videos:$_postsRevision'),
-          accountId: widget.accountId,
+          cidNumber: widget.cidNumber,
           api: _api,
           mediaKind: SquareMediaKind.video,
           emptyLabel: '还没有视频',
@@ -480,7 +526,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case ProfileTab.articles:
         return ProfilePostsTab(
           key: ValueKey('articles:$_postsRevision'),
-          accountId: widget.accountId,
+          cidNumber: widget.cidNumber,
           api: _api,
           contentFormat: SquarePostContentFormat.article,
           emptyLabel: '还没有文章',
@@ -529,7 +575,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     collapsedTitle: _title,
                     banner: _bannerWidget(),
                     foreground: ProfileHeaderCard(
-                      accountId: widget.accountId,
+                      cidNumber: widget.cidNumber,
                       profile: _profile,
                       fallbackName: _walletName,
                       avatarUrl: _mediaUrl(_profile?.avatarObjectKey),
@@ -548,12 +594,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         onToggleFollow: _toggleFollow,
                       ),
                       // 他人主页才显示「订阅 TA / 取消」（订阅创作者会员，上链热签）。
-                      creatorSubscribeButton: widget.isSelf
-                          ? null
-                          : CreatorSubscribeButton(
-                              creatorAccountId: widget.accountId,
-                              enabled: !_isOwnAccount,
-                            ),
+                      // 链上订阅入参需要创作者钱包账户 account_id：从已拉取的
+                      // profile.account_id（当前绑定账户）取，资料未就绪或无绑定则不显示。
+                      creatorSubscribeButton: _creatorSubscribeButton(),
                     ),
                   ),
                 ),

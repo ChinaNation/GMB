@@ -28,6 +28,7 @@ void main() {
 
   const session = SquareSession(
     sessionToken: 't',
+    cidNumber: "CN220-CTZN2-198805200-2026",
     accountId:
         '0x7777777777777777777777777777777777777777777777777777777777777777',
     expiresAt: 9999999999999,
@@ -90,6 +91,7 @@ void main() {
     );
     final signedSession = SquareSession(
       sessionToken: 't',
+      cidNumber: "CN220-CTZN2-198805200-2026",
       accountId:
           '0x7777777777777777777777777777777777777777777777777777777777777777',
       expiresAt: 9999999999999,
@@ -168,6 +170,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
   @override
   Future<SquareSession?> ensureSession() async => const SquareSession(
         sessionToken: 'creator-session',
+        cidNumber: "CN220-CTZN2-198805200-2026",
         accountId: _accountId,
         expiresAt: 9999999999999,
       );

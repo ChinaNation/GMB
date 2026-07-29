@@ -294,16 +294,17 @@ class _SquareHomePageState extends State<SquareHomePage> {
     await _refreshFeed();
   }
 
-  Future<void> _openAuthor(String accountId) async {
-    if (accountId.isEmpty) return;
+  Future<void> _openAuthor(String cidNumber) async {
+    if (cidNumber.isEmpty) return;
     final identity = await _identityFuture;
     if (!mounted) return;
-    final isSelf =
-        identity.accountId.isNotEmpty && identity.accountId == accountId;
+    // 身份主键 = cid_number：作者主键与本人身份都按 cid 比对判定 isSelf。
+    final selfCid = identity.cidNumber?.trim() ?? '';
+    final isSelf = selfCid.isNotEmpty && selfCid == cidNumber;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => UserProfilePage(
-          accountId: accountId,
+          cidNumber: cidNumber,
           isSelf: isSelf,
         ),
       ),
@@ -559,7 +560,7 @@ class _FeedBody extends StatelessWidget {
           return SquareArticleCard(
             post: post,
             onTap: () => onOpenPost(post),
-            onAuthorTap: () => onOpenAuthor(post.author.accountId),
+            onAuthorTap: () => onOpenAuthor(post.author.cidNumber ?? ''),
             avatarUrl: avatarUrl,
             avatarHeaders: avatarHeaders,
           );
@@ -567,7 +568,7 @@ class _FeedBody extends StatelessWidget {
         return SquarePostCard(
           post: post,
           onTap: () => onOpenPost(post),
-          onAuthorTap: () => onOpenAuthor(post.author.accountId),
+          onAuthorTap: () => onOpenAuthor(post.author.cidNumber ?? ''),
           avatarUrl: avatarUrl,
           avatarHeaders: avatarHeaders,
         );

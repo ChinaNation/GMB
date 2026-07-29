@@ -12,6 +12,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/isar_test_env.dart';
 
+/// 钱包账户 account_id（MLS 名册/归属）与身份主键 cid_number（投递路由键）语义分离。
+const _bobAccountId =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
+
 void main() {
   useIsolatedIsar();
 
@@ -47,7 +52,7 @@ void main() {
     final flow = ChatFlow(
       crypto: _FakeMlsCrypto(),
       store: store,
-      deliverer: (envelope, _) async => ChatDeliveryResult(
+      deliverer: (envelope, _, __) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.queued,
@@ -60,6 +65,7 @@ void main() {
           '0x1111111111111111111111111111111111111111111111111111111111111111',
       recipientAccountId:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       text: 'hello bob',
@@ -69,8 +75,7 @@ void main() {
     expect(queued, hasLength(2));
     expect(
         queued.every((item) =>
-            item.recipientAccountId ==
-            '0x2222222222222222222222222222222222222222222222222222222222222222'),
+            item.recipientCidNumber == _bobCidNumber),
         isTrue);
     for (final item in queued) {
       await store.markOutgoingDelivery(
@@ -85,7 +90,7 @@ void main() {
     final flow = ChatFlow(
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
-      deliverer: (_, __) => throw StateError('接收端不得重新投递'),
+      deliverer: (_, __, ___) => throw StateError('接收端不得重新投递'),
     );
     final welcome = const MlsWireMessage(
       wireBytes: [0x01],
@@ -145,7 +150,7 @@ void main() {
     final flow = ChatFlow(
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
-      deliverer: (envelope, _) async => ChatDeliveryResult(
+      deliverer: (envelope, _, __) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
@@ -158,6 +163,7 @@ void main() {
           '0x1111111111111111111111111111111111111111111111111111111111111111',
       recipientAccountId:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       media: ChatMediaDraft(
@@ -168,7 +174,7 @@ void main() {
         byteSize: 4,
       ),
       sendDeviceAttachment: ({
-        required recipientAccountId,
+        required recipientCidNumber,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -222,7 +228,7 @@ void main() {
     final flow = ChatFlow(
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
-      deliverer: (envelope, _) async => ChatDeliveryResult(
+      deliverer: (envelope, _, __) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
@@ -236,6 +242,7 @@ void main() {
             '0x1111111111111111111111111111111111111111111111111111111111111111',
         recipientAccountId:
             '0x2222222222222222222222222222222222222222222222222222222222222222',
+        recipientCidNumber: _bobCidNumber,
         senderDeviceId: 'alice-phone',
         recipientKeyPackage: _dummyKeyPackage(),
         // byteSize 超出自由档 10MB 上限;门控看 byteSize 字段,发前即拦,不触碰源文件。
@@ -247,7 +254,7 @@ void main() {
           byteSize: ChatMediaLimits.maxBytesForLevel('freedom') + 1,
         ),
         sendDeviceAttachment: ({
-          required recipientAccountId,
+          required recipientCidNumber,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -272,7 +279,7 @@ void main() {
     final flow = ChatFlow(
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
-      deliverer: (envelope, _) async => ChatDeliveryResult(
+      deliverer: (envelope, _, __) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
@@ -288,6 +295,7 @@ void main() {
             '0x1111111111111111111111111111111111111111111111111111111111111111',
         recipientAccountId:
             '0x2222222222222222222222222222222222222222222222222222222222222222',
+        recipientCidNumber: _bobCidNumber,
         senderDeviceId: 'alice-phone',
         media: ChatMediaDraft(
           kind: ChatMessageKind.image,
@@ -297,7 +305,7 @@ void main() {
           byteSize: 3,
         ),
         sendDeviceAttachment: ({
-          required recipientAccountId,
+          required recipientCidNumber,
           required conversationId,
           required attachmentId,
           required fileName,
@@ -323,7 +331,7 @@ void main() {
     final flow = ChatFlow(
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
-      deliverer: (envelope, _) async => ChatDeliveryResult(
+      deliverer: (envelope, _, __) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.sent,
@@ -336,6 +344,7 @@ void main() {
           '0x1111111111111111111111111111111111111111111111111111111111111111',
       recipientAccountId:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       media: ChatMediaDraft(
@@ -347,7 +356,7 @@ void main() {
       ),
       // sendDeviceAttachment 成功(对方在线)。
       sendDeviceAttachment: ({
-        required recipientAccountId,
+        required recipientCidNumber,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -375,7 +384,7 @@ void main() {
     final flow = ChatFlow(
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
-      deliverer: (envelope, _) async => ChatDeliveryResult(
+      deliverer: (envelope, _, __) async => ChatDeliveryResult(
         envelopeId: envelope.envelopeId,
         transportType: ChatTransportType.cloudflare,
         state: ChatMessageDeliveryState.queued,
@@ -390,6 +399,7 @@ void main() {
           '0x1111111111111111111111111111111111111111111111111111111111111111',
       recipientAccountId:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       media: ChatMediaDraft(
@@ -400,7 +410,7 @@ void main() {
         byteSize: 4,
       ),
       sendDeviceAttachment: ({
-        required recipientAccountId,
+        required recipientCidNumber,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -653,8 +663,8 @@ class _FakeMlsCrypto implements MlsCrypto {
 }
 
 MlsKeyPackage _dummyKeyPackage() => const MlsKeyPackage(
-      accountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      accountId: _bobAccountId,
+      cidNumber: _bobCidNumber,
       deviceId: 'bob-phone',
       devicePublicKey: 'aabb',
       keyPackageId: 'kp-bob',

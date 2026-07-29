@@ -150,9 +150,12 @@ class ChatPushService {
   }
 
   /// 推送正文只能识别无内容唤醒，不接受消息或附件字段。
+  ///
+  /// 唤醒发件人以身份主键 CID 号（`sender_cid_number`）标识，与 Worker R5 对齐；
+  /// 下游 peer_ready / 补发一律按 CID 语义寻址。
   static String? wakeSenderFromData(Map<String, dynamic> data) {
     if (data['kind'] != 'chat_wake' || data.length != 2) return null;
-    final sender = data['sender_account_id'];
+    final sender = data['sender_cid_number'];
     return sender is String && sender.isNotEmpty ? sender : null;
   }
 

@@ -57,10 +57,16 @@ class MlsKeyPackage {
     required this.createdAtMillis,
     required this.expiresAtMillis,
     this.devicePublicKey = '',
+    this.cidNumber = '',
   });
 
-  /// KeyPackage 所属的钱包聊天账户。
+  /// KeyPackage 所属设备所有者的钱包聊天账户（MLS 成员名册身份主键，绝不用 CID 覆盖）。
   final String accountId;
+
+  /// KeyPackage 所属设备所有者的身份主键 CID 号（寻址用；`accountId` 仍为 MLS 名册对齐）。
+  ///
+  /// 由 Worker 拉取/领取响应携带；本机 `createKeyPackage` 生成时留空，发布时另传自身 CID。
+  final String cidNumber;
 
   /// 发布设备 ID。
   final String deviceId;

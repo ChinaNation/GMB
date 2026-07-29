@@ -104,6 +104,7 @@ class _FakeSession extends SquareSessionProvider {
     if (!wallet.isHotWallet) return null;
     return SquareSession(
       sessionToken: 'token',
+      cidNumber: "CN220-CTZN2-198805200-2026",
       accountId: wallet.accountId,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 600000,
     );

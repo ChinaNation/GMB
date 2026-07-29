@@ -196,6 +196,8 @@ void main() {
     expect(find.text('辽宁省身份注册局'), findsWidgets); // AppBar 简称回退全称 + 全称行
     expect(find.text(_cid), findsOneWidget);
     expect(find.text('全称'), findsOneWidget);
+    expect(find.text('身份CID号'), findsOneWidget);
+    expect(find.text('身份ID'), findsNothing);
     expect(find.text('主账户'), findsOneWidget);
     expect(find.text('主账户余额'), findsOneWidget);
     expect(find.text('12.50 元'), findsOneWidget);

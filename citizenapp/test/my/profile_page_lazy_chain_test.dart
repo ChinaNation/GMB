@@ -102,6 +102,11 @@ void main() {
     expect(find.text('会员｜订阅'), findsOneWidget);
     expect(find.text('创作者'), findsOneWidget);
     expect(find.text('通讯录'), findsOneWidget);
+    final creatorTop = tester.getTopLeft(find.text('创作者')).dy;
+    final contactsTop = tester.getTopLeft(find.text('通讯录')).dy;
+    final membershipTop = tester.getTopLeft(find.text('会员｜订阅')).dy;
+    expect(creatorTop, lessThan(contactsTop));
+    expect(contactsTop, lessThan(membershipTop));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await smoldot.dispose();

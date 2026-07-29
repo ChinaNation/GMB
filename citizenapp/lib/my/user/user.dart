@@ -272,10 +272,20 @@ class _ProfilePageState extends State<MyTab> {
       );
       return;
     }
+    // 资料页身份主键 = CID 号（cid_number）：按 cid 寻址（换绑不变）。自己的 cid
+    // 从身份服务取；未占号（纯访客，无 cid）无法拥有广场资料，提示先注册身份。
+    final cidNumber = (await _myIdService.getState()).cidNumber?.trim() ?? '';
+    if (!mounted) return;
+    if (cidNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先完成身份注册再查看个人资料')),
+      );
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => UserProfilePage(
-          accountId: address,
+          cidNumber: cidNumber,
           isSelf: true,
         ),
       ),
@@ -608,16 +618,6 @@ class _ProfilePageState extends State<MyTab> {
                   children: [
                     _buildServiceEntry(
                       leading: const Icon(
-                        Icons.workspace_premium_outlined,
-                        color: AppTheme.primary,
-                        size: 22,
-                      ),
-                      title: '会员｜订阅',
-                      onTap: _openMembership,
-                    ),
-                    const Divider(height: 1, indent: 62, endIndent: 14),
-                    _buildServiceEntry(
-                      leading: const Icon(
                         Icons.edit_outlined,
                         color: AppTheme.primary,
                         size: 22,
@@ -638,6 +638,16 @@ class _ProfilePageState extends State<MyTab> {
                       ),
                       title: '通讯录',
                       onTap: _openContacts,
+                    ),
+                    const Divider(height: 1, indent: 62, endIndent: 14),
+                    _buildServiceEntry(
+                      leading: const Icon(
+                        Icons.workspace_premium_outlined,
+                        color: AppTheme.primary,
+                        size: 22,
+                      ),
+                      title: '会员｜订阅',
+                      onTap: _openMembership,
                     ),
                   ],
                 ),

@@ -104,7 +104,7 @@ void main() {
     final senderFlow = ChatFlow(
       crypto: aliceCrypto,
       store: ChatStore(),
-      deliverer: (envelope, bytes) async {
+      deliverer: (envelope, bytes, recipientCidNumber) async {
         relayed.add(List<int>.from(bytes));
         return ChatDeliveryResult(
           envelopeId: envelope.envelopeId,
@@ -120,6 +120,7 @@ void main() {
           '0x1111111111111111111111111111111111111111111111111111111111111111',
       recipientAccountId:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: 'CN220-CTZN2-100000002-2026',
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: keyPackage,
       text: '瞬时直达',
@@ -130,7 +131,7 @@ void main() {
     final receiverFlow = ChatFlow(
       crypto: bobCrypto,
       store: ChatStore(),
-      deliverer: (_, __) => throw StateError('接收端不得重新投递'),
+      deliverer: (_, __, ___) => throw StateError('接收端不得重新投递'),
     );
     for (final bytes in relayed) {
       await receiverFlow.processIncomingEnvelopeBytes(bytes);

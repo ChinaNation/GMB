@@ -780,7 +780,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                 fontSize: 14,
               ),
               decoration: _transactionFieldDecoration(
-                hintText: '输入或粘贴 SS58 地址',
+                hintText: '请输入账户',
               ),
             ),
             const SizedBox(height: 16),

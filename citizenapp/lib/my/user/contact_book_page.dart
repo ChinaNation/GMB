@@ -11,6 +11,7 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/chat/identity/peer_cid_resolver.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
@@ -75,8 +76,15 @@ class _ContactBookPageState extends State<ContactBookPage> {
       widget.sessionProvider ?? SquareSessionProvider.instance;
   final TextEditingController _searchController = TextEditingController();
 
+  late final PeerCidResolver _cidResolver = PeerCidResolver();
+
   List<UserContact> _contacts = const <UserContact>[];
+
+  /// 公开资料按身份主键 CID 号缓存（键 = cid_number，与资料接口寻址一致）。
   final Map<String, CitizenProfile> _profiles = <String, CitizenProfile>{};
+
+  /// 联系人钱包账户 account_id → 身份主键 cid_number（链读结果的页内映射）。
+  final Map<String, String> _cidByAccountId = <String, String>{};
   SquareSession? _session;
   ContactSyncState _syncState =
       const ContactSyncState(phase: ContactSyncPhase.idle);
@@ -136,29 +144,66 @@ class _ContactBookPageState extends State<ContactBookPage> {
     await _loadProfiles(contacts);
   }
 
-  /// 先读公开资料缓存，再以四个一组有界刷新，避免大通讯录产生瞬时请求尖峰。
-  Future<void> _loadProfiles(List<UserContact> contacts) async {
-    for (final contact in contacts) {
-      if (_profiles.containsKey(contact.accountId)) continue;
-      final cached = await _profileCache.read(contact.accountId);
-      if (cached != null) _profiles[contact.accountId] = cached;
+  /// 取联系人的公开资料（按其身份主键 cid_number 索引；未解析出 CID 时为 null）。
+  CitizenProfile? _profileOf(UserContact contact) {
+    final cidNumber = contact.cidNumber?.isNotEmpty == true
+        ? contact.cidNumber
+        : _cidByAccountId[contact.accountId];
+    if (cidNumber == null || cidNumber.isEmpty) return null;
+    return _profiles[cidNumber];
+  }
+
+  /// 解析联系人身份主键 CID 号：优先用通讯录已缓存的 `cid_number`，缺失则链读并回写。
+  /// 对方未绑定 CID 时返回 null（资料页/主页按 CID 寻址，无 CID 即无公开资料）。
+  Future<String?> _contactCidNumber(UserContact contact) async {
+    final cached = contact.cidNumber;
+    if (cached != null && cached.isNotEmpty) return cached;
+    try {
+      return await _cidResolver.resolve(contact.accountId);
+    } on Exception {
+      return null;
+    } on StateError {
+      // 未绑定 CID：保持默认展示，不阻塞通讯录。
+      return null;
     }
-    if (mounted) setState(() {});
+  }
+
+  /// 先读公开资料缓存，再以四个一组有界刷新，避免大通讯录产生瞬时请求尖峰。
+  /// 资料按身份主键 CID 号寻址（[_profiles] / 资料缓存均以 cid_number 为键）。
+  Future<void> _loadProfiles(List<UserContact> contacts) async {
+    final cidByAccountId = <String, String>{};
+    for (final contact in contacts) {
+      final cidNumber = await _contactCidNumber(contact);
+      if (cidNumber == null) continue;
+      cidByAccountId[contact.accountId] = cidNumber;
+      if (_profiles.containsKey(cidNumber)) continue;
+      final cached = await _profileCache.read(cidNumber);
+      if (cached != null) _profiles[cidNumber] = cached;
+    }
+    if (mounted) {
+      setState(() => _cidByAccountId.addAll(cidByAccountId));
+    } else {
+      _cidByAccountId.addAll(cidByAccountId);
+    }
     try {
       _session ??= await _sessionProvider.ensureSession();
     } on Exception {
       return;
     }
-    for (var offset = 0; offset < contacts.length; offset += 4) {
-      final end = offset + 4 < contacts.length ? offset + 4 : contacts.length;
-      final batch = contacts.sublist(offset, end);
+    final resolved = contacts
+        .where((contact) => cidByAccountId.containsKey(contact.accountId))
+        .toList(growable: false);
+    for (var offset = 0; offset < resolved.length; offset += 4) {
+      final end = offset + 4 < resolved.length ? offset + 4 : resolved.length;
+      final batch = resolved.sublist(offset, end);
       await Future.wait(batch.map((contact) async {
+        final cidNumber = cidByAccountId[contact.accountId]!;
         try {
           final profile = await _profileApi.fetchProfile(
-            contact.accountId,
+            cidNumber,
             session: _session,
           );
-          _profiles[contact.accountId] = profile;
+          _profiles[cidNumber] = profile;
           await _profileCache.write(profile);
         } on Exception {
           // 保留缓存或稳定默认头像，单个用户资料失败不阻塞通讯录。
@@ -237,7 +282,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
   }
 
   Future<void> _message(UserContact contact) async {
-    final profile = _profiles[contact.accountId];
+    final profile = _profileOf(contact);
     final title = ProfilePresentation.forAccountId(contact.accountId)
         .resolveDisplayName(publicName: profile?.displayName);
     final opener = widget.directChatOpener ?? openDirectChat;
@@ -281,23 +326,39 @@ class _ContactBookPageState extends State<ContactBookPage> {
         // 发私信:点联系人直接打开与其的一对一聊天(复用统一私信收口)。
         unawaited(_message(contact));
       case ContactPickMode.browse:
-        Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => UserProfilePage(
-              accountId: contact.accountId,
-              isSelf: false,
-              initialProfile: _profiles[contact.accountId],
-            ),
-          ),
-        );
+        // 资料页按身份主键 cid_number 寻址：用已解析的 cid（通讯录缓存或链读）。
+        unawaited(_openProfile(contact));
     }
+  }
+
+  /// 打开联系人主页：资料页以身份主键 cid_number 寻址；对方未绑定 CID 时提示而不进入。
+  Future<void> _openProfile(UserContact contact) async {
+    final cidNumber =
+        _cidByAccountId[contact.accountId] ?? await _contactCidNumber(contact);
+    if (!mounted) return;
+    if (cidNumber == null || cidNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('对方尚未绑定身份（CID），暂无公开主页')),
+      );
+      return;
+    }
+    _cidByAccountId[contact.accountId] = cidNumber;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => UserProfilePage(
+          cidNumber: cidNumber,
+          isSelf: false,
+          initialProfile: _profiles[cidNumber],
+        ),
+      ),
+    );
   }
 
   List<UserContact> get _visibleContacts {
     final query = _query.trim().toLowerCase();
     final visible = _contacts.where((contact) {
       if (query.isEmpty) return true;
-      final profile = _profiles[contact.accountId];
+      final profile = _profileOf(contact);
       final publicName = ProfilePresentation.forAccountId(contact.accountId)
           .resolveDisplayName(publicName: profile?.displayName)
           .toLowerCase();
@@ -386,8 +447,8 @@ class _ContactBookPageState extends State<ContactBookPage> {
                       for (final contact in visible) ...[
                         _ContactCard(
                           contact: contact,
-                          profile: _profiles[contact.accountId],
-                          avatarUrl: _avatarUrl(_profiles[contact.accountId]),
+                          profile: _profileOf(contact),
+                          avatarUrl: _avatarUrl(_profileOf(contact)),
                           avatarHeaders: _session == null
                               ? null
                               : <String, String>{

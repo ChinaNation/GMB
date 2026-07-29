@@ -54,9 +54,13 @@ class ChatCloudTransport implements ChatTransport {
     });
   }
 
-  Future<void> publishKeyPackage(MlsKeyPackage keyPackage) async {
+  /// 发布本机 KeyPackage。[cidNumber] 为**本身份**主键 CID 号（Worker 按 CID 归档）。
+  Future<void> publishKeyPackage(
+    MlsKeyPackage keyPackage, {
+    required String cidNumber,
+  }) async {
     await _postJson('/v1/chat/keypackages', {
-      'account_id': keyPackage.accountId,
+      'cid_number': cidNumber,
       'device_id': keyPackage.deviceId,
       'device_public_key': keyPackage.devicePublicKey,
       'key_package_id': keyPackage.keyPackageId,
@@ -67,13 +71,13 @@ class ChatCloudTransport implements ChatTransport {
     });
   }
 
+  /// 拉取目标身份的 KeyPackage 列表。[targetCidNumber] = 目标身份主键 CID 号（路由末段）。
   Future<List<MlsKeyPackage>> fetchKeyPackages({
-    required String accountId,
-    required String requesterAccountId,
+    required String targetCidNumber,
     int limit = 1,
   }) async {
     final json = await _getJson(
-      '/v1/chat/keypackages/${Uri.encodeComponent(accountId)}',
+      '/v1/chat/keypackages/${Uri.encodeComponent(targetCidNumber)}',
       queryParameters: {'limit': limit.toString()},
     );
     final items = json['key_packages'];
@@ -86,15 +90,14 @@ class ChatCloudTransport implements ChatTransport {
         .toList(growable: false);
   }
 
+  /// 领取一枚目标身份的 KeyPackage。[targetCidNumber] = 目标身份主键 CID 号。
   Future<MlsKeyPackage> consumeKeyPackage({
-    required String accountId,
+    required String targetCidNumber,
     required String keyPackageId,
-    required String requesterAccountId,
   }) async {
     final json = await _postJson('/v1/chat/keypackages/consume', {
-      'account_id': accountId,
+      'cid_number': targetCidNumber,
       'key_package_id': keyPackageId,
-      'requester_account_id': requesterAccountId,
     });
     final item = json['key_package'];
     if (item is! Map<String, dynamic>) {
@@ -104,13 +107,13 @@ class ChatCloudTransport implements ChatTransport {
   }
 
   Future<bool> sendSignal({
-    required String recipientAccountId,
+    required String recipientCidNumber,
     String? recipientDeviceId,
     required Map<String, dynamic> signal,
   }) async {
     final json = await _postJson('/v1/chat/signals', {
       'sender_device_id': localDeviceId,
-      'recipient_account_id': recipientAccountId,
+      'recipient_cid_number': recipientCidNumber,
       'recipient_device_id': recipientDeviceId ?? '',
       'signal': signal,
     });
@@ -161,6 +164,7 @@ class ChatCloudTransport implements ChatTransport {
   Future<ChatDeliveryResult> sendEncryptedEnvelope({
     required String envelopeId,
     required List<int> envelopeBytes,
+    required String recipientCidNumber,
   }) async {
     ChatEnvelope envelope;
     try {
@@ -182,10 +186,11 @@ class ChatCloudTransport implements ChatTransport {
       );
     }
     try {
+      // 路由键 = 收件人 CID 号；proto envelope 内嵌 recipient_account_id 仍供 MLS/归属。
       final json = await _postJson('/v1/chat/envelopes', {
         'envelope_id': envelope.envelopeId,
         'sender_device_id': envelope.senderDeviceId,
-        'recipient_account_id': envelope.recipientAccountId,
+        'recipient_cid_number': recipientCidNumber,
         'recipient_device_id': '',
         'envelope': _base64UrlEncode(envelopeBytes),
       });
@@ -319,7 +324,9 @@ Map<String, dynamic> _decodeResponse(http.Response response, Uri uri) {
 }
 
 MlsKeyPackage _keyPackageFromJson(Map<String, dynamic> json) => MlsKeyPackage(
+      // account_id = 设备所有者账户（MLS 名册对齐）；cid_number = 其身份主键（寻址）。
       accountId: (json['account_id'] ?? '').toString(),
+      cidNumber: (json['cid_number'] ?? '').toString(),
       deviceId: (json['device_id'] ?? '').toString(),
       devicePublicKey: (json['device_public_key'] ?? '').toString(),
       keyPackageId: (json['key_package_id'] ?? '').toString(),

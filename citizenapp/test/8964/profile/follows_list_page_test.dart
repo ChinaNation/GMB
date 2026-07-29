@@ -11,29 +11,26 @@ import 'fake_profile.dart';
 void main() {
   const session = SquareSession(
     sessionToken: 'test-session',
+    cidNumber: "CN220-CTZN2-198805200-2026",
     accountId:
         '0x6666666666666666666666666666666666666666666666666666666666666666',
     expiresAt: 9999999999999,
   );
   testWidgets('renders follow entries as rows', (tester) async {
+    const cidA = 'CN001-CTZN-000000001-2026';
+    const cidB = 'CN001-CTZN-000000002-2026';
     final api = FakeProfileApi(
       sampleProfile(),
       follows: const [
-        SquareFollowEntry(
-            accountId:
-                '0x0101010101010101010101010101010101010101010101010101010101010101',
-            createdAt: 200),
-        SquareFollowEntry(
-            accountId:
-                '0x0202020202020202020202020202020202020202020202020202020202020202',
-            createdAt: 100),
+        SquareFollowEntry(cidNumber: cidA, createdAt: 200),
+        SquareFollowEntry(cidNumber: cidB, createdAt: 100),
       ],
       throwOnProfile: true,
     );
     await tester.pumpWidget(
       MaterialApp(
         home: FollowsListPage(
-          accountId: kOwner,
+          cidNumber: kOwner,
           type: FollowsType.following,
           session: session,
           api: api,
@@ -44,21 +41,21 @@ void main() {
 
     expect(find.byType(ListTile), findsNWidgets(2));
     expect(find.text('关注'), findsOneWidget);
+    // 缺公开资料时按身份主键 cid_number 稳定派生默认昵称。
     expect(
-      find.text(ProfilePresentation.forAccountId(
-              '0x0101010101010101010101010101010101010101010101010101010101010101')
-          .fallbackName),
+      find.text(ProfilePresentation.forAccountId(cidA).fallbackName),
       findsOneWidget,
     );
-    expect(find.text('0x0101...010101'), findsOneWidget);
-    expect(find.text('0x0202...020202'), findsOneWidget);
+    // 副标题展示身份主键 cid_number（完整）。
+    expect(find.text(cidA), findsOneWidget);
+    expect(find.text(cidB), findsOneWidget);
   });
 
   testWidgets('shows empty state when there are no followers', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: FollowsListPage(
-          accountId: kOwner,
+          cidNumber: kOwner,
           type: FollowsType.followers,
           session: session,
           api: FakeProfileApi(sampleProfile()),

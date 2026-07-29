@@ -50,6 +50,11 @@ ChatMediaDraft _draft(int byteSize) => ChatMediaDraft(
       byteSize: byteSize,
     );
 
+/// 收件人钱包账户 account_id 与身份主键 cid_number 分离：前者进 proto 供 MLS，
+/// 后者是投递/WebRTC 信令路由键。
+const _peerAccountId = 'b';
+const _peerCidNumber = 'CN220-CTZN2-100000002-2026';
+
 void main() {
   useIsolatedIsar();
 
@@ -60,7 +65,7 @@ void main() {
     return ChatFlow(
       crypto: _FakeMls(),
       store: store,
-      deliverer: (envelope, bytes) async {
+      deliverer: (envelope, bytes, recipientCidNumber) async {
         delivered.add(envelope);
         return ChatDeliveryResult(
           envelopeId: envelope.envelopeId,
@@ -80,11 +85,12 @@ void main() {
     await flow.sendMedia(
       conversationId: 'dm:a:b',
       senderAccountId: 'a',
-      recipientAccountId: 'b',
+      recipientAccountId: _peerAccountId,
+      recipientCidNumber: _peerCidNumber,
       senderDeviceId: 'devA',
       media: _draft(200 * 1024 * 1024),
       sendDeviceAttachment: ({
-        required recipientAccountId,
+        required recipientCidNumber,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -127,11 +133,12 @@ void main() {
     await flow.sendMedia(
       conversationId: 'dm:a:b',
       senderAccountId: 'a',
-      recipientAccountId: 'b',
+      recipientAccountId: _peerAccountId,
+      recipientCidNumber: _peerCidNumber,
       senderDeviceId: 'devA',
       media: _draft(50 * 1024 * 1024),
       sendDeviceAttachment: ({
-        required recipientAccountId,
+        required recipientCidNumber,
         required conversationId,
         required attachmentId,
         required fileName,
@@ -172,11 +179,12 @@ void main() {
       flow.sendMedia(
         conversationId: 'dm:a:b',
         senderAccountId: 'a',
-        recipientAccountId: 'b',
+        recipientAccountId: _peerAccountId,
+        recipientCidNumber: _peerCidNumber,
         senderDeviceId: 'devA',
         media: _draft(200 * 1024 * 1024),
         sendDeviceAttachment: ({
-          required recipientAccountId,
+          required recipientCidNumber,
           required conversationId,
           required attachmentId,
           required fileName,

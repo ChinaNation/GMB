@@ -10,6 +10,7 @@ const String kOwner =
 
 SquareSession fakeSession() => SquareSession(
       sessionToken: 'tok',
+      cidNumber: "CN220-CTZN2-198805200-2026",
       accountId: kOwner,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
     );
@@ -106,7 +107,7 @@ class FakeProfileApi extends CitizenProfileApi {
 
   @override
   Future<CitizenProfile> fetchProfile(
-    String accountId, {
+    String cidNumber, {
     SquareSession? session,
   }) async {
     calls++;
@@ -118,7 +119,7 @@ class FakeProfileApi extends CitizenProfileApi {
 
   @override
   Future<({List<SquarePost> posts, int? nextCursor})> fetchAuthorPosts(
-    String accountId, {
+    String cidNumber, {
     SquarePostCategory? category,
     SquarePostContentFormat? contentFormat,
     int limit = 20,
@@ -136,7 +137,7 @@ class FakeProfileApi extends CitizenProfileApi {
   @override
   Future<void> followUser({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
   }) async {
     followCalls++;
     if (throwOnFollow) {
@@ -147,7 +148,7 @@ class FakeProfileApi extends CitizenProfileApi {
   @override
   Future<void> unfollowUser({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
   }) async {
     unfollowCalls++;
     if (throwOnFollow) {
@@ -158,7 +159,7 @@ class FakeProfileApi extends CitizenProfileApi {
   @override
   Future<void> setNotify({
     required SquareSession session,
-    required String followedAccountId,
+    required String followedCidNumber,
     required bool enabled,
   }) async {
     notifyCalls++;
@@ -169,14 +170,14 @@ class FakeProfileApi extends CitizenProfileApi {
   }
 
   @override
-  Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows(
-    String accountId, {
+  Future<({List<SquareFollowEntry> entries, int? nextCursor})> fetchFollows(
+    String cidNumber, {
     required String type,
     int limit = 20,
     int? cursor,
     SquareSession? session,
   }) async {
-    return (accounts: follows, nextCursor: null);
+    return (entries: follows, nextCursor: null);
   }
 
   @override
@@ -201,7 +202,7 @@ class FakeProfileCache extends CitizenProfileCache {
   bool wrote = false;
 
   @override
-  Future<CitizenProfile?> read(String accountId) async => seed;
+  Future<CitizenProfile?> read(String cidNumber) async => seed;
 
   @override
   Future<void> write(CitizenProfile profile) async {
@@ -210,7 +211,7 @@ class FakeProfileCache extends CitizenProfileCache {
   }
 
   @override
-  Future<void> clear(String accountId) async {
+  Future<void> clear(String cidNumber) async {
     seed = null;
   }
 }

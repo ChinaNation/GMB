@@ -107,6 +107,7 @@ void main() {
           httpClient: client,
           sessionResolver: () async => SquareSession(
             sessionToken: 'session-token',
+            cidNumber: "CN220-CTZN2-198805200-2026",
             accountId: accountId,
             expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
           ),
