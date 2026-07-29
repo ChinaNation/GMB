@@ -632,11 +632,19 @@ class ChatFlow {
     if (!await AttachmentVault.hasCipher(cachePath)) {
       return null;
     }
-    final plain = await AttachmentVault.openPlain(
+    // 先复用已解密好的明文：会话打开时每条媒体消息都会走一次路径解析，
+    // 若每次都整文件解密，一个有若干视频的会话首屏就要解出上 GB。
+    final reusable = await AttachmentVault.existingPlain(
       cachePath: cachePath,
-      key: attachmentKey,
       plainDirectory: plainDirectory,
     );
+    final plain = reusable != null && await reusable.length() == clearByteSize
+        ? reusable
+        : await AttachmentVault.openPlain(
+            cachePath: cachePath,
+            key: attachmentKey,
+            plainDirectory: plainDirectory,
+          );
     final length = await plain.length();
     if (length != clearByteSize) {
       await AttachmentVault.releasePlain(plain);

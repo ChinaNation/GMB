@@ -251,6 +251,64 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
 无原生桥（线程 B 负责），故 iOS 上 child mini-secret 的硬件保护弱于 Android，
 会传导到 KEK。加密设计本身不受影响，但 iOS 整体强度须等线程 B 补齐。
 
+### 自审与修复(2026-07-29,六步交付后)
+
+按 `memory/07-ai/audit-recipe.md` 对本卡六步产出做自审,发现 **1 个 CRITICAL + 1 个
+HIGH + 1 个 MEDIUM**,均已修复。
+
+#### 🔴 A(CRITICAL,已修)换绑未接 LDK 重 wrap → 全部本地密文永久不可读
+
+**证据锚点**:`rewrapLocalDataKeyForRebind` 曾**零调用点**——
+`wallet_manager.dart:1154` 只有定义,全仓 `lib/` + `test/` 无调用方;换绑主流程
+`myid_service.dart:_doRunRebindMigration` 只调了通讯录迁移。
+
+**后果链**:换绑后 `ensureLocalDataKeyForAccountId(新账户)` 查不到缓存与 wrap →
+`vault.ensureForAccount` **新生成一把 LDK** → 五把子钥全变 → 聊天/MLS/附件/通讯录
+已落盘密文全部不可解密。且因解密失败被刻意做成**抛错而非静默降级**,表现为
+相关页面直接报错。**直接违反死契约 `cid-rebind-subkeys-must-auto-migrate`。**
+
+**修复**:`myid_service.dart` 本地重建插入步骤 3,顺序**必须**是
+「通讯录迁移 → LDK 重 wrap → 广播身份变化」:
+- 在迁移**之后**——迁移要读旧账户本地密文 KV,而重 wrap 会删旧账户 LDK wrap,
+  倒过来迁移就读不出旧数据(这是修复时的真实陷阱,直接补调用会打断迁移);
+- 在广播**之前**——广播后各页按新账户读本地密文,此时新账户必须已有 wrap。
+- 不吞异常:失败让整个迁移重试。
+
+**测试补齐**:`myid_service_test.dart` 新增断言——重 wrap 实参正确 +
+`trace == ['contact_migrate', 'ldk_rewrap']` 钉死顺序。删掉调用即测试红。
+
+#### 🟠 B(HIGH,已修)打开会话会解密该会话全部媒体
+
+**证据锚点**:`chat_page.dart:_resolveMediaPaths` 遍历会话内每条媒体消息逐个解析
+路径,而第 5 步把 `readCachedAttachment` 改成了「每次调用完整解密整个文件」。
+改造前该函数注释原文是「只按文件存在性 + 大小(stat,不读整块字节)判定」——
+刻意的轻量设计被改成了重操作。有若干视频的会话首屏要解出上 GB。
+
+**修复**:新增 `AttachmentVault.existingPlain`(只探不解密);
+`readCachedAttachment` 先复用已解密明文(长度校验通过即用),未命中才解密。
+
+#### 🟡 C(MEDIUM,已修)`ChatCrypto.evict` 死代码
+
+零调用点。核验确认**不是正确性问题**:缓存按 accountId 分键,且换绑后 LDK 与
+五把子钥都不变,无陈旧风险。按「无残桩」死规则删除,并留注释说明为何不需要。
+
+#### 撤回:一条先前不成立的说法
+
+第 1 步任务卡与提交 `bf017a8e` 写「死契约以 O(1) 成本**满足**」——**该说法不成立**,
+当时只做到金库层具备能力、业务链路未接。现已接上并有顺序断言,该说法此刻才成立。
+
+#### 根因反思(给后续 auditor)
+
+A 与 B 同源:验收停在「单元级能力正确」,没有沿**真实调用链**回推(换绑流程谁调、
+UI 每帧调几次)。982 项测试全绿反而给了虚假信心。这正是仓库「真实验收硬规则」
+要求真机运行态验收的原因——本卡六步至今**零真机验收**。
+
+#### 已核验不成立的疑点(避免下轮重复排查)
+
+- 通讯录 `cid_number` 缺陷:已由 CID 重构修好,非本卡问题;
+- `_localKvKey` 从键名解析 accountId:四前缀各只含一个 `:`、accountId 是纯 hex,解析正确;
+- `lib/isar/` 与线程 B / 广场双存的边界冲突:至今未发生,`git status` 干净。
+
 ## 完成标准
 
 - Isar 和 App 私有目录不再保存联系人、聊天正文、会话摘要、MLS 秘密或附件明文。

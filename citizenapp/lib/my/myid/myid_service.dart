@@ -513,10 +513,11 @@ class MyIdService {
   /// 本地重建实体步骤:
   /// 1. 设备子钥归属切新账户(新账户云会话登录的**硬前置**,须最先且必成功);
   /// 2. 通讯录迁到新账户并用新账户 child 密钥重加密上云(上云失败落待办,不阻断);
-  /// 3. 新账户会话携旧账户换绑授权执行账户级吊销；失败保留安全 outbox 独立重试;
-  /// 4. 广播身份绑定变化——**在通讯录迁移完成之后**:避免其它页在新账户通讯录尚空/
+  /// 3. 本地静止态数据密钥(LDK)重 wrap 到新账户;
+  /// 4. 新账户会话携旧账户换绑授权执行账户级吊销；失败保留安全 outbox 独立重试;
+  /// 5. 广播身份绑定变化——**在通讯录迁移完成之后**:避免其它页在新账户通讯录尚空/
   ///    迁移进行中就翻到新账户,读到空/错乱,或与迁移的整份快照发生读-改-写覆盖丢数据;
-  /// 5. 更新「已同步账户」标记为新账户(功能对账基线推进；安全 outbox 仍以服务端确认
+  /// 6. 更新「已同步账户」标记为新账户(功能对账基线推进；安全 outbox 仍以服务端确认
   ///    为唯一完成条件)。
   Future<void> _doRunRebindMigration(
     String cidNumber,
@@ -527,6 +528,16 @@ class MyIdService {
     await _contactService.migrateContactsToNewIdentity(
       oldAccountId,
       newAccountId,
+    );
+    // 步骤 3:LDK 重 wrap。顺序上必须**在通讯录迁移之后**——迁移要读旧账户的本地
+    // 密文 KV,而重 wrap 会删掉旧账户的 LDK wrap;倒过来迁移就读不出旧数据了。
+    // 也必须**在广播身份变化之前**:广播后各页会按新账户读本地密文,若此时新账户
+    // 还没有 LDK wrap,`ensureLocalDataKeyForAccountId` 会新生成一把,导致聊天/
+    // MLS/附件/通讯录已落盘密文全部不可解密。
+    // 不吞异常:失败必须让整个迁移重试(死契约 cid-rebind-subkeys-must-auto-migrate)。
+    await _walletManager.rewrapLocalDataKeyForRebind(
+      oldAccountId: oldAccountId,
+      newAccountId: newAccountId,
     );
     // 用新账户会话代吊销旧账户。网络失败不阻断已经 finalized 的身份切换，但安全
     // outbox 绝不删除；即使同步标记推进，后续 getState 仍独立重试，直至 Worker 确认。

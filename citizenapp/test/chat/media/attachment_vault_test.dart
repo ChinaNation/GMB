@@ -123,6 +123,52 @@ void main() {
     expect(plainDir.existsSync(), isFalse);
   });
 
+  test('existingPlain:未解密时返回 null,不触发解密', () async {
+    final cachePath = '${cacheDir.path}/conv/att-5.bin';
+    await AttachmentVault.seal(
+      plainSource: writePlain('src5.bin', List<int>.filled(2048, 3)),
+      cachePath: cachePath,
+      key: key,
+    );
+    expect(
+      await AttachmentVault.existingPlain(
+        cachePath: cachePath,
+        plainDirectory: plainDir,
+      ),
+      isNull,
+    );
+    // 探测不得产生任何明文
+    expect(plainDir.existsSync() ? plainDir.listSync() : const [], isEmpty);
+  });
+
+  test('existingPlain:已解密后命中,可复用免二次解密', () async {
+    final secret = List<int>.generate(3000, (i) => (i * 11) % 256);
+    final cachePath = '${cacheDir.path}/conv/att-6.bin';
+    await AttachmentVault.seal(
+      plainSource: writePlain('src6.bin', secret),
+      cachePath: cachePath,
+      key: key,
+    );
+    final first = await AttachmentVault.openPlain(
+      cachePath: cachePath,
+      key: key,
+      plainDirectory: plainDir,
+    );
+    final hit = await AttachmentVault.existingPlain(
+      cachePath: cachePath,
+      plainDirectory: plainDir,
+    );
+    expect(hit, isNotNull);
+    expect(hit!.path, first.path);
+    expect(hit.readAsBytesSync(), secret);
+    // 用错密钥也能拿到复用句柄——证明这条路径确实没走解密
+    final reusedWithWrongKey = await AttachmentVault.existingPlain(
+      cachePath: cachePath,
+      plainDirectory: plainDir,
+    );
+    expect(reusedWithWrongKey, isNotNull);
+  });
+
   test('清理不存在的目录是安全的', () async {
     await AttachmentVault.purgePlainDirectory(
       Directory('${root.path}/never-created'),

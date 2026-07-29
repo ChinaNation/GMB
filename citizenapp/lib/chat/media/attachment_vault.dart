@@ -49,9 +49,22 @@ class AttachmentVault {
   static Future<bool> hasCipher(String cachePath) =>
       cipherFileOf(cachePath).exists();
 
+  /// 已解密好的短命明文文件（不存在返回 null，不触发解密）。
+  ///
+  /// 供列表渲染这类**高频路径**先探一次，命中就直接复用，避免同一附件被反复
+  /// 整文件解密——会话里每条媒体消息都会走一次路径解析，视频动辄上百 MB。
+  static Future<File?> existingPlain({
+    required String cachePath,
+    required Directory plainDirectory,
+  }) async {
+    final plain = File('${plainDirectory.path}/${_plainName(cachePath)}');
+    return await plain.exists() ? plain : null;
+  }
+
   /// 解密到短命明文临时文件并返回它。
   ///
-  /// 调用方**必须**在用完后调 [releasePlain];异常路径同样要删,否则明文会留在盘上。
+  /// 明文生命周期由「前台存活」策略统一兜底（启动 / 退后台 / 删会话三处 purge），
+  /// 调用方不需要逐处交接所有权；[releasePlain] 只用于确定不再需要的即时清理。
   static Future<File> openPlain({
     required String cachePath,
     required List<int> key,

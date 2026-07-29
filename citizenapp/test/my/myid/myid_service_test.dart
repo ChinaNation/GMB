@@ -328,6 +328,10 @@ void main() {
         _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]);
     final fakeContact = _FakeContactService();
     final fakeRevoker = _FakeRebindRevoker();
+    // 两个 fake 共用一条轨迹,用于断言本地重建各步的先后顺序。
+    final trace = <String>[];
+    fakeWallet.trace = trace;
+    fakeContact.trace = trace;
     final service = MyIdService(
       walletManager: fakeWallet,
       chainRpc: _FakeChainRpc(),
@@ -353,6 +357,14 @@ void main() {
     expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
     expect(fakeContact.migrations.single.oldAccountId, _validAccountId);
     expect(fakeContact.migrations.single.newAccountId, newAccount.accountId);
+    // 本地静止态数据密钥(LDK)必须重 wrap 到新账户。
+    // 漏这一步 → 新账户读不到 LDK wrap → 会新生成一把 → 聊天/MLS/附件/通讯录
+    // 已落盘密文全部不可解密(死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
+    expect(fakeWallet.ldkRewraps.single.oldAccountId, _validAccountId);
+    expect(fakeWallet.ldkRewraps.single.newAccountId, newAccount.accountId);
+    // 顺序钉死:通讯录迁移要读旧账户本地密文,而重 wrap 会删旧账户 LDK wrap,
+    // 倒过来迁移就读不出旧数据了。
+    expect(trace, <String>['contact_migrate', 'ldk_rewrap']);
     // 吊销旧账户云端隐私/鉴权数据(换绑止损)。
     expect(fakeRevoker.revoked, [_validAccountId]);
     // 重建完成 → 「已同步账户」标记推进到新账户。
@@ -658,6 +670,23 @@ class _FakeWalletManager extends WalletManager {
   int subkeyRebindCalls = 0;
   final List<String> subkeyRebindTargets = <String>[];
 
+  /// 换绑本地重建的调用顺序轨迹。与 [_FakeContactService.trace] 指向同一个 list,
+  /// 用来钉死「通讯录迁移 → LDK 重 wrap」的先后关系。
+  List<String> trace = <String>[];
+
+  /// LDK 重 wrap 的实参记录。
+  final List<({String oldAccountId, String newAccountId})> ldkRewraps =
+      <({String oldAccountId, String newAccountId})>[];
+
+  @override
+  Future<void> rewrapLocalDataKeyForRebind({
+    required String oldAccountId,
+    required String newAccountId,
+  }) async {
+    trace.add('ldk_rewrap');
+    ldkRewraps.add((oldAccountId: oldAccountId, newAccountId: newAccountId));
+  }
+
   @override
   Future<WalletProfile?> getDefaultWallet() async => _wallet;
   @override
@@ -686,11 +715,15 @@ class _FakeContactService extends UserContactService {
   final List<({String oldAccountId, String newAccountId})> migrations =
       <({String oldAccountId, String newAccountId})>[];
 
+  /// 与 [_FakeWalletManager.trace] 共用同一个 list,记录调用顺序。
+  List<String> trace = <String>[];
+
   @override
   Future<void> migrateContactsToNewIdentity(
     String oldAccountId,
     String newAccountId,
   ) async {
+    trace.add('contact_migrate');
     migrations.add((oldAccountId: oldAccountId, newAccountId: newAccountId));
   }
 }

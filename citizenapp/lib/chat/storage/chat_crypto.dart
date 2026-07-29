@@ -51,8 +51,8 @@ class ChatCrypto {
     return keys;
   }
 
-  /// 清除某账户的子钥缓存（换绑 / 退出账户时调）。
-  void evict(String accountId) => _cache.remove(accountId);
+  // 说明：不提供 evict——缓存按 accountId 分键，且 CID 换绑只重 wrap、LDK 与
+  // 五把子钥都不变，不存在陈旧子钥问题。加一个永不调用的清理入口只会变成残桩。
 
   /// 加密聊天正文 / 会话摘要。[recordId] 进 AAD，把密文钉死在该条记录上。
   Future<String> encryptText({
