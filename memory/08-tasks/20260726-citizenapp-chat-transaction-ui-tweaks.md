@@ -35,6 +35,10 @@
 
 ### 二、交易页（lib/transaction）
 
+> 2026-07-28：本节第 5 项的内容区链状态卡片及其竖线已经被
+> `20260728-citizenapp-transaction-citizen-topbar.md` 的顶栏行内状态取代；
+> 下述内容只记录当时验收结果，不再是当前 UI 目标。
+
 5. 顶部链状态栏（ui/widgets/chain_progress_banner.dart 的 compactThreeState）与扫一扫/多签账户栏（transaction_tab_page.dart）中间的竖线对齐：
    - 扫一扫/多签栏竖线本在卡片正中，链状态栏竖线偏右约 8px（呼吸圆点 + 间距摆在左 Expanded 之外把分隔线顶右了）。
    - 把呼吸圆点 + 间距移进左 Expanded、分隔线两侧留等宽间距，使链状态栏竖线也落在卡片几何正中。两卡同宽同插边（同一 ListView，padding all(16)），居中后即上下同一垂直线。

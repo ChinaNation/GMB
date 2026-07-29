@@ -10,7 +10,14 @@ const POINT = {
   observedAt: 10_000,
 };
 
+// 身份主键 cid 与其当前绑定账户 account_id 刻意取不同值，验证「按 cid 迭代镜像、按 account_id 回链读」的拆分。
+const CID_DUE = "CN220-CTZN2-198805200-2026";
+const CID_FUTURE = "CN220-CTZN2-197001010-2026";
+const CID_BAD = "CN220-CTZN2-199001010-2026";
+const CID_GOOD = "CN220-CTZN2-199512120-2026";
+
 interface Row {
+  cid_number: string;
   account_id: string;
   membership_level: string;
   paid_until: number;
@@ -20,10 +27,12 @@ interface Row {
 }
 
 class FakeDb {
+  // PK = cid_number；account_id 仅为当前绑定账户列。
   rows = new Map<string, Row>();
 
-  seed(accountId: string, paidUntil: number, status = "active"): void {
-    this.rows.set(accountId, {
+  seed(cidNumber: string, accountId: string, paidUntil: number, status = "active"): void {
+    this.rows.set(cidNumber, {
+      cid_number: cidNumber,
       account_id: accountId,
       membership_level: "freedom",
       paid_until: paidUntil,
@@ -44,13 +53,13 @@ class FakeStmt {
   bind(...args: unknown[]): FakeStmt { this.args = args; return this; }
 
   async all<T>(): Promise<{ results: T[] }> {
-    if (this.sql.includes("SELECT account_id FROM square_memberships")) {
+    if (this.sql.includes("SELECT cid_number, account_id FROM square_memberships")) {
       const [chainTimestamp, limit] = this.args as [number, number];
       const results = [...this.db.rows.values()]
         .filter((row) => row.subscription_status === "active" && row.paid_until <= chainTimestamp)
         .sort((a, b) => a.paid_until - b.paid_until)
         .slice(0, limit)
-        .map((row) => ({ account_id: row.account_id }));
+        .map((row) => ({ cid_number: row.cid_number, account_id: row.account_id }));
       return { results: results as T[] };
     }
     return { results: [] };
@@ -59,8 +68,8 @@ class FakeStmt {
   async run(): Promise<{ meta: { changes: number } }> {
     if (this.sql.includes("INSERT INTO chain_clock")) return { meta: { changes: 1 } };
     if (this.sql.includes("subscription_status = 'terminated'")) {
-      const accountId = this.args[3] as string;
-      const row = this.db.rows.get(accountId);
+      const cidNumber = this.args[3] as string;
+      const row = this.db.rows.get(cidNumber);
       if (row) {
         row.subscription_status = "terminated";
         row.entitlement_lapsed_at = row.paid_until;
@@ -69,8 +78,8 @@ class FakeStmt {
       return { meta: { changes: row ? 1 : 0 } };
     }
     if (this.sql.includes("UPDATE square_memberships SET membership_level")) {
-      const accountId = this.args[10] as string;
-      const row = this.db.rows.get(accountId);
+      const cidNumber = this.args[10] as string;
+      const row = this.db.rows.get(cidNumber);
       if (row) {
         row.membership_level = this.args[0] as string;
         row.paid_until = this.args[4] as number;
@@ -102,9 +111,10 @@ function deps(
 ): ReconcileDeps {
   return {
     finalizedPoint: async () => POINT,
-    readSubscriptionAtBlock: async (_env, subscriber) => {
-      if (fail.has(subscriber)) throw new Error("chain failed");
-      return states[subscriber] ?? null;
+    // 回链读订阅按当前绑定账户 account_id 入参，states/fail 均以 account_id 为键。
+    readSubscriptionAtBlock: async (_env, accountId) => {
+      if (fail.has(accountId)) throw new Error("chain failed");
+      return states[accountId] ?? null;
     },
   };
 }
@@ -125,45 +135,45 @@ function active(level: "freedom" | "democracy" | "spark"): ChainSubscriptionStat
 describe("平台订阅低资源到期对账", () => {
   it("只扫描已到期 Active，未到期记录不读链", async () => {
     const db = new FakeDb();
-    db.seed("due", 8_000);
-    db.seed("future", 12_000);
-    const result = await reconcileMemberships(env(db), deps({ due: active("democracy") }));
+    db.seed(CID_DUE, "acct-due", 8_000);
+    db.seed(CID_FUTURE, "acct-future", 12_000);
+    const result = await reconcileMemberships(env(db), deps({ "acct-due": active("democracy") }));
     expect(result).toEqual({ scanned: 1, updated: 1, failed: 0 });
-    expect(db.rows.get("due")?.membership_level).toBe("democracy");
-    expect(db.rows.get("due")?.paid_until).toBe(20_000);
-    expect(db.rows.get("future")?.paid_until).toBe(12_000);
+    expect(db.rows.get(CID_DUE)?.membership_level).toBe("democracy");
+    expect(db.rows.get(CID_DUE)?.paid_until).toBe(20_000);
+    expect(db.rows.get(CID_FUTURE)?.paid_until).toBe(12_000);
   });
 
   it("链上查无时 fail-closed 为 terminated", async () => {
     const db = new FakeDb();
-    db.seed("due", 8_000);
-    await reconcileMemberships(env(db), deps({ due: null }));
-    expect(db.rows.get("due")?.subscription_status).toBe("terminated");
+    db.seed(CID_DUE, "acct-due", 8_000);
+    await reconcileMemberships(env(db), deps({ "acct-due": null }));
+    expect(db.rows.get(CID_DUE)?.subscription_status).toBe("terminated");
   });
 
   it("单条链读失败不阻断同批其它记录", async () => {
     const db = new FakeDb();
-    db.seed("bad", 7_000);
-    db.seed("good", 8_000);
+    db.seed(CID_BAD, "acct-bad", 7_000);
+    db.seed(CID_GOOD, "acct-good", 8_000);
     const result = await reconcileMemberships(
       env(db),
-      deps({ good: active("spark") }, new Set(["bad"])),
+      deps({ "acct-good": active("spark") }, new Set(["acct-bad"])),
     );
     expect(result).toEqual({ scanned: 2, updated: 1, failed: 1 });
-    expect(db.rows.get("bad")?.verified_at).toBe(1);
-    expect(db.rows.get("good")?.membership_level).toBe("spark");
+    expect(db.rows.get(CID_BAD)?.verified_at).toBe(1);
+    expect(db.rows.get(CID_GOOD)?.membership_level).toBe("spark");
   });
 
   it("关闭开关或链 RPC 未配置时零扫描", async () => {
     const db = new FakeDb();
-    db.seed("due", 8_000);
+    db.seed(CID_DUE, "acct-due", 8_000);
     await expect(reconcileMemberships(
       env(db, { MEMBERSHIP_RECONCILE_ENABLED: "0" }),
-      deps({ due: null }),
+      deps({ "acct-due": null }),
     )).resolves.toEqual({ scanned: 0, updated: 0, failed: 0 });
     await expect(reconcileMemberships(
       env(db, { CHAIN_URL: undefined }),
-      deps({ due: null }),
+      deps({ "acct-due": null }),
     )).resolves.toEqual({ scanned: 0, updated: 0, failed: 0 });
   });
 });

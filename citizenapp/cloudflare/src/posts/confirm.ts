@@ -91,8 +91,9 @@ export async function deletePostCloudflareData(
   }
 
   const post = await loadPostForDelete(env, postId);
-  if (post.account_id !== session.account_id) {
-    throw new HttpError(403, 'post_account_mismatch', '登录钱包与动态作者不一致');
+  // 删除自己的动态 = off-chain 操作;归属按身份主键 cid_number(非签名账户)。
+  if (post.cid_number !== session.cid_number) {
+    throw new HttpError(403, 'post_owner_mismatch', '登录身份与动态作者不一致');
   }
 
   const upload = await loadUploadForPost(env, postId);
@@ -110,8 +111,8 @@ export async function deletePostCloudflareData(
   // 硬删除：彻底删掉帖子行本身，不留软删残行；链上仅存 content_hash 不受影响。
   const statements = [
     env.DB.prepare(
-      `DELETE FROM square_posts WHERE post_id = ? AND account_id = ?`
-    ).bind(postId, session.account_id)
+      `DELETE FROM square_posts WHERE post_id = ? AND cid_number = ?`
+    ).bind(postId, session.cid_number)
   ];
 
   if (upload) {
@@ -137,7 +138,7 @@ export async function confirmPublishedPost(
   body: ConfirmRequest
 ): Promise<SquarePostFeedItem> {
   // 发布确认是最后一道服务端闸门；会员在上传后失效也不得把链上事件投影为广场内容。
-  const membership = await requireActiveMembership(env, session.account_id);
+  const membership = await requireActiveMembership(env, session.cid_number);
   if (typeof body.post_id !== 'string' || body.post_id.trim().length === 0) {
     throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
   }
@@ -146,8 +147,9 @@ export async function confirmPublishedPost(
   }
 
   const upload = await loadCompletedUpload(env, body.post_id.trim());
-  if (upload.account_id !== session.account_id) {
-    throw new HttpError(403, 'upload_account_mismatch', '登录钱包与上传记录不一致');
+  // 上传归属按身份主键 cid_number(非签名账户)。
+  if (upload.cid_number !== session.cid_number) {
+    throw new HttpError(403, 'upload_owner_mismatch', '登录身份与上传记录不一致');
   }
   if (!upload.content_hash || !upload.storage_receipt_id) {
     throw new HttpError(409, 'upload_not_completed', '上传任务尚未完成');
@@ -158,6 +160,11 @@ export async function confirmPublishedPost(
   if (!event) {
     throw new HttpError(409, 'square_event_not_found', '指定区块没有匹配的广场发布事件');
   }
+  // 身份主键 cid_number 在 D1 为 NOT NULL:发布事件必须携带发布者 CID,否则拒绝镜像。
+  if (!event.cid_number) {
+    throw new HttpError(409, 'square_event_cid_missing', '广场发布事件缺少身份主键 CID');
+  }
+  const authorCidNumber = event.cid_number;
 
   const objectKeys = parseObjectKeys(upload);
   const manifestObjectKey = objectKeys.find((key) => key.endsWith('/manifest.json'));
@@ -195,7 +202,7 @@ export async function confirmPublishedPost(
     .bind(
       upload.post_id,
       upload.account_id,
-      event.cid_number,
+      authorCidNumber,
       upload.post_category,
       contentFormat,
       title,
@@ -210,9 +217,9 @@ export async function confirmPublishedPost(
   // 发帖通知扇出：读作者展示名一次并入队；队列消费者分页跨调用推给全部未静音粉丝。
   // 入队失败只 log、绝不回滚已发布的帖子（链上已 finalized、D1 已镜像）。
   try {
-    const authorDoc = await readProfileDoc(env, upload.account_id);
+    const authorDoc = await readProfileDoc(env, authorCidNumber);
     await env.SQUARE_NOTIFY_QUEUE?.send({
-      author_account_id: upload.account_id,
+      author_cid_number: authorCidNumber,
       author_name: authorDoc?.display_name ?? '',
       content_format: contentFormat,
       post_id: upload.post_id,
@@ -226,7 +233,7 @@ export async function confirmPublishedPost(
   return {
     post_id: upload.post_id,
     account_id: upload.account_id,
-    cid_number: event.cid_number,
+    cid_number: authorCidNumber,
     post_category: upload.post_category,
     content_format: contentFormat,
     title,
@@ -276,7 +283,7 @@ function findMatchingEvent(
 
 async function loadCompletedUpload(env: Env, postId: string): Promise<PreparedUploadRow> {
   const upload = await env.DB.prepare(
-    `SELECT upload_id, post_id, account_id, post_category, manifest_hash, content_hash,
+    `SELECT upload_id, post_id, cid_number, account_id, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE post_id = ?`
@@ -294,7 +301,7 @@ async function loadCompletedUpload(env: Env, postId: string): Promise<PreparedUp
 
 async function loadUploadForPost(env: Env, postId: string): Promise<PreparedUploadRow | null> {
   return env.DB.prepare(
-    `SELECT upload_id, post_id, account_id, post_category, manifest_hash, content_hash,
+    `SELECT upload_id, post_id, cid_number, account_id, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE post_id = ?`

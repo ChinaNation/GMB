@@ -7,9 +7,7 @@ package org.citizenapp
 //   CryptoObject 解密（读弹生物识别，每次一验，令牌原子绑定 doFinal）。
 // - 混合信封：随机 AES-256-GCM DEK 加密明文，KEK 公钥 wrap DEK；规避 24 词助记词
 //   超 RSA 块，且加解密体积无关。
-// - 两档（tier）访问控制不同：
-//   · strict（seed）：仅强生物识别，增删指纹即永久失效（invalidatedByEnrollment=true）。
-//   · recovery（助记词）：强生物识别 或 设备凭证（PIN/图案/密码），扛换指纹（false）。
+// - 公民 App 只使用 strict：账户 child 私钥仅由强生物识别解锁。
 // - OAEP 铁律：MGF1 掩码摘要必须 SHA-1（主摘要 SHA-256），否则 keystore2 抛
 //   INCOMPATIBLE_MGF_DIGEST。加解密两端逐字节共用 oaepSpec()。
 //
@@ -55,8 +53,6 @@ class HardwareSeedVaultBridge(private val activity: FragmentActivity) {
         private const val BLOB_VERSION = 1
 
         const val TIER_STRICT = "strict"
-        const val TIER_RECOVERY = "recovery"
-
         private fun aliasFor(tier: String, walletIndex: Int) =
             "gmb_${tier}_kek_v1_$walletIndex"
     }
@@ -91,12 +87,7 @@ class HardwareSeedVaultBridge(private val activity: FragmentActivity) {
         val alias = aliasFor(tier, walletIndex)
         if (ks.containsAlias(alias)) return
 
-        val authTypes = when (tier) {
-            TIER_STRICT -> KeyProperties.AUTH_BIOMETRIC_STRONG
-            TIER_RECOVERY ->
-                KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
-            else -> throw IllegalArgumentException("unknownTier:$tier")
-        }
+        if (tier != TIER_STRICT) throw IllegalArgumentException("unknownTier:$tier")
         val builder = KeyGenParameterSpec.Builder(
             alias,
             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
@@ -105,11 +96,14 @@ class HardwareSeedVaultBridge(private val activity: FragmentActivity) {
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_RSA_OAEP)
             .setKeySize(2048)
             .setUserAuthenticationRequired(true)
-            // strict：增删指纹即永久失效 → 走助记词自愈；recovery：扛换指纹（锚定设备凭证）。
-            .setInvalidatedByBiometricEnrollment(tier == TIER_STRICT)
+            // strict：增删指纹即永久失效并 fail-closed；App 不保存助记词，也不在查看时恢复。
+            .setInvalidatedByBiometricEnrollment(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // 0 = 每次使用都需认证；靠 CryptoObject 携令牌原子解锁。
-            builder.setUserAuthenticationParameters(0, authTypes)
+            builder.setUserAuthenticationParameters(
+                0,
+                KeyProperties.AUTH_BIOMETRIC_STRONG,
+            )
         } else {
             @Suppress("DEPRECATION")
             builder.setUserAuthenticationValidityDurationSeconds(-1)
@@ -178,7 +172,27 @@ class HardwareSeedVaultBridge(private val activity: FragmentActivity) {
         val alias = aliasFor(tier, walletIndex)
         val rsa = Cipher.getInstance(RSA_TRANSFORM)
         try {
-            val priv = ks.getKey(alias, null) as PrivateKey
+            // 密文可能被系统备份恢复，但 Android Keystore 私钥不会随备份迁移。
+            // 缺失别名必须作为“密钥已失效”返回，不能让空值强转在生物识别前崩掉。
+            if (!ks.containsAlias(alias)) {
+                Log.w(TAG, "decrypt: missing KEK alias $alias")
+                result.error(
+                    "keyPermanentlyInvalidated",
+                    "设备安全存储中的账户私钥不可用",
+                    null,
+                )
+                return
+            }
+            val priv = ks.getKey(alias, null) as? PrivateKey
+            if (priv == null) {
+                Log.w(TAG, "decrypt: KEK private key unavailable $alias")
+                result.error(
+                    "keyPermanentlyInvalidated",
+                    "设备安全存储中的账户私钥不可用",
+                    null,
+                )
+                return
+            }
             rsa.init(Cipher.DECRYPT_MODE, priv, oaepSpec())
         } catch (e: KeyPermanentlyInvalidatedException) {
             Log.w(TAG, "decrypt: KEY_PERMANENTLY_INVALIDATED $alias", e)
@@ -240,19 +254,11 @@ class HardwareSeedVaultBridge(private val activity: FragmentActivity) {
         }
 
         val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
-        val allowed = when (tier) {
-            TIER_STRICT -> BiometricManager.Authenticators.BIOMETRIC_STRONG
-            else -> BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        }
         val infoBuilder = BiometricPrompt.PromptInfo.Builder()
             .setTitle("验证身份")
             .setSubtitle("解锁钱包密钥以继续")
-            .setAllowedAuthenticators(allowed)
-        // 允许设备凭证时不能设 negative button（互斥）；纯生物识别时必须设。
-        if (tier == TIER_STRICT) {
-            infoBuilder.setNegativeButtonText("取消")
-        }
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText("取消")
         Log.i(TAG, "decrypt: showing BiometricPrompt tier=$tier idx=$walletIndex")
         prompt.authenticate(infoBuilder.build(), BiometricPrompt.CryptoObject(rsa))
     }

@@ -443,212 +443,217 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      body: Stack(
         children: [
           ChainProgressBanner(
             busy: _submitting || _loadingBalance,
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          // ──── 机构信息 ────
-          _buildInstitutionHeader(),
-          const SizedBox(height: 16),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              // ──── 机构信息 ────
+              _buildInstitutionHeader(),
+              const SizedBox(height: 16),
 
-          // ──── 发起管理员 ────
-          _buildLabel('发起管理员'),
-          const SizedBox(height: 6),
-          _buildAdminSelector(),
-          const SizedBox(height: 16),
+              // ──── 发起管理员 ────
+              _buildLabel('发起管理员'),
+              const SizedBox(height: 6),
+              _buildAdminSelector(),
+              const SizedBox(height: 16),
 
-          if (!isPersonalAccountIdentity(widget.institution.cidNumber)) ...[
-            _buildLabel('提案发起岗位码'),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _proposerRoleCodeController,
-              maxLength: 64,
-              decoration: const InputDecoration(
-                hintText: '填写当前任职且拥有本业务提案权限的岗位码',
-                filled: true,
-                fillColor: AppTheme.surfaceMuted,
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // ──── 转出地址（只读） ────
-          _buildLabel('转出地址'),
-          const SizedBox(height: 6),
-          _buildReadOnlyField(_fromSs58),
-          const SizedBox(height: 16),
-
-          // ──── 收款地址 ────
-          _buildLabel('收款地址'),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _beneficiaryController,
-            decoration: InputDecoration(
-              hintText: '输入 SS58 格式地址',
-              hintStyle:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
-              filled: true,
-              fillColor: AppTheme.surfaceMuted,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.primaryDark),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.danger),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.danger),
-              ),
-              errorText: _addressError,
-              suffixIcon: IconButton(
-                tooltip: '扫码填入收款地址',
-                onPressed: _scanToAddress,
-                icon: SvgPicture.asset(
-                  'assets/icons/scan-line.svg',
-                  width: 18,
-                  height: 18,
+              if (!isPersonalAccountIdentity(widget.institution.cidNumber)) ...[
+                _buildLabel('提案发起岗位码'),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _proposerRoleCodeController,
+                  maxLength: 64,
+                  decoration: const InputDecoration(
+                    hintText: '填写当前任职且拥有本业务提案权限的岗位码',
+                    filled: true,
+                    fillColor: AppTheme.surfaceMuted,
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-            ),
-            style: const TextStyle(fontSize: 14),
-          ),
-          const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
 
-          // ──── 转账金额 ────
-          _buildLabel('转账金额（元）'),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _amountController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [ThousandSeparatorFormatter()],
-            decoration: InputDecoration(
-              hintText: '最低 1.11 元',
-              hintStyle:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
-              filled: true,
-              fillColor: AppTheme.surfaceMuted,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.primaryDark),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.danger),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.danger),
-              ),
-              errorText: _amountError,
-              suffixText: '元',
-            ),
-            style: const TextStyle(fontSize: 14),
-          ),
-          const SizedBox(height: 12),
+              // ──── 转出地址（只读） ────
+              _buildLabel('转出地址'),
+              const SizedBox(height: 6),
+              _buildReadOnlyField(_fromSs58),
+              const SizedBox(height: 16),
 
-          // ──── 预估手续费 ────
-          _buildInfoRow(
-            '预估手续费',
-            _estimatedFee > 0
-                ? '${AmountFormat.format(_estimatedFee, symbol: '')} 元'
-                : '--',
-          ),
-          const SizedBox(height: 8),
-
-          // ──── 可用余额 ────
-          _buildInfoRow(
-            '可用余额',
-            _loadingBalance
-                ? '查询中...'
-                : _availableBalance != null
-                    ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
-                        '${_balanceStale ? '（链上刷新失败，金额可能已过期）' : ''}'
-                    : '查询失败',
-          ),
-          const SizedBox(height: 16),
-
-          // ──── 备注 ────
-          _buildLabel('备注（可选）'),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _remarkController,
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText: '最多 256 字节',
-              hintStyle:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
-              filled: true,
-              fillColor: AppTheme.surfaceMuted,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.primaryDark),
-              ),
-            ),
-            style: const TextStyle(fontSize: 14),
-          ),
-          const SizedBox(height: 24),
-
-          // ──── 提交按钮 ────
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.primaryDark,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: _canSubmit ? _submit : null,
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      '提交转账提案',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+              // ──── 收款地址 ────
+              _buildLabel('收款地址'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _beneficiaryController,
+                decoration: InputDecoration(
+                  hintText: '输入 SS58 格式地址',
+                  hintStyle: const TextStyle(
+                      color: AppTheme.textTertiary, fontSize: 14),
+                  filled: true,
+                  fillColor: AppTheme.surfaceMuted,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.primaryDark),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.danger),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.danger),
+                  ),
+                  errorText: _addressError,
+                  suffixIcon: IconButton(
+                    tooltip: '扫码填入收款地址',
+                    onPressed: _scanToAddress,
+                    icon: SvgPicture.asset(
+                      'assets/icons/scan-line.svg',
+                      width: 18,
+                      height: 18,
                     ),
-            ),
-          ),
-          if (_submitBlockedReason != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _submitBlockedReason!,
-              style: const TextStyle(
-                fontSize: 12,
-                height: 1.4,
-                color: AppTheme.textSecondary,
+                  ),
+                ),
+                style: const TextStyle(fontSize: 14),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+
+              // ──── 转账金额 ────
+              _buildLabel('转账金额（元）'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _amountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [ThousandSeparatorFormatter()],
+                decoration: InputDecoration(
+                  hintText: '最低 1.11 元',
+                  hintStyle: const TextStyle(
+                      color: AppTheme.textTertiary, fontSize: 14),
+                  filled: true,
+                  fillColor: AppTheme.surfaceMuted,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.primaryDark),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.danger),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.danger),
+                  ),
+                  errorText: _amountError,
+                  suffixText: '元',
+                ),
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+
+              // ──── 预估手续费 ────
+              _buildInfoRow(
+                '预估手续费',
+                _estimatedFee > 0
+                    ? '${AmountFormat.format(_estimatedFee, symbol: '')} 元'
+                    : '--',
+              ),
+              const SizedBox(height: 8),
+
+              // ──── 可用余额 ────
+              _buildInfoRow(
+                '可用余额',
+                _loadingBalance
+                    ? '查询中...'
+                    : _availableBalance != null
+                        ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
+                            '${_balanceStale ? '（链上刷新失败，金额可能已过期）' : ''}'
+                        : '查询失败',
+              ),
+              const SizedBox(height: 16),
+
+              // ──── 备注 ────
+              _buildLabel('备注（可选）'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _remarkController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: '最多 256 字节',
+                  hintStyle: const TextStyle(
+                      color: AppTheme.textTertiary, fontSize: 14),
+                  filled: true,
+                  fillColor: AppTheme.surfaceMuted,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.primaryDark),
+                  ),
+                ),
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+
+              // ──── 提交按钮 ────
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.primaryDark,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: _canSubmit ? _submit : null,
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          '提交转账提案',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ),
+              if (_submitBlockedReason != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _submitBlockedReason!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

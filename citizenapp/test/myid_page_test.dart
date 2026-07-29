@@ -57,11 +57,12 @@ void main() {
   testWidgets('三张身份卡始终存在且旧访客文案彻底删除', (tester) async {
     await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
 
-    expect(find.text('注册身份·访客'), findsOneWidget);
+    expect(find.text('身份·访客'), findsOneWidget);
     expect(find.text('公民身份 · 投票'), findsOneWidget);
     expect(find.text('公民身份 · 竞选'), findsOneWidget);
     // 旧文案零残留
     expect(find.text('匿名访客'), findsNothing);
+    expect(find.text('注册身份·访客'), findsNothing);
     expect(find.text('公民 · 投票身份'), findsNothing);
     expect(find.text('公民 · 竞选身份'), findsNothing);
     expect(find.text('没有公民身份信息'), findsNothing);
@@ -157,7 +158,8 @@ void main() {
     expect(find.text('链上身份读取失败'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
     expect(find.text('当前身份'), findsNothing);
-    expect(find.text('注册身份·访客'), findsOneWidget);
+    expect(find.text('身份·访客'), findsOneWidget);
+    expect(find.text('注册身份·访客'), findsNothing);
     expect(find.text('公民身份 · 投票'), findsOneWidget);
     expect(find.text('公民身份 · 竞选'), findsOneWidget);
     expect(find.text('—'), findsNothing);
@@ -295,7 +297,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    // 决策:不新增卡/色,访客卡仍是「注册身份·访客」+匿名标签。
+    // 决策:不新增卡/色,访客卡仍是「身份·访客」+匿名标签。
     expect(find.byKey(const ValueKey<String>('passport-anonymous-tag')),
         findsOneWidget);
   });

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
@@ -655,11 +656,25 @@ class WalletManager {
       if (row != null) {
         await isar.accountEntitys.delete(row.id);
       }
+      // 账户生命周期结束时一并清除该账户全部本机流水、同步游标和通讯录缓存，
+      // 避免重新派生前仍能读到已删除账户的旧状态。
+      await isar.localTxEntitys
+          .filter()
+          .accountIdEqualTo(accountId)
+          .deleteAll();
+      await isar.walletTxSyncCursorEntitys
+          .filter()
+          .accountIdEqualTo(accountId)
+          .deleteAll();
+      for (final key in _contactCacheKeys(accountId)) {
+        await isar.appKvEntitys.deleteByKey(key);
+      }
       remaining =
           await isar.accountEntitys.filter().masterIdEqualTo(masterId).count();
     });
     await _store.deleteAccountKey(
         walletIndex: walletIndex, accountId: accountId);
+    await _deleteContactKeys(accountId);
 
     // 删空 = 该助记词已无可用账户,级联删钱包(清 WalletProfile + 剩余账户行 + 通讯录钥)。
     if (remaining == 0) {
@@ -720,8 +735,8 @@ class WalletManager {
       return isar.accountEntitys.where().findAll();
     });
     await WalletIsar.instance.writeTxn((isar) async {
-      for (final wallet in wallets) {
-        for (final key in _contactCacheKeys(wallet.accountId)) {
+      for (final account in accounts) {
+        for (final key in _contactCacheKeys(account.accountId)) {
           await isar.appKvEntitys.deleteByKey(key);
         }
       }
@@ -754,10 +769,54 @@ class WalletManager {
             walletIndex: walletIndex, accountId: account.accountId);
       }
     }
-    for (final row in wallets) {
-      if (row.signMode == 'local') {
-        await _deleteContactKeys(row.accountId);
+    for (final wallet in wallets) {
+      if (wallet.signMode == 'local') {
+        await _store.deleteWalletKey(walletIndex: wallet.walletIndex);
       }
+    }
+    for (final account in accounts) {
+      final walletIndex = walletIndexByMaster[account.masterId];
+      if (walletIndex != null) {
+        await _deleteContactKeys(account.accountId);
+      }
+    }
+  }
+
+  /// 账户0签名并本地验签后删除整只热钱包。
+  ///
+  /// 这里签的是本机 `Random.secure()` 产生的一次性随机挑战，只用于证明当前操作人
+  /// 能解锁账户0 child；挑战和签名不落库、不联网、不进入 QR_V1 或链上协议。
+  /// 任何取消、签名异常或验签失败都发生在 [deleteWallet] 前，事实数据保持不变。
+  Future<void> signAndDeleteWallet({
+    required int walletIndex,
+    required String accountId,
+  }) async {
+    final profile = await _requireHotWalletProfile(walletIndex);
+    final account = await getAccountByAccountId(accountId);
+    if (profile.accountId != accountId ||
+        account == null ||
+        account.accountIndex != 0 ||
+        account.masterId != profile.accountId) {
+      throw const WalletAuthException('只有账户0可以签名删除整只钱包');
+    }
+
+    final random = Random.secure();
+    final challenge =
+        Uint8List.fromList(List<int>.generate(32, (_) => random.nextInt(256)));
+    Uint8List? signature;
+    try {
+      signature = await signForAccountId(accountId, challenge);
+      final publicKey =
+          sr.PublicKey.newPublicKey(Uint8List.fromList(_hexToBytes(accountId)));
+      final proof = sr.Signature.fromBytes(signature);
+      final (verified, _) = sr.Sr25519.verify(publicKey, proof, challenge);
+      if (!verified) {
+        throw const WalletAuthException('删除钱包签名验证失败');
+      }
+      await deleteWallet(walletIndex);
+    } finally {
+      challenge.fillRange(0, challenge.length, 0);
+      signature?.fillRange(0, signature.length, 0);
     }
   }
 
@@ -795,8 +854,10 @@ class WalletManager {
       }
       // 删除钱包同时终止该钱包在本机的通讯录生命周期；云端密文仍可在用户
       // 重新导入同一助记词后恢复，但本机缓存、待同步操作和状态不得残留。
-      for (final key in _contactCacheKeys(current.accountId)) {
-        await isar.appKvEntitys.deleteByKey(key);
+      for (final accountId in accountIds) {
+        for (final key in _contactCacheKeys(accountId)) {
+          await isar.appKvEntitys.deleteByKey(key);
+        }
       }
       await isar.walletProfileEntitys.delete(current.id);
       // 连带删除该助记词下全部账户行(含账户0),避免钱包已删但账户行残留。
@@ -806,14 +867,16 @@ class WalletManager {
           .deleteAll();
       // 用户明确删除钱包后，本机交易记录周期结束；再次导入同一地址
       // 会从新的 finalized 区块重新记录，不保留旧本机流水。
-      await isar.localTxEntitys
-          .filter()
-          .accountIdEqualTo(current.accountId)
-          .deleteAll();
-      await isar.walletTxSyncCursorEntitys
-          .filter()
-          .accountIdEqualTo(current.accountId)
-          .deleteAll();
+      for (final accountId in accountIds) {
+        await isar.localTxEntitys
+            .filter()
+            .accountIdEqualTo(accountId)
+            .deleteAll();
+        await isar.walletTxSyncCursorEntitys
+            .filter()
+            .accountIdEqualTo(accountId)
+            .deleteAll();
+      }
 
       final settings = await _getSettingsInTxn(isar);
       if (settings.activeWalletIndex == walletIndex) {
@@ -835,14 +898,38 @@ class WalletManager {
       for (final accountId in accountIds) {
         await _store.deleteAccountKey(
             walletIndex: walletIndex, accountId: accountId);
+        await _deleteContactKeys(accountId);
       }
-      await _deleteContactKeys(target.accountId);
+      await _store.deleteWalletKey(walletIndex: walletIndex);
     }
   }
 
   // 更新
   Future<void> renameWallet(int walletIndex, String walletName) async {
     await updateWalletDisplay(walletIndex, walletName: walletName);
+  }
+
+  /// 重命名单个 `//index` 账户；账户名是本机账户标签，不联动钱包名或用户昵称。
+  Future<void> renameAccount(String accountId, String accountName) async {
+    final nextName = accountName.trim();
+    if (nextName.isEmpty) {
+      throw Exception('账户名称不能为空');
+    }
+    if (nextName.runes.length > 30) {
+      throw Exception('账户名称不能超过30个字符');
+    }
+    await WalletIsar.instance.writeTxn((isar) async {
+      final row = await isar.accountEntitys
+          .filter()
+          .accountIdEqualTo(accountId)
+          .findFirst();
+      if (row == null) {
+        throw Exception('未找到账户');
+      }
+      row.accountName = nextName;
+      await isar.accountEntitys.put(row);
+    });
+    _bumpWalletsRevision();
   }
 
   Future<void> updateWalletDisplay(
@@ -1090,8 +1177,8 @@ class WalletManager {
   ///
   /// - 用户取消 / 超时（[AuthCancelled]）、无锁屏（[NoDeviceCredential]）、金库
   ///   不可用（[SecureStoreUnavailable]）直接上抛，由上层文案区分。
-  /// - KEK 失效（[SeedKeyInvalidated]）或条目缺失 → 抛
-  ///   [WalletAuthException]，提示用户用助记词重新导入钱包。
+  /// - KEK 失效（[SeedKeyInvalidated]）或条目缺失 → 明确报告设备安全存储中的
+  ///   私钥不可用；查看私钥流程绝不索要助记词或绕过生物识别。
   Future<String> _readAccountKeyOrThrow(
     int walletIndex,
     String accountId,
@@ -1102,11 +1189,11 @@ class WalletManager {
         accountId: accountId,
       );
       if (childHex == null) {
-        throw const WalletAuthException('密钥不可用，请重新导入钱包');
+        throw const WalletAuthException('设备安全存储中没有该账户私钥');
       }
       return childHex;
     } on SeedKeyInvalidated {
-      throw const WalletAuthException('密钥不可用，请重新导入钱包');
+      throw const WalletAuthException('设备安全存储中的账户私钥不可用');
     }
   }
 
@@ -1454,6 +1541,7 @@ class WalletManager {
       await _deleteContactKeys(accountId!);
       await _store.deleteAccountKey(
           walletIndex: walletIndex, accountId: accountId!);
+      await _store.deleteWalletKey(walletIndex: walletIndex);
     }
   }
 

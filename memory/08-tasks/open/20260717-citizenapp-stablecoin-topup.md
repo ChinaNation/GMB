@@ -113,6 +113,27 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
 
 ## 进度记录
 
+- **2026-07-28 · WalletConnect「All Wallets」钱包图标 CSP 修复**
+  - 真机根因：Reown 下载钱包图标后转换为 `blob:` URL；原
+    `img-src data: https:` 拒绝 `blob:null/...`，导致 Binance、MetaMask、OKX 等
+    钱包图标显示破图；缺少 `font-src` 同时阻止 Reown 官方字体。
+  - 用户确认正式 DApp 元数据网址仍为 `https://www.crcfrcn.com`，不得改成
+    `file://` 或 `blob:`。
+  - 最小权限方案：`img-src` 仅增加 `'self'` 与 `blob:`；新增
+    `font-src https://fonts.reown.com`；不向 `script-src`、`frame-src` 开放
+    `blob:`，不增加 `unsafe-eval`。
+  - 预计修改目录：
+    - `citizenapp/assets/topup/`：修正 WalletConnect HTML CSP 和中文安全注释。
+    - `citizenapp/test/transaction/topup/`：更新既有测试，锁定权限边界与正式官网元数据。
+    - `memory/08-tasks/open/`：记录根因、权限边界和真机验收。
+  - 验收完成：充值定向测试 13/13 通过，`dart analyze` 0 问题，
+    `git diff --check` 通过；Pixel 8a 重新安装 profile 包后，All Wallets 中 Binance、
+    MetaMask、SafePal、Trust Wallet、OKX、TokenPocket、Bitget、Uniswap、Ledger 等
+    图标均真实显示，日志中 `blob:null` 图片和 Reown 字体的 CSP 拒绝归零。
+  - 仍保留 Reown 对“正式元数据网址与本地 `file://` 页面来源不同”的提示；这是本地
+    WebView 来源提示，不是图标故障。本次按用户确认保持正式网址
+    `https://www.crcfrcn.com`，不伪造为本地来源。
+
 - **2026-07-25 · staging 主网环境完成，付款前发现正式链阻塞**
   - staging D1 已清空重建并登记唯一 `0001_square_core.sql`；充值表为空且为当前 21
     字段结构。Worker 已写入新的意图 Secret、同步结算令牌并部署主网 Base 配置；

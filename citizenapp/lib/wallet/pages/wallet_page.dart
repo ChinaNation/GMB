@@ -13,6 +13,7 @@ import 'package:citizenapp/qr/scan_dispatch_flow.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
+import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/ui/widgets/shimmer_loading.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
@@ -92,7 +93,8 @@ String? extractColdWalletImportAddress(String raw) {
 ///   点冷钱包行进冷钱包详情；
 /// - 选择交易钱包态（selectForTrade）：按钱包整只选择付款钱包，沿用 WalletProfile 行；
 /// - 钱包/账户图标按冷热配色：热=墨绿主色 / 冷=蓝(离线签名设备调性)；
-/// - 冷钱包行三点菜单保留「重命名 / 删除钱包」2 项 + 二次确认；账户的改名/删除收在账户详情页。
+/// - 冷钱包行保留既有行为；热钱包账户行提供扫码签名与
+///   「重命名 / 账户详情 / 删除钱包或删除账户」菜单。
 class _WalletTabState extends State<WalletTab> {
   final WalletManager _walletService = WalletManager();
   final ChainRpc _chainRpc = ChainRpc();
@@ -106,6 +108,7 @@ class _WalletTabState extends State<WalletTab> {
   List<Account> _accounts = const <Account>[];
   bool _walletsLoading = true;
   bool _balanceRefreshing = false;
+  bool _accountMutationInProgress = false;
   String? _identityAccountId;
   DateTime? _lastWalletStoreSnackAt;
 
@@ -416,16 +419,155 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
-  /// 点账户行进入账户详情（Lv3）；返回改动过账户集合则整页刷新。
-  Future<void> _openAccountDetail(Account account, String walletName) async {
+  /// 点账户行或菜单“账户详情”进入同一页面。
+  Future<void> _openAccountDetail(Account account) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) =>
-            AccountDetailPage(account: account, walletName: walletName),
+        builder: (_) => AccountDetailPage(account: account),
       ),
     );
     if (changed == true) {
       await _reload();
+    }
+  }
+
+  /// 账户标签只写 AccountEntity.accountName，不联动钱包名或链上昵称。
+  Future<void> _renameAccount(Account account) async {
+    final controller = TextEditingController(text: account.accountName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('重命名账户'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 30,
+          decoration: const InputDecoration(
+            hintText: '输入新的账户名称',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (newName == null ||
+        newName.isEmpty ||
+        newName == account.accountName ||
+        !mounted) {
+      return;
+    }
+    try {
+      await _walletService.renameAccount(account.accountId, newName);
+      if (!mounted) return;
+      await _loadWallets();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('重命名失败：$e')));
+    }
+  }
+
+  /// 账户卡扫码只接受签名请求，并把签名账户钉死为当前卡片 account_id。
+  Future<void> _scanSignForAccount(Account account) async {
+    await openAccountScanSignFlow(context: context, account: account);
+  }
+
+  /// 菜单删除唯一入口：账户0签名后删整钱包；其它账户不弹窗直接删除。
+  Future<void> _deleteAccountFromMenu(
+    Account account,
+    WalletProfile hotWallet,
+  ) async {
+    if (_accountMutationInProgress) return;
+    if (account.accountIndex == 0) {
+      await _confirmAndDeleteHotWallet(account, hotWallet);
+      return;
+    }
+
+    _accountMutationInProgress = true;
+    try {
+      await _walletService.deleteAccount(account.accountId);
+      // 清算行快照属于交易域 SharedPreferences，账户事实删除后同步清掉该账户缓存。
+      await ClearingBankPrefs.clear(account.accountId);
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      await _reload();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('已删除账户「${account.accountName}」')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
+    } finally {
+      _accountMutationInProgress = false;
+    }
+  }
+
+  Future<void> _confirmAndDeleteHotWallet(
+    Account anchor,
+    WalletProfile hotWallet,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除钱包'),
+        content: Text(
+          '删除「${hotWallet.walletName}」会从本设备移除该钱包下全部 ${_accounts.length} 个账户、'
+          '私钥、交易记录和清算行缓存。\n\n请确认已经备份助记词，此操作无法撤销。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('签名并删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || _accountMutationInProgress) return;
+
+    _accountMutationInProgress = true;
+    final accountIds = _accounts
+        .where((account) => account.masterId == anchor.masterId)
+        .map((account) => account.accountId)
+        .toList(growable: false);
+    try {
+      await _walletService.signAndDeleteWallet(
+        walletIndex: hotWallet.walletIndex,
+        accountId: anchor.accountId,
+      );
+      for (final accountId in accountIds) {
+        await ClearingBankPrefs.clear(accountId);
+      }
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      await _reload();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('已删除钱包「${hotWallet.walletName}」')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
+    } finally {
+      _accountMutationInProgress = false;
     }
   }
 
@@ -585,7 +727,6 @@ class _WalletTabState extends State<WalletTab> {
   /// - 身份字段损坏的钱包既不入账户列表也不算冷钱包，单列出来保留删除出路。
   Widget _buildMyWalletList(List<WalletProfile> wallets) {
     final hot = _hotWallet(wallets);
-    final hotName = hot?.walletName ?? '钱包';
     final coldWallets = wallets
         .where((w) => w.isColdWallet && isAccountIdText(w.accountId))
         .toList(growable: false);
@@ -601,7 +742,19 @@ class _WalletTabState extends State<WalletTab> {
           child: WalletAccountTile(
             account: account,
             isIdentity: account.accountId == _identityAccountId,
-            onTap: () => _openAccountDetail(account, hotName),
+            onTap: () => _openAccountDetail(account),
+            onScan: () => _scanSignForAccount(account),
+            onRename: () => _renameAccount(account),
+            onDetail: () => _openAccountDetail(account),
+            onDelete: () {
+              if (hot == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('未找到该账户所属钱包')),
+                );
+                return;
+              }
+              _deleteAccountFromMenu(account, hot);
+            },
           ),
         ),
       for (final cold in coldWallets)
@@ -964,9 +1117,8 @@ class _WalletBadge extends StatelessWidget {
 
 /// 单行账户卡片：唯一热钱包下某个 `//index` 账户。
 ///
-/// 左侧 46×46 序号徽标（#0、#1…）→ 中间账户名 + 短 SS58 → 右侧身份徽标 + 箭头。
-/// 整卡 InkWell 点击进入 [AccountDetailPage]。账户没有独立的重命名/删除三点菜单，
-/// 这些操作收在账户详情页里（与冷钱包行的三点菜单区分开）。
+/// 左侧序号徽标 → 账户名 + 短 SS58 → 身份徽标（如有）→ 扫码签名 → 竖三点。
+/// 整卡与菜单“账户详情”进入同一页；按钮各自阻止事件落到整卡。
 ///
 /// 仅供 wallet_page 自己使用，通过 `@visibleForTesting` 暴露给 widget 测试。
 @visibleForTesting
@@ -975,11 +1127,19 @@ class WalletAccountTile extends StatelessWidget {
     super.key,
     required this.account,
     required this.onTap,
+    required this.onScan,
+    required this.onRename,
+    required this.onDetail,
+    required this.onDelete,
     this.isIdentity = false,
   });
 
   final Account account;
   final VoidCallback onTap;
+  final VoidCallback onScan;
+  final VoidCallback onRename;
+  final VoidCallback onDetail;
+  final VoidCallback onDelete;
 
   /// 链上唯一公民身份绑定的账户。
   final bool isIdentity;
@@ -1050,9 +1210,72 @@ class WalletAccountTile extends StatelessWidget {
                 const SizedBox(width: 8),
                 const _WalletBadge(label: '身份钱包', icon: Icons.verified),
               ],
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right,
-                  size: 20, color: AppTheme.textTertiary),
+              IconButton(
+                tooltip: '扫码签名',
+                onPressed: onScan,
+                icon: SvgPicture.asset(
+                  'assets/icons/scan-line.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: const ColorFilter.mode(
+                    AppTheme.primaryLight,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: '账户操作',
+                icon: const Icon(Icons.more_vert,
+                    size: 20, color: AppTheme.textTertiary),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'rename':
+                      onRename();
+                    case 'detail':
+                      onDetail();
+                    case 'delete':
+                      onDelete();
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'rename',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_outlined,
+                            size: 18, color: AppTheme.textSecondary),
+                        SizedBox(width: 10),
+                        Text('重命名'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'detail',
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 18, color: AppTheme.textSecondary),
+                        SizedBox(width: 10),
+                        Text('账户详情'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete_outline,
+                            size: 18, color: AppTheme.danger),
+                        const SizedBox(width: 10),
+                        Text(
+                          account.accountIndex == 0 ? '删除钱包' : '删除账户',
+                          style: const TextStyle(color: AppTheme.danger),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -1157,10 +1380,21 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   Future<void> _onMenuAction(String action) async {
     switch (action) {
       case 'scan_sign':
+        final account =
+            await _walletService.getAccountByAccountId(widget.wallet.accountId);
+        if (account == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('未找到该钱包的账户0')),
+            );
+          }
+          return;
+        }
+        if (!mounted) return;
         await openScanDispatchFlow(
           context: context,
           paymentWallet: widget.wallet,
-          signingWallet: widget.wallet,
+          signingAccount: account,
         );
       case 'clearing_bank':
         // 跳转「设置清算行」占位页。真实搜索/绑定流程等后续任务卡。

@@ -54,21 +54,30 @@ class OnchainPaymentPage extends StatelessWidget {
 class OnchainPaymentPanel extends StatefulWidget {
   const OnchainPaymentPanel({
     super.key,
-    required this.title,
+    this.title,
+    this.chainStatusInHeader = false,
     this.initialToAddress,
     this.extraEntriesBuilder,
     this.walletPicker,
     this.currentWalletLoader,
     this.localRecordsLoader,
     this.enableDelayedLocalRecordRefresh = true,
-  });
+  }) : assert(
+          chainStatusInHeader || title != null,
+          '非交易 Tab 的链上支付面板必须提供标题',
+        );
 
-  final String title;
+  final String? title;
+
+  /// 交易 Tab 将真实链状态放入原页面标题位置。
+  ///
+  /// 默认关闭；通讯录进入的独立“链上支付”页只保留标题，链状态在后台读取。
+  final bool chainStatusInHeader;
 
   /// 预填收款地址（从通讯录等入口跳转时使用）。
   final String? initialToAddress;
 
-  /// 交易 Tab 可在链状态提示下方、链上支付表单上方插入入口。
+  /// 交易 Tab 可在顶栏链状态下方、链上支付表单上方插入入口。
   /// onchain 模块不直接 import offchain / multisig，跨功能编排留在 ui 层。
   final OnchainPaymentExtraEntriesBuilder? extraEntriesBuilder;
 
@@ -333,7 +342,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     await _loadLocalRecords();
   }
 
-  /// 下拉刷新：余额 + 本地交易记录重载；`_refreshing` 驱动连接状态栏 busy →
+  /// 下拉刷新：余额 + 本地交易记录重载；`_refreshing` 驱动链状态读取 busy →
   /// 触发轻节点连接即时重探（ChainProgressBanner 内部 `_loadProgress`）。
   Future<void> _onPullRefresh() async {
     if (mounted) setState(() => _refreshing = true);
@@ -992,11 +1001,21 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                   ),
                   Expanded(
                     child: Center(
-                      child: Text(
-                        widget.title,
-                        style: const TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.w700),
-                      ),
+                      child: widget.chainStatusInHeader
+                          ? ChainProgressBanner(
+                              margin: EdgeInsets.zero,
+                              busy: _refreshing,
+                              showInlineStatus: true,
+                              onProgressChanged: _handleChainProgressChanged,
+                              onErrorChanged: _handleChainProgressErrorChanged,
+                            )
+                          : Text(
+                              widget.title!,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
                   ),
                   IconButton(
@@ -1015,6 +1034,12 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                 ],
               ),
             ),
+            if (!widget.chainStatusInHeader)
+              ChainProgressBanner(
+                busy: _refreshing,
+                onProgressChanged: _handleChainProgressChanged,
+                onErrorChanged: _handleChainProgressErrorChanged,
+              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _onPullRefresh,
@@ -1022,12 +1047,6 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
                   children: [
-                    ChainProgressBanner(
-                      busy: _refreshing,
-                      compactThreeState: true,
-                      onProgressChanged: _handleChainProgressChanged,
-                      onErrorChanged: _handleChainProgressErrorChanged,
-                    ),
                     if (widget.extraEntriesBuilder != null)
                       ...widget.extraEntriesBuilder!(context, _currentWallet),
                     if (_currentWallet == null && !_loadingWallet)

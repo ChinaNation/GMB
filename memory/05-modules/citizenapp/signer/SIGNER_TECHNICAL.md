@@ -1,6 +1,6 @@
 # CitizenApp Signer 技术说明
 
-- 更新日期:2026-07-18
+- 更新日期:2026-07-28
 - 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
 - Action 注册表:`memory/01-architecture/qr/qr-action-registry.md`
 
@@ -52,7 +52,14 @@ CitizenApp 不在 QR 内写入展示摘要,也不接收 QR 内的 payload hash�
 
 ## 4. 业务边界
 
-- 公民签名确认：交易页“扫一扫”按请求公钥自动定位本机热钱包；“我的 → 钱包 → 我的钱包 → 钱包详情 → 右上角三点 → 扫一扫”固定使用当前热钱包。两个入口统一复用 `CitizenIdentitySignService`，独立解码投票/参选身份载荷并校验请求、载荷、本机钱包三方公钥一致；旧的独立 `MyIdSignPage` 已删除。
+- 公民签名确认：交易页“扫一扫”按请求公钥自动定位本机热账户；“我的 → 钱包 →
+  我的钱包 → 账户卡片 → 扫码图标”把签名账户锁定为该卡片的 `account_id`。两个入口统一
+  复用 `CitizenIdentitySignService`，独立解码投票/参选身份载荷并校验请求、载荷、本机
+  账户三方公钥一致；账户不一致必须在读取私钥前拒绝，旧的独立 `MyIdSignPage` 已删除。
+- 广场账户动作与公民占号/换绑也使用同一账户维度签名模型，最终统一调用
+  `WalletManager.signForAccountId()`；不得把非0账户的请求回退到账户0签名。
+- 账户卡片入口只接收签名请求，扫码页面仍复用既有 `QrScanPage`，不得修改蓝色对准框、
+  提示小字、相册、手电筒或其它扫描 UI。
 - CitizenWallet 继续通过统一离线签名服务处理同一 `citizen_identity` action；动作标题只读取生成的 QR action registry，统一为“公民签名确认”。
 - 链交易:CitizenApp 生成交易 payload 签名请求,扫描签名响应后广播交易。
 - 管理员登录:不属于 CitizenApp,由 CitizenWallet 公民钱包处理。
@@ -65,4 +72,5 @@ CitizenApp 不在 QR 内写入展示摘要,也不接收 QR 内的 payload hash�
 2. id 错配、公钥错配、签名错误均拒绝。
 3. 链 payload 大于 256 字节时按 Substrate 规则签 hash。
 4. 未登记 action 或旧字段进入解析器时拒绝。
-5. 公民签名入口对 action 不符、载荷不可完整展示、钱包不在本机、当前钱包不匹配和冷钱包代签全部拒绝。
+5. 公民签名与广场动作入口对 action 不符、载荷不可完整展示、账户不在本机或卡片账户
+   不匹配全部拒绝，并断言实际调用 `signForAccountId()` 的账户正是目标 `account_id`。

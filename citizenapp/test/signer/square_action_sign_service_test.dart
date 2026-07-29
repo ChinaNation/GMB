@@ -40,37 +40,36 @@ String _signRequestRaw({int action = QrActions.squareAccountAction}) {
   );
 }
 
-WalletProfile _wallet(
-    {required String publicKey, String signMode = 'local', int index = 3}) {
-  return WalletProfile(
-    walletIndex: index,
-    walletName: 'w',
-    walletIcon: '',
-    balance: 0,
+Account _account({required String accountId, int index = 3}) {
+  return Account(
+    masterId: index == 0 ? accountId : '0x${'01' * 32}',
+    accountIndex: index,
     ss58Address: _signerSs58Address,
-    accountId: publicKey,
-    alg: 'sr25519',
-    ss58: 2027,
-    createdAtMillis: 0,
-    source: 'test',
-    signMode: signMode,
+    accountId: accountId,
+    accountName: '账户$index',
   );
 }
 
 class _FakeWalletManager extends WalletManager {
-  _FakeWalletManager(this._wallets);
-  final List<WalletProfile> _wallets;
+  _FakeWalletManager(this._accounts);
+  final List<Account> _accounts;
 
   Uint8List signature = Uint8List(64)..fillRange(0, 64, 0x5a);
   Uint8List? signedPayload;
-  int? signedIndex;
+  String? signedAccountId;
 
   @override
-  Future<List<WalletProfile>> getWallets() async => _wallets;
+  Future<Account?> getAccountByAccountId(String accountId) async {
+    for (final account in _accounts) {
+      if (account.accountId == accountId) return account;
+    }
+    return null;
+  }
 
   @override
-  Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
-    signedIndex = walletIndex;
+  Future<Uint8List> signForAccountId(
+      String accountId, Uint8List payload) async {
+    signedAccountId = accountId;
     signedPayload = payload;
     return signature;
   }
@@ -82,9 +81,9 @@ void main() {
   test(
       'prepare resolves accountId wallet by QR u signer public key + decodes action',
       () async {
-    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
+    final wm = _FakeWalletManager([_account(accountId: '0x$_pubHex')]);
     final prep = await service.prepare(_signRequestRaw(), wm);
-    expect(prep.wallet.walletIndex, 3);
+    expect(prep.account.accountIndex, 3);
     expect(prep.actionLabel, '广场账户动作签名');
     expect(prep.decoded.action, 'cancel_membership');
     expect(prep.decoded.actionTypeLabel, '取消订阅');
@@ -92,7 +91,7 @@ void main() {
   });
 
   test('prepare rejects unknown action before signing', () async {
-    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
+    final wm = _FakeWalletManager([_account(accountId: '0x$_pubHex')]);
     await expectLater(
       service.prepare(_signRequestRaw(action: 0x7fff), wm),
       throwsA(
@@ -113,7 +112,7 @@ void main() {
 
   test('prepare rejects registered but unsupported action before signing',
       () async {
-    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
+    final wm = _FakeWalletManager([_account(accountId: '0x$_pubHex')]);
     await expectLater(
       service.prepare(_signRequestRaw(action: QrActions.login), wm),
       throwsA(
@@ -133,7 +132,7 @@ void main() {
   });
 
   test('prepare throws accountNotLocal when no wallet matches u', () async {
-    final wm = _FakeWalletManager([_wallet(publicKey: '0x${'aa' * 32}')]);
+    final wm = _FakeWalletManager([_account(accountId: '0x${'aa' * 32}')]);
     await expectLater(
       service.prepare(_signRequestRaw(), wm),
       throwsA(
@@ -146,16 +145,20 @@ void main() {
     );
   });
 
-  test('prepare rejects cold wallet', () async {
-    final wm = _FakeWalletManager(
-        [_wallet(publicKey: '0x$_pubHex', signMode: 'external')]);
+  test('prepare rejects card-selected account when QR u is another account',
+      () async {
+    final wm = _FakeWalletManager([_account(accountId: '0x$_pubHex')]);
     await expectLater(
-      service.prepare(_signRequestRaw(), wm),
+      service.prepare(
+        _signRequestRaw(),
+        wm,
+        requiredAccount: _account(accountId: '0x${'aa' * 32}'),
+      ),
       throwsA(
         isA<SquareActionSignException>().having(
           (e) => e.error,
           'error',
-          SquareActionSignError.coldWalletUnsupported,
+          SquareActionSignError.accountNotLocal,
         ),
       ),
     );
@@ -164,13 +167,13 @@ void main() {
   test(
       'sign signs signing_message(0x1D) with accountId wallet and builds signResponse',
       () async {
-    final wm = _FakeWalletManager([_wallet(publicKey: '0x$_pubHex')]);
+    final wm = _FakeWalletManager([_account(accountId: '0x$_pubHex')]);
     final prep = await service.prepare(_signRequestRaw(), wm);
 
     final responseJson = await service.sign(prep, wm);
 
-    // 用 accountId 钱包（index 3）对 signing_message(0x1D, payload) 签名。
-    expect(wm.signedIndex, 3);
+    // 用 QR 指定的 account_id 对 signing_message(0x1D, payload) 签名。
+    expect(wm.signedAccountId, '0x$_pubHex');
     final expected = signingMessage(
         opTag: kOpSignSquareAction, scalePayload: _payloadBytes());
     expect(wm.signedPayload, expected);

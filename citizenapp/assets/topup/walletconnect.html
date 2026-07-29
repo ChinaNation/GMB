@@ -3,8 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <!-- Reown 把远端钱包图标转换为 blob URL 后再显示；blob 仅开放给图片，
+         字体只开放官方字体域名，脚本权限保持不变。 -->
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; connect-src https: wss:; frame-src https:; child-src https:; base-uri 'none'; form-action 'none'" />
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob: https:; font-src https://fonts.reown.com; connect-src https: wss:; frame-src https:; child-src https:; base-uri 'none'; form-action 'none'" />
     <title>连接钱包支付</title>
     <style>
       :root { color-scheme: light; }
@@ -68,6 +70,7 @@
             metadata: {
               name: 'CitizenApp',
               description: '链上充值购买公民币',
+              // WalletConnect DApp 元数据必须使用正式官网，不得改成本地 file/blob 来源。
               url: 'https://www.crcfrcn.com',
               icons: [],
             },

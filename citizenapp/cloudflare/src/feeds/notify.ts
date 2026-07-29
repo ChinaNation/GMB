@@ -8,21 +8,22 @@ interface ReadRequest {
 
 /// 数某游标之后、我未静音关注（notify_enabled=1）发布的新帖数。
 /// 与关注流同源（square_posts JOIN square_follows），只多一层 created_at > 游标 与静音过滤。
+/// viewer = 观看者身份主键 cid_number;JOIN 双端均为 cid。
 async function countUnreadSince(
   env: Env,
-  viewer: string,
+  viewerCidNumber: string,
   since: number
 ): Promise<number> {
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS n
        FROM square_posts p
-       INNER JOIN square_follows f ON f.followed_account_id = p.account_id
-      WHERE f.account_id = ?
+       INNER JOIN square_follows f ON f.followed_cid_number = p.cid_number
+      WHERE f.follower_cid_number = ?
         AND f.notify_enabled = 1
         AND p.post_state = 'published'
         AND p.created_at > ?`
   )
-    .bind(viewer, since)
+    .bind(viewerCidNumber, since)
     .first<{ n: number }>();
   return row?.n ?? 0;
 }
@@ -32,17 +33,17 @@ async function countUnreadSince(
 export async function getNotifyUnreadRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const reads = await env.DB.prepare(
-    'SELECT last_seen_square_at, last_seen_following_at FROM square_notify_reads WHERE account_id = ?'
+    'SELECT last_seen_square_at, last_seen_following_at FROM square_notify_reads WHERE cid_number = ?'
   )
-    .bind(session.account_id)
+    .bind(session.cid_number)
     .first<{ last_seen_square_at: number; last_seen_following_at: number }>();
 
   const squareSince = reads?.last_seen_square_at ?? 0;
   const followingSince = reads?.last_seen_following_at ?? 0;
 
   const [squareUnread, followingUnread] = await Promise.all([
-    countUnreadSince(env, session.account_id, squareSince),
-    countUnreadSince(env, session.account_id, followingSince)
+    countUnreadSince(env, session.cid_number, squareSince),
+    countUnreadSince(env, session.cid_number, followingSince)
   ]);
 
   return jsonResponse({
@@ -65,11 +66,11 @@ export async function markNotifyReadRoute(request: Request, env: Env): Promise<R
   const column =
     body.scope === 'square' ? 'last_seen_square_at' : 'last_seen_following_at';
   await env.DB.prepare(
-    `INSERT INTO square_notify_reads (account_id, ${column})
+    `INSERT INTO square_notify_reads (cid_number, ${column})
        VALUES (?, ?)
-     ON CONFLICT(account_id) DO UPDATE SET ${column} = excluded.${column}`
+     ON CONFLICT(cid_number) DO UPDATE SET ${column} = excluded.${column}`
   )
-    .bind(session.account_id, now)
+    .bind(session.cid_number, now)
     .run();
 
   return jsonResponse({ ok: true, scope: body.scope, last_seen_at: now });

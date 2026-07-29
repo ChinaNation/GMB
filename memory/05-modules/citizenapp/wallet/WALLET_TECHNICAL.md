@@ -62,17 +62,18 @@ lib/
 
 - `wallet_manager.dart`
   - 钱包生命周期与地址派生
-  - 热钱包：seed 写入 secure storage（不存助记词）
+  - 热钱包：每个账户的 child 私钥写入硬件安全存储；不持久化母种子和助记词
   - 冷钱包：仅存公钥与地址到 Isar（不写 secure storage）
-  - seed 读取时强制生物识别/设备密码验证（`_authenticateIfSupported()`）
+  - 账户私钥读取时由 `BiometricPrompt.CryptoObject` 强制强生物识别
   - 钱包元数据写入 Isar
 - `lib/isar/app_isar.dart`
   - Isar 最终集合定义与数据库打开
   - 正式创世切换前已完成最终业务库重建；运行态不读取旧 schema、不执行旧格式 migration
   - 提供 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 作为全 App 业务读写唯一入口；余额刷新、交易流水同步、多签扫描、钱包导入等并发读写必须排队执行
   - `LocalTxEntity` 保存本机钱包进入 App 后的余额变化流水；`WalletTxSyncCursorEntity` 保存每个钱包的同步起点和最新同步高度
-- `wallet_secure_keys.dart`
-  - 机密 key 命名规范（`wallet.secret.<id>.seed_hex.v1`）
+- `hardware_bound_seed_vault.dart`
+  - 账户 child 私钥按 `account_id` 分密文保存；同钱包账户共享 Android Keystore KEK
+  - 私钥明文只在生物识别成功后的解密与签名期间短暂进入内存
 
 ### 3.2 `capabilities`
 
@@ -86,12 +87,18 @@ lib/
 ### 3.3 `pages`
 
 - `wallet_page.dart`
-  - 钱包列表（带热/冷标识）、长按拖拽排序、创建、导入、删除、激活、地址复制
+  - 「我的钱包」只展示唯一热钱包的账户卡片及冷钱包卡片。热账户卡整卡进入账户详情，
+    右侧固定为“扫码签名 + 竖三点”；竖三点菜单固定“重命名 / 账户详情 /
+    删除钱包或删除账户”，账户0显示“删除钱包”，其余账户显示“删除账户”
   - 钱包列表只允许把链上唯一 `voting_account_id` 对应的钱包标为“身份钱包”，不得按多个钱包分别认证
   - 热钱包创建/导入（`CreateWalletPage` / `ImportWalletPage`）
   - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`），导入冷钱包页标题右侧提供扫码图标，复用 `QrScanPage(raw)` 识别钱包二维码并只回填账户地址/公钥输入框
   - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchFinalizedBalance()` / `fetchFinalizedBalances()` 直连节点）
-  - 钱包详情页（`WalletDetailPage`）：余额卡片（含钱包名称）、二维码（含下载按钮）、地址、交易记录入口+最近记录
+  - 热账户详情页（`AccountDetailPage`）：用户二维码独立贴在账户卡右上角；完整 SS58 地址独占
+    第二行，复制按钮靠齐内容右边界，不再用二维码预留位挤压地址宽度；
+    充值列显示该 `account_id` 的 finalized total 链上余额，零钱包列显示该账户清算行余额，
+    下方复用现有交易记录；AppBar 最右侧竖三点只提供“清算行 / 查看私钥”
+  - 冷钱包详情页（`WalletDetailPage`）：余额卡片（含钱包名称）、二维码（含下载按钮）、地址、交易记录入口+最近记录
 - `transaction_history_page.dart`
   - 交易记录列表页（`TransactionHistoryPage`）：按 `accountId` 过滤，显示业务类型、带正负号的余额变化、对方地址、时间、状态
   - 交易记录详情页（`TransactionDetailPage`）：显示余额变化、转账金额、手续费、发送方、接收方、对方地址、区块/事件定位、txHash、来源、状态与失败原因
@@ -101,7 +108,8 @@ lib/
 - `wallet_identity_card.dart`
   - 钱包身份卡：钱包名、短地址、复制与二维码入口
 - `wallet_action_card.dart`
-  - 钱包操作卡：充值、提现与零钱包余额展示；零钱包余额来自绑定清算行节点，不等同于下方链上余额卡
+  - 账户操作卡：充值、提现与零钱包；充值余额来自链上 finalized total，
+    零钱包余额来自该 `account_id` 绑定的清算行，两者不得混用
 - `wallet_onchain_balance_card.dart`
   - 链上余额卡：展示链上 finalized total 余额
 - `wallet_qr_dialog.dart`
@@ -165,11 +173,39 @@ lib/
 3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；普通链上转账备注写入 `remark`；不再单独保存 `direction`。
 4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / multisig_transfer`；列表方向由金额正负号推导。
 5. 区块事件记录唯一键为 `accountId:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `accountId:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
-6. 删除钱包时同步删除该 `accountId` 下的 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`；再次导入同一链上账户也从新的本机导入时刻重新记录。
-7. 流水同步遇到本地 Isar/MDBX 繁忙时直接让路到下一轮，不和钱包列表、余额刷新、治理页面抢写锁。
-8. 交易页 `签名交易` 下方的四个状态只统计当前交易钱包的转出记录；钱包详情页和完整交易记录页才展示该钱包全部收支流水。
+6. 删除非0账户时同步删除该 `account_id` 的账户行、硬件金库 child、`LocalTxEntity`、
+   `WalletTxSyncCursorEntity`、通讯录密钥与本机缓存；菜单点击后直接执行，不再弹二次确认。
+7. 删除账户0即删除整只热钱包：必须先显示危险提示，再用账户0对本机一次性随机挑战签名并
+   本地验签；只有验签通过才能删除。删除时覆盖该钱包全部账户的账户行、硬件金库 child、
+   交易记录、同步游标、清算行缓存、通讯录密钥与本机缓存。再次导入同一链上账户从新的本机
+   导入时刻重新记录。
+8. 流水同步遇到本地 Isar/MDBX 繁忙时直接让路到下一轮，不和钱包列表、余额刷新、治理页面抢写锁。
+9. 交易页 `签名交易` 下方的四个状态只统计当前交易钱包的转出记录；账户详情页和完整交易记录页才展示该账户全部收支流水。
 
-### 4.5.2 钱包卡片拖拽排序
+### 4.5.2 硬件私钥生命周期
+
+1. 同一热钱包的全部账户密文按 `account_id` 分开存储，但共享该 `walletIndex` 的严档
+   Android Keystore KEK；读取任一 child 时由 `BiometricPrompt.CryptoObject` 每次认证。
+2. 删除非0账户只删除该账户密文，绝不能删除共享 KEK；只有删除整钱包或创建失败回滚时
+   才能删除共享 KEK。
+3. 系统备份可能恢复密文但不会迁移 Android Keystore 私钥；缺失 KEK 必须映射为
+   `SeedKeyInvalidated` 并向 UI 明确报告设备安全存储中的账户私钥不可用，不得泄露
+   Kotlin 空值强转异常。
+4. 查看私钥的唯一流程是“危险确认 → 设备安全存储读取 → 强生物识别 → 显示私钥”；
+   查看页面不得要求输入助记词，也不得静默生成新 KEK 冒充恢复。
+5. App 不保存助记词或母种子。KEK 缺失后，现有账户私钥密文无法在本机反解，必须
+   fail-closed；任何重新导入属于独立的钱包生命周期操作，不能嵌入查看私钥流程。
+
+### 4.5.3 账户卡片扫码签名
+
+1. 热账户卡片扫码按钮复用现有 `QrScanPage`，只把页面标题设为“扫码签名”；蓝色对准框、
+   提示小字、相册、手电筒和其它视觉参数不得由钱包页面改写。
+2. 该入口只接受 `QR_V1 k=1` 签名请求，不把收款码分派到付款流程。
+3. 卡片的 `Account.accountId`（业务字段 `account_id`）是强制签名账户；公民身份和广场动作请求中的
+   `signer_public_key` 与该账户不一致时，必须在读取私钥前拒绝。
+4. 三类签名服务最终统一调用 `WalletManager.signForAccountId()`，不得回退到账户0。
+
+### 4.5.4 钱包卡片拖拽排序
 
 1. `MyWalletPage` 使用 `ReorderableListView` 承载钱包卡片，长按拖拽触发 `_onReorder(oldIndex, newIndex)`。
 2. `WalletManager.getWallets()` 返回 fixed-length list，UI 层不能直接对 `_wallets` 执行 `removeAt/insert`。
@@ -244,7 +280,9 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 - 钱包模块和其他业务模块不得直接调用 `WalletIsar.instance.db()` 后读写 collection，也不得直接调用 `isar.writeTxn()`；统一使用 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()`，避免 Android 真机上多个异步任务同时读写 MDBX 时出现 `MdbxError (11): Try again`。
 - 钱包 settings 行的创建不得在已有写事务中再次开启写事务；事务内只能调用 `_getSettingsInTxn()` 这类明确带 `InTxn` 后缀的方法。
-- 钱包创建/导入必须在返回 UI 前完成落库校验；任何一个落库或机密写入步骤失败，都必须回滚同一 `walletIndex` 的 Isar 记录、seed 和助记词。
+- 钱包创建/导入必须在返回 UI 前完成落库校验；任何一个落库或账户私钥写入步骤失败，
+  都必须回滚同一 `walletIndex` 的 Isar 记录、已写入的 child 私钥密文和硬件 KEK；
+  助记词只存在于创建/导入页面内存，不得持久化。
 - `WalletManager.createWallet()` / `importWallet()` / `importColdWallet()` 的钱包元数据写入和当前钱包切换在同一事务内完成，避免钱包索引重复、激活钱包丢失或嵌套事务。
 - 钱包页展示错误时，本地 Isar/MDBX 错误统一提示为本地钱包数据库繁忙，不再显示为轻节点或区块链连接失败。
 

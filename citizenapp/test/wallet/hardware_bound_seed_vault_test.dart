@@ -202,15 +202,21 @@ void main() {
       expect(calls.where((c) => c.method == 'decrypt'), isEmpty);
     });
 
-    test('deleteAccountKey removes blob and deletes strict KEK', () async {
+    test('deleteAccountKey removes only target blob and keeps shared KEK',
+        () async {
       await vault.putAccountKey(
         walletIndex: 3,
         accountId: _accountA,
         childMiniSecretHex: 'x',
       );
       await vault.deleteAccountKey(walletIndex: 3, accountId: _accountA);
-      expect(blobs.store.containsKey('wallet_account_key_v1_$_accountA'),
-          isFalse);
+      expect(
+          blobs.store.containsKey('wallet_account_key_v1_$_accountA'), isFalse);
+      expect(calls.where((c) => c.method == 'deleteKey'), isEmpty);
+    });
+
+    test('deleteWalletKey deletes strict KEK once', () async {
+      await vault.deleteWalletKey(walletIndex: 3);
       final del = calls.firstWhere((c) => c.method == 'deleteKey');
       expect(del.arguments['tier'], 'strict');
       expect(del.arguments['walletIndex'], 3);

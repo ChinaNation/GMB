@@ -110,7 +110,7 @@ lib/rpc/
 - database 序列化在原生 warp 活跃期间直接返回无 chain information；App 只有 `isUsable=true` 才发起导出，并要求导出前后 `currentVerifiedFinalizedBlockNumber/hash` 完全一致。同步失败和重试未完成路径不再调用“保存部分进度”。
 - `ChainRpc` 的 finalized 缓存命名空间、runtime API 锚点和钱包确认高度统一读取 `currentVerifiedFinalized`；普通订阅 `finalizedBlock` 仅保留诊断展示，禁止进入业务 finalized 路径。
 - 已删除跨 fragment、storage、runtime 和 chain-information 阶段的绝对 10 秒 watchdog；各网络请求只服从自身超时。fragment/storage/call-proof 以 request id 记录实际 peer，失败只处罚该请求 peer，取消或断连只清理命中记录并恢复重调度；虚假的“warp 无进展”失败枚举已删除。新版 Android ARM64 构建已完成；真实正高度差已发生，但运行中 H/F 验收因交易验证竞态触发 native crash 而失败。
-- `ChainProgressBanner` 只展示原生轻节点阶段：fragments 下载/验证、目标状态下载、runtime 构建、chain information 构建和普通尾部同步各自使用独立文案；只有原生 `isUsable=true` 才显示“轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
+- `ChainProgressBanner` 统一负责原生轻节点状态轮询与页面门禁回调，但全 App 只有交易 Tab 设置 `showInlineStatus=true` 后可见；其他调用方返回零尺寸组件，只保留后台状态读取。交易顶栏只显示同色的呼吸灯、“公民链”和 `currentVerifiedFinalizedBlockNumber`，绿色表示 `isUsable=true`、蓝色表示连接或同步中、红色表示读取失败；不得显示状态文字、详细轻节点阶段、卡片或竖线，也不允许用 best/latest 填充“最终区块”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
 - 既有真机记录已经证明固定 `#0` 会真实进入 GRANDPA warp 并生成可恢复的本机 database；此前 `Chain.waitUntilSynced()` 只看 runtime `isSyncing` 而提前返回的问题已删除。原生 `isUsable`、Dart `ChainStatus/wait`、App operational、缓存导出和 Banner 现在使用唯一完成语义。
 - profile 结构化日志会在同步阶段变化与最终完成时输出 `phase/usable/source/startup/peer_finalized/current_verified/warp_target/active_requests/requests/received/verified/rejected/last_failure/best/surface_finalized`。第 1～5 阶段代码、本机分层自动化和 ARM64-only APK 静态验收已经完成；真实设备状态仍待后续阶段验收。
 - 2026-07-11 ARM64-only profile APK 已重建：所有 native entry 只位于 Android 官方 ARM64 ABI 目录，smoldot 为 ELF64/AArch64 且 LOAD segment 以 16 KiB 对齐；APK 内固定 `#0` 的 `light_sync_state.json`、zipalign 和 v2 签名检查均通过。

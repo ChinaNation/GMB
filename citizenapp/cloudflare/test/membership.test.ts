@@ -46,6 +46,7 @@ describe("平台与创作者统一订阅门禁", () => {
 
 function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
   return {
+    cid_number: "CN220-CTZN2-198805200-2026",
     account_id: "0x9999999999999999999999999999999999999999999999999999999999999999",
     membership_level: "freedom",
     started_at: 1_000_000,

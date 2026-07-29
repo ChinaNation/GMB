@@ -42,7 +42,7 @@ class SecureStorageBlobStore implements VaultBlobStore {
 /// 一把严档 KEK，各账户各存一份密文；[hasAccountKey] 只探 blob 存在性。
 ///
 /// 原生错误按 [SecureSeedException] 子类型分类，供 [WalletManager] 决定
-/// 中止（[AuthCancelled]）/ 提示重新导入（[SeedKeyInvalidated]）/ fail-closed
+/// 中止（[AuthCancelled]）/ 报告设备私钥不可用（[SeedKeyInvalidated]）/ fail-closed
 /// （[NoDeviceCredential]）/ 上抛（[SecureStoreUnavailable]）。
 class HardwareBoundSeedVault implements SecureSeedStore {
   HardwareBoundSeedVault({
@@ -106,7 +106,11 @@ class HardwareBoundSeedVault implements SecureSeedStore {
     required int walletIndex,
     required String accountId,
   }) =>
-      _delete(_accountBlobKey(accountId), walletIndex);
+      _deleteBlob(_accountBlobKey(accountId));
+
+  @override
+  Future<void> deleteWalletKey({required int walletIndex}) =>
+      _deleteKek(walletIndex);
 
   Future<void> _put(
     String blobKey,
@@ -156,19 +160,23 @@ class HardwareBoundSeedVault implements SecureSeedStore {
     }
   }
 
-  Future<void> _delete(String blobKey, int walletIndex) async {
+  /// 单账户删除只删该账户密文。KEK 按钱包共享，不能在这里连带删除。
+  Future<void> _deleteBlob(String blobKey) async {
     try {
       await _blobStore.delete(blobKey);
     } on PlatformException catch (e) {
       throw SecureStoreUnavailable(e.message ?? e.code);
     }
+  }
+
+  /// 整钱包生命周期结束时才删除共享严档 KEK。
+  Future<void> _deleteKek(int walletIndex) async {
     try {
       await _channel.invokeMethod<void>('deleteKey', <String, dynamic>{
         'tier': _tierStrict,
         'walletIndex': walletIndex,
       });
     } on PlatformException catch (e) {
-      // blob 已删，KEK 删除失败不致命（无 blob 也解不出），但上抛便于上层记录。
       throw SecureStoreUnavailable(e.message ?? e.code);
     }
   }

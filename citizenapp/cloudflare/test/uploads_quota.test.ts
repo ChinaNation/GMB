@@ -171,6 +171,7 @@ function mediaAsset(): MediaAssetRow {
   return {
     upload_id: 'squ_test',
     post_id: 'sqp_test',
+    cid_number: 'CN220-CTZN2-198805200-2026',
     account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
     media_index: 0,
     media_kind: 'image',

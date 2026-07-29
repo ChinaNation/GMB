@@ -56,4 +56,7 @@ class FakeHardwareBoundSeedVault implements SecureSeedStore {
   }) async {
     _accountKeys.remove(accountId);
   }
+
+  @override
+  Future<void> deleteWalletKey({required int walletIndex}) async {}
 }

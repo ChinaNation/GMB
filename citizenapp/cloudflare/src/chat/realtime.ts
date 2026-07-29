@@ -5,8 +5,8 @@ import { resourceLimit } from '../limits/catalog';
 
 export interface ChatRelayPayload {
   type: 'gmb_chat_envelope_v2' | 'gmb_chat_signal_v1';
-  sender_account_id: string;
-  recipient_account_id: string;
+  sender_cid_number: string;
+  recipient_cid_number: string;
   recipient_device_id: string | null;
   envelope_id?: string;
   envelope?: string;
@@ -14,7 +14,7 @@ export interface ChatRelayPayload {
 }
 
 interface ChatSocketAttachment {
-  account_id: string;
+  cid_number: string;
   device_id: string;
   connected_at: number;
 }
@@ -53,9 +53,9 @@ export class ChatRealtimeObject implements DurableObject {
       return jsonResponse({ ok: false, error_code: 'websocket_required', message: '请使用 WebSocket 连接' }, { status: 426 });
     }
 
-    const accountId = request.headers.get('x-chat-account-id');
+    const cidNumber = request.headers.get('x-chat-cid-number');
     const deviceId = request.headers.get('x-chat-device');
-    if (!accountId || !deviceId) {
+    if (!cidNumber || !deviceId) {
       return jsonResponse({ ok: false, error_code: 'chat_connection_invalid', message: 'Chat 连接缺少设备身份' }, { status: 400 });
     }
     const maxSockets = resourceLimit('chat_device').max_count!;
@@ -64,7 +64,7 @@ export class ChatRealtimeObject implements DurableObject {
     }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
-    server.serializeAttachment({ account_id: accountId, device_id: deviceId, connected_at: nowMs() } satisfies ChatSocketAttachment);
+    server.serializeAttachment({ cid_number: cidNumber, device_id: deviceId, connected_at: nowMs() } satisfies ChatSocketAttachment);
     this.state.acceptWebSocket(server, [deviceTag(deviceId)]);
     server.send(JSON.stringify({ type: 'gmb_chat_ws_ready_v2', server_time: nowMs() }));
     return new Response(null, { status: 101, webSocket: client });
@@ -78,7 +78,7 @@ export class ChatRealtimeObject implements DurableObject {
     let sent = 0;
     for (const socket of sockets) {
       const attachment = readAttachment(socket);
-      if (attachment?.account_id !== payload.recipient_account_id) continue;
+      if (attachment?.cid_number !== payload.recipient_cid_number) continue;
       try {
         socket.send(text);
         sent += 1;
@@ -104,7 +104,7 @@ export class ChatRealtimeObject implements DurableObject {
 
 export async function relayChatPayload(env: Env, payload: ChatRelayPayload): Promise<number> {
   const namespace = requireChatRealtimeNamespace(env);
-  const response = await namespace.getByName(payload.recipient_account_id).fetch(
+  const response = await namespace.getByName(payload.recipient_cid_number).fetch(
     new Request('https://chat.internal/__relay', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -115,10 +115,11 @@ export async function relayChatPayload(env: Env, payload: ChatRelayPayload): Pro
   return ((await response.json()) as { sent?: number }).sent ?? 0;
 }
 
-export async function closeChatRealtime(env: Env, accountId: string): Promise<number> {
+/// 关闭某身份主键 cid_number 的实时信箱(注销/换绑吊销时断开旧连接);DO 按 cid 命名。
+export async function closeChatRealtime(env: Env, cidNumber: string): Promise<number> {
   const namespace = env.CHAT_REALTIME;
   if (!namespace) return 0;
-  const response = await namespace.getByName(accountId).fetch(
+  const response = await namespace.getByName(cidNumber).fetch(
     new Request('https://chat.internal/__close', { method: 'POST' }),
   );
   if (!response.ok) return 0;
@@ -138,7 +139,7 @@ function deviceTag(deviceId: string): string {
 
 function readAttachment(socket: WebSocket): ChatSocketAttachment | null {
   const value = socket.deserializeAttachment();
-  if (value && typeof value === 'object' && typeof value.account_id === 'string' && typeof value.device_id === 'string') {
+  if (value && typeof value === 'object' && typeof value.cid_number === 'string' && typeof value.device_id === 'string') {
     return value as ChatSocketAttachment;
   }
   return null;

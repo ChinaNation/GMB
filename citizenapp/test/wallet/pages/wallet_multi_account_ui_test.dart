@@ -157,7 +157,14 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: WalletAccountTile(account: _makeAccount(), onTap: () {}),
+            body: WalletAccountTile(
+              account: _makeAccount(),
+              onTap: () {},
+              onScan: () {},
+              onRename: () {},
+              onDetail: () {},
+              onDelete: () {},
+            ),
           ),
         ),
       );
@@ -175,6 +182,10 @@ void main() {
             body: WalletAccountTile(
               account: _makeAccount(),
               onTap: () => tapped = true,
+              onScan: () {},
+              onRename: () {},
+              onDetail: () {},
+              onDelete: () {},
             ),
           ),
         ),
@@ -182,6 +193,78 @@ void main() {
       await tester.tap(find.text('账户1'));
       await tester.pump();
       expect(tapped, isTrue);
+    });
+
+    testWidgets('扫码在竖三点左侧且点击只触发当前账户扫码', (tester) async {
+      var scanned = false;
+      var cardTapped = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WalletAccountTile(
+              account: _makeAccount(),
+              onTap: () => cardTapped = true,
+              onScan: () => scanned = true,
+              onRename: () {},
+              onDetail: () {},
+              onDelete: () {},
+            ),
+          ),
+        ),
+      );
+      final scan = find.byTooltip('扫码签名');
+      final menu = find.byTooltip('账户操作');
+      expect(scan, findsOneWidget);
+      expect(menu, findsOneWidget);
+      expect(tester.getCenter(scan).dx, lessThan(tester.getCenter(menu).dx));
+      await tester.tap(scan);
+      await tester.pump();
+      expect(scanned, isTrue);
+      expect(cardTapped, isFalse);
+    });
+
+    testWidgets('账户0菜单为重命名/账户详情/删除钱包，非0显示删除账户', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WalletAccountTile(
+              account: _makeAccount(index: 0, name: '账户0'),
+              onTap: () {},
+              onScan: () {},
+              onRename: () {},
+              onDetail: () {},
+              onDelete: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('账户操作'));
+      await tester.pumpAndSettle();
+      expect(find.text('重命名'), findsOneWidget);
+      expect(find.text('账户详情'), findsOneWidget);
+      expect(find.text('删除钱包'), findsOneWidget);
+      expect(find.text('删除账户'), findsNothing);
+    });
+
+    testWidgets('非0账户菜单显示删除账户而不是删除钱包', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WalletAccountTile(
+              account: _makeAccount(index: 5, name: '账户5'),
+              onTap: () {},
+              onScan: () {},
+              onRename: () {},
+              onDetail: () {},
+              onDelete: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('账户操作'));
+      await tester.pumpAndSettle();
+      expect(find.text('删除账户'), findsOneWidget);
+      expect(find.text('删除钱包'), findsNothing);
     });
 
     testWidgets('账户行与冷钱包行可在同一列表共存', (tester) async {
@@ -193,6 +276,10 @@ void main() {
                 WalletAccountTile(
                   account: _makeAccount(index: 0, name: '账户0'),
                   onTap: () {},
+                  onScan: () {},
+                  onRename: () {},
+                  onDetail: () {},
+                  onDelete: () {},
                 ),
                 WalletListTile(
                   wallet: _makeColdWallet(name: '我的冷钱包'),
@@ -212,53 +299,88 @@ void main() {
     });
   });
 
-  group('AccountDetailPage（私钥默认隐藏 + 找回钱包功能）', () {
+  group('AccountDetailPage（顶部账户资料 + AppBar 菜单 + 找回钱包功能）', () {
     // 账户详情渲染 WalletActionCard(读 ClearingBankPrefs/SharedPreferences)并加载本地
     // 交易记录(Isar,由文件级 useIsolatedIsar 提供);此处只补 SharedPreferences mock。
     setUp(() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    testWidgets('默认隐藏私钥，只显示「点击查看私钥」', (tester) async {
-      // 账户详情现含充值/提现/零钱包/清算行/交易记录,内容变高;放大测试视口让整页
-      // (含底部删除按钮)完整构建,避免惰性 ListView 未构建底部控件。
+    testWidgets('顶部完整地址和卡片右上角二维码，删除/私钥/清算行不残留在正文', (tester) async {
       tester.view.physicalSize = const Size(1200, 3200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
+      final account = _makeAccount(name: '账户1');
       await tester.pumpWidget(
         MaterialApp(
           home: AccountDetailPage(
-            account: _makeAccount(name: '账户1'),
-            walletName: '钱包1',
+            account: account,
           ),
         ),
       );
       await tester.pump();
       expect(find.text('账户详情'), findsOneWidget);
-      expect(find.text('点击查看私钥'), findsOneWidget);
-      // 未确认前不得展示已揭示态的任何文案。
-      expect(find.text('请手抄备份，不支持复制；导出即等于该账户控制权'), findsNothing);
-      expect(find.widgetWithText(TextButton, '隐藏'), findsNothing);
-      // 非账户0 → 删除该账户；账户0 → 删除钱包。
-      expect(find.text('删除该账户'), findsOneWidget);
+      expect(find.text(account.ss58Address), findsOneWidget);
+      expect(find.byTooltip('账户二维码'), findsOneWidget);
+      expect(find.byTooltip('复制 SS58 地址'), findsOneWidget);
+      final headerFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is Container &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration! as BoxDecoration).gradient != null,
+        description: '账户详情渐变资料卡',
+      );
+      final headerRect = tester.getRect(headerFinder);
+      final nameRect = tester.getRect(find.text(account.accountName));
+      final qrRect = tester.getRect(find.byTooltip('账户二维码'));
+      final copyRect = tester.getRect(find.byTooltip('复制 SS58 地址'));
+      expect(qrRect.left, greaterThanOrEqualTo(nameRect.right),
+          reason: '二维码必须位于账户名布局区之外，不能紧挨名称排版');
+      expect(qrRect.top - headerRect.top, lessThanOrEqualTo(12),
+          reason: '二维码触控区必须贴在账户卡顶部');
+      expect(headerRect.right - qrRect.right, lessThanOrEqualTo(12),
+          reason: '二维码触控区必须贴在账户卡右侧');
+      expect(copyRect.top, greaterThanOrEqualTo(qrRect.bottom),
+          reason: '复制按钮必须下移到独立地址行，不能继续占用二维码旁的地址宽度');
+      expect(headerRect.right - copyRect.right, lessThanOrEqualTo(24),
+          reason: '复制按钮必须靠齐账户卡内容右侧');
+      expect(find.text('点击查看私钥'), findsNothing);
+      expect(find.text('删除账户'), findsNothing);
+      expect(find.text('删除钱包'), findsNothing);
+      expect(find.text('绑定 / 切换清算行'), findsNothing);
     });
 
-    testWidgets('账户0 底部为「删除钱包」', (tester) async {
-      // 同上:放大测试视口让整页(含底部删除按钮)完整构建。
-      tester.view.physicalSize = const Size(1200, 3200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+    testWidgets('AppBar 右侧竖三点只有「清算行 / 查看私钥」', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: AccountDetailPage(
             account: _makeAccount(index: 0, name: '账户0'),
-            walletName: '钱包1',
           ),
         ),
       );
       await tester.pump();
-      expect(find.text('删除钱包'), findsOneWidget);
-      expect(find.text('删除该账户'), findsNothing);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('清算行'), findsOneWidget);
+      expect(find.text('查看私钥'), findsOneWidget);
+      expect(find.text('删除钱包'), findsNothing);
+      expect(find.text('重命名'), findsNothing);
+    });
+
+    testWidgets('账户卡右上角二维码进入现有用户二维码页', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AccountDetailPage(
+            account: _makeAccount(index: 5, name: '日常账户'),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('账户二维码'));
+      await tester.pumpAndSettle();
+      expect(find.text('二维码'), findsOneWidget);
+      expect(find.text('日常账户'), findsOneWidget);
+      expect(find.text('扫描此二维码可加为联系人，或向其转账'), findsOneWidget);
     });
   });
 
@@ -293,8 +415,7 @@ void main() {
           .setMockMethodCallHandler(localAuthChannel, null);
     });
 
-    testWidgets('指定序号模式:直接露出序号输入框,可录入多序号 "1 5 9",提交按钮在场',
-        (tester) async {
+    testWidgets('指定序号模式:直接露出序号输入框,可录入多序号 "1 5 9",提交按钮在场', (tester) async {
       // 只验 UI 装配(指定序号模式渲染 / 多序号录入 / 提交按钮在场)。模式由入口固定,
       // 面板内不再有切换器。「1 5 9」→ [1,5,9] 解析由 parseAccountIndices 单测覆盖;
       // addAccounts([1,5,9]) 落库效果由 wallet_multi_account_test 覆盖。

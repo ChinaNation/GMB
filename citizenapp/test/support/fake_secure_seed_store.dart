@@ -20,6 +20,7 @@ class FakeSecureSeedStore implements SecureSeedStore {
 
   int readCount = 0;
   int putCount = 0;
+  final List<int> deletedWalletKeyIndexes = <int>[];
 
   @override
   Future<SecureAuthStatus> authStatus() async {
@@ -70,5 +71,10 @@ class FakeSecureSeedStore implements SecureSeedStore {
   }) async {
     accountKeys.remove(accountId);
     invalidatedAccountIds.remove(accountId);
+  }
+
+  @override
+  Future<void> deleteWalletKey({required int walletIndex}) async {
+    deletedWalletKeyIndexes.add(walletIndex);
   }
 }

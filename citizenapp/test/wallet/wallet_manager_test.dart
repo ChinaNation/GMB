@@ -13,7 +13,7 @@ import '../support/isar_test_env.dart';
 
 const _mnemonicA =
     'legal winner thank year wave sausage worth useful legal winner thank yellow';
-// 另一条合法但派生不同公钥的助记词（回归：曾用于自愈"助记词不一致"分支）。
+// 另一条合法但派生不同公钥的助记词（独立导入与私钥存储校验用）。
 const _mnemonicB =
     'abandon abandon abandon abandon abandon abandon abandon abandon '
     'abandon abandon abandon about';
@@ -282,10 +282,10 @@ void main() {
     });
   });
 
-  group('WalletManager — 密钥失效 fail-closed（无根 = 无自愈）', () {
+  group('WalletManager — 设备私钥失效 fail-closed', () {
     final payload = Uint8List.fromList(List<int>.generate(32, (_) => 7));
 
-    test('KEK 失效 → fail-closed 抛需重新导入，绝不重写 child', () async {
+    test('KEK 失效 → 只报告设备安全存储异常，绝不自动重写 child', () async {
       final manager = WalletManager();
       final imported = await manager.importWallet(_mnemonicA);
       fakeStore.putCount = 0;
@@ -294,15 +294,18 @@ void main() {
       await expectLater(
         manager.signWithWallet(1, payload),
         throwsA(
-          isA<WalletAuthException>()
-              .having((e) => e.message, 'message', contains('重新导入')),
+          isA<WalletAuthException>().having(
+            (e) => e.message,
+            'message',
+            contains('设备安全存储'),
+          ),
         ),
       );
-      // 无母种子 / 助记词可自愈，绝不重派生重写。
+      // App 不持久化母种子 / 助记词，查看或签名流程绝不重派生、重写。
       expect(fakeStore.putCount, 0);
     });
 
-    test('child 条目缺失 → fail-closed 抛需重新导入', () async {
+    test('child 条目缺失 → 只报告设备安全存储中没有账户私钥', () async {
       final manager = WalletManager();
       final imported = await manager.importWallet(_mnemonicA);
       fakeStore.accountKeys.remove(imported.accountId);
@@ -310,14 +313,16 @@ void main() {
       await expectLater(
         manager.signWithWallet(1, payload),
         throwsA(
-          isA<WalletAuthException>()
-              .having((e) => e.message, 'message', contains('重新导入')),
+          isA<WalletAuthException>().having(
+            (e) => e.message,
+            'message',
+            contains('没有该账户私钥'),
+          ),
         ),
       );
     });
 
-    test('回归：曾派生不同公钥的助记词，如今无自愈路径读取它', () async {
-      // _mnemonicB 仅作历史回归标记：无自愈后，签名只认严档 child，助记词不再入库。
+    test('另一钱包导入后也只从严档读取账户 child，不保存助记词', () async {
       final manager = WalletManager();
       final imported = await manager.importWallet(_mnemonicB);
       final key = fakeStore.accountKeys[imported.accountId];

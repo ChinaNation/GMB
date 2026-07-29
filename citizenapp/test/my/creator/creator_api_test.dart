@@ -51,8 +51,8 @@ void main() {
     );
 
     expect(api.lastSaveTxHash, '0x${List.filled(64, 'a').join()}');
-    expect(plan.creatorAccountId,
-        '0x7777777777777777777777777777777777777777777777777777777777777777');
+    // 离线 fake 无 cid 来源，身份主键字段留空（不塞会话钱包账户）。
+    expect(plan.creatorCidNumber, isEmpty);
     expect(plan.tiers, hasLength(1));
     expect(await api.fetchMyPlan(session), isNotNull);
   });
@@ -77,7 +77,7 @@ void main() {
         return http.Response.bytes(
           utf8.encode(jsonEncode({
             'plan': {
-              'creator_account_id':
+              'creator_cid_number':
                   '0x7777777777777777777777777777777777777777777777777777777777777777',
               'tiers': [tier.toJson()],
               'updated_at': 1,
@@ -114,7 +114,7 @@ void main() {
   test('FakeCreatorApi 概览默认按档位数', () async {
     final api = FakeCreatorApi(
       initialPlan: const CreatorPlan(
-        creatorAccountId:
+        creatorCidNumber:
             '0x7777777777777777777777777777777777777777777777777777777777777777',
         tiers: [tier],
         updatedAt: 0,

@@ -309,6 +309,7 @@ function makeEnv(db: FakeDb): Env {
       get: async (key: string) => {
         const accountId = key.slice('square_session:session-'.length);
         return {
+          cid_number: 'CN220-CTZN2-198805200-2026',
           account_id: accountId,
           device_key_hash: 'device',
           created_at: Date.now(),

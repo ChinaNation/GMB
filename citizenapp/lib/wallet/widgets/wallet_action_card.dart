@@ -5,6 +5,8 @@ import 'package:citizenapp/transaction/offchain-transaction/rpc/offchain_clearin
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/petty_wallet_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/withdraw_page.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 账户详情的 3 列等宽操作区（充值/提现/零钱包），一律按 `account_id` 键控。
@@ -21,6 +23,7 @@ class WalletActionCard extends StatefulWidget {
     super.key,
     required this.accountId,
     required this.ss58Address,
+    this.finalizedBalanceLoader,
   });
 
   /// 该账户链账户主键(0x+64hex):充值目标、清算行绑定缓存键、按账户签名均以它为准。
@@ -29,6 +32,9 @@ class WalletActionCard extends StatefulWidget {
   /// 该账户 SS58 地址,用于查询清算行存款余额。
   final String ss58Address;
 
+  /// 默认复用链上余额 RPC；测试可注入稳定结果，避免把网络状态写进组件断言。
+  final Future<double> Function(String accountId)? finalizedBalanceLoader;
+
   @override
   State<WalletActionCard> createState() => WalletActionCardState();
 }
@@ -36,6 +42,7 @@ class WalletActionCard extends StatefulWidget {
 class WalletActionCardState extends State<WalletActionCard> {
   ClearingBankBindingSnapshot? _binding;
   String _balanceText = '读取中';
+  String _onchainBalanceText = '读取中';
 
   @override
   void initState() {
@@ -44,6 +51,7 @@ class WalletActionCardState extends State<WalletActionCard> {
   }
 
   Future<void> refresh() async {
+    final onchainFuture = _loadOnchainBalance();
     final binding = await ClearingBankPrefs.loadSnapshot(widget.accountId);
     if (!mounted) return;
     setState(() {
@@ -52,6 +60,26 @@ class WalletActionCardState extends State<WalletActionCard> {
     });
     if (binding != null) {
       await _loadBalance(binding);
+    }
+    await onchainFuture;
+  }
+
+  /// 充值列展示该账户 finalized total 链上余额，数据源与原钱包余额卡完全一致。
+  Future<void> _loadOnchainBalance() async {
+    if (mounted) {
+      setState(() => _onchainBalanceText = '查询中');
+    }
+    try {
+      final loader = widget.finalizedBalanceLoader ??
+          (accountId) => ChainRpc().fetchFinalizedTotalBalance(accountId);
+      final balance = await loader(widget.accountId);
+      if (!mounted) return;
+      setState(() {
+        _onchainBalanceText = '${AmountFormat.format(balance, symbol: '')} 元';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _onchainBalanceText = '查询失败');
     }
   }
 
@@ -84,6 +112,7 @@ class WalletActionCardState extends State<WalletActionCard> {
             child: _ClickableAction(
               icon: Icons.arrow_circle_down_outlined,
               label: '充值',
+              detailText: _onchainBalanceText,
               onTap: () => _openTopup(context),
             ),
           ),
@@ -194,11 +223,13 @@ class _ClickableAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.detailText,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final String? detailText;
 
   @override
   Widget build(BuildContext context) {
@@ -235,8 +266,19 @@ class _ClickableAction extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              // 保持三列和零钱包状态行等高，不引入可见占位文案。
-              const SizedBox(height: 15),
+              if (detailText == null)
+                // 提现列不展示金额，但保持和两侧状态行等高。
+                const SizedBox(height: 15)
+              else
+                Text(
+                  detailText!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textTertiary,
+                  ),
+                ),
             ],
           ),
         ),

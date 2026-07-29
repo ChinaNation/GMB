@@ -11,30 +11,30 @@ interface PushDeviceRow {
 
 interface WakePayload {
   kind: 'chat_wake';
-  sender_account_id: string;
+  sender_cid_number: string;
 }
 
 /**
  * 发送无聊天内容的设备唤醒通知。
  *
  * Cloudflare 不保存待通知任务；未送达密文继续留在发送设备本地队列。推送载荷只
- * 告知“哪个账户有待发送数据”，不得加入消息文字、会话编号、附件或文件名。
+ * 告知“哪个身份(cid_number)有待发送数据”，不得加入消息文字、会话编号、附件或文件名。
  */
 export async function sendChatWake(
   env: Env,
-  recipientAccountId: string,
-  senderAccountId: string,
+  recipientCidNumber: string,
+  senderCidNumber: string,
 ): Promise<number> {
   const result = await env.DB.prepare(
     `SELECT push_provider, push_token
       FROM chat_devices
-      WHERE account_id = ? AND expires_at > ?`,
+      WHERE cid_number = ? AND expires_at > ?`,
   )
-    .bind(recipientAccountId, nowMs())
+    .bind(recipientCidNumber, nowMs())
     .all<PushDeviceRow>();
   const payload: WakePayload = {
     kind: 'chat_wake',
-    sender_account_id: senderAccountId,
+    sender_cid_number: senderCidNumber,
   };
   assertDeliverySize('push_wake', JSON.stringify(payload));
   const outcomes = await Promise.all(

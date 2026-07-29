@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,40 @@ import 'package:citizenapp/8964/services/square_api_client.dart'
     show SquareSession;
 
 void main() {
+  group('WalletConnect WebView CSP', () {
+    final html = File('assets/topup/walletconnect.html').readAsStringSync();
+
+    test('只给钱包图片开放 blob 并固定 Reown 字体域名', () {
+      expect(
+        html,
+        contains("img-src 'self' data: blob: https:;"),
+      );
+      expect(
+        html,
+        contains('font-src https://fonts.reown.com;'),
+      );
+    });
+
+    test('不向脚本或框架开放 blob，正式官网元数据保持不变', () {
+      expect(
+        html,
+        contains("script-src 'self' 'unsafe-inline';"),
+      );
+      expect(
+        html,
+        isNot(contains('script-src blob:')),
+      );
+      expect(
+        html,
+        isNot(contains('frame-src blob:')),
+      );
+      expect(
+        html,
+        contains("url: 'https://www.crcfrcn.com'"),
+      );
+    });
+  });
+
   group('encodeErc20Transfer', () {
     test('按 selector + 32B 地址 + 32B 金额编码', () {
       final data = encodeErc20Transfer('0x${'ab' * 20}', BigInt.from(15000000));

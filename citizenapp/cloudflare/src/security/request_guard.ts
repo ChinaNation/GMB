@@ -1,5 +1,6 @@
 import type { Env, SessionState } from '../types';
 import { normalizeP256SignatureHex, verifyP256Signature } from '../auth/device_subkey';
+import { fetchChainIdentityStateCached } from '../chain/identity';
 import { HttpError, requireSession } from '../shared/http';
 import { sha256Hex } from '../shared/hash';
 import {
@@ -117,8 +118,14 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   // 不再"无会话即放行、把鉴权全交给各 handler 自觉"——新增受保护路由默认即受保护,
   // 某 handler 漏调 requireSession 也不会退化成公开接口。
   const session = await requireSession(request, env);
+  // 链上绑定复查:会话的 account_id 必须仍是其 cid_number 当前绑定账户。换绑走了的旧账户
+  // 会话一律拒(靠链上实时绑定为准,不靠删会话)——身份是 cid_number,凭证是当前绑定钱包。
+  const identity = await fetchChainIdentityStateCached(env, session.account_id);
+  if (identity.cid_number !== session.cid_number) {
+    throw new HttpError(401, 'cid_binding_changed', '钱包账户绑定已变更,请重新登录');
+  }
   const rate = routeRate(path, request.method);
-  await enforceRateLimit(env, `${rate.key}:account_id:${session.account_id}`, rate.limit, rate.seconds);
+  await enforceRateLimit(env, `${rate.key}:cid_number:${session.cid_number}`, rate.limit, rate.seconds);
 
   if (requiresDeviceProof(path, request.method)) {
     await requireDeviceProof(request, env, path, session);
@@ -184,12 +191,15 @@ async function requireDeviceProof(
     throw new HttpError(401, 'device_nonce_invalid', '设备请求 nonce 不合法');
   }
 
+  // 子钥按 (cid_number, device_id) 精确定位;device_id == 会话记录的 device_key_hash(均 = sha256(p256))。
   const subkey = await env.DB.prepare(
-    'SELECT p256_public_key FROM square_device_subkeys WHERE account_id = ?'
-  ).bind(session.account_id).first<{ p256_public_key: string }>();
+    'SELECT p256_public_key, account_id FROM square_device_subkeys WHERE cid_number = ? AND device_id = ?'
+  )
+    .bind(session.cid_number, session.device_key_hash)
+    .first<{ p256_public_key: string; account_id: string }>();
   if (!subkey) throw new HttpError(401, 'device_not_registered', '设备子钥未注册');
-  const deviceKeyHash = await sha256Hex(subkey.p256_public_key);
-  if (deviceKeyHash !== session.device_key_hash) {
+  // 该设备子钥的所属账户须与会话一致(换绑等把它改到别的账户即视为失效)。
+  if (subkey.account_id !== session.account_id) {
     throw new HttpError(401, 'device_key_changed', '设备密钥已更换，请重新登录');
   }
 
@@ -217,11 +227,11 @@ async function requireDeviceProof(
     throw new HttpError(401, 'device_signature_invalid', '设备请求签名校验失败');
   }
 
-  const nonceHash = await sha256Hex(`${session.account_id}:${nonce}`);
+  const nonceHash = await sha256Hex(`${session.cid_number}:${nonce}`);
   const inserted = await env.DB.prepare(
     `INSERT OR IGNORE INTO square_request_nonces
-      (nonce_hash, account_id, expires_at, created_at) VALUES (?, ?, ?, ?)`
-  ).bind(nonceHash, session.account_id, nowMs() + REQUEST_NONCE_TTL_MS, nowMs()).run();
+      (nonce_hash, cid_number, expires_at, created_at) VALUES (?, ?, ?, ?)`
+  ).bind(nonceHash, session.cid_number, nowMs() + REQUEST_NONCE_TTL_MS, nowMs()).run();
   if ((inserted.meta?.changes ?? 0) !== 1) {
     throw new HttpError(409, 'device_request_replayed', '设备请求已被使用');
   }

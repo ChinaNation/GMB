@@ -94,7 +94,7 @@ export async function platformSubscriptionConfirmRoute(
     blockHash: transaction.blockHash,
     observedAt: confirmedAt,
   });
-  await mirrorPlatformState(env, session.account_id, state!, transaction, confirmedAt);
+  await mirrorPlatformState(env, session.cid_number, session.account_id, state!, transaction, confirmedAt);
   return jsonResponse({
     ok: true,
     subscription_status: state!.status,
@@ -159,6 +159,7 @@ function assertPlatformStateMatches(
 
 async function mirrorPlatformState(
   env: Env,
+  cidNumber: string,
   accountId: string,
   state: ChainSubscriptionState,
   transaction: VerifiedFinalizedTransaction,
@@ -169,14 +170,16 @@ async function mirrorPlatformState(
   }
   const lastChargedPriceFen = safePrice(state.lastChargedPriceFen);
   const entitlementLapsedAt = state.status === "active" ? null : state.paidUntil;
+  // 归属主键 = 身份主键 cid_number;account_id 记当前付款/签名账户(链上事实)。
   await env.DB.prepare(
     `INSERT INTO square_memberships
-      (account_id, membership_level, started_at,
+      (cid_number, account_id, membership_level, started_at,
        last_charged_at, last_charged_price_fen, paid_until, subscription_status,
        finalized_block_number, finalized_block_hash, verified_at,
        entitlement_lapsed_at, last_tx_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(account_id) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(cid_number) DO UPDATE SET
+        account_id = excluded.account_id,
         membership_level = excluded.membership_level,
         started_at = excluded.started_at,
         last_charged_at = excluded.last_charged_at,
@@ -191,6 +194,7 @@ async function mirrorPlatformState(
       WHERE excluded.finalized_block_number >= square_memberships.finalized_block_number`,
   )
     .bind(
+      cidNumber,
       accountId,
       state.plan.membershipLevel,
       state.startedAt,

@@ -10,13 +10,19 @@ import { readProfileDoc, writeProfileDoc } from '../src/profiles/repository';
 import { profileObjectKey } from '../src/storage/r2_keys';
 import type { CitizenProfileDoc, Env, SessionState } from '../src/types';
 
+// 社交面统一按身份主键 cid_number 寻址(F1):路由第三参 = 目标 cid_number(不再是 account_id)。
 const accountId = '0x1111111111111111111111111111111111111111111111111111111111111111';
 const viewer = '0x2222222222222222222222222222222222222222222222222222222222222222';
+// 账户↔CID 固定映射:身份主键 = cid_number(换绑不丢),归属数据全部按 cid 存取。
+const targetCid = 'CN001-CTZN-000000001-2026'; // accountId 绑定的 CID
+const viewerCid = 'CN220-CTZN2-198805200-2026'; // viewer 绑定的 CID(= 标准会话 CID)
+const candidateCid = 'CN001-CTZN-000000009-2026'; // 独立于 targetCid 的另一目标身份主键
 
 interface PostSeed {
   post_id: string;
   account_id: string;
-  cid_number: string | null;
+  /// 身份主键:发布者 cid_number(帖子归属键)。
+  cid_number: string;
   post_category: 'normal' | 'campaign';
   content_format: 'normal' | 'article';
   created_at: number;
@@ -24,8 +30,9 @@ interface PostSeed {
 }
 
 interface FollowSeed {
-  account_id: string;
-  followed_account_id: string;
+  /// 关注关系双端均为身份主键 cid_number。
+  follower_cid_number: string;
+  followed_cid_number: string;
   created_at?: number;
   /// 关注即默认开通知（1）；0=对该关注静音。缺省视为 1。
   notify_enabled?: number;
@@ -36,10 +43,10 @@ describe('citizen profile repository', () => {
     const env = fakeEnv();
     const doc: CitizenProfileDoc = {
       schema: 'citizenapp.square.profile.v1',
-      account_id: accountId,
+      cid_number: targetCid,
       display_name: '轻节点',
       bio: '链上公民',
-      avatar_object_key: `profile/${accountId.slice(2)}/avatar`,
+      avatar_object_key: `profile/${targetCid}/avatar`,
       avatar_content_hash: '0xabc',
       banner_object_key: null,
       banner_content_hash: null,
@@ -47,48 +54,50 @@ describe('citizen profile repository', () => {
     };
 
     await writeProfileDoc(env, doc);
-    const loaded = await readProfileDoc(env, accountId);
+    const loaded = await readProfileDoc(env, targetCid);
 
     expect(loaded).toMatchObject({
       display_name: '轻节点',
       bio: '链上公民',
-      avatar_object_key: `profile/${accountId.slice(2)}/avatar`,
+      avatar_object_key: `profile/${targetCid}/avatar`,
       updated_at: 123
     });
   });
 
   it('returns null for a missing or schema-invalid profile', async () => {
     const env = fakeEnv();
-    expect(await readProfileDoc(env, accountId)).toBeNull();
+    expect(await readProfileDoc(env, targetCid)).toBeNull();
 
-    await env.SQUARE_MEDIA.put(profileObjectKey(accountId), JSON.stringify({ schema: 'wrong' }));
-    expect(await readProfileDoc(env, accountId)).toBeNull();
+    await env.SQUARE_MEDIA.put(profileObjectKey(targetCid), JSON.stringify({ schema: 'wrong' }));
+    expect(await readProfileDoc(env, targetCid)).toBeNull();
   });
 });
 
 describe('GET /v1/square/users/:account', () => {
   it('reports counts, certification and follow state for the viewer', async () => {
     const env = fakeEnv({
+      // 目标身份的两条已发布帖(归属键 cid_number = targetCid)。
       posts: [
-        published({ post_id: 'p1', cid_number: 'CN001-CTZN-000000001-2026', created_at: 200 }),
-        published({ post_id: 'p2', cid_number: null, created_at: 100 })
+        published({ post_id: 'p1', created_at: 200 }),
+        published({ post_id: 'p2', created_at: 100 })
       ],
       // 认证真源=链上身份：投票公民携带 cid，主页据此判认证。
-      identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
+      identity: { identity_level: 'voting', cid_number: targetCid },
       // 购买了民主会员且有效 → 徽章带勾（会员与身份解耦，勾只看会员是否有效）。
       membership: { membership_level: 'democracy' },
+      // 关注关系全部按 cid:目标关注两人,viewer 关注目标。
       follows: [
-        { account_id: accountId, followed_account_id: '0x4444444444444444444444444444444444444444444444444444444444444444' },
-        { account_id: accountId, followed_account_id: '0x5555555555555555555555555555555555555555555555555555555555555555' },
-        { account_id: viewer, followed_account_id: accountId }
+        { follower_cid_number: targetCid, followed_cid_number: 'CN001-CTZN-000000004-2026' },
+        { follower_cid_number: targetCid, followed_cid_number: 'CN001-CTZN-000000005-2026' },
+        { follower_cid_number: viewerCid, followed_cid_number: targetCid }
       ],
       session: { token: 'tok', account_id: viewer }
     });
 
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
-      accountId
+      targetCid
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
 
@@ -98,7 +107,7 @@ describe('GET /v1/square/users/:account', () => {
       identity_level: 'voting',
       membership_level: 'democracy',
       membership_active: true,
-      cid_number: 'CN001-CTZN-000000001-2026',
+      cid_number: targetCid,
       is_following: true
     });
     expect(body.profile.counts).toEqual({ following: 2, followers: 1, posts: 2 });
@@ -107,13 +116,13 @@ describe('GET /v1/square/users/:account', () => {
   it('reports identity and membership independently (decoupled)', async () => {
     // 会员与身份解耦（ADR-036）：竞选身份可只买自由会员，两轴各自上报、互不影响。
     const env = fakeEnv({
-      identity: { identity_level: 'candidate', cid_number: 'CN001-CTZN-000000009-2026' },
+      identity: { identity_level: 'candidate', cid_number: candidateCid },
       membership: { membership_level: 'freedom' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${candidateCid}`, { authToken: 'tok' }),
       env,
-      accountId
+      candidateCid
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
     expect(body.profile).toMatchObject({
@@ -125,13 +134,13 @@ describe('GET /v1/square/users/:account', () => {
 
   it('reports a cancelled membership as active until paid_until', async () => {
     const env = fakeEnv({
-      identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
+      identity: { identity_level: 'voting', cid_number: targetCid },
       membership: { membership_level: 'democracy', subscription_status: 'cancelled' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
-      accountId
+      targetCid
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
     expect(body.profile).toMatchObject({
@@ -143,36 +152,38 @@ describe('GET /v1/square/users/:account', () => {
 
   it('marks a candidate identity account as certified candidate', async () => {
     const env = fakeEnv({
-      identity: { identity_level: 'candidate', cid_number: 'CN001-CTZN-000000009-2026' }
+      identity: { identity_level: 'candidate', cid_number: candidateCid }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${candidateCid}`, { authToken: 'tok' }),
       env,
-      accountId
+      candidateCid
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
 
     expect(body.profile).toMatchObject({
       is_certified: true,
       identity_level: 'candidate',
-      cid_number: 'CN001-CTZN-000000009-2026'
+      cid_number: candidateCid
     });
   });
 
   it('is wallet-readable and reports an unverified visitor when no chain identity', async () => {
-    // 无身份桩 + 未配 RPC → 软降级为访客（未认证），不因链上不可用而报错。
+    // 目标 cid 无 active 身份桩 + 未配 RPC → 软降级为访客（未认证，account_id 空、cid_number=目标 cid），
+    // 不因链上不可用而报错。
     const env = fakeEnv({ posts: [], follows: [] });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
-      accountId
+      targetCid
     );
     const body = (await response.json()) as { profile: Record<string, unknown> };
 
     expect(body.profile).toMatchObject({
+      account_id: '',
       is_certified: false,
       identity_level: 'visitor',
-      cid_number: null,
+      cid_number: targetCid,
       is_following: false,
       display_name: ''
     });
@@ -180,8 +191,11 @@ describe('GET /v1/square/users/:account', () => {
 });
 
 describe('PUT /v1/square/profile', () => {
-  it('persists display_name and bio for the session accountId', async () => {
-    const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
+  it('persists display_name and bio for the session cid', async () => {
+    const env = fakeEnv({
+      session: { token: 'tok', account_id: accountId },
+      identity: { identity_level: 'voting', cid_number: targetCid }
+    });
     const response = await putProfileRoute(
       request('https://w/v1/square/profile', {
         method: 'PUT',
@@ -194,10 +208,10 @@ describe('PUT /v1/square/profile', () => {
 
     expect(body.profile.display_name).toBe('轻节点');
     expect(body.profile.bio).toBe('个性签名');
-    expect(await readProfileDoc(env, accountId)).toMatchObject({ display_name: '轻节点' });
+    expect(await readProfileDoc(env, targetCid)).toMatchObject({ display_name: '轻节点' });
   });
 
-  it('rejects an avatar key outside the accountId profile directory', async () => {
+  it('rejects an avatar key outside the cid profile directory', async () => {
     const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
@@ -211,14 +225,14 @@ describe('PUT /v1/square/profile', () => {
     ).rejects.toMatchObject({ code: 'invalid_asset_key' });
   });
 
-  it('rejects a non-fixed avatar key inside the accountId profile directory', async () => {
+  it('rejects a non-fixed avatar key inside the cid profile directory', async () => {
     const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
         request('https://w/v1/square/profile', {
           method: 'PUT',
           authToken: 'tok',
-          body: { avatar_object_key: `profile/${accountId.slice(2)}/avatar_extra` }
+          body: { avatar_object_key: `profile/${targetCid}/avatar_extra` }
         }),
         env
       )
@@ -243,6 +257,7 @@ describe('PUT /v1/square/profile', () => {
 describe('GET /v1/square/users/:account/posts', () => {
   it('filters by category and paginates by cursor', async () => {
     const env = fakeEnv({
+      identity: { identity_level: 'voting', cid_number: targetCid },
       posts: [
         published({ post_id: 'c1', post_category: 'campaign', created_at: 300 }),
         published({ post_id: 'n1', post_category: 'normal', created_at: 200 }),
@@ -264,6 +279,7 @@ describe('GET /v1/square/users/:account/posts', () => {
 
   it('filters by content_format so articles and short posts separate', async () => {
     const env = fakeEnv({
+      identity: { identity_level: 'voting', cid_number: targetCid },
       posts: [
         published({ post_id: 'a1', content_format: 'article', created_at: 300 }),
         published({ post_id: 'p1', content_format: 'normal', created_at: 200 })
@@ -282,9 +298,9 @@ describe('GET /v1/square/users/:account/posts', () => {
     query: string
   ): Promise<{ posts: Array<{ post_id: string }>; next_cursor: number | null }> {
     const response = await getUserPostsRoute(
-      request(`https://w/v1/square/users/${accountId}/posts?${query}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${targetCid}/posts?${query}`, { authToken: 'tok' }),
       env,
-      accountId
+      targetCid
     );
     return (await response.json()) as {
       posts: Array<{ post_id: string }>;
@@ -296,37 +312,39 @@ describe('GET /v1/square/users/:account/posts', () => {
 describe('GET /v1/square/users/:account/follows', () => {
   it('lists following and followers ordered by recency', async () => {
     const env = fakeEnv({
+      identity: { identity_level: 'voting', cid_number: targetCid },
       follows: [
-        { account_id: accountId, followed_account_id: '0x4444444444444444444444444444444444444444444444444444444444444444', created_at: 100 },
-        { account_id: accountId, followed_account_id: '0x5555555555555555555555555555555555555555555555555555555555555555', created_at: 200 },
-        { account_id: '0x6666666666666666666666666666666666666666666666666666666666666666', followed_account_id: accountId, created_at: 300 }
+        { follower_cid_number: targetCid, followed_cid_number: 'CN001-CTZN-000000004-2026', created_at: 100 },
+        { follower_cid_number: targetCid, followed_cid_number: 'CN001-CTZN-000000005-2026', created_at: 200 },
+        { follower_cid_number: 'CN001-CTZN-000000006-2026', followed_cid_number: targetCid, created_at: 300 }
       ]
     });
 
+    // 列表项为身份主键 cid_number(响应字段 entries)。
     const following = await readFollows(env, 'type=following');
-    expect(following.accounts.map((a) => a.account_id)).toEqual([
-      '0x5555555555555555555555555555555555555555555555555555555555555555',
-      '0x4444444444444444444444444444444444444444444444444444444444444444'
+    expect(following.entries.map((e) => e.cid_number)).toEqual([
+      'CN001-CTZN-000000005-2026',
+      'CN001-CTZN-000000004-2026'
     ]);
 
     const followers = await readFollows(env, 'type=followers');
-    expect(followers.accounts.map((a) => a.account_id)).toEqual(['0x6666666666666666666666666666666666666666666666666666666666666666']);
+    expect(followers.entries.map((e) => e.cid_number)).toEqual(['CN001-CTZN-000000006-2026']);
   });
 
   async function readFollows(
     env: Env,
     query: string
   ): Promise<{
-    accounts: Array<{ account_id: string; created_at: number }>;
+    entries: Array<{ cid_number: string; created_at: number }>;
     next_cursor: number | null;
   }> {
     const response = await getUserFollowsRoute(
-      request(`https://w/v1/square/users/${accountId}/follows?${query}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${targetCid}/follows?${query}`, { authToken: 'tok' }),
       env,
-      accountId
+      targetCid
     );
     return (await response.json()) as {
-      accounts: Array<{ account_id: string; created_at: number }>;
+      entries: Array<{ cid_number: string; created_at: number }>;
       next_cursor: number | null;
     };
   }
@@ -335,7 +353,8 @@ describe('GET /v1/square/users/:account/follows', () => {
 describe('post notify (is_notifying + PUT .../notify)', () => {
   it('reports is_notifying true when following with notify enabled (default)', async () => {
     const env = fakeEnv({
-      follows: [{ account_id: viewer, followed_account_id: accountId }],
+      identity: { identity_level: 'voting', cid_number: targetCid },
+      follows: [{ follower_cid_number: viewerCid, followed_cid_number: targetCid }],
       session: { token: 'tok', account_id: viewer }
     });
     const body = await readProfile(env);
@@ -344,8 +363,9 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
 
   it('reports is_notifying false when following but muted', async () => {
     const env = fakeEnv({
+      identity: { identity_level: 'voting', cid_number: targetCid },
       follows: [
-        { account_id: viewer, followed_account_id: accountId, notify_enabled: 0 }
+        { follower_cid_number: viewerCid, followed_cid_number: targetCid, notify_enabled: 0 }
       ],
       session: { token: 'tok', account_id: viewer }
     });
@@ -354,18 +374,23 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
   });
 
   it('reports is_notifying false when not following', async () => {
-    const env = fakeEnv({ follows: [], session: { token: 'tok', account_id: viewer } });
+    const env = fakeEnv({
+      identity: { identity_level: 'voting', cid_number: targetCid },
+      follows: [],
+      session: { token: 'tok', account_id: viewer }
+    });
     const body = await readProfile(env);
     expect(body.profile).toMatchObject({ is_following: false, is_notifying: false });
   });
 
   it('PUT .../notify accepts a boolean and echoes the new state', async () => {
     const env = fakeEnv({
-      follows: [{ account_id: viewer, followed_account_id: accountId }],
+      identity: { identity_level: 'voting', cid_number: targetCid },
+      follows: [{ follower_cid_number: viewerCid, followed_cid_number: targetCid }],
       session: { token: 'tok', account_id: viewer }
     });
     const response = await setFollowNotifyRoute(
-      request(`https://w/v1/square/follows/${accountId}/notify`, {
+      request(`https://w/v1/square/follows/${targetCid}/notify`, {
         method: 'PUT',
         authToken: 'tok',
         body: { enabled: false }
@@ -380,7 +405,7 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
     const env = fakeEnv({ session: { token: 'tok', account_id: viewer } });
     await expect(
       setFollowNotifyRoute(
-        request(`https://w/v1/square/follows/${accountId}/notify`, {
+        request(`https://w/v1/square/follows/${targetCid}/notify`, {
           method: 'PUT',
           authToken: 'tok',
           body: { enabled: 'yes' }
@@ -392,9 +417,9 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
 
   async function readProfile(env: Env): Promise<{ profile: Record<string, unknown> }> {
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${accountId}`, { authToken: 'tok' }),
+      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
-      accountId
+      targetCid
     );
     return (await response.json()) as { profile: Record<string, unknown> };
   }
@@ -403,7 +428,7 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
 function published(overrides: Partial<PostSeed> & Pick<PostSeed, 'post_id'>): PostSeed {
   return {
     account_id: accountId,
-    cid_number: null,
+    cid_number: targetCid,
     post_category: 'normal',
     content_format: 'normal',
     created_at: 0,
@@ -416,7 +441,7 @@ interface FakeEnvOptions {
   posts?: PostSeed[];
   follows?: FollowSeed[];
   session?: { token: string; account_id: string };
-  /// 预置 accountId 的链上身份（写进 SQUARE_CACHE 命中缓存版身份读取）；缺省=未配置→软降级为访客。
+  /// 预置目标 cid 的链上身份（写进 SQUARE_CACHE 命中 fetchChainIdentityStateByCidCached）；缺省=未配置→软降级为访客（account_id 空）。
   identity?: { identity_level: 'visitor' | 'voting' | 'candidate'; cid_number?: string | null };
   /// 预置 accountId 的会员购买（对应 D1 square_memberships 一行）；缺省=未购买（无行）。
   membership?: {
@@ -426,38 +451,38 @@ interface FakeEnvOptions {
   };
 }
 
+/// 会话身份主键 = 账户绑定的 cid_number(与路由内链上 resolve 同一映射)。
+function cidForAccount(account: string): string {
+  return account === accountId ? targetCid : viewerCid;
+}
+
 function fakeEnv(options: FakeEnvOptions = {}): Env {
   const posts = options.posts ?? [];
   const follows = options.follows ?? [];
   const kv = new Map<string, unknown>();
-  if (!options.session) {
-    const defaultSession: SessionState = {
-      account_id: viewer,
-      device_key_hash: 'a'.repeat(64),
-      created_at: 0,
-      expires_at: Date.now() + 60_000
-    };
-    kv.set('square_session:tok', defaultSession);
-  }
-  if (options.session) {
-    const session: SessionState = {
-      account_id: options.session.account_id,
-      device_key_hash: 'a'.repeat(64),
-      created_at: 0,
-      expires_at: Date.now() + 60_000
-    };
-    kv.set(`square_session:${options.session.token}`, session);
-  }
+  const sessionToken = options.session?.token ?? 'tok';
+  const sessionAccount = options.session?.account_id ?? viewer;
+  const session: SessionState = {
+    cid_number: cidForAccount(sessionAccount),
+    account_id: sessionAccount,
+    device_key_hash: 'a'.repeat(64),
+    created_at: 0,
+    expires_at: Date.now() + 60_000
+  };
+  kv.set(`square_session:${sessionToken}`, session);
   if (options.identity) {
     const level = options.identity.identity_level;
+    // 社交面按身份主键 cid_number 寻址:身份缓存键 = square_identity_cid:<cid>
+    // (命中 fetchChainIdentityStateByCidCached);account_id = 该 cid 当前绑定钱包账户。
+    const identityCid = options.identity.cid_number ?? null;
     kv.set(
-      `square_identity:${accountId}`,
+      `square_identity_cid:${identityCid}`,
       JSON.stringify({
         account_id: accountId,
         identity_level: level,
         has_voting_identity: level !== 'visitor',
         has_candidate_identity: level === 'candidate',
-        cid_number: options.identity.cid_number ?? null,
+        cid_number: identityCid,
         checked_at: 0
       })
     );
@@ -465,6 +490,8 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
 
   const membershipRow = options.membership
     ? {
+        // 身份主键 cid_number = 目标账户链上 resolve 出的 cid（buildProfileResponse 按此查会员）。
+        cid_number: options.identity?.cid_number ?? null,
         account_id: accountId,
         membership_level: options.membership.membership_level,
         subscription_status: options.membership.subscription_status ?? 'active',
@@ -558,47 +585,45 @@ class FakeStmt {
     const sql = this.sql;
     const b0 = this.binds[0] as string;
 
+    // 会员按身份主键 cid_number 命中（getMembership 绑定目标 cid）。
     if (sql.includes('square_memberships')) {
       const m = this.membership;
-      return m && m.account_id === b0 ? (m as T) : null;
+      return m && m.cid_number === b0 ? (m as T) : null;
     }
 
-    if (sql.includes('COUNT(*)') && sql.includes('square_follows') &&
-      sql.includes('followed_account_id = ?')) {
-      return { n: this.follows.filter((f) => f.followed_account_id === b0).length } as T;
-    }
-    if (sql.includes('square_follows') && sql.includes('followed_account_id = ?') &&
-      sql.includes('account_id = ?')) {
+    // isFollowing / isNotifying：关注关系双端 cid（follower + followed），非计数。
+    if (
+      sql.includes('square_follows') &&
+      sql.includes('follower_cid_number = ?') &&
+      sql.includes('followed_cid_number = ?')
+    ) {
       const b1 = this.binds[1] as string;
       const follow = this.follows.find(
-        (f) => f.account_id === b0 && f.followed_account_id === b1
+        (f) => f.follower_cid_number === b0 && f.followed_cid_number === b1
       );
       // isNotifying 读 notify_enabled；isFollowing 读 1 AS n。
       if (sql.includes('notify_enabled')) {
         return follow ? ({ notify_enabled: follow.notify_enabled ?? 1 } as T) : null;
       }
-      return (follow ? ({ n: 1 } as T) : null);
+      return follow ? ({ n: 1 } as T) : null;
     }
-    if (sql.includes('COUNT(*)') && sql.includes('square_follows')) {
-      return { n: this.follows.filter((f) => f.account_id === b0).length } as T;
+    // 粉丝数：followed_cid_number = ? 命中该身份被关注的条数。
+    if (sql.includes('COUNT(*)') && sql.includes('square_follows') &&
+      sql.includes('followed_cid_number = ?')) {
+      return { n: this.follows.filter((f) => f.followed_cid_number === b0).length } as T;
     }
+    // 关注数：follower_cid_number = ? 命中该身份主动关注的条数。
+    if (sql.includes('COUNT(*)') && sql.includes('square_follows') &&
+      sql.includes('follower_cid_number = ?')) {
+      return { n: this.follows.filter((f) => f.follower_cid_number === b0).length } as T;
+    }
+    // 帖子数：按身份主键 cid_number 聚合已发布帖。
     if (sql.includes('COUNT(*)') && sql.includes('square_posts')) {
       return {
         n: this.posts.filter(
-          (p) => p.account_id === b0 && p.post_state === 'published'
+          (p) => p.cid_number === b0 && p.post_state === 'published'
         ).length
       } as T;
-    }
-    if (sql.includes('cid_number FROM square_posts')) {
-      const row = this.posts
-        .filter(
-          (p) =>
-            p.account_id === b0 &&
-            p.post_state === 'published' &&
-            p.cid_number !== null
-        )
-        .sort((a, b) => b.created_at - a.created_at)[0];
-      return row ? ({ cid_number: row.cid_number } as T) : null;
     }
     if (sql.includes('FROM square_uploads')) {
       return null;
@@ -607,20 +632,30 @@ class FakeStmt {
   }
 
   async all<T>(): Promise<{ results: T[] }> {
+    // 批量会员：按身份主键 cid_number IN(...) 命中；测试仅置一行。
+    if (this.sql.includes('square_memberships')) {
+      const cidNumbers = this.binds as string[];
+      const rows = this.membership && cidNumbers.includes(this.membership.cid_number as string)
+        ? [this.membership]
+        : [];
+      return { results: rows as unknown as T[] };
+    }
+
     if (this.sql.includes('FROM square_follows')) {
-      const isFollowing = this.sql.includes('followed_account_id AS account_id');
+      // following: WHERE follower_cid_number = ?（选 followed 列）；followers 反之。
+      const isFollowing = this.sql.includes('follower_cid_number = ?');
       let fi = 0;
-      const account = this.binds[fi++] as string;
+      const key = this.binds[fi++] as string;
       const cursor = this.sql.includes('created_at < ?')
         ? (this.binds[fi++] as number)
         : null;
       const limit = this.binds[fi++] as number;
       const rows = this.follows
         .filter((f) =>
-          isFollowing ? f.account_id === account : f.followed_account_id === account
+          isFollowing ? f.follower_cid_number === key : f.followed_cid_number === key
         )
         .map((f) => ({
-          account_id: isFollowing ? f.followed_account_id : f.account_id,
+          cid_number: isFollowing ? f.followed_cid_number : f.follower_cid_number,
           created_at: f.created_at ?? 0
         }))
         .filter((r) => (cursor !== null ? r.created_at < cursor : true))
@@ -629,8 +664,9 @@ class FakeStmt {
       return { results: rows as unknown as T[] };
     }
 
+    // listAuthorPosts：按身份主键 cid_number 过滤已发布帖。
     let i = 0;
-    const accountId = this.binds[i++] as string;
+    const cidNumber = this.binds[i++] as string;
     const category = this.sql.includes('post_category = ?')
       ? (this.binds[i++] as string)
       : null;
@@ -643,7 +679,7 @@ class FakeStmt {
     const limit = this.binds[i++] as number;
 
     const results = this.posts
-      .filter((p) => p.account_id === accountId && p.post_state === 'published')
+      .filter((p) => p.cid_number === cidNumber && p.post_state === 'published')
       .filter((p) => (category ? p.post_category === category : true))
       .filter((p) => (contentFormat ? p.content_format === contentFormat : true))
       .filter((p) => (cursor !== null ? p.created_at < cursor : true))

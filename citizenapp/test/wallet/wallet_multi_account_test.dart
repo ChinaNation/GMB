@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
+import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import '../support/fake_secure_seed_store.dart';
@@ -102,7 +103,9 @@ void main() {
       final added = await manager.addAccounts(masterId, _mnemonicA, [1, 2, 3]);
       expect(added.map((a) => a.accountIndex).toList(), [1, 2, 3]);
       expect(
-        (await manager.getAccounts(masterId)).map((a) => a.accountIndex).toList(),
+        (await manager.getAccounts(masterId))
+            .map((a) => a.accountIndex)
+            .toList(),
         [0, 1, 2, 3],
       );
       for (final index in [1, 2, 3]) {
@@ -120,7 +123,9 @@ void main() {
       final added = await manager.addAccounts(masterId, _mnemonicA, [1, 5, 9]);
       expect(added.map((a) => a.accountIndex).toList(), [1, 5, 9]);
       expect(
-        (await manager.getAccounts(masterId)).map((a) => a.accountIndex).toList(),
+        (await manager.getAccounts(masterId))
+            .map((a) => a.accountIndex)
+            .toList(),
         [0, 1, 5, 9],
       );
     });
@@ -162,7 +167,8 @@ void main() {
       final masterId = await seedWallet();
       final manager = WalletManager();
       await manager.addAccounts(masterId, _mnemonicA, [1, 2]);
-      expect((await manager.addNextAccount(masterId, _mnemonicA)).accountIndex, 3);
+      expect(
+          (await manager.addNextAccount(masterId, _mnemonicA)).accountIndex, 3);
     });
 
     test('getAccountPrivateKey 返回该账户 child', () async {
@@ -172,6 +178,36 @@ void main() {
       final expected = _childMiniSecret(await _masterSeed(_mnemonicA), 1);
       expect(await manager.getAccountPrivateKey(added.single.accountId),
           '0x${_hex(expected)}');
+    });
+
+    test('硬件私钥失效时明确拒绝且不改写安全存储', () async {
+      final masterId = await seedWallet();
+      final manager = WalletManager();
+      fakeStore.invalidatedAccountIds.add(masterId);
+
+      await expectLater(
+        manager.getAccountPrivateKey(masterId),
+        throwsA(
+          isA<WalletAuthException>().having(
+            (error) => error.message,
+            'message',
+            contains('设备安全存储'),
+          ),
+        ),
+      );
+
+      expect(fakeStore.deletedWalletKeyIndexes, isEmpty);
+      expect(fakeStore.accountKeys, contains(masterId));
+    });
+
+    test('renameAccount 只改目标账户标签', () async {
+      final masterId = await seedWallet();
+      final manager = WalletManager();
+      final added = await manager.addAccounts(masterId, _mnemonicA, [1]);
+      await manager.renameAccount(added.single.accountId, '  日常账户  ');
+      final accounts = await manager.getAccounts(masterId);
+      expect(accounts.first.accountName, '账户0');
+      expect(accounts.last.accountName, '日常账户');
     });
 
     test('signForAccountId //index 签名可被该账户公钥验证', () async {
@@ -201,13 +237,56 @@ void main() {
       final added = await manager.addAccounts(masterId, _mnemonicA, [1]);
       await manager.deleteAccount(added.single.accountId);
       expect(
-        (await manager.getAccounts(masterId)).map((a) => a.accountIndex).toList(),
+        (await manager.getAccounts(masterId))
+            .map((a) => a.accountIndex)
+            .toList(),
         [0],
       );
+      expect(await manager.getAccountPrivateKey(masterId), startsWith('0x'),
+          reason: '删除子账户不能连带删除账户0共享的硬件 KEK');
+      expect(fakeStore.deletedWalletKeyIndexes, isEmpty);
       // 账户0 此时无兄弟 → 删它级联删整钱包。
       await manager.deleteAccount(masterId);
       expect(await manager.getWallets(), isEmpty);
       expect(fakeStore.accountKeys, isEmpty);
+      expect(fakeStore.deletedWalletKeyIndexes, [1]);
+    });
+
+    test('signAndDeleteWallet 账户0签名验签成功后删除全部账户和 child', () async {
+      final masterId = await seedWallet();
+      final manager = WalletManager();
+      await manager.addAccounts(masterId, _mnemonicA, [1, 5]);
+      final wallet = (await manager.getWallets()).single;
+
+      await manager.signAndDeleteWallet(
+        walletIndex: wallet.walletIndex,
+        accountId: masterId,
+      );
+
+      expect(await manager.getWallets(), isEmpty);
+      expect(await manager.getAccounts(masterId), isEmpty);
+      expect(fakeStore.accountKeys, isEmpty);
+      expect(fakeStore.deletedWalletKeyIndexes, [wallet.walletIndex]);
+    });
+
+    test('signAndDeleteWallet 用户取消读取账户0时零删除', () async {
+      final masterId = await seedWallet();
+      final manager = WalletManager();
+      await manager.addAccounts(masterId, _mnemonicA, [1]);
+      final wallet = (await manager.getWallets()).single;
+      fakeStore.cancelReads.add(masterId);
+
+      await expectLater(
+        manager.signAndDeleteWallet(
+          walletIndex: wallet.walletIndex,
+          accountId: masterId,
+        ),
+        throwsA(isA<AuthCancelled>()),
+      );
+
+      expect((await manager.getWallets()).single.accountId, masterId);
+      expect((await manager.getAccounts(masterId)).length, 2);
+      expect(fakeStore.accountKeys.length, 2);
     });
   });
 }

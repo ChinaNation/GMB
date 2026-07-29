@@ -38,7 +38,7 @@ void main() {
   group('CreatorPlan', () {
     test('fromJson 解析档位列表', () {
       final plan = CreatorPlan.fromJson({
-        'creator_account_id': 'acc',
+        'creator_cid_number': 'acc',
         'updated_at': 123,
         'tiers': [
           {
@@ -48,7 +48,7 @@ void main() {
           },
         ],
       });
-      expect(plan.creatorAccountId, 'acc');
+      expect(plan.creatorCidNumber, 'acc');
       expect(plan.updatedAt, 123);
       expect(plan.tiers, hasLength(1));
       expect(plan.tiers.first.priceFenOf(BillingPeriod.monthly), 500);

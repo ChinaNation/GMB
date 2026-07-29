@@ -32,6 +32,10 @@ const postId = "sqp_test";
 const contentHash = `0x${"11".repeat(32)}`;
 const storageReceiptId = "sqr_test";
 const blockHash = `0x${"22".repeat(32)}`;
+// 登录会话身份主键(=上传/媒体/帖子归属键);标准测试 cid。
+const sessionCid = "CN220-CTZN2-198805200-2026";
+// 链上 SquarePostPublished 事件携带的发布者 cid(=已发布帖镜像的身份主键)。
+const authorCid = "CN001-CTZN-000000001-2026";
 
 describe("square chain confirmation", () => {
   afterEach(() => {
@@ -40,7 +44,7 @@ describe("square chain confirmation", () => {
 
   it("decodes SquarePostPublished from System.Events bytes", () => {
     const eventsHex = buildEventsHex({
-      cidNumber: "CN001-CTZN-000000001-2026",
+      cidNumber: authorCid,
     });
     const events = decodeSquarePostPublishedEvents(eventsHex);
 
@@ -48,7 +52,7 @@ describe("square chain confirmation", () => {
     expect(events[0]).toMatchObject({
       post_id: postId,
       account_id: accountId,
-      cid_number: "CN001-CTZN-000000001-2026",
+      cid_number: authorCid,
       post_category: "campaign",
       content_hash: contentHash,
       storage_receipt_id: storageReceiptId,
@@ -62,6 +66,7 @@ describe("square chain confirmation", () => {
     const upload: PreparedUploadRow = {
       upload_id: "squ_test",
       post_id: postId,
+      cid_number: sessionCid,
       account_id: accountId,
       post_category: "normal",
       manifest_hash: contentHash.slice(2),
@@ -81,6 +86,7 @@ describe("square chain confirmation", () => {
       {
         upload_id: upload.upload_id,
         post_id: postId,
+        cid_number: sessionCid,
         account_id: accountId,
         media_index: 0,
         media_kind: "image",
@@ -138,7 +144,7 @@ describe("square chain confirmation", () => {
           jsonrpc: "2.0",
           id: 1,
           result: buildEventsHex({
-            cidNumber: "CN001-CTZN-000000001-2026",
+            cidNumber: authorCid,
             postCategory: "normal",
           }),
         }),
@@ -151,7 +157,7 @@ describe("square chain confirmation", () => {
     });
 
     expect(post.text).toBe("普通动态");
-    expect(post.cid_number).toBe("CN001-CTZN-000000001-2026");
+    expect(post.cid_number).toBe(authorCid);
     expect(post.media_items?.[0]).toMatchObject({
       provider: "cloudflare_images",
       provider_asset_id: "img_test",
@@ -256,7 +262,7 @@ describe("square chain confirmation", () => {
     db.posts.set(postId, {
       post_id: postId,
       account_id: accountId,
-      cid_number: "CN001-CTZN-000000001-2026",
+      cid_number: sessionCid,
       post_category: "normal",
       content_format: "normal",
       title: "旧标题",
@@ -323,6 +329,7 @@ function chainRpcEnv(overrides: Partial<Env> = {}): Env {
 
 function session(): SessionState {
   return {
+    cid_number: sessionCid,
     account_id: accountId,
     device_key_hash: "a".repeat(64),
     created_at: 1,
@@ -334,6 +341,7 @@ function completedUpload(manifestKey: string): PreparedUploadRow {
   return {
     upload_id: "squ_test",
     post_id: postId,
+    cid_number: sessionCid,
     account_id: accountId,
     post_category: "normal",
     manifest_hash: contentHash.slice(2),
@@ -352,6 +360,7 @@ function imageAsset(uploadId: string): MediaAssetRow {
   return {
     upload_id: uploadId,
     post_id: postId,
+    cid_number: sessionCid,
     account_id: accountId,
     media_index: 0,
     media_kind: "image",

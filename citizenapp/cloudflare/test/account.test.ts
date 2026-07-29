@@ -4,6 +4,24 @@ vi.mock('../src/auth/wallet_signature', () => ({
   verifyWalletSignature: vi.fn()
 }));
 
+// 注销按身份主键 cid_number 删 off-chain 表：mock 让 fetchChainIdentityStateCached
+// 返回带 cid_number 的身份态，使 purge 的 cid-keyed 删除分支（follows/browse/
+// user_signals/notify_reads/request_nonces/rate_windows）真正执行。其余导出保留真实实现。
+vi.mock('../src/chain/identity', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/chain/identity')>();
+  return {
+    ...actual,
+    fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) => ({
+      account_id: accountId,
+      identity_level: 'voting' as const,
+      has_voting_identity: true,
+      has_candidate_identity: false,
+      cid_number: 'CN220-CTZN2-198805200-2026',
+      checked_at: 0
+    }))
+  };
+});
+
 import { verifyWalletSignature } from '../src/auth/wallet_signature';
 import {
   consumeActionSignature,
@@ -17,6 +35,8 @@ import type { Env, MediaAssetRow } from '../src/types';
 const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
 
 const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
+// 唯一身份主键 CID：注销按 cid_number 删 off-chain 表，须与上方 identity mock 一致。
+const STANDARD_CID = 'CN220-CTZN2-198805200-2026';
 
 interface ChallengeRecord {
   challenge_id: string;
@@ -274,9 +294,10 @@ describe('purgeAccount', () => {
     kv: FakeKv;
   } {
     const db = new PurgeDb();
-    db.membership = { account_id: ACCOUNT_ID };
+    // 会员镜像已随身份主键 cid_number 归属（R3 按 cid 硬删）；fixture 同步补 cid_number。
+    db.membership = { account_id: ACCOUNT_ID, cid_number: STANDARD_CID };
     db.mediaRows = [{
-      upload_id: 'squ_1', post_id: 'sqp_1', account_id: ACCOUNT_ID, media_index: 0,
+      upload_id: 'squ_1', post_id: 'sqp_1', cid_number: STANDARD_CID, account_id: ACCOUNT_ID, media_index: 0,
       media_kind: 'image', provider: 'cloudflare_images', provider_asset_id: 'img_1',
       upload_method: 'worker', resource_key: 'square_image_sd', content_type: 'image/webp',
       byte_size: 1024, asset_state: 'ready', declared_duration_seconds: null,
@@ -285,8 +306,8 @@ describe('purgeAccount', () => {
       archived_at: null, r2_archive_key: null,
     }];
     const r2 = new FakeR2([
-      `profile/${ACCOUNT_ID.slice(2)}/profile.json`,
-      `profile/${ACCOUNT_ID.slice(2)}/avatar`,
+      `profile/${STANDARD_CID}/profile.json`,
+      `profile/${STANDARD_CID}/avatar`,
       `square/${ACCOUNT_ID.slice(2)}/posts/p1/manifest.json`
     ]);
     const kv = new FakeKv();
@@ -316,16 +337,37 @@ describe('purgeAccount', () => {
 
     // A 的 Chat 路由、浏览、关注两端引用和业务表全部进入硬删除清单。
     const joined = db.deletes.join('\n');
-    expect(joined).toContain('DELETE FROM square_memberships WHERE account_id = ?');
-    expect(joined).toContain('DELETE FROM square_posts WHERE account_id = ?');
-    expect(joined).toContain('DELETE FROM square_follows WHERE account_id = ?');
-    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE account_id = ?');
+    // R6:注销=删身份,身份内容(帖子/上传/媒体)按 cid_number 删该身份跨换绑账户全部内容。
+    expect(joined).toContain('DELETE FROM square_posts WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_uploads WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_media_assets WHERE cid_number = ?');
+    // 仅账户级鉴权凭证(设备子钥/登录挑战)按当前 account_id 硬删。
+    expect(joined).toContain('DELETE FROM square_device_subkeys WHERE account_id = ?');
+    expect(joined).toContain('DELETE FROM square_login_challenges WHERE account_id = ?');
+    // R5 起 chat_device_binding_nonces PK 改为 (cid_number, nonce_hash)，绑定 nonce 按身份主键 cid 硬删。
+    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE cid_number = ?');
     expect(joined).toContain('DELETE FROM chat_devices WHERE account_id = ?');
-    expect(joined).toContain('DELETE FROM square_contacts WHERE account_id = ?');
-    expect(joined).toContain('DELETE FROM square_browse_days WHERE account_id = ?');
+    // R3 起 square_memberships 随身份主键 cid_number 走（从 account_id 分支移出），
+    // R4 起通讯录密文亦按 cid 归属，与订阅/预留/用量/创作者档一同按 cid 硬删（关注两端引用一并清）。
+    expect(joined).toContain('DELETE FROM square_contacts WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_memberships WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM resource_reservations WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM resource_usage WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_creator_tiers WHERE creator_cid_number = ?');
+    expect(joined).toContain(
+      'DELETE FROM square_creator_subscriptions WHERE subscriber_cid_number = ? OR creator_cid_number = ?'
+    );
+    expect(joined).toContain(
+      'DELETE FROM square_follows WHERE follower_cid_number = ? OR followed_cid_number = ?'
+    );
+    expect(joined).toContain('DELETE FROM square_browse_days WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_user_signals WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_notify_reads WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_request_nonces WHERE cid_number = ?');
+    expect(joined).toContain('DELETE FROM square_rate_windows WHERE rate_key LIKE ?');
 
-    // R2：只存在并删除 profile / posts 等当前业务对象，Chat 不使用 R2。
-    expect(r2.deleted).toContain(`profile/${ACCOUNT_ID.slice(2)}/profile.json`);
+    // R2：资料包按身份主键 cid 路径删(profile/{cid}/);帖子 manifest 按发布 account 路径删。Chat 不使用 R2。
+    expect(r2.deleted).toContain(`profile/${STANDARD_CID}/profile.json`);
     expect(r2.deleted).toContain(`square/${ACCOUNT_ID.slice(2)}/posts/p1/manifest.json`);
 
     // KV：身份缓存 + 会话都清。
@@ -358,7 +400,7 @@ describe('注销入口默认拒（不再匿名对任意账户发起挑战）', (
 describe('revokeRebindOldAccount', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('只删旧账户隐私/鉴权数据(通讯录/Chat/设备子钥/挑战/会话),不碰迁移数据(动态/会员/关注)', async () => {
+  it('只删旧账户鉴权敏感数据(Chat/设备子钥/挑战/会话),不碰随身份迁移数据(通讯录/动态/会员/关注)', async () => {
     const db = new PurgeDb();
     const kv = new FakeKv();
     kv.store.set(`square_identity:${ACCOUNT_ID}`, '{"identity_level":"voting"}');
@@ -369,14 +411,15 @@ describe('revokeRebindOldAccount', () => {
     const result = await revokeRebindOldAccount(env, ACCOUNT_ID);
 
     const joined = db.deletes.join('\n');
-    // 隐私/鉴权敏感数据全删。
-    expect(joined).toContain('DELETE FROM square_contacts WHERE account_id = ?');
+    // 账户级鉴权敏感数据全删(Chat 端到端材料/登录挑战/设备子钥)。
     expect(joined).toContain('DELETE FROM chat_keypackages WHERE account_id = ?');
     expect(joined).toContain('DELETE FROM chat_devices WHERE account_id = ?');
-    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE account_id = ?');
+    // R5 起绑定 nonce 按身份主键 cid 归属（PK 去掉 account_id 列），吊销旧账户按 cid 硬删。
+    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE cid_number = ?');
     expect(joined).toContain('DELETE FROM square_login_challenges WHERE account_id = ?');
     expect(joined).toContain('DELETE FROM square_device_subkeys WHERE account_id = ?');
-    // 迁移数据(随 CID 迁到新账户,永不丢失)绝不删。
+    // 随 CID 迁到新账户的数据(永不丢失)绝不删——R4 起通讯录密文亦按 cid 归属,一并保留。
+    expect(joined).not.toContain('square_contacts');
     expect(joined).not.toContain('square_posts');
     expect(joined).not.toContain('square_memberships');
     expect(joined).not.toContain('square_follows');

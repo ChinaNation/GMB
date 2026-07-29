@@ -7,7 +7,7 @@ import { usageLimits } from './catalog';
 export async function reserveUploadUsage(input: {
   env: Env;
   upload_id: string;
-  account_id: string;
+  cid_number: string;
   membership_level: MembershipLevel;
   membership: MembershipRow;
   byte_size: number;
@@ -19,32 +19,33 @@ export async function reserveUploadUsage(input: {
   const limit = usageLimits[input.membership_level];
   const { periodStart, periodEnd } = membershipUsagePeriod(input.membership);
   const createdAt = nowMs();
+  // 用量预留归属键 = 身份主键 cid_number(活动预留数、周期用量额度均按 cid 累计)。
   const result = await input.env.DB.prepare(
     `INSERT INTO resource_reservations
-      (reservation_id, account_id, resource_key, period_start, period_end, byte_size,
+      (reservation_id, cid_number, resource_key, period_start, period_end, byte_size,
        image_count, video_seconds, expires_at, reservation_state, created_at, used_at)
       SELECT ?, ?, 'square_upload', ?, ?, ?, ?, ?, ?, 'reserved', ?, NULL
       WHERE
         (SELECT COUNT(*) FROM resource_reservations
-          WHERE account_id = ? AND resource_key = 'square_upload'
+          WHERE cid_number = ? AND resource_key = 'square_upload'
             AND reservation_state = 'reserved' AND expires_at > ?) < ?
         AND COALESCE((SELECT image_count FROM resource_usage
-          WHERE account_id = ? AND resource_key = 'square_upload' AND period_start = ?), 0)
+          WHERE cid_number = ? AND resource_key = 'square_upload' AND period_start = ?), 0)
           + COALESCE((SELECT SUM(image_count) FROM resource_reservations
-            WHERE account_id = ? AND resource_key = 'square_upload'
+            WHERE cid_number = ? AND resource_key = 'square_upload'
               AND reservation_state = 'reserved' AND expires_at > ?), 0) + ? <= ?
         AND COALESCE((SELECT video_seconds FROM resource_usage
-          WHERE account_id = ? AND resource_key = 'square_upload' AND period_start = ?), 0)
+          WHERE cid_number = ? AND resource_key = 'square_upload' AND period_start = ?), 0)
           + COALESCE((SELECT SUM(video_seconds) FROM resource_reservations
-            WHERE account_id = ? AND resource_key = 'square_upload'
+            WHERE cid_number = ? AND resource_key = 'square_upload'
               AND reservation_state = 'reserved' AND expires_at > ?), 0) + ? <= ?`
   ).bind(
-    input.upload_id, input.account_id, periodStart, periodEnd, input.byte_size,
+    input.upload_id, input.cid_number, periodStart, periodEnd, input.byte_size,
     input.image_count, input.video_seconds, input.expires_at, createdAt,
-    input.account_id, createdAt, limit.active_uploads,
-    input.account_id, periodStart, input.account_id, createdAt,
+    input.cid_number, createdAt, limit.active_uploads,
+    input.cid_number, periodStart, input.cid_number, createdAt,
     input.image_count, limit.monthly_images,
-    input.account_id, periodStart, input.account_id, createdAt,
+    input.cid_number, periodStart, input.cid_number, createdAt,
     input.video_seconds, limit.monthly_video_seconds,
   ).run();
   if ((result.meta?.changes ?? 0) !== 1) {
@@ -77,9 +78,9 @@ export async function consumeUploadUsage(
   const reservation = await env.DB.prepare(
     `UPDATE resource_reservations SET reservation_state = 'used', used_at = ?
       WHERE reservation_id = ? AND reservation_state = 'reserved'
-      RETURNING account_id, period_start, period_end, byte_size, image_count, video_seconds`
+      RETURNING cid_number, period_start, period_end, byte_size, image_count, video_seconds`
   ).bind(usedAt, uploadId).first<{
-    account_id: string;
+    cid_number: string;
     period_start: number;
     period_end: number;
     byte_size: number;
@@ -92,15 +93,15 @@ export async function consumeUploadUsage(
     await env.DB.batch([
       env.DB.prepare(
       `INSERT INTO resource_usage
-        (account_id, resource_key, period_start, period_end, byte_size, image_count, video_seconds, updated_at)
+        (cid_number, resource_key, period_start, period_end, byte_size, image_count, video_seconds, updated_at)
         VALUES (?, 'square_upload', ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(account_id, resource_key, period_start) DO UPDATE SET
+        ON CONFLICT(cid_number, resource_key, period_start) DO UPDATE SET
           byte_size = resource_usage.byte_size + excluded.byte_size,
           image_count = resource_usage.image_count + excluded.image_count,
           video_seconds = resource_usage.video_seconds + excluded.video_seconds,
           updated_at = excluded.updated_at`
       ).bind(
-      reservation.account_id, reservation.period_start, reservation.period_end,
+      reservation.cid_number, reservation.period_start, reservation.period_end,
       reservation.byte_size, reservation.image_count, reservation.video_seconds, usedAt,
       ),
       totalStatement(env, 'square_image', assets.filter((asset) => asset.media_kind === 'image')),

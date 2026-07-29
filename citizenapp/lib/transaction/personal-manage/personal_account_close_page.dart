@@ -295,183 +295,178 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      body: Stack(
         children: [
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              // 个人多签账户（只读）
+              _buildSectionTitle('个人多签账户'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceMuted,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  _accountSs58,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 当前余额
+              _buildSectionTitle('个人多签余额'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceMuted,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: _loadingBalance
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        _availableBalance != null
+                            ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
+                            : '查询失败',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: _availableBalance != null
+                              ? AppTheme.primaryDark
+                              : AppTheme.danger,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 20),
+              _buildSectionTitle('阈值规则', note: '注销须全员同意'),
+              const SizedBox(height: 20),
+              // 受益人地址
+              _buildSectionTitle('受益人地址'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _beneficiaryController,
+                      decoration: InputDecoration(
+                        hintText: '输入或扫码',
+                        errorText: _addressError,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: '扫码填入受益人地址',
+                    icon: SvgPicture.asset(
+                      'assets/icons/scan-line.svg',
+                      width: 22,
+                      height: 22,
+                    ),
+                    onPressed: () async {
+                      // QrScanPage 在 transfer 模式下 pop 的是 QrScanTransferResult 对象
+                      // 而非 String,故 push 泛型须用 QrScanTransferResult。
+                      // 复用转账扫码结果解析写法，仅取收款地址。
+                      final result = await Navigator.push<QrScanTransferResult>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const QrScanPage(
+                            mode: QrScanMode.transfer,
+                            customTitle: '扫描收款码',
+                          ),
+                        ),
+                      );
+                      if (result == null || !mounted) return;
+                      setState(() {
+                        _beneficiaryController.text = result.toSs58Address;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              if (widget.adminWallets.length > 1) ...[
+                const SizedBox(height: 20),
+                _buildSectionTitle('签名钱包'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<WalletProfile>(
+                  initialValue: _selectedWallet,
+                  items: widget.adminWallets.map((w) {
+                    return DropdownMenuItem(
+                      value: w,
+                      child: Text(
+                        '${w.walletName} (${_truncateAddress(w.ss58Address)})',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (w) {
+                    if (w != null) setState(() => _selectedWallet = w);
+                  },
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 28),
+              // 提交按钮
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _canSubmit ? _submit : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.danger,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('发起关闭个人多签提案',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              if (_submitBlockedReason != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _submitBlockedReason!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
           ChainProgressBanner(
             busy: _submitting || _loadingBalance,
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          // 个人多签账户（只读）
-          _buildSectionTitle('个人多签账户'),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceMuted,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              _accountSs58,
-              style: const TextStyle(
-                fontSize: 13,
-                fontFamily: 'monospace',
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // 当前余额
-          _buildSectionTitle('个人多签余额'),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceMuted,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: _loadingBalance
-                ? const SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    _availableBalance != null
-                        ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
-                        : '查询失败',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _availableBalance != null
-                          ? AppTheme.primaryDark
-                          : AppTheme.danger,
-                    ),
-                  ),
-          ),
-
-          const SizedBox(height: 20),
-
-          _buildSectionTitle('阈值规则', note: '注销须全员同意'),
-
-          const SizedBox(height: 20),
-
-          // 受益人地址
-          _buildSectionTitle('受益人地址'),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _beneficiaryController,
-                  decoration: InputDecoration(
-                    hintText: '输入或扫码',
-                    errorText: _addressError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: '扫码填入受益人地址',
-                icon: SvgPicture.asset(
-                  'assets/icons/scan-line.svg',
-                  width: 22,
-                  height: 22,
-                ),
-                onPressed: () async {
-                  // QrScanPage 在 transfer 模式下 pop 的是 QrScanTransferResult 对象
-                  // 而非 String,故 push 泛型须用 QrScanTransferResult。
-                  // 复用转账扫码结果解析写法，仅取收款地址。
-                  final result = await Navigator.push<QrScanTransferResult>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const QrScanPage(
-                        mode: QrScanMode.transfer,
-                        customTitle: '扫描收款码',
-                      ),
-                    ),
-                  );
-                  if (result == null || !mounted) return;
-                  setState(() {
-                    _beneficiaryController.text = result.toSs58Address;
-                  });
-                },
-              ),
-            ],
-          ),
-
-          if (widget.adminWallets.length > 1) ...[
-            const SizedBox(height: 20),
-            _buildSectionTitle('签名钱包'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<WalletProfile>(
-              initialValue: _selectedWallet,
-              items: widget.adminWallets.map((w) {
-                return DropdownMenuItem(
-                  value: w,
-                  child: Text(
-                    '${w.walletName} (${_truncateAddress(w.ss58Address)})',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                );
-              }).toList(),
-              onChanged: (w) {
-                if (w != null) setState(() => _selectedWallet = w);
-              },
-              decoration: InputDecoration(
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 28),
-
-          // 提交按钮
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _canSubmit ? _submit : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.danger,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: _submitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text('发起关闭个人多签提案',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            ),
-          ),
-          if (_submitBlockedReason != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _submitBlockedReason!,
-              style: const TextStyle(
-                fontSize: 12,
-                height: 1.4,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ],
         ],
       ),
     );

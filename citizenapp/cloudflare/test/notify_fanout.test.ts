@@ -2,17 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { fanOutPage } from '../src/feeds/notify_fanout';
 import type { Env, SquareNotifyJob } from '../src/types';
 
-const author = '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+/// 身份主键 = CID 号（R2 重构后 follows 双端皆为 cid）。作者与粉丝都以 cid 标识。
+const author = 'CN220-CTZN2-198805200-2026';
+const cidA = 'CN220-CTZN2-1000000AA-2026';
+const cidB = 'CN220-CTZN2-1000000BB-2026';
+const cidC = 'CN220-CTZN2-1000000CC-2026';
 const FAR_FUTURE = 9999999999999;
 
 interface FollowRow {
-  account_id: string;
-  followed_account_id: string;
+  follower_cid_number: string;
+  followed_cid_number: string;
   notify_enabled: number;
   created_at: number;
 }
+/// R5 起 chat_devices 直接按 cid_number 归属（不再经 square_device_subkeys 桥接账户）。
 interface DeviceRow {
-  account_id: string;
+  cid_number: string;
   push_provider: 'apns' | 'fcm';
   push_token: string;
   expires_at: number;
@@ -21,18 +26,18 @@ interface DeviceRow {
 describe('fanOutPage', () => {
   it('pushes only to notify-enabled followers with non-expired devices', async () => {
     const { env, db } = fakeEnv({
-      follows: [follow('0x0101010101010101010101010101010101010101010101010101010101010101', 1, 100), follow('0x0202020202020202020202020202020202020202020202020202020202020202', 0, 110), follow('0x0303030303030303030303030303030303030303030303030303030303030303', 1, 120)],
-      devices: [device('0x0101010101010101010101010101010101010101010101010101010101010101', FAR_FUTURE), device('0x0202020202020202020202020202020202020202020202020202020202020202', FAR_FUTURE), device('0x0303030303030303030303030303030303030303030303030303030303030303', 1)],
+      follows: [follow(cidA, 1, 100), follow(cidB, 0, 110), follow(cidC, 1, 120)],
+      devices: [device(cidA, FAR_FUTURE), device(cidC, 1)],
     });
     await fanOutPage(env, job(), 100);
-    // 静音（notify_enabled=0）与过期 token 都排除。
-    expect(db.pushedAccounts).toEqual(['0x0101010101010101010101010101010101010101010101010101010101010101']);
+    // 静音（notify_enabled=0）的 cidB 与设备过期的 cidC 都排除，仅 cidA 收到推送。
+    expect(db.pushedCids).toEqual([cidA]);
   });
 
   it('does not re-enqueue when the page is not full', async () => {
     const { env, queue } = fakeEnv({
-      follows: [follow('0x1111111111111111111111111111111111111111111111111111111111111111', 1, 100), follow('0x2222222222222222222222222222222222222222222222222222222222222222', 1, 110)],
-      devices: [device('0x1111111111111111111111111111111111111111111111111111111111111111', FAR_FUTURE), device('0x2222222222222222222222222222222222222222222222222222222222222222', FAR_FUTURE)],
+      follows: [follow(cidA, 1, 100), follow(cidB, 1, 110)],
+      devices: [device(cidA, FAR_FUTURE), device(cidB, FAR_FUTURE)],
     });
     await fanOutPage(env, job(), 100);
     expect(queue.sent).toHaveLength(0);
@@ -40,48 +45,55 @@ describe('fanOutPage', () => {
 
   it('re-enqueues a continuation cursor when the page is full', async () => {
     const { env, queue } = fakeEnv({
-      follows: [follow('0x1111111111111111111111111111111111111111111111111111111111111111', 1, 100), follow('0x2222222222222222222222222222222222222222222222222222222222222222', 1, 110), follow('0x3333333333333333333333333333333333333333333333333333333333333333', 1, 120)],
-      devices: [device('0x1111111111111111111111111111111111111111111111111111111111111111', FAR_FUTURE), device('0x2222222222222222222222222222222222222222222222222222222222222222', FAR_FUTURE), device('0x3333333333333333333333333333333333333333333333333333333333333333', FAR_FUTURE)],
+      follows: [follow(cidA, 1, 100), follow(cidB, 1, 110), follow(cidC, 1, 120)],
+      devices: [
+        device(cidA, FAR_FUTURE),
+        device(cidB, FAR_FUTURE),
+        device(cidC, FAR_FUTURE),
+      ],
     });
     await fanOutPage(env, job(), 2); // 页大小 2、3 个合格粉丝 → 满页续跑
 
     expect(queue.sent).toHaveLength(1);
     expect(queue.sent[0]).toMatchObject({
-      author_account_id: author,
+      author_cid_number: author,
       post_id: 'p1',
-      cursor: { created_at: 110, account_id: '0x2222222222222222222222222222222222222222222222222222222222222222' }, // 本页末个粉丝
+      cursor: { created_at: 110, cid_number: cidB }, // 本页末个粉丝 cid
     });
   });
 });
 
 function job(): SquareNotifyJob {
   return {
-    author_account_id: author,
+    author_cid_number: author,
     author_name: '林正华',
     content_format: 'normal',
     post_id: 'p1',
   };
 }
 
-function follow(accountId: string, notify: number, createdAt: number): FollowRow {
+function follow(followerCid: string, notify: number, createdAt: number): FollowRow {
   return {
-    account_id: accountId,
-    followed_account_id: author,
+    follower_cid_number: followerCid,
+    followed_cid_number: author,
     notify_enabled: notify,
     created_at: createdAt,
   };
 }
 
-function device(accountId: string, expiresAt: number): DeviceRow {
+function device(cid: string, expiresAt: number): DeviceRow {
   return {
-    account_id: accountId,
+    cid_number: cid,
     push_provider: 'fcm',
-    push_token: `tok_${accountId}`,
+    push_token: `tok_${cid}`,
     expires_at: expiresAt,
   };
 }
 
-function fakeEnv(options: { follows: FollowRow[]; devices: DeviceRow[] }): {
+function fakeEnv(options: {
+  follows: FollowRow[];
+  devices: DeviceRow[];
+}): {
   env: Env;
   queue: FakeQueue;
   db: FakeDb;
@@ -104,7 +116,7 @@ class FakeQueue {
 }
 
 class FakeDb {
-  pushedAccounts: string[] = [];
+  pushedCids: string[] = [];
   constructor(
     readonly follows: FollowRow[],
     readonly devices: DeviceRow[],
@@ -128,7 +140,7 @@ class FakeStmt {
 
   async all<T>(): Promise<{ results: T[] }> {
     if (this.sql.includes('FROM square_follows')) {
-      const [followed, cursorAt, cursorAccountId, limit] = this.binds as [
+      const [followed, cursorAt, cursorCid, limit] = this.binds as [
         string,
         number,
         string,
@@ -137,29 +149,32 @@ class FakeStmt {
       const rows = this.db.follows
         .filter(
           (f) =>
-            f.followed_account_id === followed &&
+            f.followed_cid_number === followed &&
             f.notify_enabled === 1 &&
             (f.created_at > cursorAt ||
-              (f.created_at === cursorAt && f.account_id > cursorAccountId)),
+              (f.created_at === cursorAt && f.follower_cid_number > cursorCid)),
         )
         .sort(
           (a, b) =>
-            a.created_at - b.created_at || a.account_id.localeCompare(b.account_id),
+            a.created_at - b.created_at ||
+            a.follower_cid_number.localeCompare(b.follower_cid_number),
         )
         .slice(0, limit)
-        .map((f) => ({ account_id: f.account_id, created_at: f.created_at }));
+        .map((f) => ({ cid_number: f.follower_cid_number, created_at: f.created_at }));
       return { results: rows as unknown as T[] };
     }
 
+    // 设备 SQL：R5 起直接 chat_devices WHERE cid_number IN (...) AND expires_at > ?，
+    // 按粉丝 cid 取未过期设备（不再经 square_device_subkeys 桥接账户）。
     if (this.sql.includes('FROM chat_devices')) {
-      const accounts = this.binds.slice(0, -1) as string[];
+      const cids = this.binds.slice(0, -1) as string[];
       const now = this.binds[this.binds.length - 1] as number;
-      const hit = this.db.devices.filter(
-        (d) => accounts.includes(d.account_id) && d.expires_at > now,
+      const matched = this.db.devices.filter(
+        (d) => cids.includes(d.cid_number) && d.expires_at > now,
       );
-      this.db.pushedAccounts.push(...hit.map((d) => d.account_id));
+      this.db.pushedCids.push(...matched.map((d) => d.cid_number));
       return {
-        results: hit.map((d) => ({
+        results: matched.map((d) => ({
           push_provider: d.push_provider,
           push_token: d.push_token,
         })) as unknown as T[],

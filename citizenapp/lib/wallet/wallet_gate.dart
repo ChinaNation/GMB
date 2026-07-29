@@ -10,7 +10,7 @@ import 'package:citizenapp/wallet/pages/create_wallet_onboarding_page.dart';
 /// 应用级账户门禁：公民 App 的唯一账户是钱包账户，必须至少有 1 个**有效热钱包**。
 ///
 /// 三态：检查中（与应用锁检查同款极简 loading）→ 无有效热钱包 → 强制初始化页
-/// （可创建新钱包或用助记词恢复）；有有效热钱包 → 放行 [child]。
+/// （可创建新钱包或导入已有钱包）；有有效热钱包 → 放行 [child]。
 ///
 /// 「有效」由 [WalletManager.isUsableHotWallet] 单源判定：热钱包 + accountId 规范
 /// + ss58 与 accountId 一致 + 严档种子条目存在。**冷钱包与半残钱包一律不作为依据**

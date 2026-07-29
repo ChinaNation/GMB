@@ -75,47 +75,31 @@ export async function fetchChainIdentityStateCached(
   }
 }
 
-export async function fetchChainIdentityState(
-  env: Env,
-  accountId: string,
-): Promise<ChainIdentityState> {
-  const accountIdBytes = decodeAccountId(accountId);
-  // 同一次身份判断的五项 storage 必须锚定同一个 finalized 区块，禁止混读 best head。
-  const finalizedHead = await fetchFinalizedHead(env);
-  const cidByWalletKey = storageMapKey(
-    "CitizenIdentity",
-    "CidByWalletAccount",
-    accountIdBytes,
-  );
-  const cidHex = await fetchChainStorage(
-    env,
-    `0x${bytesToHex(cidByWalletKey)}`,
-    finalizedHead,
-  );
-  const cidNumber = cidHex ? decodeCidNumber(hexToBytes(cidHex)) : null;
-  if (!cidNumber) return visitorIdentityState(accountId);
+/// 未绑定/无有效身份的身份主键 cid_number 的默认态(account_id 空)。
+function visitorIdentityStateByCid(cidNumber: string): ChainIdentityState {
+  return {
+    account_id: "",
+    identity_level: "visitor",
+    has_voting_identity: false,
+    has_candidate_identity: false,
+    cid_number: cidNumber,
+    checked_at: nowMs(),
+  };
+}
 
+/// 按身份主键 cid_number 读取链上身份态(锚定同一 finalized 区块):
+/// WalletAccountByCid → 当前绑定钱包账户 account_id;CidRegistry active 校验;投票/竞选公开字段。
+/// 未绑定或 CidRegistry 非 active → 返回 null(由调用方决定降级形态)。
+async function readChainIdentityByCid(
+  env: Env,
+  cidNumber: string,
+  finalizedHead: string,
+): Promise<ChainIdentityState | null> {
   const cidScale = encodeBoundedBytes(new TextEncoder().encode(cidNumber));
-  const walletByCidKey = storageMapKey(
-    "CitizenIdentity",
-    "WalletAccountByCid",
-    cidScale,
-  );
-  const cidRegistryKey = storageMapKey(
-    "CitizenIdentity",
-    "CidRegistry",
-    cidScale,
-  );
-  const votingKey = storageMapKey(
-    "CitizenIdentity",
-    "VotingIdentityByCid",
-    cidScale,
-  );
-  const candidateKey = storageMapKey(
-    "CitizenIdentity",
-    "CandidateIdentityByCid",
-    cidScale,
-  );
+  const walletByCidKey = storageMapKey("CitizenIdentity", "WalletAccountByCid", cidScale);
+  const cidRegistryKey = storageMapKey("CitizenIdentity", "CidRegistry", cidScale);
+  const votingKey = storageMapKey("CitizenIdentity", "VotingIdentityByCid", cidScale);
+  const candidateKey = storageMapKey("CitizenIdentity", "CandidateIdentityByCid", cidScale);
   const [walletHex, cidRecordHex, votingHex, candidateHex] = await Promise.all([
     fetchChainStorage(env, `0x${bytesToHex(walletByCidKey)}`, finalizedHead),
     fetchChainStorage(env, `0x${bytesToHex(cidRegistryKey)}`, finalizedHead),
@@ -125,23 +109,14 @@ export async function fetchChainIdentityState(
 
   const walletBinding = walletHex ? hexToBytes(walletHex) : null;
   const cidRecord = cidRecordHex ? hexToBytes(cidRecordHex) : null;
-  if (
-    !walletBinding ||
-    !sameBytes(walletBinding, accountIdBytes) ||
-    !cidRecordIsActive(cidRecord)
-  ) {
-    return visitorIdentityState(accountId);
+  if (!walletBinding || !cidRecordIsActive(cidRecord)) {
+    return null;
   }
+  const boundAccountId = `0x${bytesToHex(walletBinding)}`;
 
-  const votingIdentity = votingHex
-    ? decodeVotingIdentity(hexToBytes(votingHex))
-    : null;
-  const hasVotingIdentity = votingIdentity
-    ? votingIdentityIsActive(votingIdentity)
-    : false;
-  const candidateIdentity = candidateHex
-    ? decodeCandidateIdentity(hexToBytes(candidateHex))
-    : null;
+  const votingIdentity = votingHex ? decodeVotingIdentity(hexToBytes(votingHex)) : null;
+  const hasVotingIdentity = votingIdentity ? votingIdentityIsActive(votingIdentity) : false;
+  const candidateIdentity = candidateHex ? decodeCandidateIdentity(hexToBytes(candidateHex)) : null;
   const hasCandidateIdentity = hasVotingIdentity && candidateIdentity !== null;
   const identityLevel: IdentityLevel = hasCandidateIdentity
     ? "candidate"
@@ -149,14 +124,71 @@ export async function fetchChainIdentityState(
       ? "voting"
       : "visitor";
 
+  // cid_number 是用户唯一身份主键:只要 CidRegistry active(占即绑)就返回,匿名/投票/竞选一视同仁。
+  // 投票/竞选只是该 CID 链上多几个公开字段(姓/名/出生地…),由 identity_level / has_*_identity
+  // 单独表达,不决定"有没有身份"。account_id = WalletAccountByCid 即当前绑定钱包账户。
   return {
-    account_id: accountId,
+    account_id: boundAccountId,
     identity_level: identityLevel,
     has_voting_identity: hasVotingIdentity,
     has_candidate_identity: hasCandidateIdentity,
-    cid_number: hasVotingIdentity ? cidNumber : null,
+    cid_number: cidNumber,
     checked_at: nowMs(),
   };
+}
+
+/// 按钱包账户 account_id 读取链上身份:CidByWalletAccount → cid,再经 readChainIdentityByCid
+/// 复核 WalletAccountByCid 双向绑定(必须回指本账户),防单向映射伪造。
+export async function fetchChainIdentityState(
+  env: Env,
+  accountId: string,
+): Promise<ChainIdentityState> {
+  const accountIdBytes = decodeAccountId(accountId);
+  // 同一次身份判断的所有 storage 必须锚定同一个 finalized 区块，禁止混读 best head。
+  const finalizedHead = await fetchFinalizedHead(env);
+  const cidByWalletKey = storageMapKey("CitizenIdentity", "CidByWalletAccount", accountIdBytes);
+  const cidHex = await fetchChainStorage(env, `0x${bytesToHex(cidByWalletKey)}`, finalizedHead);
+  const cidNumber = cidHex ? decodeCidNumber(hexToBytes(cidHex)) : null;
+  if (!cidNumber) return visitorIdentityState(accountId);
+
+  const state = await readChainIdentityByCid(env, cidNumber, finalizedHead);
+  // 双向绑定校验:WalletAccountByCid 必须回指本账户,否则视为无效(单向映射伪造)。
+  if (!state || !sameBytes(decodeAccountId(state.account_id), accountIdBytes)) {
+    return visitorIdentityState(accountId);
+  }
+  return state;
+}
+
+/// 按身份主键 cid_number 读取链上身份(社交面 /users/:cid 用):
+/// 带 KV 短缓存 + 失败/未绑定软降级(account_id 空、visitor),绝不阻塞渲染。
+export async function fetchChainIdentityStateByCidCached(
+  env: Env,
+  cidNumber: string,
+): Promise<ChainIdentityState> {
+  const cacheKey = `square_identity_cid:${cidNumber}`;
+  try {
+    const cached = await env.SQUARE_CACHE.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached) as ChainIdentityState;
+    }
+  } catch {
+    // 缓存读失败忽略，继续读链。
+  }
+  try {
+    const finalizedHead = await fetchFinalizedHead(env);
+    const state = (await readChainIdentityByCid(env, cidNumber, finalizedHead))
+      ?? visitorIdentityStateByCid(cidNumber);
+    try {
+      await putKvJson(env, cacheKey, state, "identity_cache", {
+        expirationTtl: IDENTITY_CACHE_TTL_SECONDS,
+      });
+    } catch {
+      // 缓存写失败忽略。
+    }
+    return state;
+  } catch {
+    return visitorIdentityStateByCid(cidNumber);
+  }
 }
 
 export function decodeVotingIdentity(data: Uint8Array): VotingIdentity | null {

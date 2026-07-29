@@ -13,18 +13,22 @@ export interface BrowseState {
 }
 
 /**
- * 读取当前账户的产品浏览额度。有效会员不设产品额度；技术安全限速归第 2 步。
+ * 读取当前身份的产品浏览额度(按 cid_number 计量)。有效会员不设产品额度；技术安全限速归第 2 步。
+ * membership 与 browse_days 归属键均为身份主键 cid_number。
  */
-export async function getBrowseState(env: Env, accountId: string): Promise<BrowseState> {
+export async function getBrowseState(
+  env: Env,
+  cidNumber: string,
+): Promise<BrowseState> {
   const browseDay = new Date().toISOString().slice(0, 10);
-  const membership = await getMembership(env, accountId);
+  const membership = await getMembership(env, cidNumber);
   // 解耦后（ADR-036）浏览额度只看订阅是否有效，不再经身份冻结判定。
   if (membership && subscriptionIsActive(membership)) {
     return { browse_day: browseDay, browse_count: 0, browse_limit: null, browse_left: null };
   }
   const row = await env.DB.prepare(
-    `SELECT browse_count FROM square_browse_days WHERE account_id = ? AND browse_day = ?`,
-  ).bind(accountId, browseDay).first<{ browse_count: number }>();
+    `SELECT browse_count FROM square_browse_days WHERE cid_number = ? AND browse_day = ?`,
+  ).bind(cidNumber, browseDay).first<{ browse_count: number }>();
   const count = Math.min(Math.max(row?.browse_count ?? 0, 0), GUEST_DAILY_BROWSE_LIMIT);
   return {
     browse_day: browseDay,
@@ -34,10 +38,10 @@ export async function getBrowseState(env: Env, accountId: string): Promise<Brows
   };
 }
 
-/** 按服务端实际返回条数累计浏览量，客户端声明值不能成为计费真源。 */
+/** 按服务端实际返回条数累计浏览量（归属键 cid_number），客户端声明值不能成为计费真源。 */
 export async function addBrowseCount(
   env: Env,
-  accountId: string,
+  cidNumber: string,
   state: BrowseState,
   returnedCount: number,
 ): Promise<BrowseState> {
@@ -46,16 +50,16 @@ export async function addBrowseCount(
   if (allowed <= 0) throw browseLimitReached();
   const updatedAt = nowMs();
   const write = await env.DB.prepare(
-    `INSERT INTO square_browse_days (account_id, browse_day, browse_count, updated_at)
+    `INSERT INTO square_browse_days (cid_number, browse_day, browse_count, updated_at)
       VALUES (?, ?, ?, ?)
-      ON CONFLICT(account_id, browse_day) DO UPDATE SET
+      ON CONFLICT(cid_number, browse_day) DO UPDATE SET
         browse_count = square_browse_days.browse_count + excluded.browse_count,
         updated_at = excluded.updated_at
       WHERE square_browse_days.browse_count + excluded.browse_count <= ?`,
-  ).bind(accountId, state.browse_day, allowed, updatedAt, GUEST_DAILY_BROWSE_LIMIT).run();
+  ).bind(cidNumber, state.browse_day, allowed, updatedAt, GUEST_DAILY_BROWSE_LIMIT).run();
   // 并发请求只能有一个原子扣量成功；失败请求不返回已经读取的内容。
   if ((write.meta?.changes ?? 0) !== 1) throw browseLimitReached();
-  return getBrowseState(env, accountId);
+  return getBrowseState(env, cidNumber);
 }
 
 export function assertBrowseAvailable(state: BrowseState): number {

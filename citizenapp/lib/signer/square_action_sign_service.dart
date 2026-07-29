@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/signer/square_action_payload.dart';
@@ -11,7 +9,6 @@ enum SquareActionSignError {
   unsupportedAction,
   undecodable,
   accountNotLocal,
-  coldWalletUnsupported,
 }
 
 class SquareActionSignException implements Exception {
@@ -30,13 +27,13 @@ class SquareActionSignPrep {
     required this.request,
     required this.actionLabel,
     required this.decoded,
-    required this.wallet,
+    required this.account,
   });
 
   final SignRequestEnvelope request;
   final String actionLabel;
   final SquareActionPayload decoded;
-  final WalletProfile wallet;
+  final Account account;
 }
 
 /// 广场账户动作「签名响应方」（官网无私钥，CitizenApp 扫一扫代签）。
@@ -50,7 +47,10 @@ class SquareActionSignService {
 
   /// 解析 + 两色解码 + 定位钱包（不签名、不弹生物识别）。失败抛 [SquareActionSignException]。
   Future<SquareActionSignPrep> prepare(
-      String raw, WalletManager walletManager) async {
+    String raw,
+    WalletManager walletManager, {
+    Account? requiredAccount,
+  }) async {
     final SignRequestEnvelope request;
     try {
       request = _signer.parseRequest(raw);
@@ -80,27 +80,21 @@ class SquareActionSignService {
         '签名内容无法完整中文展示，已拒绝签名',
       );
     }
-    final wallet = await _resolveWalletBySignerPublicKey(
-      walletManager,
-      body.signerPublicKeyBytes,
-    );
-    if (wallet == null) {
+    final requestAccountId = body.signerPublicKeyHex.toLowerCase();
+    final account = requiredAccount ??
+        await walletManager.getAccountByAccountId(requestAccountId);
+    if (account == null ||
+        _normalizeHex(account.accountId) != _normalizeHex(requestAccountId)) {
       throw const SquareActionSignException(
         SquareActionSignError.accountNotLocal,
         '此签名请求的账户不在本机',
-      );
-    }
-    if (wallet.isColdWallet) {
-      throw const SquareActionSignException(
-        SquareActionSignError.coldWalletUnsupported,
-        '冷钱包无法在此签名',
       );
     }
     return SquareActionSignPrep(
       request: request,
       actionLabel: actionLabel,
       decoded: decoded,
-      wallet: wallet,
+      account: account,
     );
   }
 
@@ -111,26 +105,15 @@ class SquareActionSignService {
       payloadHex: prep.request.body.payloadHex,
       action: prep.request.body.action,
     );
-    final signature =
-        await walletManager.signWithWallet(prep.wallet.walletIndex, signBytes);
+    final signature = await walletManager.signForAccountId(
+      prep.account.accountId,
+      signBytes,
+    );
     final response = _signer.buildResponse(
       request: prep.request,
       signatureHex: '0x${bytesToHex(signature)}',
     );
     return _signer.encodeResponse(response);
-  }
-
-  Future<WalletProfile?> _resolveWalletBySignerPublicKey(
-    WalletManager walletManager,
-    Uint8List signerPublicKey,
-  ) async {
-    final target = bytesToHex(signerPublicKey);
-    for (final wallet in await walletManager.getWallets()) {
-      if (_normalizeHex(wallet.accountId) == target) {
-        return wallet;
-      }
-    }
-    return null;
   }
 
   static String _normalizeHex(String hex) {

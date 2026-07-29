@@ -20,11 +20,11 @@ export type MediaArchiveState = 'live' | 'archived' | 'restoring';
 /// 广场发帖通知扇出队列消息：一条 = 一次发帖事件，或一页续跑（cursor 空=首页）。
 /// author_name 入队时读一次作者展示名、续跑复用，避免每页重读；cursor 为 keyset 续跑游标。
 export interface SquareNotifyJob {
-  author_account_id: string;
+  author_cid_number: string;
   author_name: string;
   content_format: 'normal' | 'article';
   post_id: string;
-  cursor?: { created_at: number; account_id: string };
+  cursor?: { created_at: number; cid_number: string };
 }
 
 /// Wrangler 根据 wrangler.toml 生成普通变量与资源绑定；Secret 仅保留名称契约，不写入配置或生成物。
@@ -80,6 +80,9 @@ type RuntimeBindings =
 export type Env = RuntimeBindings & WorkerSecretsAndOptionalVars;
 
 export interface SessionState {
+  /// 用户唯一身份主键。会话即以 cid_number 为身份。
+  cid_number: string;
+  /// 签发本会话时该 cid_number 链上绑定的钱包账户;用于定位设备子钥 + 每请求复查绑定。
   account_id: string;
   device_key_hash: string;
   created_at: number;
@@ -95,6 +98,11 @@ export interface LoginChallengeRow {
 }
 
 export interface DeviceSubkeyRow {
+  /// 身份主键:设备子钥挂在其当前绑定钱包账户对应的 cid_number 下。
+  cid_number: string;
+  /// 设备标识 = P-256 公钥的 sha256(同一身份多设备各一行)。
+  device_id: string;
+  /// 生成该子钥的钱包账户(换绑后由链上绑定校验判活/失效)。
   account_id: string;
   p256_public_key: string;
   issued_at: number;
@@ -103,8 +111,9 @@ export interface DeviceSubkeyRow {
 }
 
 /// 端到端加密通讯录行。Worker 只保存不透明密文，绝不接收联系人账户或名称明文。
+/// 属主键 = 身份主键 cid_number(换绑后随身份保留)。
 export interface ContactCiphertextRow {
-  account_id: string;
+  cid_number: string;
   contact_id: string;
   ciphertext: string;
   nonce: string;
@@ -113,6 +122,9 @@ export interface ContactCiphertextRow {
 }
 
 export interface MembershipRow {
+  /// 身份主键:会员镜像归属的 cid_number。
+  cid_number: string;
+  /// 当前绑定的付款/签名钱包账户(链上事实保留);不作身份归属键。
   account_id: string;
   membership_level: string;
   started_at: number;
@@ -141,6 +153,9 @@ export interface UploadItemInput {
 export interface PreparedUploadRow {
   upload_id: string;
   post_id: string;
+  /// 身份主键:发起上传的 cid_number。
+  cid_number: string;
+  /// 发起上传的钱包账户(当前绑定=发布签名者);作事实保留,不作身份归属键。
   account_id: string;
   post_category: PostCategory;
   manifest_hash: string;
@@ -157,6 +172,9 @@ export interface PreparedUploadRow {
 export interface MediaAssetRow {
   upload_id: string;
   post_id: string;
+  /// 身份主键:媒体所属 cid_number(随其 upload 归属)。
+  cid_number: string;
+  /// 上传该媒体的钱包账户(当前绑定);作事实保留,不作身份归属键。
   account_id: string;
   media_index: number;
   media_kind: 'image' | 'video';
@@ -183,8 +201,10 @@ export interface MediaAssetRow {
 
 export interface SquarePostRow {
   post_id: string;
+  /// 身份主键:发布者 cid_number(链上 SquarePostPublished 事件镜像)。
+  cid_number: string;
+  /// 发布该帖的钱包账户(链上签名者=当前绑定);作事实保留,不作身份归属键。
   account_id: string;
-  cid_number: string | null;
   post_category: PostCategory;
   content_format: PostContentFormat;
   title: string | null;
@@ -241,7 +261,8 @@ export type AuthorContentFormat = 'all' | PostContentFormat;
 /// 头像/背景/签名/展示名等公开链下资料的唯一真源。
 export interface CitizenProfileDoc {
   schema: 'citizenapp.square.profile.v1';
-  account_id: string;
+  /// 身份主键:资料所属 cid_number(随身份走,换绑不丢)。
+  cid_number: string;
   display_name: string;
   bio: string;
   avatar_object_key: string | null;

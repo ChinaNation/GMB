@@ -2,11 +2,11 @@
 
 ## 任务状态
 
-- 状态：进行中
+- 状态：已完成
 - 创建日期：2026-07-28
 - 模块：Mobile Agent（`citizenapp`），不涉及 `citizenchain/runtime`、不涉及扫码签名协议
 
-## 任务需求（用户 6 项）
+## 任务需求（用户 6 项 + 账户页 UI 复核）
 
 1. 身份门禁标题 `注册身份后使用{X}` → 聊天=`注册后开始聊天`、其余=`注册后使用{X}`，并删掉标题下那行小字。
 2. 警示条标题 `需要已注册身份` → `需要注册身份`；正文改为
@@ -19,6 +19,33 @@
    拆成钱包列表「＋」里的两个添加入口。对齐 CitizenWallet 已实现做法。
 6. 找回单钱包多账户改造中从热钱包详情丢失的 充值 / 提现 / 零钱包 / 交易记录 / 清算行，
    装回「账户详情」；一律按 `account_id`（Substrate 官方口径，不缩写）键控与签名。
+7. 按用户确认的“方案 1 修正版”重做「我的钱包」账户卡片与「账户详情」：
+   - 账户卡片删右箭头，右侧改为「扫码签名 + 竖三点」；整卡和菜单“账户详情”进入同一页面。
+   - 账户卡片竖三点固定“重命名 / 账户详情 / 删除钱包或删除账户”；账户0显示删除钱包，
+     其余账户显示删除账户。
+   - 账户详情 AppBar 最右侧放竖三点，菜单仅“清算行 / 查看私钥”；正文删除清算行独立卡、
+     私钥卡和删除按钮。
+   - 顶部账户卡完整显示 SS58 地址与复制按钮；删除派生路径小字；账户名称右侧增加用户二维码
+     图标并复用全 App 唯一 `UserQrPage`。
+   - 充值下显示该账户链上余额；零钱包下继续显示该账户清算行余额；交易记录继续复用现有
+     `LocalTxStore` / `LocalTxRecordTile`。
+8. 账户卡扫码必须锁定当前 `account_id`：只接受签名请求，使用
+   `WalletManager.signForAccountId`，请求指定账户不一致时必须在读取私钥前拒绝；不得修改
+   `qr_scan_page.dart` 的蓝色对准框、提示小字、相册、手电筒或任何视觉参数。
+9. 删除规则：
+   - 账户0：二次危险提示后，对一次性本地挑战签名并本地验签，验签成功才能删除整只钱包。
+   - 非0账户：菜单点击后直接删除，不弹确认、不签名。
+   - 钱包/账户删除必须清理对应账户行、硬件金库 child、交易记录、同步游标、清算行缓存、
+     通讯录密钥和本机相关缓存；任一清理失败不得显示删除成功。
+10. 2026-07-28 真机复核补充：
+    - 账户二维码必须位于顶部账户卡片独立右上角，不能紧挨账户名称。
+    - 修复查看私钥在 `BiometricPrompt` 前直接失败；单账户删除不得误删同钱包共享 KEK。
+    - 查看私钥只能读取设备安全存储中的账户私钥并完成生物识别，禁止要求输入助记词；
+      KEK 缺失时只能明确报告设备私钥不可用。
+11. 2026-07-28 账户卡布局复核补充：
+    - 用户二维码必须贴到顶部账户卡真正的右上角，不能被卡片内容 padding 二次向内挤。
+    - SS58 地址改为独立第二行，只在右侧保留复制按钮；复制按钮靠齐内容右边界，不再让
+      上一行二维码的预留位压缩地址显示空间。
 
 ## 已检查依据
 
@@ -44,6 +71,12 @@
   冷钱包 `WalletDetailPage` 传 `wallet.accountId/ss58`，不破冷路径、不扩范围。
 - 同步测试：`clearing_bank_prefs_test` / `wallet_action_card_test` / `wallet_multi_account_ui_test`
   / `identity_registration_gate_test` / `clearing_bank_settings_page_test`。
+- UI 复核新增边界：
+  - 账户名称重命名只写 `AccountEntity.accountName`，不联动钱包名或链上昵称。
+  - 账户用户二维码直接复用 `UserQrPage(contactName, accountId)`，不新增二维码协议。
+  - 账户扫码签名改造现有三个签名服务为账户维度，不保留误落账户0的双轨分支。
+  - `qr_scan_page.dart` 基线 SHA-256：
+    `8160c55fab80256615d3132a3ae7e6e221ae434124be24788025718f196d7303`。
 - 更新文档注释、清残留；不触碰 runtime；未获允许不 push。
 
 ## 预计修改目录
@@ -52,9 +85,14 @@
 - `citizenapp/lib/my/myid/`：访客卡标题（需求 4）。
 - `citizenapp/lib/wallet/pages/`：「＋」三项菜单、账户详情找回功能、冷钱包详情传参（需求 5/6）。
 - `citizenapp/lib/wallet/widgets/`：动作卡按账户键控（需求 6）。
+- `citizenapp/lib/wallet/core/`：账户重命名、账户0签名删除门禁、钱包/账户彻底清理。
+- `citizenapp/lib/qr/`：只改扫码签名分派；`qr_scan_page.dart` 零修改。
+- `citizenapp/lib/signer/`：公民身份、广场动作、占号/换绑统一按 `account_id` 签名。
 - `citizenapp/lib/transaction/offchain-transaction/`：清算全链路按 `account_id` 键控与签名（需求 6）。
-- `citizenapp/test/`：同步 5 个既有测试，不新增测试文件。
-- `memory/08-tasks/open/`：本任务卡。
+- `citizenapp/test/`：更新既有钱包 UI、钱包生命周期、签名服务与门禁测试，不新增测试文件。
+- `memory/05-modules/citizenapp/wallet/`：更新账户卡、账户详情、删除与扫码签名当前实现说明。
+- `memory/05-modules/citizenapp/signer/`：更新指定 `account_id` 扫码签名边界。
+- `memory/08-tasks/open/`：更新本任务卡、验收记录与残留清理结论。
 
 ## 当前进度
 
@@ -68,14 +106,46 @@
 - [x] dart analyze 干净（lib 全域 + 5 测试）
 - [x] 定向测试运行通过（5 文件全绿；wallet_multi_account_ui 14/14 All tests passed）
 - [x] 清残留（全仓无旧构造/旧键/旧文案；wallet_gate 两处注释为动作描述非 UI 文案，保留）
-- [ ] 真机验收（Pixel/模拟器）——未做,待用户确认是否需要
+- [x] 账户卡片 UI：扫码图标 + 竖三点 + 动态三项菜单 + 账户重命名。
+- [x] 账户详情 UI：AppBar 菜单、完整 SS58、账户二维码、双余额、交易记录，删除旧正文入口。
+- [x] 指定账户扫码签名：三个签名服务改按 `account_id`，扫码页 UI 零改动。
+- [x] 账户0签名后删除整钱包；非0账户直接删除；全部关联本机数据清理并复核。
+- [x] 新增范围静态检查与回归：`dart analyze` 0 问题；`flutter test -r compact`
+  全量 910 项通过、5 项按既有条件跳过；`git diff --check` 通过。
+- [x] Pixel 8a（Android 16）真机验收：真实启动、smoldot 进入 regular；实看账户卡片、
+  三项菜单、账户详情、用户二维码、双余额、交易记录、详情 AppBar 菜单与扫码签名页面。
+- [x] 按已确认方案 1 设计图与 Pixel 8a 同屏比对：标题栏三点位置、渐变账户卡、
+  账户名旁二维码、完整地址、三列操作区与交易记录卡层级一致；真机无交易时按真实数据
+  显示“暂无交易记录”，未伪造设计图示例流水。
+- [x] 扫码签名 UI 冻结复核：`qr_scan_page.dart` Git diff 为空，SHA-256 仍为
+  `8160c55fab80256615d3132a3ae7e6e221ae434124be24788025718f196d7303`；真机蓝色对准框、
+  提示小字、相册和手电筒均保持基线布局。
+- [x] 文档、中文注释与残留清理：更新 Wallet/Signer 技术文档；旧访客卡测试注释、
+  旧账户详情私钥/删除入口及账户0签名回退残留已清理。
+- [x] 二次 UI 修正：账户二维码从账户名后方移至账户卡独立右上角；Widget 测试断言二维码
+  与账户名之间保留明显横向间隔，Pixel 8a 实测语义边界为 `[880,363][985,468]`。
+- [x] 私钥认证真因修复：Pixel 8a 原生日志确认共享 KEK
+  `gmb_strict_kek_v1_1` 缺失，旧代码在 `BiometricPrompt` 前把 `null` 强转为
+  `PrivateKey`；现改为明确报告设备安全存储中的账户私钥不可用。
+- [x] 共享 KEK 生命周期修复：`deleteAccountKey` 只删目标账户密文，
+  `deleteWalletKey` 只在整钱包删除/回滚时调用；补充子账户删除后账户0仍可解锁、
+  整钱包仅删一次 KEK 的测试。
+- [x] 纠正错误恢复设计：彻底删除账户详情助记词输入弹窗、`restoreWalletKeys`、
+  `WalletKeyRecoveryRequired`、原生 recovery 档与对应测试/文档；查看私钥恢复为
+  “危险确认 → 设备安全存储 → 生物识别 → 显示私钥”唯一流程。
+- [x] 账户卡最终布局：二维码贴到卡片真正右上角；地址独立第二行；复制按钮靠齐内容右侧。
+  定向测试 18/18 通过、`dart analyze` 0 问题、`git diff --check` 通过；Pixel 8a 真机
+  复核二维码边界 `[912,331][1017,436]`、复制按钮边界 `[880,489][985,594]`，
+  两者分处首行右上角和第二行最右侧，完整 SS58 地址获得整行可用宽度。
 
-## 测试修复记录（wallet_multi_account_ui_test）
+## 最终验收记录
 
-- AccountDetailPage 内容变高(加了充值/提现/零钱包/清算行/交易记录),底部删除按钮落在
-  默认测试视口(800×600)+缓存范围外 → 惰性 ListView 未构建 → `findsOneWidget` 落空。
-  修法:两个账户详情测试放大测试视口 `tester.view.physicalSize = 1200×3200` + `addTearDown(reset)`。
-- 账户详情测试需 Isar(读交易记录)。初版在 AccountDetailPage 组与 AddAccountSheet 组
-  **各调一次** `useIsolatedIsar()` → 两次开 IsarCore,第二个 group 的 setUpAll 挂死(12 分钟超时)。
-  修法:按 `isar_test_env.dart` 注释,`useIsolatedIsar()` 只在 `main()` 顶部调一次(文件级),
-  两个 group 内的调用全删。
+- `wallet_multi_account_ui_test.dart` 覆盖账户卡图标顺序、整卡与菜单详情入口、0/非0账户
+  删除文案、账户详情完整 SS58/二维码/AppBar 菜单，以及正文无旧私钥卡和删除按钮。
+- `wallet_multi_account_test.dart` 覆盖账户改名、账户0签名验签后删除、取消认证不删除，
+  以及账户/钱包关联事实、交易、游标、通讯录缓存和安全存储清理。
+- 三个 signer 测试覆盖目标 `account_id` 精确签名与错配拒绝；动作卡测试覆盖链上余额和
+  清算行余额分离显示。
+- 真机验收未执行破坏性删除，也未读取私钥；删除安全链路由隔离 Isar 与模拟硬件金库测试
+  验收，避免删除用户 Pixel 8a 上的真实钱包。
+- 设备私钥缺失/失效测试只断言 fail-closed 与零密钥重写，不构造助记词恢复路径。

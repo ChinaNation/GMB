@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { routeRequest } from '../src/routes';
 import { sha256Hex } from '../src/shared/hash';
 import {
@@ -10,6 +10,25 @@ import type { ContactCiphertextRow, Env, SessionState } from '../src/types';
 
 const ACCOUNT_ID_A = '0x1111111111111111111111111111111111111111111111111111111111111111';
 const ACCOUNT_ID_B = '0x2222222222222222222222222222222222222222222222222222222222222222';
+// 身份主键 = 账户链上绑定的 cid_number;A/B 各绑不同 CID 保证隔离。
+const CID_A = 'CN220-CTZN2-100000001-2026';
+const CID_B = 'CN220-CTZN2-100000002-2026';
+vi.mock('../src/chain/identity', () => ({
+  fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) => {
+    const map: Record<string, string> = {
+      ['0x' + '11'.repeat(32)]: 'CN220-CTZN2-100000001-2026',
+      ['0x' + '22'.repeat(32)]: 'CN220-CTZN2-100000002-2026'
+    };
+    return {
+      account_id: accountId,
+      identity_level: 'visitor',
+      has_voting_identity: false,
+      has_candidate_identity: false,
+      cid_number: map[accountId] ?? null,
+      checked_at: 0
+    };
+  })
+}));
 const CONTACT_A = '01'.repeat(32);
 const CONTACT_B = '02'.repeat(32);
 const CONTACT_C = '03'.repeat(32);
@@ -57,7 +76,7 @@ describe('端到端加密通讯录 API', () => {
     const stored = [...context.db.contacts.values()];
     expect(stored).toHaveLength(2);
     expect(Object.keys(stored[0]).sort()).toEqual([
-      'account_id', 'ciphertext', 'contact_id', 'mac', 'nonce', 'updated_at'
+      'cid_number', 'ciphertext', 'contact_id', 'mac', 'nonce', 'updated_at'
     ]);
     expect(JSON.stringify(stored)).not.toContain(secretContactAccount);
     expect(JSON.stringify(stored)).not.toContain(secretContactName);
@@ -194,10 +213,14 @@ async function registerAccount(
     ['sign', 'verify']
   );
   const pubkey = toHex(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-  db.subkeys.set(accountId, pubkey);
+  const cid = accountId === ACCOUNT_ID_A ? CID_A : CID_B;
+  // device_id == 会话 device_key_hash == sha256(p256):子钥挂在 (cid, device_id) 下。
+  const deviceId = await sha256Hex(pubkey);
+  db.subkeys.set(`${cid}:${deviceId}`, { p256_public_key: pubkey, account_id: accountId });
   kv.store.set(`square_session:${token}`, {
+    cid_number: cid,
     account_id: accountId,
-    device_key_hash: await sha256Hex(pubkey),
+    device_key_hash: deviceId,
     created_at: Date.now(),
     expires_at: Date.now() + 60_000
   } satisfies SessionState);
@@ -304,19 +327,24 @@ class ContactStmt {
       this.db.rateWindows.set(rateKey, count);
       return { request_count: count, expires_at: this.binds[1] as number } as T;
     }
-    if (this.sql.includes('SELECT p256_public_key FROM square_device_subkeys')) {
-      const pubkey = this.db.subkeys.get(this.binds[0] as string);
-      return pubkey ? ({ p256_public_key: pubkey } as T) : null;
+    if (this.sql.includes('FROM square_device_subkeys')) {
+      // 子钥按 (cid_number, device_id) 查:binds = [cid, device_id]。
+      const cid = this.binds[0] as string;
+      const deviceId = this.binds[1] as string;
+      const row = this.db.subkeys.get(`${cid}:${deviceId}`);
+      return row
+        ? ({ p256_public_key: row.p256_public_key, account_id: row.account_id } as T)
+        : null;
     }
     return null;
   }
 
   async all<T>(): Promise<{ results: T[] }> {
     if (!this.sql.includes('FROM square_contacts')) return { results: [] };
-    const accountId = this.binds[0] as string;
+    const cidNumber = this.binds[0] as string;
     const limit = this.binds[this.binds.length - 1] as number;
     let rows = [...this.db.contacts.values()]
-      .filter((row) => row.account_id === accountId)
+      .filter((row) => row.cid_number === cidNumber)
       .sort((left, right) =>
         right.updated_at - left.updated_at || right.contact_id.localeCompare(left.contact_id));
     if (this.sql.includes('updated_at < ?')) {
@@ -338,14 +366,14 @@ class ContactStmt {
     }
     if (this.sql.includes('INSERT INTO square_contacts')) {
       const row: ContactCiphertextRow = {
-        account_id: this.binds[0] as string,
+        cid_number: this.binds[0] as string,
         contact_id: this.binds[1] as string,
         ciphertext: this.binds[2] as string,
         nonce: this.binds[3] as string,
         mac: this.binds[4] as string,
         updated_at: this.binds[5] as number
       };
-      const key = `${row.account_id}:${row.contact_id}`;
+      const key = `${row.cid_number}:${row.contact_id}`;
       const existing = this.db.contacts.get(key);
       if (!existing || row.updated_at >= existing.updated_at) {
         this.db.contacts.set(key, row);
@@ -363,7 +391,7 @@ class ContactStmt {
 
 class ContactDb {
   readonly contacts = new Map<string, ContactCiphertextRow>();
-  readonly subkeys = new Map<string, string>();
+  readonly subkeys = new Map<string, { p256_public_key: string; account_id: string }>();
   readonly rateWindows = new Map<string, number>();
   readonly requestNonces = new Set<string>();
   forcedRateCount: number | null = null;

@@ -15,10 +15,11 @@ export async function feedRoute(
 ): Promise<Response> {
   const url = new URL(request.url);
   const session = await requireSession(request, env);
-  const before = await getBrowseState(env, session.account_id);
+  const before = await getBrowseState(env, session.cid_number);
   const limit = Math.min(parseLimit(url), assertBrowseAvailable(before));
-  const posts = await listFeedPosts(env, feedKind, session.account_id, limit);
-  const browse = await addBrowseCount(env, session.account_id, before, posts.length);
+  // 关注流按观看者身份主键 cid 取关注对象的帖;浏览计量归属键 = cid。
+  const posts = await listFeedPosts(env, feedKind, session.cid_number, limit);
+  const browse = await addBrowseCount(env, session.cid_number, before, posts.length);
 
   return jsonResponse({
     ok: true,

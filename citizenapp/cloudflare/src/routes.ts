@@ -264,15 +264,16 @@ function routeUserPath(
 ): Promise<Response> {
   const rest = path.slice("/v1/square/users/".length);
   const segments = rest.split("/").filter((segment) => segment.length > 0);
-  const account = segments[0] ?? "";
+  // 路由末段 = 目标用户钱包账户 account_id(handler 内部 resolve 到身份主键 cid_number)。
+  const accountId = segments[0] ?? "";
   if (segments.length === 1) {
-    return getUserProfileRoute(request, env, account);
+    return getUserProfileRoute(request, env, accountId);
   }
   if (segments.length === 2 && segments[1] === "posts") {
-    return getUserPostsRoute(request, env, account);
+    return getUserPostsRoute(request, env, accountId);
   }
   if (segments.length === 2 && segments[1] === "follows") {
-    return getUserFollowsRoute(request, env, account);
+    return getUserFollowsRoute(request, env, accountId);
   }
   throw new HttpError(404, "route_not_found", "广场接口不存在");
 }

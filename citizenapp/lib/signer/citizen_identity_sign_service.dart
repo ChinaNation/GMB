@@ -19,13 +19,13 @@ class CitizenIdentitySignPrep {
     required this.request,
     required this.actionLabel,
     required this.decoded,
-    required this.wallet,
+    required this.account,
   });
 
   final SignRequestEnvelope request;
   final String actionLabel;
   final VotingIdentityConsentPayload decoded;
-  final WalletProfile wallet;
+  final Account account;
 }
 
 /// 公民签名统一服务：完整解码、请求/载荷/本机钱包三方公钥一致后才允许签名。
@@ -37,7 +37,7 @@ class CitizenIdentitySignService {
   Future<CitizenIdentitySignPrep> prepare(
     String raw,
     WalletManager walletManager, {
-    WalletProfile? requiredWallet,
+    Account? requiredAccount,
   }) async {
     final SignRequestEnvelope request;
     try {
@@ -62,22 +62,19 @@ class CitizenIdentitySignService {
     if (_normalizeHex(decoded.accountId) != requestPublicKey) {
       throw const CitizenIdentitySignException('身份载荷钱包与签名请求不一致');
     }
-    final wallet = requiredWallet ??
-        await _resolveWallet(
-          walletManager,
-          request.body.signerPublicKeyBytes,
+    final account = requiredAccount ??
+        await walletManager.getAccountByAccountId(
+          request.body.signerPublicKeyHex.toLowerCase(),
         );
-    if (wallet == null || _normalizeHex(wallet.accountId) != requestPublicKey) {
+    if (account == null ||
+        _normalizeHex(account.accountId) != requestPublicKey) {
       throw const CitizenIdentitySignException('此签名请求的账户不在本机');
-    }
-    if (wallet.isColdWallet) {
-      throw const CitizenIdentitySignException('公民 App 不能替离线钱包签名');
     }
     return CitizenIdentitySignPrep(
       request: request,
       actionLabel: actionLabel,
       decoded: decoded,
-      wallet: wallet,
+      account: account,
     );
   }
 
@@ -89,23 +86,14 @@ class CitizenIdentitySignService {
       payloadHex: prep.request.body.payloadHex,
       action: prep.request.body.action,
     );
-    final signature =
-        await walletManager.signWithWallet(prep.wallet.walletIndex, bytes);
+    final signature = await walletManager.signForAccountId(
+      prep.account.accountId,
+      bytes,
+    );
     return _signer.encodeResponse(_signer.buildResponse(
       request: prep.request,
       signatureHex: '0x${bytesToHex(signature)}',
     ));
-  }
-
-  Future<WalletProfile?> _resolveWallet(
-    WalletManager walletManager,
-    Uint8List signerPublicKey,
-  ) async {
-    final target = bytesToHex(signerPublicKey);
-    for (final wallet in await walletManager.getWallets()) {
-      if (_normalizeHex(wallet.accountId) == target) return wallet;
-    }
-    return null;
   }
 
   static String _normalizeHex(String value) {

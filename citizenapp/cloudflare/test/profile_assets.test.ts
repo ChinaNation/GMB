@@ -3,10 +3,12 @@ import { prepareProfileAsset } from '../src/profiles/assets';
 import type { Env, SessionState } from '../src/types';
 
 const accountId = '0x1111111111111111111111111111111111111111111111111111111111111111';
+const cidNumber = 'CN220-CTZN2-198805200-2026';
 const sha = 'a'.repeat(64);
 
 function fakeEnv(): Env {
   const session: SessionState = {
+    cid_number: cidNumber,
     account_id: accountId,
     device_key_hash: 'a'.repeat(64),
     created_at: 0,
@@ -32,7 +34,7 @@ function prepareRequest(body: unknown): Request {
 }
 
 describe('profile asset upload prepare', () => {
-  it('returns the fixed per-accountId avatar key and hash-bound upload URL', async () => {
+  it('returns the fixed per-cid avatar key and hash-bound upload URL', async () => {
     const response = await prepareProfileAsset(
       prepareRequest({
         kind: 'avatar',
@@ -48,9 +50,12 @@ describe('profile asset upload prepare', () => {
       upload_url: string;
     };
 
-    expect(body.object_key).toBe(`profile/${accountId.slice(2)}/avatar`);
+    expect(body.object_key).toBe(`profile/${cidNumber}/avatar`);
     expect(body.content_hash).toBe(sha);
     expect(body.upload_url).toContain('/v1/square/profile/assets?');
+    expect(new URL(body.upload_url).searchParams.get('object_key')).toBe(
+      `profile/${cidNumber}/avatar`
+    );
     expect(new URL(body.upload_url).searchParams.get('sha256')).toBe(sha);
   });
 

@@ -5,14 +5,14 @@ import { resolveAuthorSignals } from '../social/author_signals';
 export async function listFeedPosts(
   env: Env,
   feedKind: FeedKind,
-  accountId: string | null,
+  viewerCidNumber: string | null,
   limit: number
 ): Promise<SquarePostFeedItem[]> {
   const boundedLimit = Math.min(Math.max(limit, 1), 50);
 
   if (feedKind === 'campaign') {
     const result = await env.DB.prepare(
-      `SELECT post_id, account_id, cid_number, post_category, content_format, title,
+      `SELECT post_id, cid_number, account_id, post_category, content_format, title,
           text, content_hash, storage_receipt_id, chain_block, created_at, post_state
         FROM square_posts
         WHERE post_state = 'published' AND post_category = 'campaign'
@@ -24,28 +24,29 @@ export async function listFeedPosts(
     return hydrateFeedItems(env, result.results ?? []);
   }
 
-  if (feedKind === 'following' && !accountId) {
+  if (feedKind === 'following' && !viewerCidNumber) {
     return [];
   }
-  if (feedKind === 'following' && accountId) {
+  if (feedKind === 'following' && viewerCidNumber) {
+    // 关注流:按观看者身份主键 cid 取其关注对象(follows 双端 cid)的已发布帖。
     const result = await env.DB.prepare(
-      `SELECT p.post_id, p.account_id, p.cid_number, p.post_category, p.content_format,
+      `SELECT p.post_id, p.cid_number, p.account_id, p.post_category, p.content_format,
           p.title, p.text, p.content_hash, p.storage_receipt_id, p.chain_block,
           p.created_at, p.post_state
         FROM square_posts p
         INNER JOIN square_follows f
-          ON f.followed_account_id = p.account_id
-        WHERE f.account_id = ? AND p.post_state = 'published'
+          ON f.followed_cid_number = p.cid_number
+        WHERE f.follower_cid_number = ? AND p.post_state = 'published'
         ORDER BY p.created_at DESC
         LIMIT ?`
     )
-      .bind(accountId, boundedLimit)
+      .bind(viewerCidNumber, boundedLimit)
       .all<SquarePostRow>();
     return hydrateFeedItems(env, result.results ?? []);
   }
 
   const result = await env.DB.prepare(
-    `SELECT post_id, account_id, cid_number, post_category, content_format, title,
+    `SELECT post_id, cid_number, account_id, post_category, content_format, title,
         text, content_hash, storage_receipt_id, chain_block, created_at, post_state
       FROM square_posts
       WHERE post_state = 'published'
@@ -62,13 +63,16 @@ async function hydrateFeedItems(
   env: Env,
   rows: SquarePostRow[]
 ): Promise<SquarePostFeedItem[]> {
-  // 本页去重作者统一读链上身份+批量读会员，回填每条帖子作者的徽章信号。
+  // 本页去重作者(按身份主键 cid)统一读链上身份+批量读会员+资料，回填每条帖子作者的徽章信号。
   const [signals, items] = await Promise.all([
-    resolveAuthorSignals(env, rows.map((row) => row.account_id)),
+    resolveAuthorSignals(
+      env,
+      rows.map((row) => ({ cid_number: row.cid_number, account_id: row.account_id }))
+    ),
     Promise.all(rows.map((row) => buildFeedPostItem(env, row)))
   ]);
   return items.map((item) => {
-    const signal = signals.get(item.account_id);
+    const signal = signals.get(item.cid_number);
     return {
       ...item,
       identity_level: signal?.identity_level ?? 'visitor',

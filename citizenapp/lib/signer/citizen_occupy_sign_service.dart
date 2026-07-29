@@ -19,14 +19,14 @@ class CitizenOccupySignPrep {
     required this.actionLabel,
     required this.cidNumber,
     required this.isOccupy,
-    required this.wallet,
+    required this.account,
   });
 
   final SignRequestEnvelope request;
   final String actionLabel;
   final String cidNumber;
   final bool isOccupy;
-  final WalletProfile wallet;
+  final Account account;
 }
 
 /// 注册局占号/换绑签名服务。
@@ -38,10 +38,10 @@ class CitizenOccupySignService {
   CitizenOccupySignService({QrSigner? signer}) : _signer = signer ?? QrSigner();
   final QrSigner _signer;
 
-  /// [selectedWallet] = 用户自选的绑定账户(占即绑一账户)。
+  /// [selectedAccount] = 用户自选或账户卡扫码入口锁定的绑定账户(占即绑一账户)。
   Future<CitizenOccupySignPrep> prepare(
     String raw,
-    WalletProfile selectedWallet,
+    Account selectedAccount,
   ) async {
     final SignRequestEnvelope request;
     try {
@@ -61,15 +61,12 @@ class CitizenOccupySignService {
     if (cid == null) {
       throw const CitizenOccupySignException('签名内容无法完整中文展示，已拒绝签名');
     }
-    if (selectedWallet.isColdWallet) {
-      throw const CitizenOccupySignException('公民 App 不能替离线钱包签名');
-    }
     return CitizenOccupySignPrep(
       request: request,
       actionLabel: actionLabel,
       cidNumber: cid,
       isOccupy: action == QrActions.citizenOccupy,
-      wallet: selectedWallet,
+      account: selectedAccount,
     );
   }
 
@@ -80,17 +77,19 @@ class CitizenOccupySignService {
     final bytes = QrSigner.signingBytesForHex(
       payloadHex: prep.request.body.payloadHex,
       action: prep.request.body.action,
-      selfAccountId: _accountIdBytes(prep.wallet.accountId),
+      selfAccountId: _accountIdBytes(prep.account.accountId),
     );
     if (bytes.isEmpty) {
       throw const CitizenOccupySignException('签名负载为空,无法签名');
     }
-    final signature =
-        await walletManager.signWithWallet(prep.wallet.walletIndex, bytes);
+    final signature = await walletManager.signForAccountId(
+      prep.account.accountId,
+      bytes,
+    );
     return _signer.encodeResponse(_signer.buildResponse(
       request: prep.request,
       signatureHex: '0x${bytesToHex(signature)}',
-      signerPublicKeyHexOverride: prep.wallet.accountId,
+      signerPublicKeyHexOverride: prep.account.accountId,
     ));
   }
 

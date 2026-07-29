@@ -28,7 +28,8 @@ abstract interface class SecureSeedStore {
   /// 从严档金库读取指定账户的 child mini-secret；**触发生物识别**。
   ///
   /// - 用户取消 / 超时 → 抛 [AuthCancelled]（中止，绝不吞没）。
-  /// - KEK 失效（换 / 加指纹等）→ 抛 [SeedKeyInvalidated]（上层提示重新导入）。
+  /// - KEK 失效或不存在 → 抛 [SeedKeyInvalidated]；查看私钥流程只报告设备
+  ///   安全存储异常，不得索要助记词或绕过生物识别。
   /// - 条目不存在 → 返回 `null`。
   Future<String?> readAccountKey({
     required int walletIndex,
@@ -42,11 +43,17 @@ abstract interface class SecureSeedStore {
   /// 后端不可用时抛 [SecureStoreUnavailable]，由上层走错误态而非判死。
   Future<bool> hasAccountKey(String accountId);
 
-  /// 删除指定账户的 child 条目，连带释放该钱包的 keystore KEK。
+  /// 删除指定账户的 child 密文条目，不删除同钱包其它账户共享的 KEK。
   Future<void> deleteAccountKey({
     required int walletIndex,
     required String accountId,
   });
+
+  /// 删除整只钱包共享的硬件 KEK。
+  ///
+  /// 多账户共享同一 [walletIndex] 的 KEK，因此删除单个账户时绝不能调用本方法；
+  /// 只有整钱包删除或创建回滚时才能调用。
+  Future<void> deleteWalletKey({required int walletIndex});
 }
 
 /// 设备认证能力（咨询用）。
@@ -73,8 +80,8 @@ sealed class SecureSeedException implements Exception {
 
 /// 严档 KEK 已失效（换/加指纹、锁屏变更等）。
 ///
-/// 无根模型没有母种子 / 助记词可自愈——App 只存 child，密钥失效即不可再生，
-/// 上层应提示用户用助记词（存在 citizenwallet / 手抄件）重新导入钱包。
+/// 无根模型没有母种子 / 助记词可自愈——App 只存账户 child 私钥，密钥失效即不可
+/// 从本机密文再生。上层必须 fail-closed，查看私钥流程不得索要助记词。
 final class SeedKeyInvalidated extends SecureSeedException {
   const SeedKeyInvalidated(super.message);
 }

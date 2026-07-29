@@ -16,29 +16,40 @@ export interface AuthorSignals {
   avatar_object_key: string | null;
 }
 
-/// 为一页帖子的去重作者集统一解析徽章信号。
+/// 为一页帖子的去重作者集统一解析徽章信号,返回 Map(键 = 身份主键 cid_number)。
 ///
-/// 身份走 [fetchChainIdentityStateCached]（KV 45s 缓存 + 读链失败软降级为访客）对去重作者
-/// 并发读；会员用一条 IN() 批量读。与主页 buildProfileResponse 的单作者路径同源，口径一致。
+/// 身份走 [fetchChainIdentityStateCached]（KV 45s 缓存 + 读链失败软降级为访客）按作者
+/// **当前绑定钱包账户** account_id 并发读；会员镜像同按 account_id 一条 IN() 批量读;
+/// 公开资料 profile.json 按**身份主键 cid_number** 读(换绑不丢)。与主页 buildProfileResponse
+/// 的单作者路径同源，口径一致。入参每项含 (cid_number, 当前 account_id),二者来自 post 行两列。
 export async function resolveAuthorSignals(
   env: Env,
-  accountIds: string[]
+  authors: { cid_number: string; account_id: string }[]
 ): Promise<Map<string, AuthorSignals>> {
-  const distinct = [...new Set(accountIds)];
   const map = new Map<string, AuthorSignals>();
-  if (distinct.length === 0) {
+  // 按身份主键 cid_number 去重(同一身份多帖只解析一次);值取该身份当前绑定账户。
+  const distinct = new Map<string, string>();
+  for (const author of authors) {
+    if (!distinct.has(author.cid_number)) {
+      distinct.set(author.cid_number, author.account_id);
+    }
+  }
+  if (distinct.size === 0) {
     return map;
   }
+  const cidList = [...distinct.keys()];
+  const accountList = [...distinct.values()];
   const [identities, membershipMap, profiles] = await Promise.all([
-    Promise.all(distinct.map((accountId) => fetchChainIdentityStateCached(env, accountId))),
-    batchMemberships(env, distinct),
+    // 链身份按当前绑定账户读(链查入口 = account_id);会员镜像与资料均按身份主键 cid_number 读。
+    Promise.all(accountList.map((accountId) => fetchChainIdentityStateCached(env, accountId))),
+    batchMemberships(env, cidList),
     // 去重作者的 profile.json 并行读；缺失（未建资料）软降级为空名 + 无头像。
-    Promise.all(distinct.map((accountId) => readProfileDoc(env, accountId).catch(() => null)))
+    Promise.all(cidList.map((cidNumber) => readProfileDoc(env, cidNumber).catch(() => null)))
   ]);
-  distinct.forEach((accountId, index) => {
-    const membership = membershipMap.get(accountId);
+  cidList.forEach((cidNumber, index) => {
+    const membership = membershipMap.get(cidNumber);
     const profile = profiles[index];
-    map.set(accountId, {
+    map.set(cidNumber, {
       identity_level: identities[index].identity_level,
       membership_level: (membership?.membership_level ?? null) as MembershipLevel | null,
       membership_active: membership ? subscriptionIsActive(membership) : false,

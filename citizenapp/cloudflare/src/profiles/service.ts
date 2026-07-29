@@ -12,9 +12,9 @@ import {
   readJson,
   requireSession
 } from '../shared/http';
-import { assertAccountId } from '../shared/ids';
+import { assertCidNumber } from '../shared/ids';
 import { nowMs } from '../shared/time';
-import { fetchChainIdentityStateCached } from '../chain/identity';
+import { fetchChainIdentityStateByCidCached } from '../chain/identity';
 import { getMembership, subscriptionIsActive } from '../membership/service';
 import type { MembershipLevel } from '../membership/plans';
 import { addBrowseCount, assertBrowseAvailable, getBrowseState } from '../feeds/browse';
@@ -43,45 +43,47 @@ interface ProfileUpdateRequest {
   banner_content_hash?: unknown;
 }
 
-/// GET /v1/square/users/:account —— 仅钱包用户可读，并附带当前账户的关注状态。
+/// GET /v1/square/users/:cid —— 仅钱包用户可读，并附带当前身份的关注状态。
+/// 路由参数 = 目标用户身份主键 cid_number(D1a 收敛:社交面统一按 cid 寻址)。
 export async function getUserProfileRoute(
   request: Request,
   env: Env,
-  accountRaw: string
+  cidRaw: string
 ): Promise<Response> {
-  const accountId = parseAccountId(accountRaw);
+  const targetCidNumber = parseCidNumber(cidRaw);
   const viewer = await requireSession(request, env);
-  const profile = await buildProfileResponse(env, accountId, viewer.account_id);
+  const profile = await buildProfileResponse(env, targetCidNumber, viewer.cid_number);
   return jsonResponse({ ok: true, profile });
 }
 
 /// GET 与 PUT 共用同一份主页响应装配：profile 文档 + 计数 + 认证 + is_following。
+/// 身份主键 = 目标 cid_number;profile/计数/关注/会员全按 cid;链上身份/当前绑定账户 account_id
+/// 由 fetchChainIdentityStateByCidCached(WalletAccountByCid)读出用于展示。
 async function buildProfileResponse(
   env: Env,
-  accountId: string,
-  viewerAccountId: string | null
+  targetCidNumber: string,
+  viewerCidNumber: string | null
 ): Promise<UserProfileResponse> {
-  // 认证真源=链上身份（VotingIdentity/CandidateIdentity），不再依赖发帖投影。
-  // 会员购买（membership）另取自 D1，公开下发以支撑徽章「勾」。
-  const [doc, counts, identity, membership, following, notifying] =
+  // 认证真源=链上身份（VotingIdentity/CandidateIdentity），按 cid 读;account_id = 当前绑定钱包账户。
+  const [identity, doc, counts, membership, following, notifying] =
     await Promise.all([
-      readProfileDoc(env, accountId),
-      countUserStats(env, accountId),
-      fetchChainIdentityStateCached(env, accountId),
-      getMembership(env, accountId),
-      isFollowing(env, viewerAccountId, accountId),
-      isNotifying(env, viewerAccountId, accountId)
+      fetchChainIdentityStateByCidCached(env, targetCidNumber),
+      readProfileDoc(env, targetCidNumber),
+      countUserStats(env, targetCidNumber),
+      getMembership(env, targetCidNumber),
+      isFollowing(env, viewerCidNumber, targetCidNumber),
+      isNotifying(env, viewerCidNumber, targetCidNumber)
     ]);
 
-  const profile = doc ?? defaultProfileDoc(accountId);
+  const profile = doc ?? defaultProfileDoc(targetCidNumber);
   const membershipLevel = (membership?.membership_level ?? null) as MembershipLevel | null;
   return {
-    account_id: accountId,
+    account_id: identity.account_id, // 当前绑定钱包账户(展示/复制);可能为空(未绑定)
     display_name: profile.display_name,
     bio: profile.bio,
     avatar_object_key: profile.avatar_object_key,
     banner_object_key: profile.banner_object_key,
-    cid_number: identity.cid_number,
+    cid_number: targetCidNumber,
     is_certified: identity.identity_level !== 'visitor',
     identity_level: identity.identity_level,
     membership_level: membershipLevel,
@@ -93,15 +95,15 @@ async function buildProfileResponse(
   };
 }
 
-/// GET /v1/square/users/:account/posts?category=&content_format=&limit=&cursor= —— 按作者分页。
+/// GET /v1/square/users/:cid/posts?category=&content_format=&limit=&cursor= —— 按作者身份分页。
 export async function getUserPostsRoute(
   request: Request,
   env: Env,
-  accountRaw: string
+  cidRaw: string
 ): Promise<Response> {
-  const accountId = parseAccountId(accountRaw);
+  const targetCidNumber = parseCidNumber(cidRaw);
   const viewer = await requireSession(request, env);
-  const before = await getBrowseState(env, viewer.account_id);
+  const before = await getBrowseState(env, viewer.cid_number);
   const url = new URL(request.url);
   const category = parseCategory(url.searchParams.get('category'));
   const contentFormat = parseContentFormat(url.searchParams.get('content_format'));
@@ -113,7 +115,7 @@ export async function getUserPostsRoute(
 
   const posts = await listAuthorPosts(
     env,
-    accountId,
+    targetCidNumber,
     category,
     contentFormat,
     limit,
@@ -121,11 +123,11 @@ export async function getUserPostsRoute(
   );
   const nextCursor =
     posts.length >= limit ? posts[posts.length - 1]?.created_at ?? null : null;
-  const browse = await addBrowseCount(env, viewer.account_id, before, posts.length);
+  const browse = await addBrowseCount(env, viewer.cid_number, before, posts.length);
 
   return jsonResponse({
     ok: true,
-    account_id: accountId,
+    cid_number: targetCidNumber,
     category,
     content_format: contentFormat,
     posts,
@@ -134,13 +136,13 @@ export async function getUserPostsRoute(
   });
 }
 
-/// GET /v1/square/users/:account/follows?type=following|followers —— 关注/粉丝列表分页。
+/// GET /v1/square/users/:cid/follows?type=following|followers —— 关注/粉丝列表分页。
 export async function getUserFollowsRoute(
   request: Request,
   env: Env,
-  accountRaw: string
+  cidRaw: string
 ): Promise<Response> {
-  const accountId = parseAccountId(accountRaw);
+  const targetCid = parseCidNumber(cidRaw);
   await requireSession(request, env);
   const url = new URL(request.url);
   const type = url.searchParams.get('type') === 'followers' ? 'followers' : 'following';
@@ -150,24 +152,25 @@ export async function getUserFollowsRoute(
   );
   const cursor = parseCursor(url.searchParams.get('cursor'));
 
-  const accounts = await listFollows(env, accountId, type, limit, cursor);
+  // 列表项为身份主键 cid_number(FollowEntry.cid_number)。
+  const entries = await listFollows(env, targetCid, type, limit, cursor);
   const nextCursor =
-    accounts.length >= limit ? accounts[accounts.length - 1]?.created_at ?? null : null;
+    entries.length >= limit ? entries[entries.length - 1]?.created_at ?? null : null;
 
-  return jsonResponse({ ok: true, type, accounts, next_cursor: nextCursor });
+  return jsonResponse({ ok: true, type, entries, next_cursor: nextCursor });
 }
 
-/// PUT /v1/square/profile —— 仅本人可写；account_id 从 session 派生。
+/// PUT /v1/square/profile —— 仅本人可写；身份主键 cid_number 从 session 派生。
 export async function putProfileRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const body = await readJson<ProfileUpdateRequest>(request);
-  const existing = (await readProfileDoc(env, session.account_id)) ??
-    defaultProfileDoc(session.account_id);
+  const existing = (await readProfileDoc(env, session.cid_number)) ??
+    defaultProfileDoc(session.cid_number);
 
-  const assetPrefix = profileAssetPrefix(session.account_id);
+  const assetPrefix = profileAssetPrefix(session.cid_number);
   const next: CitizenProfileDoc = {
     schema: 'citizenapp.square.profile.v1',
-    account_id: session.account_id,
+    cid_number: session.cid_number,
     display_name: normalizeText(body.display_name, existing.display_name, DISPLAY_NAME_MAX),
     bio: normalizeText(body.bio, existing.bio, BIO_MAX),
     avatar_object_key: normalizeAssetKey(
@@ -187,15 +190,15 @@ export async function putProfileRoute(request: Request, env: Env): Promise<Respo
 
   await writeProfileDoc(env, next);
   // 返回与 GET 一致的完整主页响应（本人视角 is_following=false），让客户端单一解析。
-  const profile = await buildProfileResponse(env, session.account_id, session.account_id);
+  const profile = await buildProfileResponse(env, session.cid_number, session.cid_number);
   return jsonResponse({ ok: true, profile });
 }
 
-function parseAccountId(accountRaw: string): string {
+function parseCidNumber(cidRaw: string): string {
   try {
-    return assertAccountId(decodeURIComponent(accountRaw));
+    return assertCidNumber(decodeURIComponent(cidRaw));
   } catch {
-    throw new HttpError(400, 'invalid_account_id', '账户标识格式不合法');
+    throw new HttpError(400, 'invalid_cid_number', '身份标识 cid_number 格式不合法');
   }
 }
 

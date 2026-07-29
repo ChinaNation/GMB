@@ -82,8 +82,10 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
       final chainTiers = results[1] as List<ChainCreatorTier>;
       if (!mounted) return;
       setState(() {
+        // widget.creatorAccountId 是被查看创作者的钱包账户（非 cid）；创作者身份主键取
+        // worker 计划镜像的 creator_cid_number，worker 不可用时留空，不塞 account_id。
         _plan = mergeCreatorPlanWithChain(
-          creatorAccountId: widget.creatorAccountId,
+          creatorCidNumber: displayPlan?.creatorCidNumber ?? '',
           displayPlan: displayPlan,
           chainTiers: chainTiers,
         );

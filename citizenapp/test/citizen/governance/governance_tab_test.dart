@@ -103,7 +103,7 @@ void main() {
     expect(ordered.map((i) => i.cidNumber), ['prc-b', 'prc-a', 'prc-c']);
   });
 
-  testWidgets('公民首页展示标题、五段导航和提案摘要', (tester) async {
+  testWidgets('公民首页删除重复标题并把五段导航上移', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: SizedBox(
@@ -115,10 +115,12 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('公民'), findsOneWidget);
+    expect(find.text('公民'), findsNothing);
     for (final label in ['提案', '立法', '选举', '治理', '公权']) {
       expect(find.text(label), findsOneWidget);
     }
+    // 二级导航进入原页面标题区域，不再被“公民”标题占据一整行。
+    expect(tester.getTopLeft(find.text('提案')).dy, lessThan(45));
     expect(find.text('提案动态'), findsOneWidget);
     expect(find.text('待我投票 0'), findsOneWidget);
   });

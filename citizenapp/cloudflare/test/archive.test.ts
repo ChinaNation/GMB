@@ -14,6 +14,7 @@ import { restoreAccountVideos, runVideoArchiveSweep } from '../src/membership/ar
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface FakeMembership {
+  cid_number: string;
   account_id: string;
   subscription_status: string;
   entitlement_lapsed_at: number | null;
@@ -22,6 +23,7 @@ interface FakeMembership {
 interface FakeVideo {
   upload_id: string;
   media_index: number;
+  cid_number: string;
   account_id: string;
   media_kind: 'video' | 'image';
   provider: string;
@@ -42,10 +44,10 @@ class FakeStmt {
   }
 
   async all<T>(): Promise<{ results: T[] }> {
-    if (this.sql.includes('SELECT DISTINCT m.account_id')) {
+    if (this.sql.includes('SELECT DISTINCT m.cid_number')) {
       const cutoff = this.args[0] as number;
       const limit = this.args[1] as number;
-      const accountIds = [
+      const cidNumbers = [
         ...new Set(
           this.db.memberships
             .filter(
@@ -56,21 +58,21 @@ class FakeStmt {
                   m.subscription_status === 'terminated') &&
                 this.db.videos.some(
                   (v) =>
-                    v.account_id === m.account_id &&
+                    v.cid_number === m.cid_number &&
                     v.media_kind === 'video' &&
                     v.archive_state === 'live'
                 )
             )
-            .map((m) => m.account_id)
+            .map((m) => m.cid_number)
         )
       ].slice(0, limit);
-      return { results: accountIds.map((account_id) => ({ account_id })) as T[] };
+      return { results: cidNumbers.map((cid_number) => ({ cid_number })) as T[] };
     }
     if (this.sql.includes('FROM square_media_assets') && this.sql.includes('archive_state = ?')) {
-      const accountId = this.args[0] as string;
+      const cidNumber = this.args[0] as string;
       const state = this.args[1] as string;
       const rows = this.db.videos.filter(
-        (v) => v.account_id === accountId && v.media_kind === 'video' && v.archive_state === state
+        (v) => v.cid_number === cidNumber && v.media_kind === 'video' && v.archive_state === state
       );
       return { results: rows as unknown as T[] };
     }
@@ -156,6 +158,7 @@ function video(overrides: Partial<FakeVideo> = {}): FakeVideo {
   return {
     upload_id: 'squ_1',
     media_index: 0,
+    cid_number: 'CN220-CTZN2-198805200-2026',
     account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
     media_kind: 'video',
     provider: 'cloudflare_stream',
@@ -188,6 +191,7 @@ describe('video cold archive', () => {
   it('archives live video of an account lapsed past the threshold', async () => {
     const db = new FakeDb();
     db.memberships.push({
+      cid_number: 'CN220-CTZN2-198805200-2026',
       account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 100 * DAY_MS
@@ -204,6 +208,7 @@ describe('video cold archive', () => {
   it('skips accounts that have not lapsed 90 days yet', async () => {
     const db = new FakeDb();
     db.memberships.push({
+      cid_number: 'CN220-CTZN2-198805200-2026',
       account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 10 * DAY_MS
@@ -219,6 +224,7 @@ describe('video cold archive', () => {
   it('does nothing when the feature flag is off', async () => {
     const db = new FakeDb();
     db.memberships.push({
+      cid_number: 'CN220-CTZN2-198805200-2026',
       account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       subscription_status: 'cancelled',
       entitlement_lapsed_at: Date.now() - 100 * DAY_MS
@@ -237,7 +243,7 @@ describe('video cold archive', () => {
       video({ archive_state: 'archived', r2_archive_key: `archive/${'33'.repeat(32)}/str_uid_1.mp4` })
     );
 
-    const result = await restoreAccountVideos(env(db), '0x3333333333333333333333333333333333333333333333333333333333333333');
+    const result = await restoreAccountVideos(env(db), 'CN220-CTZN2-198805200-2026');
 
     expect(result).toEqual({ restored: 1 });
     expect(db.videos[0].archive_state).toBe('restoring');

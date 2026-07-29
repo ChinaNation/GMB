@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smoldot/smoldot.dart';
 
 void main() {
-  testWidgets('交易紧凑状态从蓝色更新中切换为绿色已更新', (tester) async {
+  testWidgets('交易顶栏只用整组颜色表达连接状态', (tester) async {
     final snapshots = Queue<LightClientStatusSnapshot>.from([
       _snapshot(
         isSyncing: true,
@@ -32,7 +32,7 @@ void main() {
         theme: AppTheme.lightTheme,
         home: Scaffold(
           body: ChainProgressBanner(
-            compactThreeState: true,
+            showInlineStatus: true,
             pollInterval: const Duration(milliseconds: 10),
             progressLoader: () async => snapshots.removeFirst(),
           ),
@@ -41,37 +41,28 @@ void main() {
     );
     await tester.pump();
 
-    final updating = tester.widget<Text>(find.text('公民链 更新中'));
-    expect(updating.style?.color, AppTheme.info);
+    var chainLabel = tester.widget<Text>(find.text('公民链'));
+    var finalizedLabel = tester.widget<Text>(find.text('最终区块 0'));
+    expect(chainLabel.style?.color, AppTheme.info);
+    expect(finalizedLabel.style?.color, AppTheme.info);
+    expect(find.textContaining('更新中'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
-    final updated = tester.widget<Text>(find.text('公民链 已更新'));
-    expect(updated.style?.color, AppTheme.success);
-    expect(
-      find.byKey(
-        const ValueKey<String>('transaction-chain-status-divider'),
-      ),
-      findsOneWidget,
-    );
-
-    final statusContainer = tester.widget<Container>(
-      find.byKey(const ValueKey<String>('transaction-chain-status')),
-    );
-    final decoration = statusContainer.decoration! as BoxDecoration;
-    expect(
-      decoration.borderRadius,
-      BorderRadius.circular(AppTheme.radiusSm),
-    );
+    chainLabel = tester.widget<Text>(find.text('公民链'));
+    finalizedLabel = tester.widget<Text>(find.text('最终区块 33'));
+    expect(chainLabel.style?.color, AppTheme.success);
+    expect(finalizedLabel.style?.color, AppTheme.success);
+    expect(find.textContaining('已更新'), findsNothing);
   });
 
-  testWidgets('交易紧凑状态读取失败时显示红色连接失败', (tester) async {
+  testWidgets('交易顶栏读取失败时整组变红但不显示失败文字', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
         home: Scaffold(
           body: ChainProgressBanner(
-            compactThreeState: true,
+            showInlineStatus: true,
             progressLoader: () async => throw StateError('offline'),
           ),
         ),
@@ -79,11 +70,48 @@ void main() {
     );
     await tester.pump();
 
-    final failed = tester.widget<Text>(find.text('公民链 连接失败'));
-    expect(failed.style?.color, AppTheme.danger);
+    final chainLabel = tester.widget<Text>(find.text('公民链'));
+    final finalizedLabel = tester.widget<Text>(find.text('最终区块 —'));
+    expect(chainLabel.style?.color, AppTheme.danger);
+    expect(finalizedLabel.style?.color, AppTheme.danger);
+    expect(find.textContaining('连接失败'), findsNothing);
   });
 
-  testWidgets('runtime 已近头但 warp 未结束时继续轮询直到 regular', (tester) async {
+  testWidgets('其他页面只读取状态且不渲染任何连接状态', (tester) async {
+    LightClientStatusSnapshot? receivedProgress;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: ChainProgressBanner(
+            progressLoader: () async => _snapshot(
+              isSyncing: false,
+              isUsable: true,
+              syncPhase: LightClientSyncPhase.regular,
+              warpRequestCount: 1,
+              warpReceivedFragmentCount: 1,
+              warpVerifiedFragmentCount: 1,
+            ),
+            onProgressChanged: (progress) => receivedProgress = progress,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(receivedProgress?.currentVerifiedFinalizedBlockNumber, 33);
+    expect(
+      find.byKey(
+        const ValueKey<String>('transaction-chain-status-inline'),
+      ),
+      findsNothing,
+    );
+    expect(find.text('公民链'), findsNothing);
+    expect(find.textContaining('最终区块'), findsNothing);
+  });
+
+  testWidgets('不可见状态读取仍持续轮询直到 regular', (tester) async {
     final snapshots = Queue<LightClientStatusSnapshot>.from([
       _snapshot(
         isSyncing: false,
@@ -128,15 +156,15 @@ void main() {
     );
 
     await tester.pump();
-    expect(find.text('轻节点正在快速验证最终性'), findsOneWidget);
+    expect(find.textContaining('轻节点'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
-    expect(find.text('轻节点正在构建最新链信息'), findsOneWidget);
+    expect(find.textContaining('轻节点'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
-    expect(find.text('轻节点已就绪'), findsOneWidget);
+    expect(find.textContaining('轻节点'), findsNothing);
     expect(loadCount, 3);
 
     // ready 快照不再继续轮询，避免稳定期制造后台开销。

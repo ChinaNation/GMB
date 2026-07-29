@@ -22,11 +22,22 @@ import {
   requireActiveMembership,
   subscriptionIsActive,
 } from "./service";
+import { fetchChainIdentityStateCached } from "../chain/identity";
 
 /**
- * 创作者会员 BFF：链账户 `account_id` 是唯一身份；档位展示、订阅关系和统计只保存 finalized 镜像。
- * 付款字段与订阅有效性来自链上，Cloudflare 不扣款、不续费、不计算订阅公历。
+ * 创作者会员 BFF：身份主键 `cid_number` 是唯一归属;account_id 为当前绑定的付款/签名钱包账户。
+ * 档位展示、订阅关系和统计只保存 finalized 镜像。付款字段与订阅有效性来自链上，
+ * Cloudflare 不扣款、不续费、不计算订阅公历。链交易验证/读链仍按 account_id(链查入口)。
  */
+
+/// 把目标钱包账户 resolve 为身份主键 cid_number;未绑定 CID → 404。
+async function resolveBoundCid(env: Env, accountId: string): Promise<string> {
+  const identity = await fetchChainIdentityStateCached(env, accountId);
+  if (!identity.cid_number) {
+    throw new HttpError(404, "cid_not_bound", "目标账户未绑定 CID");
+  }
+  return identity.cid_number;
+}
 
 const PERIODS = ["monthly", "quarterly", "yearly"] as const;
 type Period = (typeof PERIODS)[number];
@@ -40,7 +51,7 @@ export interface CreatorTierInput {
 }
 
 interface CreatorPlanRow {
-  creator_account_id: string;
+  creator_cid_number: string;
   tier_id: string;
   name: string;
   tier_order: number;
@@ -163,19 +174,19 @@ function verifiedDisplayTiers(
   return requested;
 }
 
-async function readPlan(env: Env, creatorAccountId: string): Promise<unknown> {
+async function readPlan(env: Env, creatorCidNumber: string): Promise<unknown> {
   const rows = await env.DB.prepare(
-    `SELECT creator_account_id, tier_id, name, tier_order, monthly_price_fen,
+    `SELECT creator_cid_number, tier_id, name, tier_order, monthly_price_fen,
         quarterly_price_fen, yearly_price_fen, verified_at
       FROM square_creator_tiers
-      WHERE creator_account_id = ? ORDER BY tier_order ASC`,
+      WHERE creator_cid_number = ? ORDER BY tier_order ASC`,
   )
-    .bind(creatorAccountId)
+    .bind(creatorCidNumber)
     .all<CreatorPlanRow>();
   const items = rows.results ?? [];
   if (items.length === 0) return null;
   return {
-    creator_account_id: creatorAccountId,
+    creator_cid_number: creatorCidNumber,
     tiers: items.map(rowToTier),
     updated_at: Math.max(...items.map((row) => row.verified_at)),
   };
@@ -201,8 +212,8 @@ function monthStartMs(): number {
 /** GET /v1/square/creator/plan —— 当前钱包的档位；平台订阅门禁在服务端复核。 */
 export async function creatorPlanRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  await requireActiveMembership(env, session.account_id);
-  return jsonResponse({ plan: await readPlan(env, session.account_id) });
+  await requireActiveMembership(env, session.cid_number);
+  return jsonResponse({ plan: await readPlan(env, session.cid_number) });
 }
 
 /** GET /v1/square/creator/plan/:account —— 仅返回当前仍具平台订阅资格的创作者档位。 */
@@ -212,37 +223,39 @@ export async function creatorPlanOfRoute(
   account: string,
 ): Promise<Response> {
   await requireSession(request, env);
+  // 路由入参仍为创作者钱包账户,内部 resolve 到身份主键 cid_number 读档位/会员。
   const creatorAccountId = decodeURIComponent(account);
-  const membership = await getMembership(env, creatorAccountId);
+  const creatorCidNumber = await resolveBoundCid(env, creatorAccountId);
+  const membership = await getMembership(env, creatorCidNumber);
   if (!membership || !subscriptionIsActive(membership)) return jsonResponse({ plan: null });
-  return jsonResponse({ plan: await readPlan(env, creatorAccountId) });
+  return jsonResponse({ plan: await readPlan(env, creatorCidNumber) });
 }
 
 /** GET /v1/square/creator/overview —— 仅统计链时钟下仍有效的订阅关系。 */
 export async function creatorOverviewRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  await requireActiveMembership(env, session.account_id);
-  const accountId = session.account_id;
+  await requireActiveMembership(env, session.cid_number);
+  const creatorCidNumber = session.cid_number;
   const observedAt = nowMs();
   const countRow = await env.DB.prepare(
     `SELECT COUNT(*) AS cnt
       FROM square_creator_subscriptions s
       JOIN chain_clock c ON c.clock_id = 1
-      WHERE s.creator_account_id = ?
+      WHERE s.creator_cid_number = ?
         AND s.subscription_status IN ('active', 'cancelled')
         AND c.chain_timestamp < s.paid_until
         AND c.observed_at <= ? AND c.observed_at >= ?`,
   )
-    .bind(accountId, observedAt, observedAt - CHAIN_CLOCK_MAX_STALENESS_MS)
+    .bind(creatorCidNumber, observedAt, observedAt - CHAIN_CLOCK_MAX_STALENESS_MS)
     .first<{ cnt: number }>();
   const incomeRow = await env.DB.prepare(
     `SELECT COALESCE(SUM(last_charged_price_fen), 0) AS total
       FROM square_creator_subscriptions
-      WHERE creator_account_id = ? AND last_charged_at >= ?`,
+      WHERE creator_cid_number = ? AND last_charged_at >= ?`,
   )
-    .bind(accountId, monthStartMs())
+    .bind(creatorCidNumber, monthStartMs())
     .first<{ total: number }>();
-  const plan = await readPlan(env, accountId) as { tiers?: unknown[] } | null;
+  const plan = await readPlan(env, creatorCidNumber) as { tiers?: unknown[] } | null;
   return jsonResponse({
     overview: {
       subscriber_count: Number(countRow?.cnt ?? 0),
@@ -291,10 +304,10 @@ export async function creatorPlanSaveRoute(
     blockHash: transaction.blockHash,
     observedAt: verifiedAt,
   });
-  await replaceCreatorTiers(env, session.account_id, tiers, transaction, verifiedAt);
+  await replaceCreatorTiers(env, session.cid_number, session.account_id, tiers, transaction, verifiedAt);
   return jsonResponse({
     plan: {
-      creator_account_id: session.account_id,
+      creator_cid_number: session.cid_number,
       tiers,
       updated_at: verifiedAt,
     },
@@ -345,9 +358,13 @@ export async function creatorSubscriptionConfirmRoute(
     blockHash: transaction.blockHash,
     observedAt: verifiedAt,
   });
+  // 归属按订阅者/创作者身份主键 cid;链验证已按各自当前绑定账户完成。
+  const creatorCidNumber = await resolveBoundCid(env, creatorAccountId);
   await mirrorCreatorSubscription(
     env,
+    session.cid_number,
     session.account_id,
+    creatorCidNumber,
     creatorAccountId,
     state!,
     transaction,
@@ -363,17 +380,17 @@ export async function creatorSubscriptionConfirmRoute(
 /** 创作者付费内容的统一服务端门禁；未知、陈旧、终止或过期全部拒绝。 */
 export async function requireCreatorSubscription(
   env: Env,
-  subscriberAccountId: string,
-  creatorAccountId: string,
+  subscriberCidNumber: string,
+  creatorCidNumber: string,
 ): Promise<void> {
   const row = await env.DB.prepare(
     `SELECT s.subscription_status, s.paid_until, c.chain_timestamp,
         c.observed_at AS chain_observed_at
       FROM square_creator_subscriptions s
       LEFT JOIN chain_clock c ON c.clock_id = 1
-      WHERE s.subscriber_account_id = ? AND s.creator_account_id = ?`,
+      WHERE s.subscriber_cid_number = ? AND s.creator_cid_number = ?`,
   )
-    .bind(subscriberAccountId, creatorAccountId)
+    .bind(subscriberCidNumber, creatorCidNumber)
     .first<{
       subscription_status: string;
       paid_until: number;
@@ -387,23 +404,26 @@ export async function requireCreatorSubscription(
 
 async function replaceCreatorTiers(
   env: Env,
+  creatorCidNumber: string,
   creatorAccountId: string,
   tiers: CreatorTierInput[],
   transaction: VerifiedFinalizedTransaction,
   verifiedAt: number,
 ): Promise<void> {
+  // 归属主键 = 创作者身份主键 creator_cid_number;creator_account_id 记当前签名账户(链上事实)。
   const statements: D1PreparedStatement[] = [
-    env.DB.prepare("DELETE FROM square_creator_tiers WHERE creator_account_id = ?").bind(creatorAccountId),
+    env.DB.prepare("DELETE FROM square_creator_tiers WHERE creator_cid_number = ?").bind(creatorCidNumber),
   ];
   tiers.forEach((tier, index) => {
     statements.push(
       env.DB.prepare(
         `INSERT INTO square_creator_tiers
-          (creator_account_id, tier_id, name, tier_order, monthly_price_fen,
+          (creator_cid_number, creator_account_id, tier_id, name, tier_order, monthly_price_fen,
            quarterly_price_fen, yearly_price_fen, finalized_block_number,
            finalized_block_hash, verified_at, last_tx_hash)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
+        creatorCidNumber,
         creatorAccountId,
         tier.tier_id,
         tier.name,
@@ -423,7 +443,9 @@ async function replaceCreatorTiers(
 
 async function mirrorCreatorSubscription(
   env: Env,
+  subscriberCidNumber: string,
   subscriberAccountId: string,
+  creatorCidNumber: string,
   creatorAccountId: string,
   state: ChainSubscriptionState,
   transaction: VerifiedFinalizedTransaction,
@@ -432,14 +454,17 @@ async function mirrorCreatorSubscription(
   if (state.plan.kind !== "creator") {
     throw new HttpError(409, "subscription_state_not_finalized", "链上创作者订阅计划不合法");
   }
+  // 归属主键 = (订阅者身份, 创作者身份);两 account_id 记各自当前签名/付款账户(链上事实)。
   await env.DB.prepare(
     `INSERT INTO square_creator_subscriptions
-      (subscriber_account_id, creator_account_id, tier_id, billing_period,
-       started_at, last_charged_at,
+      (subscriber_cid_number, creator_cid_number, subscriber_account_id, creator_account_id,
+       tier_id, billing_period, started_at, last_charged_at,
        last_charged_price_fen, paid_until, subscription_status,
        finalized_block_number, finalized_block_hash, verified_at, last_tx_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(subscriber_account_id, creator_account_id) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(subscriber_cid_number, creator_cid_number) DO UPDATE SET
+        subscriber_account_id = excluded.subscriber_account_id,
+        creator_account_id = excluded.creator_account_id,
         tier_id = excluded.tier_id,
         billing_period = excluded.billing_period,
         started_at = excluded.started_at,
@@ -454,6 +479,8 @@ async function mirrorCreatorSubscription(
       WHERE excluded.finalized_block_number >= square_creator_subscriptions.finalized_block_number`,
   )
     .bind(
+      subscriberCidNumber,
+      creatorCidNumber,
       subscriberAccountId,
       creatorAccountId,
       state.plan.tierId,

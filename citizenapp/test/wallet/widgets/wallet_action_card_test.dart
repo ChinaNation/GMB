@@ -21,9 +21,13 @@ void main() {
 
   Future<void> pumpCard(WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
-          body: WalletActionCard(accountId: accountId, ss58Address: ss58Address),
+          body: WalletActionCard(
+            accountId: accountId,
+            ss58Address: ss58Address,
+            finalizedBalanceLoader: (_) async => 1280.35,
+          ),
         ),
       ),
     );
@@ -44,6 +48,11 @@ void main() {
   testWidgets('零钱包 column shows unbound state', (tester) async {
     await pumpCard(tester);
     expect(find.text('未绑定'), findsOneWidget);
+  });
+
+  testWidgets('充值列复用链上 finalized total 余额', (tester) async {
+    await pumpCard(tester);
+    expect(find.text('1,280.35 元'), findsOneWidget);
   });
 
   testWidgets('tapping 提现 unbound asks user to bind clearing bank',

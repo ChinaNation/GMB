@@ -109,6 +109,8 @@ class CreatorApiHttp implements CreatorApi {
     return CreatorPlan.fromJson(plan);
   }
 
+  // worker 契约：/creator/plan/:account URL 仍传创作者钱包账户（worker 内部 resolve
+  // 到 cid），入参保持 creatorAccountId 不改；仅 plan 响应体字段改 creator_cid_number。
   @override
   Future<CreatorPlan?> fetchPlanOf(
       SquareSession session, String creatorAccountId) async {
@@ -139,6 +141,8 @@ class CreatorApiHttp implements CreatorApi {
         'block_hash': blockHashHex,
         'signed_extrinsic_hex': signedExtrinsicHex,
         'action': action,
+        // worker 契约：subscription/confirm 请求体仍传 creator_account_id（worker
+        // 内部 resolve，链验证按 account），不改。
         'creator_account_id': creatorAccountId,
         if (tierId != null) 'tier_id': tierId,
         if (billingPeriod != null) 'billing_period': billingPeriod,
@@ -252,7 +256,8 @@ class FakeCreatorApi implements CreatorApi {
   }) async {
     lastSaveTxHash = txHash;
     _plan = CreatorPlan(
-      creatorAccountId: session.accountId,
+      // 离线 fake 只有会话钱包账户、无 cid 来源；cid 字段留空，不塞 account_id。
+      creatorCidNumber: '',
       tiers: tiers,
       updatedAt: 0,
     );

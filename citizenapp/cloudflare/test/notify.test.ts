@@ -2,16 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { getNotifyUnreadRoute, markNotifyReadRoute } from '../src/feeds/notify';
 import type { Env, SessionState } from '../src/types';
 
-const viewer = '0x2222222222222222222222222222222222222222222222222222222222222222';
+// 身份主键 cid_number:关注双端与发帖归属均按 cid;viewer 账户仅作会话 account_id。
+const VIEWER_CID = 'CN220-CTZN2-198805200-2026';
+const viewerAccount = '0x2222222222222222222222222222222222222222222222222222222222222222';
+const AUTHOR_A = 'CN220-CTZN2-100000001-2026';
+const AUTHOR_B = 'CN220-CTZN2-100000002-2026';
+const AUTHOR_C = 'CN220-CTZN2-100000003-2026';
 
 interface PostRow {
-  account_id: string;
+  cid_number: string;
   created_at: number;
   post_state: string;
 }
 interface FollowRow {
-  account_id: string;
-  followed_account_id: string;
+  follower_cid_number: string;
+  followed_cid_number: string;
   notify_enabled: number;
 }
 
@@ -19,12 +24,12 @@ describe('GET /v1/square/notify/unread', () => {
   it('counts new posts from notify-enabled follows since each cursor (no reads row = 0)', async () => {
     const env = fakeEnv({
       follows: [
-        { account_id: viewer, followed_account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', notify_enabled: 1 },
-        { account_id: viewer, followed_account_id: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', notify_enabled: 1 }
+        { follower_cid_number: VIEWER_CID, followed_cid_number: AUTHOR_A, notify_enabled: 1 },
+        { follower_cid_number: VIEWER_CID, followed_cid_number: AUTHOR_B, notify_enabled: 1 }
       ],
       posts: [
-        { account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created_at: 100, post_state: 'published' },
-        { account_id: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', created_at: 200, post_state: 'published' }
+        { cid_number: AUTHOR_A, created_at: 100, post_state: 'published' },
+        { cid_number: AUTHOR_B, created_at: 200, post_state: 'published' }
       ]
     });
     const body = await readUnread(env);
@@ -34,13 +39,13 @@ describe('GET /v1/square/notify/unread', () => {
   it('excludes muted follows and unpublished posts', async () => {
     const env = fakeEnv({
       follows: [
-        { account_id: viewer, followed_account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', notify_enabled: 1 },
-        { account_id: viewer, followed_account_id: '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', notify_enabled: 0 }
+        { follower_cid_number: VIEWER_CID, followed_cid_number: AUTHOR_A, notify_enabled: 1 },
+        { follower_cid_number: VIEWER_CID, followed_cid_number: AUTHOR_C, notify_enabled: 0 }
       ],
       posts: [
-        { account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created_at: 100, post_state: 'published' },
-        { account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created_at: 150, post_state: 'draft' },
-        { account_id: '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', created_at: 200, post_state: 'published' }
+        { cid_number: AUTHOR_A, created_at: 100, post_state: 'published' },
+        { cid_number: AUTHOR_A, created_at: 150, post_state: 'draft' },
+        { cid_number: AUTHOR_C, created_at: 200, post_state: 'published' }
       ]
     });
     const body = await readUnread(env);
@@ -50,11 +55,11 @@ describe('GET /v1/square/notify/unread', () => {
   it('respects an existing cursor', async () => {
     const env = fakeEnv({
       follows: [
-        { account_id: viewer, followed_account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', notify_enabled: 1 }
+        { follower_cid_number: VIEWER_CID, followed_cid_number: AUTHOR_A, notify_enabled: 1 }
       ],
       posts: [
-        { account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created_at: 100, post_state: 'published' },
-        { account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created_at: 300, post_state: 'published' }
+        { cid_number: AUTHOR_A, created_at: 100, post_state: 'published' },
+        { cid_number: AUTHOR_A, created_at: 300, post_state: 'published' }
       ],
       reads: { last_seen_square_at: 200, last_seen_following_at: 0 }
     });
@@ -66,11 +71,11 @@ describe('GET /v1/square/notify/unread', () => {
   it('marking square read clears only the square badge, following stays', async () => {
     const env = fakeEnv({
       follows: [
-        { account_id: viewer, followed_account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', notify_enabled: 1 }
+        { follower_cid_number: VIEWER_CID, followed_cid_number: AUTHOR_A, notify_enabled: 1 }
       ],
       posts: [
-        { account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created_at: 100, post_state: 'published' },
-        { account_id: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created_at: 200, post_state: 'published' }
+        { cid_number: AUTHOR_A, created_at: 100, post_state: 'published' },
+        { cid_number: AUTHOR_A, created_at: 200, post_state: 'published' }
       ]
     });
     expect(await readUnread(env)).toMatchObject({ square_unread: 2, following_unread: 2 });
@@ -125,7 +130,8 @@ interface FakeEnvOptions {
 function fakeEnv(options: FakeEnvOptions): Env {
   const kv = new Map<string, unknown>();
   const session: SessionState = {
-    account_id: viewer,
+    cid_number: VIEWER_CID,
+    account_id: viewerAccount,
     device_key_hash: 'a'.repeat(64),
     created_at: 0,
     expires_at: Date.now() + 60_000
@@ -134,7 +140,7 @@ function fakeEnv(options: FakeEnvOptions): Env {
 
   const reads = new Map<string, { square: number; following: number }>();
   if (options.reads) {
-    reads.set(viewer, {
+    reads.set(VIEWER_CID, {
       square: options.reads.last_seen_square_at,
       following: options.reads.last_seen_following_at
     });
@@ -194,7 +200,7 @@ class FakeStmt {
 
   async first<T>(): Promise<T | null> {
     if (this.sql.includes('COUNT(*)') && this.sql.includes('square_posts')) {
-      const viewerAccountId = this.binds[0] as string;
+      const viewerCidNumber = this.binds[0] as string;
       const since = this.binds[1] as number;
       const n = this.posts.filter(
         (p) =>
@@ -202,16 +208,16 @@ class FakeStmt {
           p.created_at > since &&
           this.follows.some(
             (f) =>
-              f.account_id === viewerAccountId &&
-              f.followed_account_id === p.account_id &&
+              f.follower_cid_number === viewerCidNumber &&
+              f.followed_cid_number === p.cid_number &&
               f.notify_enabled === 1
           )
       ).length;
       return { n } as T;
     }
     if (this.sql.includes('FROM square_notify_reads')) {
-      const accountId = this.binds[0] as string;
-      const row = this.reads.get(accountId);
+      const cidNumber = this.binds[0] as string;
+      const row = this.reads.get(cidNumber);
       return row
         ? ({ last_seen_square_at: row.square, last_seen_following_at: row.following } as T)
         : null;
@@ -221,15 +227,15 @@ class FakeStmt {
 
   async run(): Promise<{ meta: { changes: number } }> {
     if (this.sql.includes('INSERT INTO square_notify_reads')) {
-      const accountId = this.binds[0] as string;
+      const cidNumber = this.binds[0] as string;
       const value = this.binds[1] as number;
-      const existing = this.reads.get(accountId) ?? { square: 0, following: 0 };
+      const existing = this.reads.get(cidNumber) ?? { square: 0, following: 0 };
       if (this.sql.includes('last_seen_square_at')) {
         existing.square = value;
       } else {
         existing.following = value;
       }
-      this.reads.set(accountId, existing);
+      this.reads.set(cidNumber, existing);
     }
     return { meta: { changes: 1 } };
   }

@@ -91,8 +91,10 @@ class CreatorService {
     final overview = results[1] as CreatorOverview;
     final chainTiers = results[2] as List<ChainCreatorTier>;
     return CreatorPageData.active(
+      // 创作者身份主键取 worker 计划镜像（`creator_cid_number`）；session 只有钱包账户，
+      // 不得塞进 cid 字段。worker 不可用（displayPlan==null）时该展示字段留空。
       plan: mergeCreatorPlanWithChain(
-        creatorAccountId: session.accountId,
+        creatorCidNumber: displayPlan?.creatorCidNumber ?? '',
         displayPlan: displayPlan,
         chainTiers: chainTiers,
       ),
@@ -253,7 +255,9 @@ class CreatorService {
     required List<CreatorTier> tiers,
   }) async {
     final localPlan = CreatorPlan(
-      creatorAccountId: accountId,
+      // 此处仅有签名钱包账户、无 cid 来源；离线兜底展示计划的 cid 字段留空，
+      // 不把 account_id 塞进身份主键字段造成语义污染。
+      creatorCidNumber: '',
       tiers: tiers,
       updatedAt: 0,
     );
@@ -292,7 +296,8 @@ class CreatorService {
     try {
       final chainTiers = await _subscriptionRpc.fetchCreatorPlans(accountId);
       return mergeCreatorPlanWithChain(
-        creatorAccountId: accountId,
+        // cid 取 worker 保存后回执镜像的 `creator_cid_number`；边缘失败回退到 localPlan 时为空。
+        creatorCidNumber: displayPlan.creatorCidNumber,
         displayPlan: displayPlan,
         chainTiers: chainTiers,
       );

@@ -30,7 +30,8 @@ class TransactionTabPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OnchainPaymentPanel(
-      title: '交易',
+      // 交易 Tab 的页面标题由真实公民链状态取代；独立链上支付页仍保留自己的标题。
+      chainStatusInHeader: true,
       extraEntriesBuilder: (context, wallet) => [
         _TransactionEntryGroup(
           children: [
@@ -84,6 +85,7 @@ class _TransactionEntryGroup extends StatelessWidget {
             Expanded(child: children[i]),
             if (i != children.length - 1)
               const SizedBox(
+                key: ValueKey<String>('transaction-entry-divider'),
                 height: 52,
                 child: VerticalDivider(
                   width: 1,

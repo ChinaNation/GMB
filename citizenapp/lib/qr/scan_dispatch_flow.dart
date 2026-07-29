@@ -15,12 +15,12 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 交易 tab「扫一扫」统一入口：扫码 → 按协议分派。
 ///
 /// - 收款 / 链下支付码 → 现有链下支付流程（用交易页选的 [paymentWallet]）。
-/// - 广场账户动作 signRequest → 签名响应方（用 QR `u` 对应的 accountId 钱包，与付款钱包无关）。
+/// - signRequest → 用 QR `u` 对应的本机 Account 签名，与付款钱包无关。
 /// - 未来其它类型只需在此加分支。
 Future<void> openScanDispatchFlow({
   required BuildContext context,
   required WalletProfile? paymentWallet,
-  WalletProfile? signingWallet,
+  Account? signingAccount,
 }) async {
   final scanned = await Navigator.of(context).push<Object?>(
     MaterialPageRoute(
@@ -42,25 +42,66 @@ Future<void> openScanDispatchFlow({
     return;
   }
   if (scanned is String) {
-    final action = QrSigner().parseRequest(scanned).body.action;
-    if (action == QrActions.citizenIdentity) {
-      await _handleCitizenIdentitySignRequest(context, scanned, signingWallet);
-    } else if (QrActions.isSelfAccountDomainAction(action)) {
-      await _handleOccupySignRequest(context, scanned);
-    } else {
-      await _handleSquareActionSignRequest(context, scanned);
-    }
+    await _dispatchSignRequest(context, scanned, signingAccount);
+  }
+}
+
+/// 我的钱包账户卡“扫码签名”：保留扫码页原 UI，只把业务边界收紧为签名请求。
+///
+/// 使用 raw 模式是为了不让收款码进入支付分支；二维码返回后仍由 [QrSigner.parseRequest]
+/// 完整校验 QR_V1 类型、字段和有效期。
+Future<void> openAccountScanSignFlow({
+  required BuildContext context,
+  required Account account,
+}) async {
+  final scanned = await Navigator.of(context).push<String>(
+    MaterialPageRoute(
+      builder: (_) => const QrScanPage(
+        mode: QrScanMode.raw,
+        customTitle: '扫码签名',
+      ),
+    ),
+  );
+  if (scanned == null || !context.mounted) return;
+  await _dispatchSignRequest(context, scanned, account);
+}
+
+Future<void> _dispatchSignRequest(
+  BuildContext context,
+  String raw,
+  Account? requiredAccount,
+) async {
+  final int action;
+  try {
+    action = QrSigner().parseRequest(raw).body.action;
+  } on QrSignException catch (error) {
+    if (context.mounted) _snack(context, '请扫描签名请求二维码：${error.message}');
+    return;
+  }
+  if (action == QrActions.citizenIdentity) {
+    await _handleCitizenIdentitySignRequest(context, raw, requiredAccount);
+  } else if (QrActions.isSelfAccountDomainAction(action)) {
+    await _handleOccupySignRequest(context, raw, requiredAccount);
+  } else {
+    await _handleSquareActionSignRequest(context, raw, requiredAccount);
   }
 }
 
 Future<void> _handleSquareActionSignRequest(
-    BuildContext context, String raw) async {
+  BuildContext context,
+  String raw,
+  Account? requiredAccount,
+) async {
   final service = SquareActionSignService();
   final walletManager = WalletManager();
 
   final SquareActionSignPrep prep;
   try {
-    prep = await service.prepare(raw, walletManager);
+    prep = await service.prepare(
+      raw,
+      walletManager,
+      requiredAccount: requiredAccount,
+    );
   } on SquareActionSignException catch (e) {
     if (context.mounted) _snack(context, e.message);
     return;
@@ -105,7 +146,7 @@ Future<void> _handleSquareActionSignRequest(
 Future<void> _handleCitizenIdentitySignRequest(
   BuildContext context,
   String raw,
-  WalletProfile? signingWallet,
+  Account? signingAccount,
 ) async {
   final service = CitizenIdentitySignService();
   final walletManager = WalletManager();
@@ -113,7 +154,7 @@ Future<void> _handleCitizenIdentitySignRequest(
     final prep = await service.prepare(
       raw,
       walletManager,
-      requiredWallet: signingWallet,
+      requiredAccount: signingAccount,
     );
     if (!context.mounted) return;
     final fields = prep.decoded.reviewEntries;
@@ -158,11 +199,13 @@ Future<void> _handleCitizenIdentitySignRequest(
 Future<void> _handleOccupySignRequest(
   BuildContext context,
   String raw,
+  Account? requiredAccount,
 ) async {
   final walletManager = WalletManager();
   final service = CitizenOccupySignService();
 
-  final selected = await _pickBindingWallet(context, walletManager);
+  final selected =
+      requiredAccount ?? await _pickBindingAccount(context, walletManager);
   if (selected == null || !context.mounted) return;
 
   try {
@@ -170,7 +213,7 @@ Future<void> _handleOccupySignRequest(
     if (!context.mounted) return;
     final reviewEntries = <(String, String)>[
       ('身份CID', prep.cidNumber),
-      ('绑定账户', _shortAddress(prep.wallet.accountId)),
+      ('绑定账户', _shortAddress(prep.account.accountId)),
     ];
     final confirmed = await showDialog<bool>(
       context: context,
@@ -179,7 +222,7 @@ Future<void> _handleOccupySignRequest(
         content: Text(
           '${prep.isOccupy ? '把此 CID 占号绑定到你的账户' : '把此 CID 换绑到你的新账户'}\n'
           '身份CID：${prep.cidNumber}\n'
-          '绑定账户：${_shortAddress(prep.wallet.accountId)}',
+          '绑定账户：${_shortAddress(prep.account.accountId)}',
         ),
         actions: [
           TextButton(
@@ -212,19 +255,29 @@ Future<void> _handleOccupySignRequest(
   }
 }
 
-/// 占号/换绑:从本机热账户中选一个绑定到该 CID(占即绑一账户)。返回 null=取消。
-Future<WalletProfile?> _pickBindingWallet(
+/// 通用扫一扫遇到占号/换绑时，从唯一热钱包的全部账户中选一个；账户卡入口则直接
+/// 使用卡片账户，不进入本选择器。
+Future<Account?> _pickBindingAccount(
   BuildContext context,
   WalletManager walletManager,
 ) async {
-  final wallets =
-      (await walletManager.getWallets()).where((w) => !w.isColdWallet).toList();
+  final wallets = await walletManager.getWallets();
+  WalletProfile? hotWallet;
+  for (final wallet in wallets) {
+    if (wallet.isHotWallet) {
+      hotWallet = wallet;
+      break;
+    }
+  }
+  final accounts = hotWallet == null
+      ? const <Account>[]
+      : await walletManager.getAccounts(hotWallet.accountId);
   if (!context.mounted) return null;
-  if (wallets.isEmpty) {
+  if (accounts.isEmpty) {
     _snack(context, '本机没有可绑定的热账户');
     return null;
   }
-  return showModalBottomSheet<WalletProfile>(
+  return showModalBottomSheet<Account>(
     context: context,
     builder: (sheetContext) => SafeArea(
       child: Column(
@@ -235,11 +288,11 @@ Future<WalletProfile?> _pickBindingWallet(
             child: Text('选择要绑定到该 CID 的账户',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           ),
-          for (final wallet in wallets)
+          for (final account in accounts)
             ListTile(
-              title: Text(wallet.walletName),
-              subtitle: Text(_shortAddress(wallet.accountId)),
-              onTap: () => Navigator.of(sheetContext).pop(wallet),
+              title: Text(account.accountName),
+              subtitle: Text(_shortAddress(account.ss58Address)),
+              onTap: () => Navigator.of(sheetContext).pop(account),
             ),
           const SizedBox(height: 8),
         ],
@@ -258,7 +311,7 @@ Future<bool?> _showActionConfirm(
     builder: (dialogContext) => AlertDialog(
       title: const Text('确认签名'),
       content: Text(
-        '账户：${_shortAddress(prep.wallet.ss58Address)}\n'
+        '账户：${_shortAddress(prep.account.ss58Address)}\n'
         '动作：${prep.actionLabel}\n'
         '$fieldLines\n\n'
         '确认后将用本机钱包对此操作签名。',

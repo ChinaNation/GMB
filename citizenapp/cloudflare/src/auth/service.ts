@@ -7,6 +7,7 @@ import { sha256Hex } from '../shared/hash';
 import { verifyTurnstile } from '../security/turnstile';
 import { verifyWalletSignature } from './wallet_signature';
 import { indexSessionToken } from './session_index';
+import { fetchChainIdentityStateCached } from '../chain/identity';
 import {
   assertP256PublicKeyHex,
   buildDeviceBindingSigningMessage,
@@ -121,13 +122,21 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(401, 'expired_challenge', '钱包登录挑战已过期');
   }
 
+  // 身份主键 = 该钱包账户链上当前绑定的 cid_number;未绑定 → 不能建会话(访客)。
+  const identity = await fetchChainIdentityStateCached(env, accountId);
+  if (!identity.cid_number) {
+    throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法登录');
+  }
+  const cidNumber = identity.cid_number;
+
   // 后台握手用 P-256 设备子钥（硬件、静默）验签 signing_message(OP_SIGN_SQUARE_LOGIN)。
-  const subkey = await env.DB.prepare(
-    `SELECT p256_public_key FROM square_device_subkeys WHERE account_id = ?`
+  // 子钥挂在 (cid_number, account_id) 下(同一身份可多设备);逐个验签,任一匹配即通过。
+  const subkeys = await env.DB.prepare(
+    `SELECT p256_public_key FROM square_device_subkeys WHERE cid_number = ? AND account_id = ?`
   )
-    .bind(accountId)
-    .first<{ p256_public_key: string }>();
-  if (!subkey) {
+    .bind(cidNumber, accountId)
+    .all<{ p256_public_key: string }>();
+  if (!subkeys.results || subkeys.results.length === 0) {
     throw new HttpError(401, 'device_not_registered', '设备子钥未注册，请先注册设备子钥');
   }
   const loginMessage = signingMessage(
@@ -137,10 +146,16 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   // 跨端签名文本须为 `0x`+128hex（ADR-041）；规范化为裸后交内部裸函数验签，
   // 裸/大写/错长与验签失败一律按既有 401 语义处理（不泄漏格式细节）。
   const signatureBare = normalizeP256SignatureHex(body.signature);
-  const isValid =
-    signatureBare !== null &&
-    (await verifyP256Signature(loginMessage, signatureBare, subkey.p256_public_key));
-  if (!isValid) {
+  let matchedP256: string | null = null;
+  if (signatureBare !== null) {
+    for (const row of subkeys.results) {
+      if (await verifyP256Signature(loginMessage, signatureBare, row.p256_public_key)) {
+        matchedP256 = row.p256_public_key;
+        break;
+      }
+    }
+  }
+  if (!matchedP256) {
     throw new HttpError(401, 'invalid_signature', '设备子钥签名校验失败');
   }
 
@@ -169,8 +184,9 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   const sessionTtlSeconds = parsePositiveInt(env.SESSION_TTL_SECONDS, 86_400);
   const sessionToken = createId('sqs');
   const session: SessionState = {
+    cid_number: cidNumber,
     account_id: accountId,
-    device_key_hash: await sha256Hex(subkey.p256_public_key),
+    device_key_hash: await sha256Hex(matchedP256),
     created_at: nowMs(),
     expires_at: secondsFromNow(sessionTtlSeconds)
   };
@@ -192,6 +208,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   return jsonResponse({
     ok: true,
     session_token: sessionToken,
+    cid_number: cidNumber,
     account_id: accountId,
     expires_at: session.expires_at
   });
@@ -199,8 +216,11 @@ export async function createSession(request: Request, env: Env): Promise<Respons
 
 /// 注册 P-256 设备子钥：客户端用 sr25519 主钥对
 /// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, account_id ‖ p256_public_key ‖ issued_at)`
-/// 签名做绑定证明；后端复用 sr25519 验签确认子钥归属，落库（一账户一活跃子钥，
-/// 重注册覆盖 = 换机/轮换）。此后登录挑战改由该子钥静默签名。
+/// 签名做绑定证明；后端复用 sr25519 验签确认子钥归属，再由链上绑定解析出身份主键
+/// cid_number，落库主键 (cid_number, device_id)：同一身份可多设备并存（各一行），
+/// 同设备（同 P-256 公钥）重注册按 issued_at 单调覆盖 = 轮换/续期。子钥属生成它的
+/// 钱包 account_id；换绑后旧账户子钥由每请求链上绑定复查自然失效。此后登录挑战改由
+/// 该子钥静默签名。
 export async function registerDeviceSubkey(request: Request, env: Env): Promise<Response> {
   const body = await readJson<DeviceRegisterRequest>(request);
   await verifyTurnstile(request, env, body.turnstile_token);
@@ -237,21 +257,32 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
     throw new HttpError(401, 'invalid_binding_signature', '设备绑定签名校验失败');
   }
 
+  // 身份主键 = 该钱包账户链上当前绑定的 cid_number(占即绑,匿名亦可)。
+  // 未绑定 CID 的账户是访客,不能注册社交身份的设备子钥。
+  const identity = await fetchChainIdentityStateCached(env, accountId);
+  if (!identity.cid_number) {
+    throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法注册设备子钥');
+  }
+  const cidNumber = identity.cid_number;
+  // device_id = 该设备 P-256 公钥的 sha256:同一身份多设备各一行;换机(新公钥)=新设备。
+  const deviceId = await sha256Hex(p256PublicKey);
+
   const updated = await env.DB.prepare(
     `INSERT INTO square_device_subkeys
-      (account_id, p256_public_key, issued_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(account_id) DO UPDATE SET
+      (cid_number, device_id, account_id, p256_public_key, issued_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(cid_number, device_id) DO UPDATE SET
+        account_id = excluded.account_id,
         p256_public_key = excluded.p256_public_key,
         issued_at = excluded.issued_at,
         updated_at = excluded.updated_at
       WHERE excluded.issued_at > square_device_subkeys.issued_at`
   )
-    .bind(accountId, p256PublicKey, body.issued_at, now, now)
+    .bind(cidNumber, deviceId, accountId, p256PublicKey, body.issued_at, now, now)
     .run();
   if ((updated.meta?.changes ?? 0) !== 1) {
     throw new HttpError(409, 'stale_device_binding', '设备绑定证明已使用或早于当前绑定');
   }
 
-  return jsonResponse({ ok: true, account_id: accountId });
+  return jsonResponse({ ok: true, cid_number: cidNumber });
 }

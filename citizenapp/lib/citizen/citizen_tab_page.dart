@@ -30,17 +30,6 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
     return SafeArea(
       child: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
-            child: Text(
-              '公民',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
           _StyledTabs(
             tabs: _tabs,
             selectedIndex: _selectedTab,
@@ -132,7 +121,8 @@ class _StyledTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      // 删除重复页面标题后，二级导航顶边对齐原标题文字的起始位置。
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppTheme.surfaceMuted,

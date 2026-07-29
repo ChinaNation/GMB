@@ -10,7 +10,7 @@ import { nowMs } from '../shared/time';
 /// 价格、状态和到期时间都来自 finalized `square-post`；BFF 不计算公历。
 
 const MEMBERSHIP_COLUMNS =
-  `m.account_id, m.membership_level, m.started_at,
+  `m.cid_number, m.account_id, m.membership_level, m.started_at,
     m.last_charged_at, m.last_charged_price_fen, m.paid_until,
     m.subscription_status, m.finalized_block_number, m.finalized_block_hash,
     m.verified_at, m.entitlement_lapsed_at, m.last_tx_hash,
@@ -19,23 +19,24 @@ const MEMBERSHIP_COLUMNS =
 /// 链时钟超过三个计划 Cron 周期仍未刷新即拒绝，防止停更镜像无限放行已过期权益。
 export const CHAIN_CLOCK_MAX_STALENESS_MS = 15 * 60 * 1000;
 
-export async function getMembership(env: Env, accountId: string): Promise<MembershipRow | null> {
+/// 会员镜像按身份主键 cid_number 读取(account_id 仅为当前付款账户,不作归属键)。
+export async function getMembership(env: Env, cidNumber: string): Promise<MembershipRow | null> {
   return env.DB.prepare(
     `SELECT ${MEMBERSHIP_COLUMNS}
       FROM square_memberships m
       LEFT JOIN chain_clock c ON c.clock_id = 1
-      WHERE m.account_id = ?`
+      WHERE m.cid_number = ?`
   )
-    .bind(accountId)
+    .bind(cidNumber)
     .first<MembershipRow>();
 }
 
-/// 批量读会员：一页去重作者一条 IN() 查询（≤50 占位符），避免逐作者点查。
+/// 批量读会员：一页去重作者(身份主键 cid_number)一条 IN() 查询（≤50 占位符），避免逐作者点查。
 export async function batchMemberships(
   env: Env,
-  accountIds: string[]
+  cidNumbers: string[]
 ): Promise<Map<string, MembershipRow>> {
-  const distinct = [...new Set(accountIds)];
+  const distinct = [...new Set(cidNumbers)];
   const map = new Map<string, MembershipRow>();
   if (distinct.length === 0) {
     return map;
@@ -45,12 +46,12 @@ export async function batchMemberships(
     `SELECT ${MEMBERSHIP_COLUMNS}
       FROM square_memberships m
       LEFT JOIN chain_clock c ON c.clock_id = 1
-      WHERE m.account_id IN (${placeholders})`
+      WHERE m.cid_number IN (${placeholders})`
   )
     .bind(...distinct)
     .all<MembershipRow>();
   for (const row of result.results ?? []) {
-    map.set(row.account_id, row);
+    map.set(row.cid_number, row);
   }
   return map;
 }
@@ -58,9 +59,9 @@ export async function batchMemberships(
 /// 发布闸门（门禁2）：只要求订阅当前有效；解耦后不再校验身份、不再冻结。
 export async function requireActiveMembership(
   env: Env,
-  accountId: string
+  cidNumber: string
 ): Promise<MembershipRow> {
-  const membership = await getMembership(env, accountId);
+  const membership = await getMembership(env, cidNumber);
   if (!membership) {
     throw new HttpError(402, 'membership_required', '需要有效会员才能发布广场内容');
   }
@@ -73,7 +74,7 @@ export async function requireActiveMembership(
 
 export async function membershipRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  const membership = await getMembership(env, session.account_id);
+  const membership = await getMembership(env, session.cid_number);
   const active = membership ? subscriptionIsActive(membership) : false;
   return jsonResponse({
     ok: true,

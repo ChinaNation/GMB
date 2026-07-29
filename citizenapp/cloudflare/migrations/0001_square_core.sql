@@ -11,8 +11,12 @@ CREATE TABLE square_login_challenges (
 CREATE INDEX idx_square_login_challenges_account_id
   ON square_login_challenges(account_id, expires_at);
 
+-- 设备子钥:身份主键 cid_number(占即绑,挂当前绑定账户下)+ device_id(=P-256 公钥 sha256)。
+-- 子钥由钱包 account_id 生成、属于该账户;换绑后旧账户子钥靠链上绑定校验判失效,不迁移。
 CREATE TABLE square_device_subkeys (
-  account_id TEXT PRIMARY KEY CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   p256_public_key TEXT NOT NULL CHECK(
     length(p256_public_key) = 130
     AND substr(p256_public_key, 1, 2) = '04'
@@ -20,12 +24,15 @@ CREATE TABLE square_device_subkeys (
   ),
   issued_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(cid_number, device_id)
 );
+CREATE INDEX idx_square_device_subkeys_cid_account
+  ON square_device_subkeys(cid_number, account_id);
 
 CREATE TABLE square_request_nonces (
   nonce_hash TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
@@ -33,8 +40,9 @@ CREATE INDEX idx_square_request_nonces_expires
   ON square_request_nonces(expires_at);
 
 -- 通讯录只保存端到端密文；联系人账户、名称和关系明文不得进入 Cloudflare。
+-- 属主 = 身份主键 cid_number(换绑后随身份保留);Worker 只按 cid 隔离,不接触明文账户。
 CREATE TABLE square_contacts (
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
   contact_id TEXT NOT NULL CHECK(
     length(contact_id) = 64 AND contact_id NOT GLOB '*[^0-9a-f]*'
   ),
@@ -42,10 +50,10 @@ CREATE TABLE square_contacts (
   nonce TEXT NOT NULL,
   mac TEXT NOT NULL,
   updated_at INTEGER NOT NULL CHECK(updated_at > 0),
-  PRIMARY KEY(account_id, contact_id)
+  PRIMARY KEY(cid_number, contact_id)
 );
-CREATE INDEX idx_square_contacts_account_id_updated
-  ON square_contacts(account_id, updated_at DESC, contact_id DESC);
+CREATE INDEX idx_square_contacts_cid_number_updated
+  ON square_contacts(cid_number, updated_at DESC, contact_id DESC);
 
 CREATE TABLE square_rate_windows (
   rate_key TEXT PRIMARY KEY,
@@ -64,9 +72,11 @@ CREATE TABLE chain_clock (
   observed_at INTEGER NOT NULL
 );
 
--- 平台订阅 finalized 镜像。链账户 account_id 是唯一业务主键；价格、状态和时间只来自链上。
+-- 平台订阅 finalized 镜像。身份主键 cid_number 是唯一业务主键;account_id 为当前绑定的
+-- 付款/签名钱包账户(链上事实保留);价格、状态和时间只来自链上。
 CREATE TABLE square_memberships (
-  account_id TEXT PRIMARY KEY CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   membership_level TEXT NOT NULL,
   started_at INTEGER NOT NULL,
   last_charged_at INTEGER NOT NULL,
@@ -87,8 +97,10 @@ CREATE INDEX idx_square_memberships_lapsed
 CREATE INDEX idx_square_memberships_reconcile
   ON square_memberships(subscription_status, paid_until, verified_at);
 
--- 创作者档位展示镜像。每档以 creator_account_id + tier_id 为关系主键；价格仍以链上为真源。
+-- 创作者档位展示镜像。每档以创作者身份主键 creator_cid_number + tier_id 为关系主键;
+-- creator_account_id 为当前绑定钱包账户(链上事实保留);价格仍以链上为真源。
 CREATE TABLE square_creator_tiers (
+  creator_cid_number TEXT NOT NULL,
   creator_account_id TEXT NOT NULL CHECK(length(creator_account_id) = 66 AND substr(creator_account_id, 1, 2) = '0x' AND substr(creator_account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   tier_id TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -100,11 +112,14 @@ CREATE TABLE square_creator_tiers (
   finalized_block_hash TEXT NOT NULL,
   verified_at INTEGER NOT NULL,
   last_tx_hash TEXT NOT NULL,
-  PRIMARY KEY(creator_account_id, tier_id)
+  PRIMARY KEY(creator_cid_number, tier_id)
 );
 
--- 创作者订阅关系必须使用订阅者钱包 + 创作者钱包复合主键，允许同一账户订阅多个创作者。
+-- 创作者订阅关系以订阅者身份主键 + 创作者身份主键复合主键，允许同一身份订阅多个创作者。
+-- subscriber_account_id / creator_account_id 为各自当前绑定钱包账户(链上事实保留)。
 CREATE TABLE square_creator_subscriptions (
+  subscriber_cid_number TEXT NOT NULL,
+  creator_cid_number TEXT NOT NULL,
   subscriber_account_id TEXT NOT NULL CHECK(length(subscriber_account_id) = 66 AND substr(subscriber_account_id, 1, 2) = '0x' AND substr(subscriber_account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   creator_account_id TEXT NOT NULL CHECK(length(creator_account_id) = 66 AND substr(creator_account_id, 1, 2) = '0x' AND substr(creator_account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   tier_id TEXT NOT NULL,
@@ -118,10 +133,10 @@ CREATE TABLE square_creator_subscriptions (
   finalized_block_hash TEXT NOT NULL,
   verified_at INTEGER NOT NULL,
   last_tx_hash TEXT NOT NULL,
-  PRIMARY KEY(subscriber_account_id, creator_account_id)
+  PRIMARY KEY(subscriber_cid_number, creator_cid_number)
 );
 CREATE INDEX idx_square_creator_subscriptions_creator
-  ON square_creator_subscriptions(creator_account_id, subscription_status, paid_until);
+  ON square_creator_subscriptions(creator_cid_number, subscription_status, paid_until);
 CREATE INDEX idx_square_creator_subscriptions_reconcile
   ON square_creator_subscriptions(subscription_status, paid_until, verified_at);
 
@@ -143,6 +158,9 @@ CREATE INDEX idx_chain_transaction_confirmations_account_id
 CREATE TABLE square_uploads (
   upload_id TEXT PRIMARY KEY,
   post_id TEXT NOT NULL UNIQUE,
+  -- 身份主键:发起上传的 cid_number(占即绑,来自会话)。归属一律按此列。
+  cid_number TEXT NOT NULL,
+  -- 发起上传的钱包账户(当前绑定=后续发布签名者);作链上事实保留,不作身份归属键。
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   post_category TEXT NOT NULL,
   manifest_hash TEXT NOT NULL,
@@ -155,14 +173,17 @@ CREATE TABLE square_uploads (
   created_at INTEGER NOT NULL,
   completed_at INTEGER
 );
-CREATE INDEX idx_square_uploads_account_id
-  ON square_uploads(account_id, status, created_at);
+CREATE INDEX idx_square_uploads_cid_number
+  ON square_uploads(cid_number, status, created_at);
 CREATE INDEX idx_square_uploads_expires
   ON square_uploads(status, expires_at);
 
 CREATE TABLE square_media_assets (
   upload_id TEXT NOT NULL,
   post_id TEXT NOT NULL,
+  -- 身份主键:媒体所属 cid_number(随其 upload 归属)。
+  cid_number TEXT NOT NULL,
+  -- 上传该媒体的钱包账户(当前绑定);作链上事实保留,不作身份归属键。
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   media_index INTEGER NOT NULL,
   media_kind TEXT NOT NULL,
@@ -193,12 +214,14 @@ CREATE INDEX idx_square_media_post
 CREATE INDEX idx_square_media_state
   ON square_media_assets(asset_state, updated_at);
 CREATE INDEX idx_square_media_archive
-  ON square_media_assets(account_id, archive_state);
+  ON square_media_assets(cid_number, archive_state);
 
 CREATE TABLE square_posts (
   post_id TEXT PRIMARY KEY,
+  -- 身份主键:发布者 cid_number(由链上 SquarePostPublished 事件镜像,占即绑)。归属一律按此列。
+  cid_number TEXT NOT NULL,
+  -- 发布该帖的钱包账户(链上签名者=当前绑定);作链上事实保留,不作身份归属键。
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
-  cid_number TEXT,
   post_category TEXT NOT NULL,
   content_format TEXT NOT NULL,
   title TEXT,
@@ -211,52 +234,53 @@ CREATE TABLE square_posts (
 );
 CREATE INDEX idx_square_posts_feed
   ON square_posts(post_category, post_state, created_at);
-CREATE INDEX idx_square_posts_account_id
-  ON square_posts(account_id, post_state, created_at);
-CREATE INDEX idx_square_posts_account_id_format
-  ON square_posts(account_id, post_state, content_format, created_at);
+CREATE INDEX idx_square_posts_cid_number
+  ON square_posts(cid_number, post_state, created_at);
+CREATE INDEX idx_square_posts_cid_number_format
+  ON square_posts(cid_number, post_state, content_format, created_at);
 
+-- 关注关系纯 off-chain,双端均为身份主键 cid_number(关注者→被关注者)。
 CREATE TABLE square_follows (
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
-  followed_account_id TEXT NOT NULL CHECK(length(followed_account_id) = 66 AND substr(followed_account_id, 1, 2) = '0x' AND substr(followed_account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  follower_cid_number TEXT NOT NULL,
+  followed_cid_number TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   notify_enabled INTEGER NOT NULL DEFAULT 1,  -- 关注即默认开发帖通知；0=对该关注静音（仍在关注流，只是不进红点/推送）
-  PRIMARY KEY(account_id, followed_account_id)
+  PRIMARY KEY(follower_cid_number, followed_cid_number)
 );
 CREATE INDEX idx_square_follows_followed
-  ON square_follows(followed_account_id, created_at);
+  ON square_follows(followed_cid_number, created_at);
 
 -- 发帖通知「已读游标」：双游标分别驱动广场底部 tab 与关注子 tab 两个红点。
 -- 红点数 = 我 notify_enabled=1 的关注在对应游标之后发布的新帖数。
 -- 进广场清 last_seen_square_at、进关注子 tab 清 last_seen_following_at；只进广场不进关注→广场清、关注留。
 CREATE TABLE square_notify_reads (
-  account_id TEXT NOT NULL PRIMARY KEY CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL PRIMARY KEY,
   last_seen_square_at INTEGER NOT NULL DEFAULT 0,
   last_seen_following_at INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE square_user_signals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
   post_id TEXT NOT NULL,
   signal_type TEXT NOT NULL,
   weight REAL NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE INDEX idx_square_user_signals_account_id
-  ON square_user_signals(account_id, created_at);
+CREATE INDEX idx_square_user_signals_cid_number
+  ON square_user_signals(cid_number, created_at);
 
 CREATE TABLE square_browse_days (
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
   browse_day TEXT NOT NULL,
   browse_count INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY(account_id, browse_day)
+  PRIMARY KEY(cid_number, browse_day)
 );
 
 CREATE TABLE resource_reservations (
   reservation_id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
   resource_key TEXT NOT NULL,
   period_start INTEGER NOT NULL,
   period_end INTEGER NOT NULL,
@@ -268,11 +292,11 @@ CREATE TABLE resource_reservations (
   created_at INTEGER NOT NULL,
   used_at INTEGER
 );
-CREATE INDEX idx_resource_reservations_account_id
-  ON resource_reservations(account_id, resource_key, reservation_state, expires_at);
+CREATE INDEX idx_resource_reservations_cid_number
+  ON resource_reservations(cid_number, resource_key, reservation_state, expires_at);
 
 CREATE TABLE resource_usage (
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
   resource_key TEXT NOT NULL,
   period_start INTEGER NOT NULL,
   period_end INTEGER NOT NULL,
@@ -280,7 +304,7 @@ CREATE TABLE resource_usage (
   image_count INTEGER NOT NULL,
   video_seconds INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY(account_id, resource_key, period_start)
+  PRIMARY KEY(cid_number, resource_key, period_start)
 );
 
 CREATE TABLE resource_totals (
@@ -312,7 +336,10 @@ CREATE INDEX idx_chain_extrinsic_relays_tx_hash
 
 -- Chat 云端只保存建立端到端通道所需的最小公开材料。
 -- Chat 消息、会话、附件及联系人明文禁止进入 D1、KV、R2 或 Durable Object Storage。
+-- 设备名册按身份主键 cid_number 归属(收件寻址单元);account_id 为登记该设备的当前绑定
+-- 钱包账户(设备所有者,绑定签名主体),换绑后旧设备失效由重新注册处理。
 CREATE TABLE chat_devices (
+  cid_number TEXT NOT NULL,
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   device_id TEXT NOT NULL,
   device_public_key_hex TEXT NOT NULL,
@@ -320,12 +347,14 @@ CREATE TABLE chat_devices (
   push_token TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
-  PRIMARY KEY(account_id, device_id)
+  PRIMARY KEY(cid_number, device_id)
 );
-CREATE INDEX idx_chat_devices_account_id
-  ON chat_devices(account_id, expires_at);
+CREATE INDEX idx_chat_devices_cid_number
+  ON chat_devices(cid_number, expires_at);
 
+-- KeyPackage 按身份主键 cid_number 归属(拉取/领取寻址单元);account_id 为发布设备的所有者账户。
 CREATE TABLE chat_keypackages (
+  cid_number TEXT NOT NULL,
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   device_id TEXT NOT NULL,
   key_package_id TEXT PRIMARY KEY,
@@ -335,14 +364,15 @@ CREATE TABLE chat_keypackages (
   expires_at INTEGER NOT NULL
 );
 CREATE INDEX idx_chat_keypackages_available
-  ON chat_keypackages(account_id, expires_at, created_at);
+  ON chat_keypackages(cid_number, expires_at, created_at);
 
+-- 设备绑定 nonce 防重放,按身份主键 cid_number 归属。
 CREATE TABLE chat_device_binding_nonces (
-  account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  cid_number TEXT NOT NULL,
   nonce_hash TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
-  PRIMARY KEY(account_id, nonce_hash)
+  PRIMARY KEY(cid_number, nonce_hash)
 );
 CREATE INDEX idx_chat_device_binding_nonces_expires
   ON chat_device_binding_nonces(expires_at);

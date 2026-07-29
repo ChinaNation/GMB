@@ -1,5 +1,5 @@
 import { HttpError } from "../shared/http";
-import { assertAccountId } from "../shared/ids";
+import { assertAccountId, assertCidNumber } from "../shared/ids";
 
 const DEVICE_ID_PATTERN = /^[A-Za-z0-9_.:-]{3,128}$/;
 const KEY_PACKAGE_ID_PATTERN = /^[A-Za-z0-9_.:-]{3,160}$/;
@@ -15,6 +15,18 @@ export function assertChatAccountId(
     return assertAccountId(value);
   } catch {
     throw new HttpError(400, code, "聊天账户标识格式不合法");
+  }
+}
+
+/// 聊天收件/归属寻址单元 = 身份主键 cid_number(严格全称,非账户)。
+export function assertChatCidNumber(
+  value: unknown,
+  code = "invalid_chat_cid_number",
+): string {
+  try {
+    return assertCidNumber(value);
+  } catch {
+    throw new HttpError(400, code, "聊天身份标识 cid_number 格式不合法");
   }
 }
 

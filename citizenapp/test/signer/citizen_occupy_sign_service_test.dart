@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
@@ -11,19 +12,24 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _cid = 'CN220-CTZN2-198805200-2026';
 
-WalletProfile _wallet({String signMode = 'local'}) => WalletProfile(
-      walletIndex: 0,
-      walletName: '账户0',
-      walletIcon: '',
-      balance: 0,
+Account _account({int index = 0}) => Account(
+      masterId: '0x${'ab' * 32}',
+      accountIndex: index,
       accountId: '0x${'ab' * 32}',
       ss58Address: 'w5FhTestAddress',
-      alg: 'sr25519',
-      ss58: 42,
-      createdAtMillis: 0,
-      source: 'created',
-      signMode: signMode,
+      accountName: '账户$index',
     );
+
+class _FakeWalletManager extends WalletManager {
+  String? signedAccountId;
+
+  @override
+  Future<Uint8List> signForAccountId(
+      String accountId, Uint8List payload) async {
+    signedAccountId = accountId;
+    return Uint8List(64);
+  }
+}
 
 /// 造占号/换绑域签名 QR(b.u 留空、d=append_bounded(cid))。
 String _domainRaw({int? action, List<int>? payload}) {
@@ -53,15 +59,15 @@ void main() {
   });
 
   test('prepare 从 bounded d 解出 CID(占号)', () async {
-    final prep = await service.prepare(_domainRaw(), _wallet());
+    final prep = await service.prepare(_domainRaw(), _account());
     expect(prep.cidNumber, _cid);
     expect(prep.isOccupy, isTrue);
-    expect(prep.wallet.accountId, '0x${'ab' * 32}');
+    expect(prep.account.accountId, '0x${'ab' * 32}');
   });
 
   test('prepare 换绑动作 isOccupy=false', () async {
-    final prep =
-        await service.prepare(_domainRaw(action: QrActions.citizenRebind), _wallet());
+    final prep = await service.prepare(
+        _domainRaw(action: QrActions.citizenRebind), _account());
     expect(prep.isOccupy, isFalse);
     expect(prep.cidNumber, _cid);
   });
@@ -74,22 +80,24 @@ void main() {
       action: QrActions.citizenIdentity,
     ));
     await expectLater(
-      service.prepare(raw, _wallet()),
-      throwsA(isA<CitizenOccupySignException>()),
-    );
-  });
-
-  test('冷钱包不能代签', () async {
-    await expectLater(
-      service.prepare(_domainRaw(), _wallet(signMode: 'external')),
+      service.prepare(raw, _account()),
       throwsA(isA<CitizenOccupySignException>()),
     );
   });
 
   test('d 非合法 bounded cid 即拒(不签寂寞)', () async {
     await expectLater(
-      service.prepare(_domainRaw(payload: [0xff, 0xff, 0xff]), _wallet()),
+      service.prepare(_domainRaw(payload: [0xff, 0xff, 0xff]), _account()),
       throwsA(isA<CitizenOccupySignException>()),
     );
+  });
+
+  test('账户卡锁定的子账户直接作为占号签名账户', () async {
+    final account = _account(index: 5);
+    final manager = _FakeWalletManager();
+    final prep = await service.prepare(_domainRaw(), account);
+    await service.sign(prep, manager);
+    expect(prep.account.accountIndex, 5);
+    expect(manager.signedAccountId, account.accountId);
   });
 }

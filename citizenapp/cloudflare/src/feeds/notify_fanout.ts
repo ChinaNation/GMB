@@ -6,43 +6,44 @@ import { sendSquarePostAlert, type PushDevice } from '../chat/push';
 const FANOUT_PAGE = 100;
 
 interface FollowerRow {
-  account_id: string;
+  cid_number: string;
   created_at: number;
 }
 
-/// 扇出一页：拉一页「未静音粉丝」，取其未过期设备，逐台发可见推送；满页则续跑入队。
-/// 分页按 (created_at, account_id) keyset，避免多设备粉丝跨页错位（先分页粉丝，再取设备）。
+/// 扇出一页：拉一页「未静音粉丝」(身份主键 cid)，取其未过期推送设备，逐台发可见推送；
+/// 满页则续跑入队。分页按 (created_at, follower_cid_number) keyset，避免多设备粉丝跨页错位
+/// （先分页粉丝，再取设备）。R5 起 chat_devices 已按 cid_number 归属,直接按粉丝 cid 取设备。
 export async function fanOutPage(
   env: Env,
   job: SquareNotifyJob,
   pageSize: number = FANOUT_PAGE,
 ): Promise<void> {
   const cursorAt = job.cursor?.created_at ?? 0;
-  const cursorAccountId = job.cursor?.account_id ?? '';
+  const cursorCidNumber = job.cursor?.cid_number ?? '';
 
   const followers = await env.DB.prepare(
-    `SELECT account_id, created_at
+    `SELECT follower_cid_number AS cid_number, created_at
        FROM square_follows
-      WHERE followed_account_id = ?
+      WHERE followed_cid_number = ?
         AND notify_enabled = 1
-        AND (created_at, account_id) > (?, ?)
-      ORDER BY created_at ASC, account_id ASC
+        AND (created_at, follower_cid_number) > (?, ?)
+      ORDER BY created_at ASC, follower_cid_number ASC
       LIMIT ?`,
   )
-    .bind(job.author_account_id, cursorAt, cursorAccountId, pageSize)
+    .bind(job.author_cid_number, cursorAt, cursorCidNumber, pageSize)
     .all<FollowerRow>();
   const rows = followers.results ?? [];
   if (rows.length === 0) return;
 
-  const accounts = rows.map((row) => row.account_id);
-  const placeholders = accounts.map(() => '?').join(',');
+  const cidNumbers = rows.map((row) => row.cid_number);
+  const placeholders = cidNumbers.map(() => '?').join(',');
   const devices = await env.DB.prepare(
-    `SELECT push_provider, push_token
+    `SELECT DISTINCT push_provider, push_token
        FROM chat_devices
-      WHERE account_id IN (${placeholders})
+      WHERE cid_number IN (${placeholders})
         AND expires_at > ?`,
   )
-    .bind(...accounts, nowMs())
+    .bind(...cidNumbers, nowMs())
     .all<PushDevice>();
 
   const alert = buildAlert(job);
@@ -52,12 +53,12 @@ export async function fanOutPage(
     ),
   );
 
-  // 满页 → 续跑下一页（游标 = 本页末个粉丝）。不满页说明已到末尾，结束。
+  // 满页 → 续跑下一页（游标 = 本页末个粉丝 cid）。不满页说明已到末尾，结束。
   if (rows.length >= pageSize) {
     const last = rows[rows.length - 1];
     await env.SQUARE_NOTIFY_QUEUE?.send({
       ...job,
-      cursor: { created_at: last.created_at, account_id: last.account_id },
+      cursor: { created_at: last.created_at, cid_number: last.cid_number },
     });
   }
 }

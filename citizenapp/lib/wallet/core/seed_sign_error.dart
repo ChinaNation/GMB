@@ -9,5 +9,5 @@ String seedSignErrorMessage(SecureSeedException e) => switch (e) {
       AuthCancelled() => '已取消签名',
       NoDeviceCredential() => '请先在系统设置开启锁屏（密码 / 指纹 / 人脸）后再签名',
       SecureStoreUnavailable() => '读取签名密钥失败，请重试',
-      SeedKeyInvalidated() => '签名密钥已失效，请用助记词重新导入钱包',
+      SeedKeyInvalidated() => '设备安全存储中的签名私钥不可用',
     };

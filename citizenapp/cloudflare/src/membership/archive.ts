@@ -22,7 +22,7 @@ const MAX_VIDEOS_PER_SWEEP = 100;
 const RESTORE_MAX_DURATION_SECONDS = resourceLimit('square_video_spark').max_seconds!;
 const ARCHIVE_READ_URL_TTL_SECONDS = 3600;
 
-const MEDIA_COLUMNS = `upload_id, post_id, account_id, media_index, media_kind, provider,
+const MEDIA_COLUMNS = `upload_id, post_id, cid_number, account_id, media_index, media_kind, provider,
   provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
   declared_duration_seconds, duration_seconds, width, height,
   error_code, created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key`;
@@ -47,22 +47,22 @@ export async function runVideoArchiveSweep(env: Env): Promise<{ account_count: n
     return { account_count: 0, archived: 0 };
   }
   const cutoff = nowMs() - lapseDays(env) * DAY_MS;
-  const accountIds = await selectLapsedAccountIds(env, cutoff, MAX_ACCOUNTS_PER_SWEEP);
+  const cidNumbers = await selectLapsedCidNumbers(env, cutoff, MAX_ACCOUNTS_PER_SWEEP);
   let archived = 0;
-  for (const accountId of accountIds) {
+  for (const cidNumber of cidNumbers) {
     if (archived >= MAX_VIDEOS_PER_SWEEP) break;
-    const videos = await selectVideoAssets(env, accountId, 'live');
+    const videos = await selectVideoAssets(env, cidNumber, 'live');
     for (const video of videos) {
       if (archived >= MAX_VIDEOS_PER_SWEEP) break;
       if (await archiveVideoAsset(env, video)) archived += 1;
     }
   }
-  return { account_count: accountIds.length, archived };
+  return { account_count: cidNumbers.length, archived };
 }
 
-/// 重订解冻：把该 AccountId 已归档的视频回灌 Stream。由会员订阅重新生效时触发。
-export async function restoreAccountVideos(env: Env, accountId: string): Promise<{ restored: number }> {
-  const videos = await selectVideoAssets(env, accountId, 'archived');
+/// 重订解冻：把该身份主键 cid_number 已归档的视频回灌 Stream。由会员订阅重新生效时触发。
+export async function restoreAccountVideos(env: Env, cidNumber: string): Promise<{ restored: number }> {
+  const videos = await selectVideoAssets(env, cidNumber, 'archived');
   let restored = 0;
   for (const video of videos) {
     if (await restoreVideoAsset(env, video)) restored += 1;
@@ -70,11 +70,11 @@ export async function restoreAccountVideos(env: Env, accountId: string): Promise
   return { restored };
 }
 
-async function selectLapsedAccountIds(env: Env, cutoff: number, limit: number): Promise<string[]> {
+async function selectLapsedCidNumbers(env: Env, cutoff: number, limit: number): Promise<string[]> {
   const result = await env.DB.prepare(
-    `SELECT DISTINCT m.account_id
+    `SELECT DISTINCT m.cid_number
       FROM square_memberships m
-      JOIN square_media_assets a ON a.account_id = m.account_id
+      JOIN square_media_assets a ON a.cid_number = m.cid_number
       WHERE m.entitlement_lapsed_at IS NOT NULL
         AND m.entitlement_lapsed_at <= ?
         AND m.subscription_status IN ('cancelled', 'terminated')
@@ -83,20 +83,20 @@ async function selectLapsedAccountIds(env: Env, cutoff: number, limit: number): 
       LIMIT ?`
   )
     .bind(cutoff, limit)
-    .all<{ account_id: string }>();
-  return (result.results ?? []).map((row) => row.account_id);
+    .all<{ cid_number: string }>();
+  return (result.results ?? []).map((row) => row.cid_number);
 }
 
 async function selectVideoAssets(
   env: Env,
-  accountId: string,
+  cidNumber: string,
   archiveState: 'live' | 'archived'
 ): Promise<MediaAssetRow[]> {
   const result = await env.DB.prepare(
     `SELECT ${MEDIA_COLUMNS} FROM square_media_assets
-      WHERE account_id = ? AND media_kind = 'video' AND archive_state = ?`
+      WHERE cid_number = ? AND media_kind = 'video' AND archive_state = ?`
   )
-    .bind(accountId, archiveState)
+    .bind(cidNumber, archiveState)
     .all<MediaAssetRow>();
   return result.results ?? [];
 }

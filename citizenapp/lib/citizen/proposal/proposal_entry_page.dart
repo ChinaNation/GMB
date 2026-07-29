@@ -75,126 +75,131 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      body: Stack(
         children: [
           ChainProgressBanner(
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          // 机构信息
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: widget.badgeColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(widget.icon, size: 18, color: widget.badgeColor),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.institution.cidShortName,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.primaryDark,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: widget.badgeColor.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    OrgType.label(widget.institution.orgType),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: widget.badgeColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ──── 未激活签名钱包提示 ────
-          if (!widget.isActivated)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.textTertiary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppTheme.textTertiary.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: AppTheme.textTertiary),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '请先激活机构签名钱包；能否发起由链上机构 CID 与岗位码共同校验',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textTertiary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (widget.isActivated && _proposalBlockedReason != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.warning.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppTheme.warning.withValues(alpha: 0.2),
-                  ),
-                ),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              // 机构信息
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
                 child: Row(
                   children: [
-                    const Icon(Icons.sync_problem,
-                        size: 16, color: AppTheme.warning),
-                    const SizedBox(width: 8),
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: widget.badgeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child:
+                          Icon(widget.icon, size: 18, color: widget.badgeColor),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        _proposalBlockedReason!,
+                        widget.institution.cidShortName,
                         style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                          height: 1.4,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryDark,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: widget.badgeColor.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        OrgType.label(widget.institution.orgType),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: widget.badgeColor,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
 
-          // ──── 可发起提案(按主体能力 registry 渲染,单一真源) ────
-          _buildSectionTitle('可发起提案'),
-          ..._buildProposalCards(proposalActionsEnabled),
+              // ──── 未激活签名钱包提示 ────
+              if (!widget.isActivated)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.textTertiary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.textTertiary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 16, color: AppTheme.textTertiary),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '请先激活机构签名钱包；能否发起由链上机构 CID 与岗位码共同校验',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (widget.isActivated && _proposalBlockedReason != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.warning.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.sync_problem,
+                            size: 16, color: AppTheme.warning),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _proposalBlockedReason!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ──── 可发起提案(按主体能力 registry 渲染,单一真源) ────
+              _buildSectionTitle('可发起提案'),
+              ..._buildProposalCards(proposalActionsEnabled),
+            ],
+          ),
         ],
       ),
     );

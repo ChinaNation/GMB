@@ -310,132 +310,137 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      body: Stack(
         children: [
           ChainProgressBanner(
             busy: _submitting || _loadingBalance,
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          _buildInstitutionHeader(),
-          const SizedBox(height: 16),
-          _buildLabel('发起管理员'),
-          const SizedBox(height: 6),
-          _buildAdminSelector(),
-          const SizedBox(height: 16),
-          _buildLabel('提案发起岗位码'),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _proposerRoleCodeController,
-            maxLength: 64,
-            decoration: const InputDecoration(
-              hintText: 'NRC/PRC 委员，PRB 董事；动态机构填写链上岗位码',
-              filled: true,
-              fillColor: AppTheme.surfaceMuted,
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildLabel('转出账户（费用账户）'),
-          const SizedBox(height: 6),
-          _buildReadOnlyField(_fromSs58),
-          const SizedBox(height: 16),
-          _buildLabel('划入账户（本机构主账户）'),
-          const SizedBox(height: 6),
-          _buildReadOnlyField(_toSs58),
-          const SizedBox(height: 16),
-          _buildLabel('划转金额（元）'),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _amountController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [ThousandSeparatorFormatter()],
-            decoration: InputDecoration(
-              hintText: '最低 1.11 元',
-              hintStyle:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
-              filled: true,
-              fillColor: AppTheme.surfaceMuted,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.primaryDark),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.danger),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.danger),
-              ),
-              errorText: _amountError,
-              suffixText: '元',
-            ),
-            style: const TextStyle(fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          _buildInfoRow(
-            '预估手续费',
-            _estimatedFee > 0
-                ? '${AmountFormat.format(_estimatedFee, symbol: '')} 元'
-                : '--',
-          ),
-          const SizedBox(height: 8),
-          _buildInfoRow(
-            '费用账户可用余额',
-            _loadingBalance
-                ? '查询中...'
-                : _availableBalance != null
-                    ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
-                    : '查询失败',
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.primaryDark,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              _buildInstitutionHeader(),
+              const SizedBox(height: 16),
+              _buildLabel('发起管理员'),
+              const SizedBox(height: 6),
+              _buildAdminSelector(),
+              const SizedBox(height: 16),
+              _buildLabel('提案发起岗位码'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _proposerRoleCodeController,
+                maxLength: 64,
+                decoration: const InputDecoration(
+                  hintText: 'NRC/PRC 委员，PRB 董事；动态机构填写链上岗位码',
+                  filled: true,
+                  fillColor: AppTheme.surfaceMuted,
+                  border: OutlineInputBorder(),
                 ),
               ),
-              onPressed: _canSubmit ? _submit : null,
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      '提交手续费划转提案',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-            ),
-          ),
-          if (_submitBlockedReason != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _submitBlockedReason!,
-              style: const TextStyle(
-                fontSize: 12,
-                height: 1.4,
-                color: AppTheme.textSecondary,
+              const SizedBox(height: 16),
+              _buildLabel('转出账户（费用账户）'),
+              const SizedBox(height: 6),
+              _buildReadOnlyField(_fromSs58),
+              const SizedBox(height: 16),
+              _buildLabel('划入账户（本机构主账户）'),
+              const SizedBox(height: 6),
+              _buildReadOnlyField(_toSs58),
+              const SizedBox(height: 16),
+              _buildLabel('划转金额（元）'),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _amountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [ThousandSeparatorFormatter()],
+                decoration: InputDecoration(
+                  hintText: '最低 1.11 元',
+                  hintStyle: const TextStyle(
+                      color: AppTheme.textTertiary, fontSize: 14),
+                  filled: true,
+                  fillColor: AppTheme.surfaceMuted,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.primaryDark),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.danger),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.danger),
+                  ),
+                  errorText: _amountError,
+                  suffixText: '元',
+                ),
+                style: const TextStyle(fontSize: 14),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              _buildInfoRow(
+                '预估手续费',
+                _estimatedFee > 0
+                    ? '${AmountFormat.format(_estimatedFee, symbol: '')} 元'
+                    : '--',
+              ),
+              const SizedBox(height: 8),
+              _buildInfoRow(
+                '费用账户可用余额',
+                _loadingBalance
+                    ? '查询中...'
+                    : _availableBalance != null
+                        ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
+                        : '查询失败',
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.primaryDark,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: _canSubmit ? _submit : null,
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          '提交手续费划转提案',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ),
+              if (_submitBlockedReason != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _submitBlockedReason!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

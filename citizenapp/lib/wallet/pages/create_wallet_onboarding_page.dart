@@ -202,7 +202,7 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
                   const SizedBox(height: 20),
                   const _SecurityNoteRow(
                     icon: Icons.vpn_key_outlined,
-                    text: '助记词和密钥硬件加密存储在本机，转账/签名时验证身份',
+                    text: '账户私钥经硬件加密存储在本机，助记词不会保存',
                   ),
                   const SizedBox(height: 8),
                   const _SecurityNoteRow(

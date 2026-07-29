@@ -5,8 +5,11 @@ import { openChatWebSocket, submitChatEnvelope } from '../src/chat/service';
 import { relayChatPayload } from '../src/chat/realtime';
 import type { Env, SessionState } from '../src/types';
 
+// 会话绑定钱包账户(设备所有者/绑定签名主体);仍是 64-hex account_id。
 const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
-const RECIPIENT = '0x2222222222222222222222222222222222222222222222222222222222222222';
+// 身份主键 cid_number:会话身份=发件人,另一 cid=收件人。寻址与归属只认 cid_number。
+const SENDER_CID = 'CN220-CTZN2-198805200-2026';
+const RECIPIENT_CID = 'CN220-CTZN2-199001010-2026';
 
 class ChatStmt {
   private values: unknown[] = [];
@@ -17,8 +20,10 @@ class ChatStmt {
   }
   async first<T>(): Promise<T | null> {
     if (this.sql.includes('FROM chat_devices')) {
+      // requireActiveDevice 按 (cid_number, device_id) 定位;WHERE 绑定顺序 = cid, device, now。
       return {
-        account_id: this.values[0],
+        cid_number: this.values[0],
+        account_id: ACCOUNT_ID,
         device_id: this.values[1],
         device_public_key_hex: 'aabbcc',
         expires_at: Date.now() + 60_000,
@@ -37,8 +42,11 @@ class ChatStmt {
 class SessionKv {
   async get<T>(key: string): Promise<T | null> {
     if (key === 'square_session:test-session') {
+      // 会话 fixture 含身份主键 cid_number + 当前绑定 account_id(设备所有者)。
       return {
+        cid_number: SENDER_CID,
         account_id: ACCOUNT_ID,
+        device_key_hash: 'device-key-hash',
         created_at: Date.now(),
         expires_at: Date.now() + 60_000,
       } as T;
@@ -95,7 +103,7 @@ describe('device-only Chat transport', () => {
         body: JSON.stringify({
           envelope_id: 'env-123456',
           sender_device_id: 'alice-phone',
-          recipient_account_id: RECIPIENT,
+          recipient_cid_number: RECIPIENT_CID,
           envelope: 'AQID',
         }),
       }),
@@ -114,7 +122,7 @@ describe('device-only Chat transport', () => {
         body: JSON.stringify({
           envelope_id: 'env-queued',
           sender_device_id: 'alice-phone',
-          recipient_account_id: RECIPIENT,
+          recipient_cid_number: RECIPIENT_CID,
           envelope: 'AQID',
         }),
       }),
@@ -138,7 +146,7 @@ describe('device-only Chat transport', () => {
     expect((await response.json()) as { routed: boolean }).toMatchObject({ routed: true });
   });
 
-  it('routes only the transient payload to the recipient account object', async () => {
+  it('routes only the transient payload to the recipient identity object', async () => {
     let routedName = '';
     const env = fakeEnv();
     env.CHAT_REALTIME = {
@@ -149,13 +157,14 @@ describe('device-only Chat transport', () => {
     } as unknown as DurableObjectNamespace;
     const sent = await relayChatPayload(env, {
       type: 'gmb_chat_envelope_v2',
-      sender_account_id: ACCOUNT_ID,
-      recipient_account_id: RECIPIENT,
+      sender_cid_number: SENDER_CID,
+      recipient_cid_number: RECIPIENT_CID,
       recipient_device_id: null,
       envelope_id: 'env-route',
       envelope: 'AQID',
     });
     expect(sent).toBe(1);
-    expect(routedName).toBe(RECIPIENT);
+    // 只路由给收件人身份主键 cid_number 命名的 DO,不落库、不广播其他身份。
+    expect(routedName).toBe(RECIPIENT_CID);
   });
 });

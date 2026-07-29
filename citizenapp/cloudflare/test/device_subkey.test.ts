@@ -6,6 +6,18 @@ vi.mock('../src/auth/wallet_signature', () => ({
 vi.mock('../src/security/turnstile', () => ({
   verifyTurnstile: vi.fn()
 }));
+// 身份主键 = 该钱包账户链上绑定的 cid_number;注册/登录都先经此解析。
+const TEST_CID = 'CN220-CTZN2-198805200-2026';
+vi.mock('../src/chain/identity', () => ({
+  fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) => ({
+    account_id: accountId,
+    identity_level: 'visitor',
+    has_voting_identity: false,
+    has_candidate_identity: false,
+    cid_number: TEST_CID,
+    checked_at: 0
+  }))
+}));
 
 import {
   assertP256PublicKeyHex,
@@ -44,6 +56,8 @@ const DEVICE_BIND_GOLDEN_HEX =
 const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
 
 interface StoredSubkey {
+  cid_number: string;
+  device_id: string;
   account_id: string;
   p256_public_key: string;
   issued_at: number;
@@ -51,6 +65,8 @@ interface StoredSubkey {
   updated_at: number;
 }
 
+// 主键 (cid_number, device_id);绑定序对齐 service.ts 的 upsert:
+// (cid_number, device_id, account_id, p256_public_key, issued_at, created_at, updated_at)。
 class DeviceStmt {
   private binds: unknown[] = [];
   constructor(private readonly rows: Map<string, StoredSubkey>) {}
@@ -59,18 +75,22 @@ class DeviceStmt {
     return this;
   }
   async run(): Promise<{ meta: { changes: number } }> {
-    const accountId = this.binds[0] as string;
-    const issuedAt = this.binds[2] as number;
-    const current = this.rows.get(accountId);
+    const cidNumber = this.binds[0] as string;
+    const deviceId = this.binds[1] as string;
+    const key = `${cidNumber}:${deviceId}`;
+    const issuedAt = this.binds[4] as number;
+    const current = this.rows.get(key);
     if (current && issuedAt <= current.issued_at) {
       return { meta: { changes: 0 } };
     }
-    this.rows.set(accountId, {
-      account_id: accountId,
-      p256_public_key: this.binds[1] as string,
+    this.rows.set(key, {
+      cid_number: cidNumber,
+      device_id: deviceId,
+      account_id: this.binds[2] as string,
+      p256_public_key: this.binds[3] as string,
       issued_at: issuedAt,
-      created_at: current?.created_at ?? (this.binds[3] as number),
-      updated_at: this.binds[4] as number
+      created_at: current?.created_at ?? (this.binds[5] as number),
+      updated_at: this.binds[6] as number
     });
     return { meta: { changes: 1 } };
   }
@@ -186,26 +206,35 @@ describe('registerDeviceSubkey 原子单调更新', () => {
     mockVerify.mockResolvedValue(true);
   });
 
-  it('只接受时间窗内且严格更新的设备绑定', async () => {
+  it('同设备严格单调更新,新设备独立成行', async () => {
     const db = new DeviceDb();
     const env = { DB: db } as unknown as Env;
     const now = Date.now();
+    const pubA = `04${'a'.repeat(128)}`;
+    const pubB = `04${'b'.repeat(128)}`;
+    const rowFor = (pub: string) =>
+      [...db.rows.values()].find((row) => row.p256_public_key === pub);
+
+    // 设备 a 首次注册:挂在链上绑定账户的 cid_number 下。
     await expect(registerDeviceSubkey(registerRequest(now), env)).resolves.toBeInstanceOf(Response);
-    expect(db.rows.get(DEVICE_BIND_INPUT.account_id)?.issued_at).toBe(now);
+    expect(rowFor(pubA)?.issued_at).toBe(now);
+    expect(rowFor(pubA)?.cid_number).toBe(TEST_CID);
 
-    await expect(
-      registerDeviceSubkey(registerRequest(now), env)
-    ).rejects.toMatchObject({ code: 'stale_device_binding' });
-    await expect(
-      registerDeviceSubkey(registerRequest(now - 1), env)
-    ).rejects.toMatchObject({ code: 'stale_device_binding' });
+    // 同设备:相同/更早 issued_at 一律 stale。
+    await expect(registerDeviceSubkey(registerRequest(now), env))
+      .rejects.toMatchObject({ code: 'stale_device_binding' });
+    await expect(registerDeviceSubkey(registerRequest(now - 1), env))
+      .rejects.toMatchObject({ code: 'stale_device_binding' });
 
-    await expect(
-      registerDeviceSubkey(registerRequest(now + 1, `0x04${'b'.repeat(128)}`), env)
-    ).resolves.toBeInstanceOf(Response);
-    expect(db.rows.get(DEVICE_BIND_INPUT.account_id)?.p256_public_key).toBe(
-      `04${'b'.repeat(128)}`
-    );
+    // 同设备:更晚 issued_at → 覆盖更新。
+    await expect(registerDeviceSubkey(registerRequest(now + 1), env)).resolves.toBeInstanceOf(Response);
+    expect(rowFor(pubA)?.issued_at).toBe(now + 1);
+
+    // 新设备 b(不同 P-256 = 不同 device_id)→ 独立成行,不覆盖 a。
+    await expect(registerDeviceSubkey(registerRequest(now + 1, `0x${pubB}`), env)).resolves.toBeInstanceOf(Response);
+    expect(rowFor(pubB)?.p256_public_key).toBe(pubB);
+    expect(db.rows.size).toBe(2);
+    expect(rowFor(pubA)?.issued_at).toBe(now + 1);
   });
 
   it('拒绝非安全整数以及超出五分钟窗口的时间戳', async () => {

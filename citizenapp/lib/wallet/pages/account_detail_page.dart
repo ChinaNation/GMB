@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:citizenapp/8964/profile/user_qr_page.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
@@ -15,20 +16,18 @@ import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 /// - 充值 / 提现 / 零钱包（[WalletActionCard]，链下清算行零钱包按账户独立绑定）；
 /// - 清算行（[ClearingBankSettingsPage] 绑定 / 切换）；
 /// - 交易记录（[TransactionHistoryPage]，按账户 `account_id` 查询）；
-/// - SS58 地址与私钥（child mini-secret 独立、单向；导出单账户不牵连锚点账户0 或
-///   兄弟账户，展示前生物识别 + 防截屏 + 纯文本不可复制）；
-/// - 删除该账户 / 删除整只钱包（账户0 为锚点）。
+/// - 顶部完整 SS58 地址与全 App 唯一用户二维码；
+/// - AppBar 菜单中的私钥（child mini-secret 独立、单向；展示前生物识别 +
+///   防截屏 + 纯文本不可复制）。
 ///
 /// 追加账户不在本页：收在「我的钱包」列表右上角「＋」的「添加下一个账户 / 添加指定账户」。
 class AccountDetailPage extends StatefulWidget {
   const AccountDetailPage({
     super.key,
     required this.account,
-    required this.walletName,
   });
 
   final Account account;
-  final String walletName;
 
   @override
   State<AccountDetailPage> createState() => _AccountDetailPageState();
@@ -41,8 +40,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   final GlobalKey<WalletActionCardState> _actionCardKey =
       GlobalKey<WalletActionCardState>();
 
-  String? _privateKey;
-  bool _privateKeyVisible = false;
   bool _screenshotGuardActive = false;
 
   /// 该账户最近交易记录(最多 5 条),按 `account_id` 查询。
@@ -111,19 +108,62 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    String? key;
     try {
-      final key =
-          await _walletManager.getAccountPrivateKey(widget.account.accountId);
+      key = await _walletManager.getAccountPrivateKey(widget.account.accountId);
       if (!mounted) return;
       if (!_screenshotGuardActive) {
         _screenshotGuardActive = true;
         await ScreenshotGuard.enable();
         if (!mounted) return;
       }
-      setState(() {
-        _privateKey = key;
-        _privateKeyVisible = true;
-      });
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('私钥'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.danger.withAlpha(15),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  border: Border.all(color: AppTheme.danger.withAlpha(40)),
+                ),
+                // 普通 Text 不提供选择/复制菜单，避免私钥进入剪贴板。
+                child: Text(
+                  key!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    color: AppTheme.textPrimary,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                '请手抄备份，不支持复制；导出即等于该账户控制权',
+                style: TextStyle(
+                  color: AppTheme.danger,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
     } on WalletAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -134,76 +174,21 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('验证失败：$e')),
       );
-    }
-  }
-
-  void _hidePrivateKey() {
-    setState(() {
-      _privateKeyVisible = false;
-      _privateKey = null;
-    });
-  }
-
-  /// 删除：账户0 是钱包锚点 → 删除整只热钱包（连带全部账户）；其余账户 → 单删。
-  Future<void> _delete() async {
-    final isAnchor = widget.account.accountIndex == 0;
-    final title = isAnchor ? '删除钱包' : '删除该账户';
-    final message = isAnchor
-        ? '账户0 是「${widget.walletName}」的锚点，删除将移除该钱包下的全部账户，且无法撤销。'
-            '请确认已备份助记词（可用它重新恢复）。'
-        : '确定删除「${widget.account.accountName}」？该账户可用钱包助记词重新派生找回。';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    try {
-      if (isAnchor) {
-        await _deleteWholeWallet();
-      } else {
-        await _walletManager.deleteAccount(widget.account.accountId);
+    } finally {
+      // 私钥弹窗关闭后立即释放页面引用并恢复截屏策略，不把敏感信息留在详情页状态中。
+      key = null;
+      if (_screenshotGuardActive) {
+        _screenshotGuardActive = false;
+        await ScreenshotGuard.disable();
       }
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败：$e')),
-      );
     }
-  }
-
-  /// 账户0 无 walletIndex 入参：按 masterId 反查这只热钱包再整只删除。
-  Future<void> _deleteWholeWallet() async {
-    final wallets = await _walletManager.getWallets();
-    final hot = wallets.where(
-      (wallet) =>
-          wallet.isHotWallet && wallet.accountId == widget.account.masterId,
-    );
-    if (hot.isEmpty) {
-      throw Exception('未找到对应钱包');
-    }
-    await _walletManager.deleteWallet(hot.first.walletIndex);
   }
 
   void _copy(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label已复制'), duration: const Duration(seconds: 1)),
+      SnackBar(
+          content: Text('$label已复制'), duration: const Duration(seconds: 1)),
     );
   }
 
@@ -221,19 +206,71 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     await _actionCardKey.currentState?.refresh();
   }
 
+  /// 账户卡右上角二维码复用全 App 唯一用户码，不另造钱包码或协议。
+  Future<void> _openUserQr() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UserQrPage(
+          contactName: widget.account.accountName,
+          accountId: widget.account.accountId,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onMenuAction(String action) async {
+    switch (action) {
+      case 'clearing_bank':
+        await _openClearingBank();
+      case 'private_key':
+        await _revealPrivateKey();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.account;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        // 删除账户走 _delete 内的 pop(true);普通返回不改动账户集合,回传 false。
+        // 本页只读账户资料；重命名和删除已统一收口到上级账户卡片菜单。
         if (!didPop) Navigator.of(context).pop(false);
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('账户详情'),
           centerTitle: true,
+          actions: [
+            PopupMenuButton<String>(
+              tooltip: '账户操作',
+              icon: const Icon(Icons.more_vert),
+              onSelected: _onMenuAction,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'clearing_bank',
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_balance_outlined,
+                          size: 18, color: AppTheme.textSecondary),
+                      SizedBox(width: 10),
+                      Text('清算行'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'private_key',
+                  child: Row(
+                    children: [
+                      Icon(Icons.key_outlined,
+                          size: 18, color: AppTheme.textSecondary),
+                      SizedBox(width: 10),
+                      Text('查看私钥'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         body: RefreshIndicator(
           onRefresh: _onPullRefresh,
@@ -254,35 +291,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              _buildClearingBankRow(),
-              const SizedBox(height: 12),
               _buildTransactionHistoryCard(),
-              const SizedBox(height: 20),
-              Container(
-                decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-                child: Column(
-                  children: [
-                    _buildSs58Tile(),
-                    const Divider(height: 1, indent: 16, endIndent: 16),
-                    _buildPrivateKeyTile(),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: _delete,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.danger,
-                  side: const BorderSide(color: AppTheme.danger),
-                ),
-                icon: Icon(
-                  account.accountIndex == 0
-                      ? Icons.delete_forever_outlined
-                      : Icons.delete_outline,
-                  size: 18,
-                ),
-                label: Text(account.accountIndex == 0 ? '删除钱包' : '删除该账户'),
-              ),
             ],
           ),
         ),
@@ -293,113 +302,111 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   Widget _buildHeader() {
     final account = widget.account;
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: AppTheme.primaryGradient,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(38),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            ),
-            child: Text(
-              '#${account.accountIndex}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
+          Padding(
+            padding: const EdgeInsets.all(20),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  account.accountName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(38),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                      ),
+                      child: Text(
+                        '#${account.accountIndex}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      // 二维码覆盖卡片右上角，账户名只在首行避让它。
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 36),
+                        child: Text(
+                          account.accountName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '${widget.walletName} · ${account.derivationPath}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withAlpha(200),
+                Padding(
+                  // 地址独占第二行，不再为上方二维码预留宽度；复制按钮贴齐内容右边界。
+                  padding: const EdgeInsets.only(left: 58),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          account.ss58Address,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                            color: Colors.white.withAlpha(210),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '复制 SS58 地址',
+                        visualDensity: VisualDensity.compact,
+                        constraints:
+                            const BoxConstraints(minWidth: 44, minHeight: 44),
+                        padding: EdgeInsets.zero,
+                        onPressed: () => _copy(account.ss58Address, 'SS58 地址'),
+                        icon: Icon(
+                          Icons.copy_rounded,
+                          size: 16,
+                          color: Colors.white.withAlpha(220),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  /// 清算行入口:整卡点击进「设置清算行」(绑定 / 切换)。
-  Widget _buildClearingBankRow() {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: _openClearingBank,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withAlpha(20),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                ),
-                child: const Icon(Icons.account_balance_outlined,
-                    size: 20, color: AppTheme.primaryDark),
+          Positioned(
+            // Stack 覆盖整张卡片，避免被内容区 20dp padding 再向内挤。
+            top: 8,
+            right: 8,
+            child: IconButton(
+              tooltip: '账户二维码',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              padding: EdgeInsets.zero,
+              onPressed: _openUserQr,
+              icon: const Icon(
+                Icons.qr_code_rounded,
+                size: 20,
+                color: Colors.white,
               ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '清算行',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      '绑定 / 切换清算行',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textTertiary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right,
-                  size: 20, color: AppTheme.textTertiary),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -475,139 +482,5 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
           );
         }),
     ];
-  }
-
-  Widget _buildSs58Tile() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'SS58 地址',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SelectableText(
-                  widget.account.ss58Address,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                    color: AppTheme.textPrimary,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.copy_rounded,
-                    size: 16, color: AppTheme.primaryLight),
-                tooltip: '复制',
-                onPressed: () =>
-                    _copy(widget.account.ss58Address, 'SS58 地址'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrivateKeyTile() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '私钥',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (!_privateKeyVisible)
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: _revealPrivateKey,
-                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                child: Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceElevated,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: AppTheme.border),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.visibility_off_rounded,
-                          color: AppTheme.textTertiary, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        '点击查看私钥',
-                        style: TextStyle(
-                            color: AppTheme.textTertiary, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.danger.withAlpha(15),
-                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                border: Border.all(color: AppTheme.danger.withAlpha(40)),
-              ),
-              // 纯 Text（非 SelectableText）→ 不可复制。
-              child: Text(
-                _privateKey ?? '无数据',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                  color: AppTheme.textPrimary,
-                  height: 1.6,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '请手抄备份，不支持复制；导出即等于该账户控制权',
-                    style: TextStyle(
-                      color: AppTheme.danger,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _hidePrivateKey,
-                  icon: const Icon(Icons.visibility_off_rounded, size: 16),
-                  label: const Text('隐藏'),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }

@@ -70,7 +70,7 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('交易页显示扫一扫和多签账户入口', (tester) async {
+  testWidgets('交易页顶栏显示链状态且保留扫一扫和多签账户入口', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
@@ -82,11 +82,43 @@ void main() {
     // 个人多签账户列表已经迁入交易页入口，机构多签不在这里展示。
     // 链上支付主体字段(收款地址 / 金额 / 签名交易)由 `OnchainPaymentPanel`
     // 在选中钱包后渲染,本测试只校验顶层入口结构。
-    expect(find.text('交易'), findsOneWidget);
+    expect(find.text('交易'), findsNothing);
     expect(find.byTooltip('我的通讯录'), findsOneWidget);
     expect(find.byTooltip('选择交易钱包'), findsOneWidget);
     expect(find.byType(ChainProgressBanner), findsOneWidget);
-    expect(find.text('公民链 更新中'), findsOneWidget);
+    expect(find.text('公民链'), findsOneWidget);
+    expect(find.text('最终区块 —'), findsOneWidget);
+    final chainLabel = tester.widget<Text>(find.text('公民链'));
+    final finalizedLabel = tester.widget<Text>(find.text('最终区块 —'));
+    expect(chainLabel.style?.color, AppTheme.info);
+    expect(finalizedLabel.style?.color, AppTheme.info);
+    expect(find.textContaining('已更新'), findsNothing);
+    expect(find.textContaining('更新中'), findsNothing);
+    expect(find.textContaining('连接失败'), findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey<String>('transaction-chain-status-inline'),
+      ),
+      findsOneWidget,
+    );
+    final centerGap = tester.getRect(
+      find.byKey(
+        const ValueKey<String>('transaction-chain-status-center-gap'),
+      ),
+    );
+    final screenWidth = tester.getSize(find.byType(Scaffold).first).width;
+    expect(centerGap.center.dx, closeTo(screenWidth / 2, 0.01));
+    // 交易顶栏状态不再使用原卡片中的竖线；扫一扫/多签卡片的竖线仍保留。
+    expect(
+      find.byKey(
+        const ValueKey<String>('transaction-chain-status-divider'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('transaction-entry-divider')),
+      findsOneWidget,
+    );
     expect(find.text('扫一扫'), findsOneWidget);
     expect(find.text('多签账户'), findsOneWidget);
     expect(find.byIcon(Icons.share_outlined), findsOneWidget);
@@ -245,7 +277,7 @@ void main() {
     expect(find.textContaining('钱包可用余额：100.00 GMB'), findsOneWidget);
   });
 
-  testWidgets('交易页下拉刷新重载余额+本地记录且保留连接状态栏', (tester) async {
+  testWidgets('独立链上支付下拉刷新重载数据且保留后台链状态读取', (tester) async {
     var walletLoads = 0;
     var recordLoads = 0;
     final payer = _wallet(
@@ -274,8 +306,16 @@ void main() {
     );
     await _pumpUntilFound(tester, find.textContaining('钱包可用余额：100'));
 
-    // 连接状态栏仍在交易页顶部；下拉刷新组件就位。
+    // 独立链上支付页只保留后台状态读取；下拉刷新组件仍就位。
     expect(find.byType(ChainProgressBanner), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey<String>('transaction-chain-status-inline'),
+      ),
+      findsNothing,
+    );
+    expect(find.text('公民链'), findsNothing);
+    expect(find.textContaining('最终区块'), findsNothing);
     expect(find.byType(RefreshIndicator), findsOneWidget);
     final walletLoadsAfterInit = walletLoads;
     final recordLoadsAfterInit = recordLoads;

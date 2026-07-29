@@ -1,9 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLoginChallenge, createSession } from '../src/auth/service';
 import { hexToBytes, signingMessage } from '../src/shared/signing_message';
+import { sha256Hex } from '../src/shared/hash';
 import type { Env } from '../src/types';
 
 const ACCOUNT_ID = '0x1111111111111111111111111111111111111111111111111111111111111111';
+// 身份主键 = 该钱包账户链上绑定的 cid_number;登录先解析它(测试里 mock 掉链)。
+const TEST_CID = 'CN220-CTZN2-198805200-2026';
+vi.mock('../src/chain/identity', () => ({
+  fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) => ({
+    account_id: accountId,
+    identity_level: 'visitor',
+    has_voting_identity: false,
+    has_candidate_identity: false,
+    cid_number: 'CN220-CTZN2-198805200-2026',
+    checked_at: 0
+  }))
+}));
 
 interface ChallengeRow {
   challenge_id: string;
@@ -51,17 +64,32 @@ class AuthStmt {
     if (this.sql.includes('FROM square_login_challenges')) {
       return (this.db.challenges.get(this.binds[0] as string) as T) ?? null;
     }
-    if (this.sql.includes('FROM square_device_subkeys')) {
-      const pubkey = this.db.subkeys.get(this.binds[0] as string);
-      return pubkey ? ({ p256_public_key: pubkey } as T) : null;
-    }
     return null;
   }
+  // 登录按 (cid_number, account_id) 取该身份+账户下的全部设备子钥(可多设备)。
+  async all<T>(): Promise<{ results: T[] }> {
+    if (this.sql.includes('FROM square_device_subkeys')) {
+      const cid = this.binds[0] as string;
+      const accountId = this.binds[1] as string;
+      const results = [...this.db.subkeys.values()]
+        .filter((row) => row.cid_number === cid && row.account_id === accountId)
+        .map((row) => ({ p256_public_key: row.p256_public_key }));
+      return { results: results as T[] };
+    }
+    return { results: [] };
+  }
+}
+
+interface StoredSubkey {
+  cid_number: string;
+  device_id: string;
+  account_id: string;
+  p256_public_key: string;
 }
 
 class AuthDb {
   readonly challenges = new Map<string, ChallengeRow>();
-  readonly subkeys = new Map<string, string>();
+  readonly subkeys = new Map<string, StoredSubkey>();
   prepare(sql: string): AuthStmt {
     return new AuthStmt(this, sql);
   }
@@ -116,7 +144,13 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
       ['sign', 'verify']
     );
     const pubHex = toHex(await crypto.subtle.exportKey('raw', keyPair.publicKey));
-    db.subkeys.set(ACCOUNT_ID, pubHex);
+    const deviceId = await sha256Hex(pubHex);
+    db.subkeys.set(`${TEST_CID}:${deviceId}`, {
+      cid_number: TEST_CID,
+      device_id: deviceId,
+      account_id: ACCOUNT_ID,
+      p256_public_key: pubHex
+    });
     return { db, kv, env, keyPair };
   }
 
