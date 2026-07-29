@@ -36,7 +36,8 @@ class CitizenProfile {
   /// 认证真源=链上，徽章据此分色（访客橙/投票蓝/竞选红）。
   final String identityLevel;
 
-  /// 已购买的会员档位（公开）：visitor/voting/candidate/null。徽章「勾」= 会员档匹配身份档。
+  /// 已购买的会员档位（公开）：freedom/democracy/spark/null（未购买）。
+  /// ADR-036 起与链上身份档彻底解耦：徽章「勾」= 会员订阅有效，与 [identityLevel] 无关。
   final String? membershipLevel;
 
   /// 会员是否当前有效。
@@ -175,12 +176,13 @@ String _asIdentityLevel(Object? value) {
 }
 
 /// 归一化会员档位；未知/缺失/未购买 → null（不给勾）。
+/// 会员三档 = freedom / democracy / spark；ADR-036 起会员与链上身份档彻底解耦，
+/// voting / candidate 是身份档（identity_level），绝不能出现在会员白名单里。
 String? _asMembershipLevel(Object? value) {
   final normalized = value?.toString().trim();
   return (normalized == 'freedom' ||
           normalized == 'democracy' ||
-          normalized == 'voting' ||
-          normalized == 'candidate')
+          normalized == 'spark')
       ? normalized
       : null;
 }

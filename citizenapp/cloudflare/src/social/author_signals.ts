@@ -1,5 +1,5 @@
 import type { Env } from '../types';
-import { fetchChainIdentityStateCached, type IdentityLevel } from '../chain/identity';
+import { fetchChainIdentityStateByCidCached, type IdentityLevel } from '../chain/identity';
 import { batchMemberships, subscriptionIsActive } from '../membership/service';
 import type { MembershipLevel } from '../membership/plans';
 import { readProfileDoc } from '../profiles/repository';
@@ -18,30 +18,23 @@ export interface AuthorSignals {
 
 /// 为一页帖子的去重作者集统一解析徽章信号,返回 Map(键 = 身份主键 cid_number)。
 ///
-/// 身份走 [fetchChainIdentityStateCached]（KV 45s 缓存 + 读链失败软降级为访客）按作者
-/// **当前绑定钱包账户** account_id 并发读；会员镜像同按 account_id 一条 IN() 批量读;
-/// 公开资料 profile.json 按**身份主键 cid_number** 读(换绑不丢)。与主页 buildProfileResponse
-/// 的单作者路径同源，口径一致。入参每项含 (cid_number, 当前 account_id),二者来自 post 行两列。
+/// 三项全部按**身份主键 cid_number** 读:链身份走 [fetchChainIdentityStateByCidCached]
+/// (KV 45s 缓存 + 读链失败软降级为访客)、会员镜像一条 IN() 批量读、公开资料 profile.json。
+/// **不得按 post 行的 account_id 读链身份** —— 那是发帖当时的签名账户,作者换绑后该账户
+/// 已不再绑定任何 CID,会让其历史帖徽章整体降级 visitor,与主页 buildProfileResponse
+/// (按 cid 读)自相矛盾。与主页单作者路径同源,口径一致。
 export async function resolveAuthorSignals(
   env: Env,
   authors: { cid_number: string; account_id: string }[]
 ): Promise<Map<string, AuthorSignals>> {
   const map = new Map<string, AuthorSignals>();
-  // 按身份主键 cid_number 去重(同一身份多帖只解析一次);值取该身份当前绑定账户。
-  const distinct = new Map<string, string>();
-  for (const author of authors) {
-    if (!distinct.has(author.cid_number)) {
-      distinct.set(author.cid_number, author.account_id);
-    }
-  }
-  if (distinct.size === 0) {
+  // 按身份主键 cid_number 去重(同一身份多帖只解析一次)。
+  const cidList = [...new Set(authors.map((author) => author.cid_number))];
+  if (cidList.length === 0) {
     return map;
   }
-  const cidList = [...distinct.keys()];
-  const accountList = [...distinct.values()];
   const [identities, membershipMap, profiles] = await Promise.all([
-    // 链身份按当前绑定账户读(链查入口 = account_id);会员镜像与资料均按身份主键 cid_number 读。
-    Promise.all(accountList.map((accountId) => fetchChainIdentityStateCached(env, accountId))),
+    Promise.all(cidList.map((cidNumber) => fetchChainIdentityStateByCidCached(env, cidNumber))),
     batchMemberships(env, cidList),
     // 去重作者的 profile.json 并行读；缺失（未建资料）软降级为空名 + 无头像。
     Promise.all(cidList.map((cidNumber) => readProfileDoc(env, cidNumber).catch(() => null)))

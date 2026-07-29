@@ -108,10 +108,14 @@ export async function registerChatDevice(request: Request, env: Env): Promise<Re
     expires_at: expiresAt,
     nonce,
   };
-  const subkey = await env.DB.prepare(`SELECT p256_public_key FROM square_device_subkeys WHERE account_id = ?`)
-    .bind(accountId)
+  // 子钥按 (cid_number, device_id) 精确定位当前请求所在设备(device_id == 会话
+  // device_key_hash == sha256(p256));同一身份多设备并存时不得用别的设备公钥验签。
+  const subkey = await env.DB.prepare(
+    `SELECT p256_public_key FROM square_device_subkeys WHERE cid_number = ? AND device_id = ?`
+  )
+    .bind(cidNumber, session.device_key_hash)
     .first<{ p256_public_key: string }>();
-  if (!subkey) throw new HttpError(401, 'missing_device_subkey', '当前账户尚未登记硬件设备子钥');
+  if (!subkey) throw new HttpError(401, 'missing_device_subkey', '当前身份尚未登记硬件设备子钥');
   // 跨端签名文本须为 `0x`+128hex（ADR-041）；裸/大写/错长与验签失败一律 401。
   const bindingSignatureBare = normalizeP256SignatureHex(body.binding_signature);
   if (

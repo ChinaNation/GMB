@@ -33,9 +33,9 @@ function requireRelayBucket(env: Env): R2Bucket {
   return bucket;
 }
 
-/// 仅薪火会员(有效订阅)可上传大文件。
-async function requireSpark(env: Env, accountId: string): Promise<void> {
-  const membership = await getMembership(env, accountId);
+/// 仅薪火会员(有效订阅)可上传大文件。会员镜像按身份主键 cid_number 归属(R3)。
+async function requireSpark(env: Env, cidNumber: string): Promise<void> {
+  const membership = await getMembership(env, cidNumber);
   if (
     !membership ||
     !subscriptionIsActive(membership) ||
@@ -67,7 +67,7 @@ function assertObjectKey(raw: string): string {
 export async function initChatRelay(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   requireRelayBucket(env);
-  await requireSpark(env, session.account_id);
+  await requireSpark(env, session.cid_number);
   const body = await readJson<InitRelayBody>(request);
   const byteSize =
     typeof body.byte_size === 'number' ? body.byte_size : Number(body.byte_size);
@@ -89,7 +89,7 @@ export async function putChatRelayBlob(
 ): Promise<Response> {
   const session = await requireSession(request, env);
   const bucket = requireRelayBucket(env);
-  await requireSpark(env, session.account_id);
+  await requireSpark(env, session.cid_number);
   const objectKey = assertObjectKey(objectKeyRaw);
   if (!request.body) {
     throw new HttpError(400, 'relay_body_missing', '缺少上传内容');

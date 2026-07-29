@@ -124,5 +124,31 @@ Worker 全库用户数据身份主键 account_id→cid_number 彻底重构完成
 - **F2 Flutter 广场/社交**:`square_api_client` 三接口 URL 传目标 cid、`fetchFollows` 响应键 `accounts`→`entries`、关注/取关/通知按 cid;`SquareFollowEntry.accountId`→`cidNumber`;`UserProfilePage` 主键 `accountId`→`cidNumber`(feed 作者点击/关注列表/通讯录入口全传 cid);创作者订阅/DM/QR 等**链上交易入参**从 profile 响应的 `account_id` 取(链验签仍按 account);资料缓存前缀 v2→v3 且缓存键改 cid。
 - **F3 Flutter chat**:传输层 `recipient_cid_number`/`cid_number`/`targetCidNumber`(领取删 requester);新增 `lib/chat/identity/peer_cid_resolver.dart`(进程缓存→链读 `CitizenIdentityChainReader.readByAccountId`→回写 `UserContact.cidNumber`;未绑定 CID **显式抛错 fail-closed**);`UserContact` 加 `cidNumber` 字段;群扇出 `_resolveRecipientCids` 建 per-member 映射;Isar `ChatOutboundQueueEntity`/`ChatOutgoingMediaEntity` 加 `recipientCidNumber`(build_runner 重生成);推送唤醒读 `sender_cid_number`;WS 身份由 session 表达(前端无改)。**MLS 身份分离铁律**:`MlsKeyPackage` 同时存 `accountId`(MLS 成员名册对齐,绝不被 cid 覆盖)与 `cidNumber`(路由);proto `ChatEnvelope` 内嵌 `recipient_account_id` 保留供 MLS/归属。
 - **F4 creator + 会话主键**:`CreatorPlan.creatorAccountId`→`creatorCidNumber`(唯一 cid 真源=worker plan 响应);**`SquareSession` 新增必填 `cidNumber`**(worker 登录响应本已下发 `cid_number`,本端 cid 不再需链读)——`nickname_publisher` 等"读本人云端资料"改用 `session.cidNumber`;通讯录页资料改按 cid 索引并解析。
-- **门禁**:worker `tsc` EXIT=0 + `vitest` 181 全绿;Flutter `dart analyze lib/ test/` **No issues found** + `flutter test` **913 通过**(~5 skip = libsmoldot 原生库跳过)。
-- **最终审计**:前端残留的 `recipient_account_id`(proto 内嵌/注释)、`creator_account_id`(订阅确认入参)、QR 收款方字段均为**设计保留**;裸 `account` 仅剩 `_ChatAccountContext.account`(账户上下文对象,非 ID 字符串),`group_flow` 循环变量已改 `accountId`。严格 Substrate 命名达成。
+- **门禁**:worker `tsc` EXIT=0 + `vitest` 全绿;Flutter `dart analyze lib/ test/` **No issues found** + `flutter test` 全绿。
+- **命名审计**:前端残留的 `recipient_account_id`(proto 内嵌/注释)、`creator_account_id`(订阅确认入参)、QR 收款方字段均为**设计保留**;裸 `account` 仅剩 `_ChatAccountContext.account`(账户上下文对象,非 ID 字符串),`group_flow` 循环变量已改 `accountId`。严格 Substrate 命名达成。
+
+## 全面审计 + 修复(2026-07-28,四路并行独立审计后)
+四个独立 agent(契约一致性 / 安全 / 代码质量命名 / 门禁文档)交叉审计,**发现并已修复 6 项实缺陷**(每条均已回原文核验为真,非 grep 误判):
+
+| 级别 | 缺陷 | 修复 |
+|---|---|---|
+| **CRITICAL** | worker `chain/identity.ts` 用的链上 storage 项名是**改名前旧名** `WalletAccountByCid`/`CidByWalletAccount`;citizenchain pallet 实为 `AccountIdByCid`/`CidByAccountId`(Flutter 已同步、worker 漏跟)。storage key 拼错 → `state_getStorage` 返回 null(**不报错**)→ 恒判"未绑定 CID" → 登录/每请求绑定复查/主页/竞选发布全线失效,且被软降级掩盖 | 改为 pallet 真实项名 |
+| **BLOCKER** | 客户端发 `device_public_key`,worker 读 `device_public_key_hex` → 设备注册 + KeyPackage 发布 **100% 400**,聊天全链路不可用(历史遗留,`37e1d206` 改名漏同步) | 客户端三处键名对齐 worker(D1 列名为真源) |
+| **BLOCKER** | `chat/relay.ts` 的 `requireSpark` 把 `session.account_id` 传给已改按 cid 查的 `getMembership` → 恒 null → 薪火大媒体中转对所有人 **403**(R3 漏改的唯一调用点) | 改传 `session.cid_number` |
+| **HIGH** | `chat/service.ts` 注册设备时 `SELECT ... WHERE account_id = ?` + `.first()`;R1 后该表已是多设备并存 → 拿别的设备公钥验签 → 第二台设备永远注册不上 | 改按 `(cid_number, device_id)` 精确定位(对齐 `request_guard`) |
+| **HIGH** | `social/author_signals.ts` 按 post 行的 `account_id`(发帖时签名账户)读链身份 → 作者换绑后历史帖徽章全降级 visitor,与主页(按 cid 读)自相矛盾 | 改 `fetchChainIdentityStateByCidCached`,三项全按 cid |
+| **HIGH** | `citizen_profile.dart` 会员档白名单含 `voting`/`candidate`(ADR-036 已解耦的身份档)却**漏 `spark`** → 薪火会员全站丢勾 | 白名单改 freedom/democracy/spark,同步修过时 dartdoc |
+| MEDIUM | `chat_page._openPeerProfile` 解析失败时**把 account_id 当 cid** 传给资料页;且每次 `PeerCidResolver()` 新建致进程缓存恒空 | 改页内单例 + 解析失败提示中止(绝不拿 account 当 cid) |
+
+**测试互盲根治**:两侧单测各自只对齐自己那一侧的键名,B1/B2 这类漂移**两边全绿、线上全炸**。新增 `cloudflare/test/cross_end_contract.test.ts`——直接读 Flutter 源码文本 + citizenchain pallet 源码做断言,把跨端 JSON 键名与链上 storage 项名钉死在一处;已**反向验证**(注入旧名即红、还原即绿)。同时修 `relay.test.ts` 的 D1 mock 使其**按 bind 值匹配**(原先无视参数恒返回,正是 B2 测不出的原因)。
+
+**修复后门禁**:worker `tsc` EXIT=0 + `vitest` **31 文件 / 188 测试全绿**;Flutter `dart analyze lib/ test/` **No issues found** + `flutter test` **914 通过 / 5 skip**(skip = OpenMLS Rust FFI + golden fixture + env 守卫,非缺陷)。
+
+### 审计发现但**未修**的遗留(需产品决策或单独任务卡,不在本次重构范围)
+- **[BLOCKER·部署] 生产 D1 未重建**:`migrations/0001_square_core.sql` 是原地重写基线(无 DROP/IF NOT EXISTS),部署流程刻意不执行它。发版前**必须**先跑 `citizenconsole` 的 `reset-formal-data`(内含 `reset_d1()` 25 表 DROP+重建 + `clear_kv()`),否则新代码查 `cid_number` 列会打到旧表上。
+- **[HIGH] 换绑吊销链路时序死锁**:`revokeRebindOldAccount` 在链上换绑 finalize **之后**才用旧账户建会话调用,而此时旧账户已 `cid_not_bound`/`device_not_registered`/`cid_binding_changed` 三重拒 → 该止损函数**永不执行**(失败被 catch 静默)。真实敞口有限(`request_guard` 每请求链上复查本身已 fail-closed 挡住旧会话),但残留行不被清。建议改为"换绑前吊销"或"新账户会话代为清理旧账户"。
+- **[HIGH] 链上订阅是账户键,换绑不跟随**:citizenchain `SquarePost` 的 `Subscriptions`/`RenewalSchedule`/`CreatorPlans` 键含 AccountId,`self_rebind_cid_account_id` 只改 CitizenIdentity 绑定、不动订阅 → 链上真源留旧账户,续费仍从旧账户扣。跨层洞,需产品决策。
+- **[MEDIUM] 通讯录孤儿密文累积**:`contact_id = HMAC(peer_account, indexKey)` 而 indexKey 由账户派生,换绑后同一联系人 contact_id 变 → 重加密写新行、旧行(用**已泄漏的旧密钥**加密)永久滞留且无清理接口。
+- **[MEDIUM] 协议/模块文档未回写**:`memory/07-ai/unified-protocols.md`(:299-304/:369-376/:478-498)、`05-modules/citizenapp/chat/CHAT_TECHNICAL.md`、`user/USER_TECHNICAL.md`、`8964/PROFILE_TECHNICAL.md`、`01-architecture/gmb/subscription-part1-tech.md:175` 仍是旧 account 契约;其中 unified-protocols :498 把上表 HIGH 项的错误行为写成了规范。
+- **[MEDIUM] 开放任务卡待闭环**:母卡 `open/20260727-citizenapp-cid-identity-rootless-wallet.md` 多个子步已完成但状态未更新,且卡内两条记录与本次落地相反;另有 5 张卡因 D1 基线重写而失真。
+- **[LOW] KV 身份缓存未 bump 键**:`square_identity:` 的 value 新增了 `cid_number` 但读侧无形状校验;TTL 仅 45s 且 `reset-formal-data` 会清 KV,影响极小。

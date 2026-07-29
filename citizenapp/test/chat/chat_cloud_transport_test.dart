@@ -169,7 +169,7 @@ Map<String, dynamic> _keyPackageJson() => {
       'account_id': _bobAccountId,
       'cid_number': _bobCidNumber,
       'device_id': 'bob-phone',
-      'device_public_key': 'aabb',
+      'device_public_key_hex': 'aabb',
       'key_package_id': 'kp-bob',
       'key_package': base64Url.encode([1, 2, 3]).replaceAll('=', ''),
       'cipher_suite': 'MLS_128',

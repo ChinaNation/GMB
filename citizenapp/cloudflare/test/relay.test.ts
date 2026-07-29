@@ -32,31 +32,43 @@ class FakeR2 {
   }
 }
 
+const SESSION_CID_NUMBER = 'CN220-CTZN2-198805200-2026';
+const SESSION_ACCOUNT_ID =
+  '0x9999999999999999999999999999999999999999999999999999999999999999';
+
 function buildEnv(level: string | null = 'spark') {
   const kv = new FakeKv();
   const r2 = new FakeR2();
   kv.store.set('square_session:tok', {
-    account_id: '0x9999999999999999999999999999999999999999999999999999999999999999',
+    cid_number: SESSION_CID_NUMBER,
+    account_id: SESSION_ACCOUNT_ID,
+    device_key_hash: 'a'.repeat(64),
+    created_at: 0,
     expires_at: Date.now() + 60_000,
   });
   const membership = level === null
     ? null
     : {
-        account_id: '0x9999999999999999999999999999999999999999999999999999999999999999',
+        cid_number: SESSION_CID_NUMBER,
+        account_id: SESSION_ACCOUNT_ID,
         membership_level: level,
         subscription_status: 'active',
         paid_until: Date.now() + 60_000,
         chain_timestamp: Date.now(),
         chain_observed_at: Date.now(),
       };
+  // 会员镜像按身份主键 cid_number 归属(R3):mock 必须**按 bind 值匹配**,否则
+  // 传错主键(如误传 account_id)的回归无法被测出——历史上正是这样漏掉的。
   const db = {
     prepare() {
+      let bound: unknown[] = [];
       return {
-        bind() {
+        bind(...args: unknown[]) {
+          bound = args;
           return this;
         },
         async first() {
-          return membership;
+          return bound[0] === SESSION_CID_NUMBER ? membership : null;
         },
       };
     },

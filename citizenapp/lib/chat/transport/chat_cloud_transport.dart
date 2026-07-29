@@ -45,7 +45,7 @@ class ChatCloudTransport implements ChatTransport {
   }) async {
     await _postJson('/v1/chat/devices/register', {
       'device_id': localDeviceId,
-      'device_public_key': devicePublicKey,
+      'device_public_key_hex': devicePublicKey,
       'push_provider': pushProvider,
       'push_token': pushToken,
       'binding_signature': bindingSignature,
@@ -62,7 +62,7 @@ class ChatCloudTransport implements ChatTransport {
     await _postJson('/v1/chat/keypackages', {
       'cid_number': cidNumber,
       'device_id': keyPackage.deviceId,
-      'device_public_key': keyPackage.devicePublicKey,
+      'device_public_key_hex': keyPackage.devicePublicKey,
       'key_package_id': keyPackage.keyPackageId,
       'key_package': _base64UrlEncode(keyPackage.keyPackageBytes),
       'cipher_suite': keyPackage.cipherSuite,
@@ -328,7 +328,7 @@ MlsKeyPackage _keyPackageFromJson(Map<String, dynamic> json) => MlsKeyPackage(
       accountId: (json['account_id'] ?? '').toString(),
       cidNumber: (json['cid_number'] ?? '').toString(),
       deviceId: (json['device_id'] ?? '').toString(),
-      devicePublicKey: (json['device_public_key'] ?? '').toString(),
+      devicePublicKey: (json['device_public_key_hex'] ?? '').toString(),
       keyPackageId: (json['key_package_id'] ?? '').toString(),
       keyPackageBytes: _base64UrlDecode((json['key_package'] ?? '').toString()),
       cipherSuite: (json['cipher_suite'] ?? '').toString(),

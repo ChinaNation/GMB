@@ -88,7 +88,7 @@ function visitorIdentityStateByCid(cidNumber: string): ChainIdentityState {
 }
 
 /// 按身份主键 cid_number 读取链上身份态(锚定同一 finalized 区块):
-/// WalletAccountByCid → 当前绑定钱包账户 account_id;CidRegistry active 校验;投票/竞选公开字段。
+/// AccountIdByCid → 当前绑定钱包账户 account_id;CidRegistry active 校验;投票/竞选公开字段。
 /// 未绑定或 CidRegistry 非 active → 返回 null(由调用方决定降级形态)。
 async function readChainIdentityByCid(
   env: Env,
@@ -96,7 +96,7 @@ async function readChainIdentityByCid(
   finalizedHead: string,
 ): Promise<ChainIdentityState | null> {
   const cidScale = encodeBoundedBytes(new TextEncoder().encode(cidNumber));
-  const walletByCidKey = storageMapKey("CitizenIdentity", "WalletAccountByCid", cidScale);
+  const walletByCidKey = storageMapKey("CitizenIdentity", "AccountIdByCid", cidScale);
   const cidRegistryKey = storageMapKey("CitizenIdentity", "CidRegistry", cidScale);
   const votingKey = storageMapKey("CitizenIdentity", "VotingIdentityByCid", cidScale);
   const candidateKey = storageMapKey("CitizenIdentity", "CandidateIdentityByCid", cidScale);
@@ -126,7 +126,7 @@ async function readChainIdentityByCid(
 
   // cid_number 是用户唯一身份主键:只要 CidRegistry active(占即绑)就返回,匿名/投票/竞选一视同仁。
   // 投票/竞选只是该 CID 链上多几个公开字段(姓/名/出生地…),由 identity_level / has_*_identity
-  // 单独表达,不决定"有没有身份"。account_id = WalletAccountByCid 即当前绑定钱包账户。
+  // 单独表达,不决定"有没有身份"。account_id = AccountIdByCid 即当前绑定钱包账户。
   return {
     account_id: boundAccountId,
     identity_level: identityLevel,
@@ -137,8 +137,8 @@ async function readChainIdentityByCid(
   };
 }
 
-/// 按钱包账户 account_id 读取链上身份:CidByWalletAccount → cid,再经 readChainIdentityByCid
-/// 复核 WalletAccountByCid 双向绑定(必须回指本账户),防单向映射伪造。
+/// 按钱包账户 account_id 读取链上身份:CidByAccountId → cid,再经 readChainIdentityByCid
+/// 复核 AccountIdByCid 双向绑定(必须回指本账户),防单向映射伪造。
 export async function fetchChainIdentityState(
   env: Env,
   accountId: string,
@@ -146,13 +146,13 @@ export async function fetchChainIdentityState(
   const accountIdBytes = decodeAccountId(accountId);
   // 同一次身份判断的所有 storage 必须锚定同一个 finalized 区块，禁止混读 best head。
   const finalizedHead = await fetchFinalizedHead(env);
-  const cidByWalletKey = storageMapKey("CitizenIdentity", "CidByWalletAccount", accountIdBytes);
+  const cidByWalletKey = storageMapKey("CitizenIdentity", "CidByAccountId", accountIdBytes);
   const cidHex = await fetchChainStorage(env, `0x${bytesToHex(cidByWalletKey)}`, finalizedHead);
   const cidNumber = cidHex ? decodeCidNumber(hexToBytes(cidHex)) : null;
   if (!cidNumber) return visitorIdentityState(accountId);
 
   const state = await readChainIdentityByCid(env, cidNumber, finalizedHead);
-  // 双向绑定校验:WalletAccountByCid 必须回指本账户,否则视为无效(单向映射伪造)。
+  // 双向绑定校验:AccountIdByCid 必须回指本账户,否则视为无效(单向映射伪造)。
   if (!state || !sameBytes(decodeAccountId(state.account_id), accountIdBytes)) {
     return visitorIdentityState(accountId);
   }

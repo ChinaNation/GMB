@@ -112,6 +112,8 @@ class _ChatPageState extends State<ChatPage> {
 
   late final InMemoryChatController _chatController;
   late final _ChatLifecycleObserver _lifecycleObserver;
+  /// 对端 account_id → cid_number 解析器（页内单例：进程缓存命中后免重复链读）。
+  final PeerCidResolver _cidResolver = PeerCidResolver();
   // 自绘 composer 的文本控制器:贴纸面板与(步骤3b)表情插入共享,发送后由
   // Composer 自动清空。
   final TextEditingController _composerController = TextEditingController();
@@ -630,13 +632,18 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _openPeerProfile() async {
     // 资料页按身份主键 cid_number 寻址；chat 的 peerUserId 是对端钱包账户 account_id，
-    // 进资料页前链读解析成其 cid_number。解析失败（对方未绑定 CID / 无网）时回落
-    // account_id，资料页自会降级为默认展示，不阻断进入。
-    var cidNumber = widget.peerUserId;
+    // 进资料页前经 [_cidResolver]（页内单例，命中进程缓存免重复链读）解析成其 cid_number。
+    // 解析失败（对方未绑定 CID / 无网）时提示并中止：account_id 绝不能当 cid 传给资料页
+    // （长度/字符集都不合法，只会得到一个查无此人的空主页）。
+    final String cidNumber;
     try {
-      cidNumber = await PeerCidResolver().resolve(widget.peerUserId);
+      cidNumber = await _cidResolver.resolve(widget.peerUserId);
     } catch (_) {
-      // 保持回落值。
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('对方尚未绑定身份（CID），暂无公开主页')),
+      );
+      return;
     }
     if (!mounted) return;
     await Navigator.of(context).push<void>(
