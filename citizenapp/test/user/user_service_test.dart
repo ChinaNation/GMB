@@ -14,6 +14,9 @@ import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
+import 'package:citizenapp/security/local_cipher.dart';
+import 'package:isar_community/isar.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import '../support/isar_test_env.dart';
@@ -25,6 +28,12 @@ const _ownerCidNumber = 'CN220-CTZN2-198805200-2026';
 const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 
 class _FakeWalletManager extends WalletManager {
+  /// 本地静止态数据密钥:固定值,避免测试触碰硬件金库/平台通道。
+  /// 只换密钥来源,**不绕过加密**——通讯录本地 KV 仍走真实 AES-256-GCM。
+  @override
+  Future<LocalDataKey> ensureLocalDataKeyForAccountId(String accountId) async =>
+      LocalDataKey(Uint8List.fromList(List<int>.generate(32, (i) => i + 1)));
+
   @override
   Future<WalletProfile?> getDefaultWallet() async => WalletProfile(
         walletIndex: 1,
@@ -136,6 +145,12 @@ class _AccountSession extends SquareSessionProvider {
 
 /// 记录旧账户通讯录密钥删除的假钱包(换绑迁移测试),不触碰 secure storage。
 class _RecordingWallet extends WalletManager {
+  /// 本地静止态数据密钥:固定值,避免测试触碰硬件金库/平台通道。
+  /// 只换密钥来源,**不绕过加密**。
+  @override
+  Future<LocalDataKey> ensureLocalDataKeyForAccountId(String accountId) async =>
+      LocalDataKey(Uint8List.fromList(List<int>.generate(32, (i) => i + 1)));
+
   final List<String> deletedContactKeys = <String>[];
   @override
   Future<WalletProfile?> getDefaultWallet() async => WalletProfile(
@@ -390,7 +405,7 @@ void main() {
       final wallet = _RecordingWallet();
       final api = _FakeApi();
 
-      // 1. 旧身份下加一个联系人(autoSync=false,只落本地明文缓存)。
+      // 1. 旧身份下加一个联系人(autoSync=false,只落本地密文缓存)。
       IdentityAccountCache.debugInstance = _AccountCache(_accountId);
       final oldService = UserContactService(
         walletManager: wallet,
@@ -423,7 +438,7 @@ void main() {
       );
       await newService.migrateContactsToNewIdentity(_accountId, newId);
 
-      // 3a. 新身份读到迁来的联系人(本地明文搬迁成功)。
+      // 3a. 新身份读到迁来的联系人(本地密文搬迁并可解密)。
       final migrated = await newService.getContacts();
       expect(migrated.single.contactRemark, '轻节点A');
       // 3b. 旧账户通讯录密钥已删(杜绝残留)。
@@ -501,5 +516,82 @@ void main() {
     ]) {
       expect(await reopened.appKvEntitys.getByKey(key), isNull);
     }
+  });
+
+  group('通讯录本地静止态加密', () {
+    UserContactService createService() => UserContactService(
+          walletManager: _FakeWalletManager(),
+          sessionProvider: _FakeSessionProvider(),
+          apiClient: _FakeApi(),
+          autoSync: false,
+        );
+
+    test('本地 KV 落盘为密文,Isar 原始值不含备注/CID/地址明文', () async {
+      final service = createService();
+      const remark = '张三备注不该出现在磁盘上';
+      await service.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: remark,
+      );
+
+      // 绕过服务直接读原始 KV 行
+      final rows = await WalletIsar.instance.read((isar) async {
+        return isar.appKvEntitys
+            .filter()
+            .idGreaterThan(0, include: true)
+            .findAll();
+      });
+      final contactRows = rows
+          .where((r) => r.key.startsWith('contact_book_by_account:'))
+          .toList();
+      expect(contactRows, isNotEmpty);
+      for (final row in contactRows) {
+        final raw = row.stringValue ?? '';
+        expect(raw, isNot(contains(remark)), reason: '备注不得明文落盘');
+        expect(raw, isNot(contains(_contactCidNumber)), reason: 'CID 不得明文落盘');
+        expect(raw, isNot(contains(_contactA)), reason: 'SS58 不得明文落盘');
+        expect(raw, isNot(contains('contact_remark')), reason: '连字段名都不该露');
+      }
+    });
+
+    test('加密后读回仍是完整明文对象', () async {
+      final service = createService();
+      await service.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '李四',
+      );
+      final reopened = createService();
+      final contacts = await reopened.getContacts();
+      expect(contacts, hasLength(1));
+      expect(contacts.single.cidNumber, _contactCidNumber);
+      expect(contacts.single.contactRemark, '李四');
+    });
+
+    test('本地密文被篡改必须抛错,不得静默当成"无本地缓存"', () async {
+      final service = createService();
+      await service.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '王五',
+      );
+      await WalletIsar.instance.writeTxn((isar) async {
+        final rows = await isar.appKvEntitys
+            .filter()
+            .idGreaterThan(0, include: true)
+            .findAll();
+        for (final row in rows) {
+          if (row.key.startsWith('contact_book_by_account:')) {
+            row.stringValue = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+            await isar.appKvEntitys.put(row);
+          }
+        }
+      });
+      await expectLater(
+        createService().getContacts(),
+        throwsA(isA<LocalCipherException>()),
+      );
+    });
   });
 }

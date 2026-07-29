@@ -199,6 +199,58 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
   重复 open 不残留多份。
 - `flutter analyze lib/ test/` 零问题。
 
+### 第 6 步：通讯录本地副本加密（2026-07-29 完成，线程 A 五项收官）
+
+**现状订正**：项 12 不是"完全没做"——云端**早已加密**（AES-256-GCM + HMAC 不透明
+索引，Worker 只见密文）；缺的是本地仍以 `jsonEncode` 明文写进 Isar KV。
+
+**改动**：本地四把 KV（`contact_book_by_account:` / `contact_pending_by_account:` /
+`contact_sync_by_account:` / `contact_cloud_reset_by_account:`）的值改为 AES-256-GCM。
+加解密收敛在 `_readKv` / `_writeKv` / `_writeSnapshot` 三处，上层模型与 UI 零改动。
+
+- **密钥与云端严格分开**：本地用 LDK 的 `LocalKeyPurpose.contactsLocal` 子钥，
+  云端仍用 `citizenapp.contacts/encryption`（账户 child 直接派生）。**不复用云端钥**——
+  否则本地密文一旦被拿到就等于同时暴露云端密文。
+- 归属账户直接从 KV 键名后缀解析（四个前缀都以 `:<accountId>` 结尾），
+  无需把 accountId 层层透传；子钥按账户缓存。
+- AAD 绑完整 KV 键名，防三份密文被互换。
+- 加密在 Isar 事务**外**完成（与聊天同一原则）。
+- `_readKv` 解密失败**直接抛错，不静默返回 null**——静默会被上层当成"本地无缓存"
+  而拉云端整表覆盖，悄悄丢掉待同步的本地改动。
+
+**"顺手修 cid_number" 一项经核查无需修改**：该缺陷已在 CID 重构中由另一线程修复——
+`cid_number` 现已进密文（`contact_service.dart:155`）、解密还原（`:195`）、
+且作为合并主键不可能为 null，旧的链读回填 `cacheContactCidNumber` 已删除。
+本卡先前审计结论基于重构前代码，现已过期。
+
+**验收（实跑）**
+- `test/user/` **26 项通过**，新增 3 项关键断言：
+  1. 绕过服务直接读 Isar 原始 KV 行，**备注 / CID / SS58 / 连字段名都不出现**；
+  2. 加密后读回仍是完整明文对象；
+  3. 本地密文被篡改必须抛 `LocalCipherException`，不得静默当成"无本地缓存"。
+- 两个既有换绑迁移测试因第二个 fake（`_RecordingWallet`）未覆盖新方法而落到真实
+  平台通道，已补同款测试注入口；同时订正了两处已过期注释（"只落本地明文缓存"）。
+- `flutter analyze lib/ test/` 零问题。
+
+---
+
+## 线程 A 五项收官汇总（2026-07-29）
+
+| 项 | 步骤 | 结果 |
+|---|---|---|
+| 9 MLS 私钥/群秘密 | 第 2 步 | ✅ AEAD 信封 + 原子写 |
+| 10 聊天正文/会话摘要 | 第 3 步 | ✅ 字段级密文 |
+| 8 HMAC 分词索引 | 第 4 步 | ✅ 两段式搜索（收窄 + 复验） |
+| 11 附件本地缓存 | 第 5 步 | ✅ 密文缓存 + 前台存活明文 |
+| 12 通讯录本地副本 | 第 6 步 | ✅ 本地 KV 密文 |
+
+全部密钥出自第 1 步的 LDK 信封，五个用途域隔离；CID 换绑只重 wrap 一次 LDK，
+已落盘密文无需重写。
+
+**仍未覆盖的明文面（须知悉，不在本卡范围）**：iOS 端 `HardwareBoundSeedVault`
+无原生桥（线程 B 负责），故 iOS 上 child mini-secret 的硬件保护弱于 Android，
+会传导到 KEK。加密设计本身不受影响，但 iOS 整体强度须等线程 B 补齐。
+
 ## 完成标准
 
 - Isar 和 App 私有目录不再保存联系人、聊天正文、会话摘要、MLS 秘密或附件明文。

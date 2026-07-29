@@ -12,6 +12,8 @@ import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/security/local_cipher.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 通讯录唯一业务模型。
@@ -608,18 +610,21 @@ class UserContactService {
     String accountId,
     List<UserContact> contacts,
     List<_PendingContactOp> pending,
-  ) {
-    return WalletIsar.instance.writeTxn((isar) async {
-      await _putKvInTxn(
-        isar,
-        '$_contactsPrefix$accountId',
-        jsonEncode(_sorted(contacts).map((item) => item.toJson()).toList()),
-      );
-      await _putKvInTxn(
-        isar,
-        '$_pendingPrefix$accountId',
-        jsonEncode(pending.map((item) => item.toJson()).toList()),
-      );
+  ) async {
+    // 两份都在事务外先加密，不让密码学运算占住 Isar 写事务。
+    final contactsKey = '$_contactsPrefix$accountId';
+    final pendingKey = '$_pendingPrefix$accountId';
+    final sealedContacts = await _sealKv(
+      contactsKey,
+      jsonEncode(_sorted(contacts).map((item) => item.toJson()).toList()),
+    );
+    final sealedPending = await _sealKv(
+      pendingKey,
+      jsonEncode(pending.map((item) => item.toJson()).toList()),
+    );
+    await WalletIsar.instance.writeTxn((isar) async {
+      await _putKvInTxn(isar, contactsKey, sealedContacts);
+      await _putKvInTxn(isar, pendingKey, sealedPending);
     });
   }
 
@@ -657,12 +662,47 @@ class UserContactService {
     );
   }
 
-  Future<String?> _readKv(String key) => WalletIsar.instance.read((isar) async {
-        return (await isar.appKvEntitys.getByKey(key))?.stringValue;
-      });
 
-  Future<void> _writeKv(String key, String value) =>
-      WalletIsar.instance.writeTxn((isar) => _putKvInTxn(isar, key, value));
+  /// 本地 KV 密文层的子钥缓存(按归属账户)。
+  final Map<String, Uint8List> _localKvKeys = <String, Uint8List>{};
+
+  /// 取某条 KV 的本地加密子钥。
+  ///
+  /// 四个前缀都以 `:<accountId>` 结尾,归属账户可直接从键名解析,无需层层透传。
+  /// 用 `LocalKeyPurpose.contactsLocal` 而**不复用云端通讯录钥**:两者域隔离,
+  /// 本地密文被拿到也不等于同时暴露云端密文。
+  Future<Uint8List> _localKvKey(String kvKey) async {
+    final accountId = kvKey.substring(kvKey.indexOf(':') + 1);
+    final cached = _localKvKeys[accountId];
+    if (cached != null) return cached;
+    final ldk = await _walletManager.ensureLocalDataKeyForAccountId(accountId);
+    final key = await ldk.subkey(LocalKeyPurpose.contactsLocal);
+    _localKvKeys[accountId] = key;
+    return key;
+  }
+
+  /// AAD 绑完整 KV 键名,防止三份(通讯录 / 待同步 / 同步态)密文被互换。
+  Future<String> _sealKv(String kvKey, String value) async => LocalCipher
+      .encryptString(key: await _localKvKey(kvKey), plaintext: value, aad: kvKey);
+
+  Future<String> _openKv(String kvKey, String blob) async => LocalCipher
+      .decryptString(key: await _localKvKey(kvKey), blob: blob, aad: kvKey);
+
+  /// 读本地 KV 并解密。解密失败直接抛 [LocalCipherException],不静默返回 null——
+  /// 静默会被上层当成"本地无缓存"而拉云端整表覆盖,悄悄丢掉待同步的本地改动。
+  Future<String?> _readKv(String key) async {
+    final blob = await WalletIsar.instance.read((isar) async {
+      return (await isar.appKvEntitys.getByKey(key))?.stringValue;
+    });
+    if (blob == null || blob.isEmpty) return null;
+    return _openKv(key, blob);
+  }
+
+  /// 加密在事务外完成,不让密码学运算占住 Isar 写事务。
+  Future<void> _writeKv(String key, String value) async {
+    final sealed = await _sealKv(key, value);
+    await WalletIsar.instance.writeTxn((isar) => _putKvInTxn(isar, key, sealed));
+  }
 
   Future<void> _deleteKvKeys(List<String> keys) =>
       WalletIsar.instance.writeTxn((isar) async {
