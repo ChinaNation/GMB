@@ -1,6 +1,6 @@
 # CitizenWallet Android 16 KB Isar clean cutover
 
-状态：open（代码与产物完成，待真实 16 KB 内核运行验收）
+状态：done（代码与产物完成；用户明确跳过真实 16 KB 内核运行验收，不记作通过）
 
 ## 任务需求
 
@@ -97,3 +97,16 @@
   ZIP/ELF 静态检查或 4 KB 冷启动冒充该项完成。
 - 批准的 `/tmp/gmb-citizenwallet-isar31-compat/` 非敏感兼容数据库和旧锁测试残留已
   删除；测试夹具没有进入仓库，Android App 和模拟器进程均已停止。
+
+## 真实 16 KB 运行验收例外（2026-07-29）
+
+- Pixel 8a 官方开发者选项存在“以 16KB 页面大小启动设备”，但系统真实弹窗要求先
+  解锁 Bootloader；启用模式会清除全部用户数据，并需两次重启。恢复 4 KB 生产锁定
+  状态还会再次恢复出厂设置。
+- 用户随后明确要求跳过该测试，因此未解锁 Bootloader、未清除设备数据、未切换页面
+  模式。设备复核保持 `PAGE_SIZE=4096`、`flash_locked=1`、
+  `verifiedbootstate=green`，界面检查临时文件已删除。
+- 本任务以依赖 clean cutover、旧库原地读写、全量自动化、APK/AAB 构建、ZIP 对齐、
+  ELF `LOAD` 对齐和 4 KB Android 16 真机冷启动结果收口。真实
+  `PAGE_SIZE=16384` 的安装、冷启动和数据库读写未执行，后续任何发布说明均不得写成
+  “已通过真实 16 KB 内核运行验收”。

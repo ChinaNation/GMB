@@ -12,6 +12,7 @@ pub use pallet::*;
 mod benchmarks;
 pub mod weights;
 
+use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::BoundedVec;
@@ -774,6 +775,67 @@ pub mod pallet {
         VotingEligibilityVersion<BlockNumberFor<T>>,
         OptionQuery,
     >;
+
+    /// 创世身份绑定配置。
+    ///
+    /// 每项依次为 `(cid_number, account_id, registrar_cid_number)`。创世只建立
+    /// Active CID 登记和 CID↔AccountId 双向闭环，不凭空生成投票或竞选身份。
+    #[pallet::genesis_config]
+    #[derive(frame_support::DefaultNoBound)]
+    pub struct GenesisConfig<T: Config> {
+        pub initial_cid_bindings: Vec<(CidNumberBound, T::AccountId, CidNumberBound)>,
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            for (index, (cid_number, account_id, registrar_cid_number)) in
+                self.initial_cid_bindings.iter().enumerate()
+            {
+                assert!(!cid_number.is_empty(), "创世 CID 不能为空");
+                assert!(
+                    !registrar_cid_number.is_empty(),
+                    "创世 CID 的登记来源不能为空"
+                );
+                Pallet::<T>::ensure_valid_self_registrable_cid(cid_number)
+                    .expect("创世 CID 必须是合法的 CTZN 或 NATP 人主体号码");
+                for (previous_cid, previous_account_id, _) in
+                    self.initial_cid_bindings[..index].iter()
+                {
+                    assert!(previous_cid != cid_number, "创世 CID 不能重复");
+                    assert!(
+                        previous_account_id != account_id,
+                        "创世 AccountId 不能绑定多个 CID"
+                    );
+                }
+                assert!(
+                    !CidRegistry::<T>::contains_key(cid_number),
+                    "创世 CID 已存在登记记录"
+                );
+                assert!(
+                    !AccountIdByCid::<T>::contains_key(cid_number),
+                    "创世 CID 已存在账户绑定"
+                );
+                assert!(
+                    !CidByAccountId::<T>::contains_key(account_id),
+                    "创世 AccountId 已存在 CID 反向绑定"
+                );
+
+                let record = CidRecord {
+                    registrar_cid_number: registrar_cid_number.clone(),
+                    commitment: blake2_256(&account_id.encode()),
+                    residence_province_code: AreaCodeBound::default(),
+                    residence_city_code: AreaCodeBound::default(),
+                    status: CidRecordStatus::Active,
+                    registered_at: BlockNumberFor::<T>::default(),
+                    revoked_at: None,
+                };
+                CidRegistry::<T>::insert(cid_number, record);
+                AccountIdByCid::<T>::insert(cid_number, account_id);
+                CidByAccountId::<T>::insert(account_id, cid_number);
+            }
+        }
+    }
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]

@@ -188,6 +188,20 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
+fn new_test_ext_with_cid_bindings(
+    bindings: Vec<(CidNumberBound, u64, CidNumberBound)>,
+) -> sp_io::TestExternalities {
+    let mut storage = frame_system::GenesisConfig::<Test>::default()
+        .build_storage()
+        .expect("frame system genesis storage should build");
+    GenesisConfig::<Test> {
+        initial_cid_bindings: bindings,
+    }
+    .assimilate_storage(&mut storage)
+    .expect("citizen identity genesis storage should build");
+    sp_io::TestExternalities::new(storage)
+}
+
 fn code(bytes: &[u8]) -> AreaCodeBound {
     bytes.to_vec().try_into().expect("area code should fit")
 }
@@ -235,6 +249,68 @@ fn registrar_role_code() -> RoleCodeBound {
         .to_vec()
         .try_into()
         .expect("registrar role code should fit")
+}
+
+#[test]
+fn genesis_cid_binding_writes_active_registry_and_bidirectional_indexes() {
+    use codec::Encode;
+
+    let cid_number = cid(&citizen_cid_number("genesis-binding"));
+    let registrar = registrar_cid_number();
+    new_test_ext_with_cid_bindings(vec![(cid_number.clone(), 42, registrar.clone())]).execute_with(
+        || {
+            let record = CidRegistry::<Test>::get(&cid_number).expect("创世 CID 必须存在登记记录");
+            assert_eq!(record.registrar_cid_number, registrar);
+            assert_eq!(
+                record.commitment,
+                sp_io::hashing::blake2_256(&42u64.encode())
+            );
+            assert!(record.residence_province_code.is_empty());
+            assert!(record.residence_city_code.is_empty());
+            assert_eq!(record.status, CidRecordStatus::Active);
+            assert_eq!(record.registered_at, 0);
+            assert_eq!(record.revoked_at, None);
+            assert_eq!(AccountIdByCid::<Test>::get(&cid_number), Some(42));
+            assert_eq!(CidByAccountId::<Test>::get(42), Some(cid_number.clone()));
+            assert!(!VotingIdentityByCid::<Test>::contains_key(&cid_number));
+            assert!(!CandidateIdentityByCid::<Test>::contains_key(&cid_number));
+        },
+    );
+}
+
+#[test]
+#[should_panic(expected = "创世 CID 不能重复")]
+fn genesis_cid_binding_rejects_duplicate_cid() {
+    let cid_number = cid(&citizen_cid_number("genesis-duplicate-cid"));
+    let registrar = registrar_cid_number();
+    let _ = new_test_ext_with_cid_bindings(vec![
+        (cid_number.clone(), 42, registrar.clone()),
+        (cid_number, 43, registrar),
+    ]);
+}
+
+#[test]
+#[should_panic(expected = "创世 CID 必须是合法的 CTZN 或 NATP 人主体号码")]
+fn genesis_cid_binding_rejects_invalid_cid_number() {
+    let _ = new_test_ext_with_cid_bindings(vec![(
+        cid(b"not-a-cid"),
+        42,
+        registrar_cid_number(),
+    )]);
+}
+
+#[test]
+#[should_panic(expected = "创世 AccountId 不能绑定多个 CID")]
+fn genesis_cid_binding_rejects_duplicate_account_id() {
+    let registrar = registrar_cid_number();
+    let _ = new_test_ext_with_cid_bindings(vec![
+        (
+            cid(&citizen_cid_number("genesis-account-a")),
+            42,
+            registrar.clone(),
+        ),
+        (cid(&citizen_cid_number("genesis-account-b")), 42, registrar),
+    ]);
 }
 
 /// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100)。占即绑账户,默认账户 1。

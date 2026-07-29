@@ -12,16 +12,48 @@
   跨端读写均已直接使用 `cid_number`；无迁移、无旧键、无兼容。P0 续费时序修复和
   双节点 +40 天换绑续费验收已完成，详见
   `memory/08-tasks/20260728-square-post-cid-primary-key.md`。
-- **#4 生产 D1 重建**:并入创世部署流程处理(见下),本卡记录。
+- **#4 生产数据重建准备 ✅ 已完成**:现有 `reset-formal-data` 已逐项核对唯一 D1
+  基线、KV、两个 R2 桶和通知队列；本窗口不执行生产清理、不修改正式节点部署。
+  真正重创世及同批生产执行交由创世线程按下方清单完成。
 
 ## P0 — 发版前必须执行(否则线上必炸)
 
-### 1. 生产 D1 重建
+### 1. 生产数据重建（创世前准备完成，待创世线程执行）
 `citizenapp/cloudflare/migrations/0001_square_core.sql` 是**原地重写的唯一基线**(25 张 `CREATE TABLE`,无 `DROP`、无 `IF NOT EXISTS`),而部署流程按 `20260713-citizenapp-cloudflare-deploy-scripts` 的规则**刻意不执行**它。本次重构把 15+ 张表主键从 `account_id` 改为 `cid_number`,不重建则新代码查 `cid_number` 列会打到旧表 → 全线 500。
 - 工具已存在且正确:`citizenconsole/actions/cloudflare.sh` 的 `reset_d1()`(DROP 全部 25 表 + `d1_migrations` → 执行 0001 → 断言表数=25)与 `clear_kv()`(清空 SQUARE_CACHE)。
 - 挂在**独立手动动作** `reset-formal-data`(`server.mjs`),不在 `production` 部署流程里。
-- **动作**:发版前先跑 `reset-formal-data`;并把「本次发版需先重建 D1」写进部署流程或 deploy 脚本任务卡,避免下次再靠人记。
+- **安全边界**:`reset-formal-data` 标记为 production，必须经 Touch ID；D1/KV/Queue
+  只使用 `CF_DATA_TOKEN`，R2 另使用账户级 R2 凭据。普通 `production` 部署不得自动调用
+  该破坏性动作。
 - 顺带解决:KV 身份缓存旧形状(`square_identity:` 的 value 新增 `cid_number`、读侧无形状校验,TTL 45s)、R2 陈旧对象。
+
+#### 创世线程执行顺序
+
+1. 完成新链创世资产冻结和全部正式节点重创世，确认所有节点的 block #0 哈希一致；
+   本窗口不承担该步骤。
+2. 把同一个新创世哈希写入 Cloudflare `CHAIN_GENESIS_HASH` 真源并完成跨端冻结资产核对；
+   禁止继续使用旧哈希或手工第二真源。
+3. 在 CitizenConsole 单独执行 `CitizenApp Cloudflare → 清空并重建全部数据`，通过该次
+   Touch ID 后依次重建 production D1、清空 production KV、清空
+   `citizenapp-square-media` / `citizenapp-chat-relay` 两个 R2 桶并 purge
+   `square-notify-fanout-production`。该动作不可恢复，执行时必须由创世线程再次取得用户
+   对明确生产目标的确认。
+4. 数据重建成功后立即执行 Cloudflare `production` 部署，使新 Worker、Secret、
+   `CHAIN_GENESIS_HASH` 和新链同时生效；任一步失败立即停止，不得跳步或报部分成功。
+5. 真实验收必须确认：D1 业务表数为 25、KV 键数为 0、两个 R2 桶对象数为 0、
+   通知队列已 purge、Worker `/api/health` 返回成功，并从 Worker 使用的链 RPC 读取到
+   与冻结资产相同的 block #0 哈希。
+
+#### 本窗口准备验收（2026-07-29）
+
+- `0001_square_core.sql` 实际解析为 25 张业务表；`reset_d1()` 白名单与其逐表排序对比
+  完全一致，数量同为 25。
+- `reset-formal-data` 的资源范围已核对为 D1、`SQUARE_CACHE` KV、两个固定 R2 桶和
+  `square-notify-fanout-production`，没有清算行资源。
+- `bash -n citizenconsole/actions/cloudflare.sh`、`node --check citizenconsole/server.mjs`
+  通过；CitizenConsole 37 项安全与业务自动测试全部通过。
+- 未连接 Cloudflare 生产数据面，未调用 Wrangler 远端写命令，未执行 D1/KV/R2/Queue
+  删除，未修改 CitizenChain 正式节点部署脚本。
 
 ## P1 — 需产品/架构决策
 

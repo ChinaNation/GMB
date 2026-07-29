@@ -1,6 +1,6 @@
 # CitizenApp 昵称、通讯录、用户主页与 QR 用户码统一改造
 
-状态：open
+状态：open（功能开发完成；待 S5 正式创世资产重生后执行真实管理员正向会话验收）
 
 ## 任务需求
 
@@ -197,7 +197,14 @@
 - 为隔离旧链状态，在仓库外临时目录启动当前已编译二进制的全新
   `citizenchain-fresh` 链、独立 PostgreSQL 和 OnChina；本次实际创世哈希为
   `0x2c9138f8b807a279204e5331d9a55e5b57dcbbe97fc057fda929a3c014abcbc0`。
-  OnChina 从当前链投影 49,593 个机构、99,232 个管理员账户，抽样审计通过。
+  OnChina 从当前链投影 49,593 个公权机构、99,232 个机构协议账户，抽样审计通过。
+  其中机构协议账户精确由 49,593 个主账户、49,593 个费用账户、43 个省储行质押
+  账户和 3 个独立基金账户组成；不得再把该数量写成管理员账户或管理员记录。
+- 当前创世管理员名册按跨机构记录计为 1,025 条：国家储委会 19 条、43 个省储委会
+  共 387 条、43 个省储行共 387 条、国家司法院 15 条、联邦注册局 215 条、联邦
+  安全局 1 条、公民链基金会 1 条。联邦安全局和基金会的两条记录属于同一名程伟、
+  同一 AccountId，因此唯一管理员 AccountId 为 1,024 个。本步骤没有创建这些管理员
+  记录，只读取既有创世状态。
 - 真实 HTTPS 使用既有 `OnChina Organization Root CA`，未通过 `-k` 绕过证书。
   macOS Chrome 正常加载 `https://onchina.local:8964/`，页面标题为“链上中国平台”，
   “管理员扫码登录”和 QR_V1 用户码说明均唯一出现，未显示非 HTTPS 警告；页面源
@@ -227,3 +234,38 @@
 - 本步骤只执行真实运行态、HTTP、数据库和页面验收，没有修改业务代码、协议、测试
   或中文注释，也没有触碰 `citizenchain/runtime/`。独立 PostgreSQL、全新链、浏览器
   标签页、设备 XML 和 App 进程均已清理；仓库外临时环境已移入 macOS 废纸篓，可恢复。
+
+### Step 7.1：创世管理员 citizen-identity 闭环（2026-07-29）
+
+- 继续正向联调前核实到：现有创世只在管理员和机构记录中引用程伟 CID/AccountId，
+  `citizen-identity` 原先没有 GenesisConfig，导致 CitizenApp 无法从链上读取固定
+  CID↔AccountId 闭环，真实页面只能生成 `k=4` 临时收款码，不能生成管理员
+  `k=3 user_contact`。
+- 经用户 runtime 二次确认后，为 `citizen-identity` 增加
+  `initial_cid_bindings`。程伟永久 CID
+  `CN220-CTZN2-198805200-2026` 保持不变，不按当前授权账户重新生成；账户保持
+  `0x0cb1d05c0c9c7f05679b60d6f24c7e5719a3985264e41c5e899d4822dca4b06b`，
+  登记来源使用既有联邦注册局 `ZS001-FRG07-249474503-2026`。
+- 创世原子写入 Active `CidRegistry`、`AccountIdByCid` 与 `CidByAccountId`，只建立
+  匿名身份闭环，不伪造投票或竞选身份。重复 CID、重复 AccountId、空 CID 或空登记
+  来源会在创世阶段直接拒绝。
+- `citizen-identity` 全量 62 项和 runtime 全量 52 项通过；
+  `WASM_BUILD_FROM_SOURCE=1 cargo build -p node` 成功。
+- 当前源码 fresh 链真实创世哈希为
+  `0xb8a32949a2d0527e3522d9db315049de7b6ecbd3adee33979b7d5df795d79d6a`；
+  RPC 逐字节读取确认登记来源、Active 状态、账户正向索引、CID 反向索引和
+  `blake2_256(account_id)` commitment 全部匹配。
+- 本步骤消除了 CitizenApp 生成真实管理员 `k=3` 用户码的链上前置缺口，但没有伪造
+  私钥。CitizenWallet 当前仍为空钱包；按用户 2026-07-29 的执行顺序，必须先完成
+  S5 正式创世资产重生这一非测试工作，再由用户在真机上手动导入对应助记词，完成
+  `k=3 → k=1 → k=2 → SUCCESS/节点绑定/工作台 → 重放拒绝`。
+- fresh 链已停止、RPC 已关闭，临时链目录已移入 macOS 废纸篓；本任务继续保持
+  `open`，直到真实管理员正向会话闭环通过。
+
+## 当前开发、发布与测试边界（2026-07-29）
+
+- 本卡公开昵称、通讯录、用户主页、QR_V1 四端切换和创世管理员身份闭环的功能开发
+  已全部完成，当前没有遗留业务代码开发项。
+- S5 正式 chainspec、CitizenApp 轻链资产、公权机构快照和 Cloudflare 创世哈希重生
+  属发布资产生成，不得用本地 fresh 链验收冒充正式冻结。
+- 真实管理员正向会话闭环属于后置测试；在 S5 完成前不启动该测试。

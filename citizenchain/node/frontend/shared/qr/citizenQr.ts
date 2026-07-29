@@ -3,6 +3,8 @@
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
 // Golden fixtures:memory/01-architecture/qr/qr-protocol-fixtures/*.json
 
+import { normalizeSs58Address } from '../ss58';
+
 export const QR_V1 = 'QR_V1' as const;
 
 export type QrKind =
@@ -41,8 +43,9 @@ export interface SignResponseBody {
 }
 
 export interface UserContactBody {
+  cid_number: string;
   ss58_address: string;
-  contactName: string;
+  display_name: string;
 }
 
 export interface UserTransferBody {
@@ -93,6 +96,19 @@ function requireInt(obj: Record<string, unknown>, key: string): number {
   return v;
 }
 
+/** 严格字段闸:body 出现未知字段直接拒,防止旧协议字段混入。 */
+function requireExactKeys(
+  obj: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  field: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  const unknown = Object.keys(obj).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new QrParseError(`${field} 包含未知字段: ${unknown.join(',')}`);
+  }
+}
+
 function normalizeB64(input: string): string {
   return input
     .replace(/-/g, '+')
@@ -141,10 +157,38 @@ function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
   };
 }
 
+/// 身份主键是 `cid_number`;`ss58_address` 只作展示与边界输入输出。
+/// 按规范必须拒绝旧 `contact_name`、缺失字段、未知字段、非 2027 SS58 及非规范 CID/昵称。
 function parseUserContactBody(b: Record<string, unknown>): UserContactBody {
+  requireExactKeys(b, ['cid_number', 'ss58_address', 'display_name'], 'b');
+  const cidNumber = requireString(b, 'cid_number');
+  if (
+    cidNumber !== cidNumber.trim() ||
+    new TextEncoder().encode(cidNumber).length > 32
+  ) {
+    throw new QrParseError('b.cid_number 必须为无首尾空格的 1 到 32 字节字符串');
+  }
+  const ss58Address = requireString(b, 'ss58_address');
+  if (ss58Address !== ss58Address.trim()) {
+    throw new QrParseError('b.ss58_address 不得包含首尾空格');
+  }
+  try {
+    normalizeSs58Address(ss58Address);
+  } catch (error) {
+    throw new QrParseError(
+      `b.ss58_address 必须为本链规范 SS58 地址: ${
+        error instanceof Error ? error.message : '校验失败'
+      }`,
+    );
+  }
+  const displayName = requireString(b, 'display_name');
+  if (displayName !== displayName.trim() || [...displayName].length > 40) {
+    throw new QrParseError('b.display_name 必须为无首尾空格的 1 到 40 字符串');
+  }
   return {
-    ss58_address: requireString(b, 'ss58_address'),
-    contactName: requireString(b, 'contact_name'),
+    cid_number: cidNumber,
+    ss58_address: ss58Address,
+    display_name: displayName,
   };
 }
 

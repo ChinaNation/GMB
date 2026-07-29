@@ -1,7 +1,8 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(用户授权 2026-07-27;需求分析 + 链侧侦察 + 三决策已锁定,待首小步方案确认)
-所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);citizenwallet 反向改动由**另一个会话**做
+状态:open(功能开发完成;S5 创世身份代码完成,待正式创世资产重生与后置真实验收)
+所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
+citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
 - 承接并**重塑** `20260727-citizenwallet-modelb-index-derivation.md` 的 Step 2(原「citizenapp 保留种子/助记词、单热钱包」决策被本卡**推翻**)
 - Step 1(citizenwallet 无根多账户)已完成,本卡把同一无根 `//index` 模型搬到 citizenapp
@@ -42,10 +43,12 @@
 
 ## 小步执行序(每小步先出技术方案待确认再执行;`dart analyze` 0 + `flutter test` 全绿 / `cargo test` 全绿为门禁)
 - **S1 链**:公民 CID 号段方案(CN 前缀 + 位3-5 承载号码高位 + N9 = 12 位/年;primitives/cid 生成+校验 + node 共识守卫)+ 金标向量。**✅ 完成(2026-07-27,全工作区绿)**。
-- **S2 链**:`self_occupy_cid`(自助+自付费+占即绑+匿名)+ op_tag + 测试。
-- **S3 链**:`self_rebind_cid_account`(自助轮换,origin=新账户+旧账户签名,OP_SIGN_CID_REBIND)+ 测试。**✅ 完成(2026-07-27,全工作区绿)**。
+- **S2 链**:`self_occupy_cid`(自助+自付费+占即绑+匿名)+ op_tag + 测试。**✅ 完成(2026-07-27,全工作区绿)**。
+- **S3 链**:`self_rebind_cid_account_id`(自助轮换,origin=新账户+旧账户签名,OP_SIGN_CID_REBIND)+ 测试。**✅ 完成(2026-07-27,全工作区绿)**。
 - **S4+S6 合并(注册局流程,链+onchina+双钱包+前端四端)—— 完成 ✅(2026-07-28)**:occupy 占即绑、档案选填(D4a)、register 纯升级、`admin_rebind_cid_account_id`(D4b)、CTZN|NATP、R5-split 单源化、审计归属办理局、qr-protocol 契约、citizenwallet/citizenapp occupy 域签名(冷热逐字节一致)、onchina 前端两次扫码 UI。**自包含交接卡:`20260727-registrar-cid-flow-s4s6.md`**(④a-c + ⑤-1..⑤-5 全绿)。剩:跨注册局换绑(后期)。
-- **S5 链**:重新创世 + 注册表重生 + 冷热链一致性。
+- **S5 链**:创世身份代码 **✅ 完成**；正式 chainspec、CitizenApp 轻链资产、公权
+  机构快照和 Cloudflare 创世哈希的同源重生仍待执行。冷热链一致性与真机业务闭环
+  属重生后的测试，不得与发布资产生成混为同一步。
 - **S6 onchina**:已并入 S4+S6 合并交接卡(见上）。
 - **S7 citizenapp 钱包层**:无根多账户重构(独立于链)。**✅ 完成(2026-07-27,S7.1/7.2/7.3 全绿)**。
 - **S8 citizenapp 身份层**:改名 + 注册按钮 + 自助占号交易 + CID 主键切换 + 门控。拆三子步:
@@ -88,16 +91,16 @@
 - **回归**:`cargo test --workspace` = 19 批次 0 failed;node bin 唯一失败 `admin_unlock::lock_decrypted_admin_removes_entry` 是 **pre-existing 并行竞态 flaky**(共享全局 `decrypted_map()`,`list_decrypted_admins_filters_by_cid` 结尾 `clear()` 整表),**与 S2 无关**——单线程 `admin_unlock` 6/6 绿证。已记独立修复任务。
 
 ## S3 落地(2026-07-27,完成 ✅)
-**`self_rebind_cid_account`(匿名 CID 自助换绑),仅链侧,主检出 `citizenchain/`:**
-- 接口:`self_rebind_cid_account(origin=新账户, cid_number, old_account_signature)` **`call_index(9)`**。新账户作 origin(自签证受控+自付费);旧账户从 `AccountIdByCid[cid]` **反查、不传**(取不到=`NotBoundToAnyCid`);payload=`(cid_number,new_account_id).encode()`,旧账户对其 op-tag 签名(D2「当前绑定账户签名授权」)。
+**`self_rebind_cid_account_id`(匿名 CID 自助换绑),仅链侧,主检出 `citizenchain/`:**
+- 接口:`self_rebind_cid_account_id(origin=新账户, cid_number, old_account_signature)` **`call_index(9)`**。新账户作 origin(自签证受控+自付费);旧账户从 `AccountIdByCid[cid]` **反查、不传**(取不到=`NotBoundToAnyCid`);payload=`(cid_number,new_account_id).encode()`,旧账户对其 op-tag 签名(D2「当前绑定账户签名授权」)。
 - 门:**匿名限定(q1)** —— 有 `VotingIdentityByCid` 即 `CivicRebindRequiresRegistrar`(civic 走 S4 注册局);**一账户一 CID** —— 新账户已绑他 CID 即 `AccountIdAlreadyBoundToAnotherCid`(新账户任意、能签即可,q 用户确认)。
-- 换绑原语 `rebind_account_id`(删旧反向索引+写新双向绑定,old==new 幂等);事件 `CidAccountRebound{cid,old,new}`;错误 `NotBoundToAnyCid`/`CivicRebindRequiresRegistrar`/`InvalidRebindSignature`。
+- 换绑原语 `rebind_account_id`(删旧反向索引+写新双向绑定,old==new 幂等);事件 `CidAccountIdRebound{cid,old,new}`;错误 `NotBoundToAnyCid`/`CivicRebindRequiresRegistrar`/`InvalidRebindSignature`。
 - **签名域**:`primitives/src/sign.rs` 新增 `OP_SIGN_CID_REBIND=0x11` + 进 `SIGN_OP_TAGS[12]` + fixture `signing_domain_vectors.json` 加 0x11 金标向量(`SIGN_GOLDEN_UPDATE=1` 回填)。**四端契约**:citizenapp(S8)/其余端签此换绑须同 op_tag。
 - `CitizenIdentityAuthority` 加 `verify_rebind_signature`(**4 处实现全覆盖**:trait/`()`、configs Runtime 用 OP_SIGN_CID_REBIND、citizen-identity mock、citizen-issuance 集成 mock;后两 `==b"valid"`)——trait 加方法波及全部 impl,漏 citizen-issuance 集成测试 mock 曾致编译错、已补;pallet helper `ensure_rebind_signature`。
-- `configs.rs` fee_route:`self_rebind_cid_account => signer_onchain_route`(自付费);weights 3 处 + benchmark(`account`+`whitelisted_caller`)。
+- `configs.rs` fee_route:`self_rebind_cid_account_id => signer_onchain_route`(自付费);weights 3 处 + benchmark(`account`+`whitelisted_caller`)。
 - 测试:换绑成功(旧账户反向索引清、新账户接管)/ 未占拒 / 旧签名无效拒 / 新账户已绑他 CID 拒 / **civic 自助换绑拒** / **NATP 居民不能升级投票公民**(锁 q3 约束)。
 - **状态**:**全绿** —— `cargo test -p citizen-identity` 49(+6 S3)、benchmark 编译、`sign_golden` 0x11 锁定、`cargo test --workspace` **81 批次 0 failed**。node 守卫放行 rebind(只校验绑定闭环一致性、不禁变更;registrar/residence 不可变只针对 `CidRegistry` 记录,rebind 不改该记录)。
-- **q1/q2/q3 锁定(2026-07-27)**:q1 投票/竞选公民只能注册局线下注册(自助只出匿名);q2 自助换绑失败者去线下注册局,管理员可直接换绑任意 CID(=S4 `admin_rebind_cid_account`);q3 自助/注册局注册均让用户自选 CTZN(公民)/NATP(居民),且 **NATP 永不可升投票/竞选**(现有 CTZN 校验已保护)。
+- **q1/q2/q3 锁定(2026-07-27)**:q1 投票/竞选公民只能注册局线下注册(自助只出匿名);q2 自助换绑失败者去线下注册局,管理员可直接换绑任意 CID(=S4 `admin_rebind_cid_account_id`);q3 自助/注册局注册均让用户自选 CTZN(公民)/NATP(居民),且 **NATP 永不可升投票/竞选**(现有 CTZN 校验已保护)。
 
 ## S7 决策(D7,2026-07-27,本窗口进行中)
 - **框架订正**:citizenwallet 现盘已被另一会话**反转成「存种子+助记词」**(`masterSeedHexV1`/`masterMnemonicV1`,已无 `accountMiniSecretV1`)。故可**逐字节复用的只是 `//index` 派生金标**(冷热共享);「无根存储(每账户 child mini-secret、不存种子/助记词)」在 **citizenapp 新建**,非照抄 citizenwallet 现盘。
@@ -238,24 +241,55 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 - **H4 观测**:对账式使每次 getState 自愈重试(不再永久静默),reconcile 失败区分日志。
 - **M1 并发锁**:`_runRebindMigration` 加 `_migrationInflight` 去重(rebindCidTo 直触发 vs getState 对账并发)。**M2** gate debugResolver 加 `kReleaseMode` 硬忽略。**M3** `_reresolve` 加代际号丢弃旧响应(注册成功不被瞬断覆盖回 queryFailed)。**M5** 会员刷新键随整 Scaffold 包 gate。
 - **注释 A1-A6**:wallet_manager signWithWallet/signForAccountId 文档身份签名路由订正、_deriveContactKeys/_contactKeyStore/ContactKeyMaterial「账户0 child」→身份账户 child、wallet_page:912「默认/身份徽标」→身份徽标、verifyWalletAccess 文档删已删概念(方法保守保留)。
-- **残余(记录)**:C1 revoke best-effort——失败仅记录不阻断功能重建、不自动重试(旧云端副本残留至下次成功),开发期零用户可接受;换绑前已被复制的数据不可删(架构残余,须产品文档披露)。posts/followers 服务端随 CID 迁移(re-key)是更大范围、未做,属身份迁移单独议题。
+- **后续审计订正**：换绑吊销已改为新账户会话、安全 outbox 和启动/身份对账持续
+  重试，不再是失败后静默遗忘的 best-effort；posts/followers 等身份数据的 CID
+  主键改造已由 CID 重构任务完成。旧表述只保留为历史问题背景，不再构成当前待办。
 
-## S8.4 通讯录 CID 真源与昵称/备注分离（2026-07-28，实施中）
+## S8.4 通讯录 CID 真源与昵称/备注分离（2026-07-28，完成 ✅）
 
 - **模型彻底切换**：`UserContact` 固定为 `cid_number + account_id + ss58_address + contact_remark + created_at + updated_at`；CID 必填且是关系主键，私人备注允许空值，公开昵称/头像/签名不复制进通讯录。旧 `contact_name` JSON 不兼容。
 - **索引与加密契约**：增删改、待同步、跨端冲突合并全部按 CID；`contact_id = HMAC(index_key, target cid_number)`。AES-256-GCM 明文载荷包含 `owner_cid_number`、联系人四字段与时间戳，AAD 使用属主 CID + 不透明 ID；删除旧 `citizenapp.contacts.v1` 域，HKDF 改为未版本化 `citizenapp.contacts/{encryption,index}`。
-- **扫码入口**：当前 `QR_V1 user_contact` 尚未携带 CID，本步在入库前按二维码 SS58 派生 `account_id`，再经链上双向绑定读取永久 CID；未绑定即拒绝。收款码缺少 CID，不再兼作联系人码；二维码钱包标签不是私人备注，首次入库备注为空。
+- **扫码入口**：本阶段先在入库前按二维码 SS58 派生 `account_id`，再经链上双向绑定
+  读取永久 CID；随后 `20260728-citizenapp-nickname-contact-profile-qr` 已把
+  `QR_V1/k=3 user_contact` 四端统一为
+  `cid_number + ss58_address + display_name`。未绑定或声明 CID 不一致均拒绝；
+  收款码不再兼作联系人码，二维码公开昵称不写入私人备注。
 - **换绑重建**：本地关系按 CID 合并并迁到新身份账户；持久化云端重建标记，分页删除属主 CID 下全部旧不透明密文成功后，才以新账户 child 密钥重新上传。断网时保留标记与待办，下次同步继续，不把旧密文当兼容数据。
 - **旧数据清理**：目标态本地 KV 改用 `contact_book_by_account:` / `contact_pending_by_account:` / `contact_sync_by_account:` / `contact_cloud_reset_by_account:`；数据库打开时删除旧 `contacts:` / `contact_pending_ops:` / `contact_sync_state:`。安全存储改用 `citizenapp_contacts_key_`，旧 `wallet_contacts_key_v1_` 只删不读。新增 `cloudflare/migrations/0002_reset_contacts_for_cid_payload.sql`，生产只允许单独审核后人工执行，本任务不部署。
 - **UI 口径**：通讯录卡片公开昵称为主标题；`备注：`、`CID：`、`SS58：` 分行展示；修改动作只编辑私人备注。资料页和公开资料缓存直接按联系人 CID 寻址，不再对已有联系人重复做 account→CID 链读。
 
 ## 待办 / 未决
-
-## 待办 / 未决
-- **S5 创世协同**:另一会话(modelb 卡 Step 3/S3.1)已在重派全部创世管理员+程伟公钥(bare→//0)并重新创世;本卡 S5 须与其合流——旧省码式 CTZN 创世常量(`FSC_GENESIS_ADMIN_CID_NUMBER`/`LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER`=`GZ000-CTZN6-…`)随该重生改 **CN** 号(公钥由用户给,CID 号由生成器按新 CN 规则重派)。二者同一次创世,勿各改各的。
-- citizenwallet 反转(改成存种子/助记词)= **另一个会话**;需与本卡协同,避免对 citizenwallet 反复横跳(Step 1 刚改无根)。
-- 访客可用面 + CID 注册门与四层门禁合并口径(S8 细化)。
-- 身份主键切换的过渡期(CID 未注册时 myid/square/chat 身份源)——S8 定。
+- **S5 创世协同**：程伟永久 CID
+  `CN220-CTZN2-198805200-2026` 已作为身份主键固定保留，不再按当前授权账户重派；
+  `citizen-identity` 创世配置现已原子写入 Active 登记、CID→AccountId 与
+  AccountId→CID 三项闭环。剩余的是使用同一份 CI WASM 重生正式 chainspec、
+  CitizenApp 轻链资产、公权机构快照与 Cloudflare 创世哈希；禁止各端自行生成不同
+  创世锚点。
+- **后置测试**：正式资产重生后再执行自助占号、换绑重建、五大功能门控和真实管理员
+  QR 会话闭环；当前不以本地 fresh 链结果冒充正式发布验收。
+- **独立任务**：联系人、聊天正文、MLS 密钥和附件的本地静止态加密归
+  `20260728-citizenapp-chat-local-data-encryption`，不并入本卡。
+- **后期范围**：跨注册局完善档案或换绑不属于本卡完成标准。
 
 ## 验收
 冷热链逐字节一致(citizenapp `//0//1//2` == Step 1 金标 == 链读);CID CN000 金标钉死;自助占号/换绑链上闭环;门控 fail-closed;全端 analyze/test 绿;残留复扫 0。
+
+## S5 创世管理员身份闭环（2026-07-29，完成）
+
+- `citizen-identity` 新增 `initial_cid_bindings` 创世配置；每项固定为
+  `(cid_number, account_id, registrar_cid_number)`，创世阶段原子写入
+  `CidRegistry`、`AccountIdByCid`、`CidByAccountId`，重复 CID、重复 AccountId 或
+  空登记来源直接拒绝烤链。
+- 程伟永久 CID 保持 `CN220-CTZN2-198805200-2026`，授权账户保持
+  `0x0cb1d05c0c9c7f05679b60d6f24c7e5719a3985264e41c5e899d4822dca4b06b`；
+  登记来源复用联邦注册局 `ZS001-FRG07-249474503-2026`。只建立匿名 Active
+  身份闭环，不生成 VotingIdentity 或 CandidateIdentity。
+- `citizen-identity` 全量 62 项、runtime 全量 52 项通过；当前源码
+  `WASM_BUILD_FROM_SOURCE=1 cargo build -p node` 成功，证明 `no_std` WASM 与原生
+  节点均能编译。
+- 当前源码 fresh 链真实创世哈希为
+  `0xb8a32949a2d0527e3522d9db315049de7b6ecbd3adee33979b7d5df795d79d6a`。
+  RPC 逐字节读取确认三张 storage 正反闭环、登记状态 Active、注册高度 0、
+  `commitment=blake2_256(account_id)`、居住省市为空且无吊销。
+- fresh 链进程已停止，RPC 19944 已关闭；临时链目录从 `/tmp` 移入 macOS 废纸篓，
+  源路径不存在且仍可恢复。

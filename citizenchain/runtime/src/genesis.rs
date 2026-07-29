@@ -30,7 +30,10 @@ use primitives::{
     cid::china::china_ch::CHINA_CH,
     cid::china::china_sf::CHINA_SF,
     cid::china::china_zf::CHINA_ZF,
-    cid::china::citizenchain::{CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS},
+    cid::china::citizenchain::{
+        CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS,
+        LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
+    },
     cid::code::{institution_code_from_cid_number, FRG, FSC},
     core_const::SS58_FORMAT,
     genesis::{CITIZENS, COUNTRY, GENESIS_CITIZEN_MAX, GENESIS_ISSUANCE, HE_FUND_ISSUANCE},
@@ -110,11 +113,11 @@ fn build_genesis() -> Value {
     );
 
     // 联邦注册局(FRG)主账户与国家司法院(CHINA_SF 首个 = 国家司法院)主账户。
-    let frg_main_account = CHINA_ZF
+    let frg_institution = CHINA_ZF
         .iter()
         .find(|inst| institution_code_from_cid_number(inst.cid_number) == Some(FRG))
-        .unwrap_or_else(|| panic!("CHINA_ZF must contain the Federal Registry Bureau (FRG)"))
-        .main_account;
+        .unwrap_or_else(|| panic!("CHINA_ZF must contain the Federal Registry Bureau (FRG)"));
+    let frg_main_account = frg_institution.main_account;
     let njd_main_account = CHINA_SF
         .first()
         .unwrap_or_else(|| panic!("CHINA_SF must contain the National Judicial Yuan"))
@@ -226,6 +229,22 @@ fn build_genesis() -> Value {
             "citizensDeclaration": citizens_bytes,
             "countryDeclaration": country_bytes,
             "citizenMax": GENESIS_CITIZEN_MAX,
+        }),
+    );
+
+    // 基金会创世管理员的永久公民 CID 已被公权管理员和法定代表人记录引用，
+    // 必须同时写入 citizen-identity 的 Active 登记及 CID↔AccountId 双向绑定。
+    // 登记来源使用既有联邦注册局机构 CID；这里只建立匿名身份闭环，不伪造投票/
+    // 竞选身份。CID 是永久主键，账户只是可依法换绑的授权凭证，禁止按当前账户重派 CID。
+    let genesis_admin_account = AccountId::new(CITIZENCHAIN_GENESIS_ADMINS[0].account_id);
+    root.insert(
+        "citizenIdentity".into(),
+        json!({
+            "initialCidBindings": [[
+                LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER.as_bytes(),
+                account_to_genesis_ss58(&genesis_admin_account),
+                frg_institution.cid_number.as_bytes(),
+            ]],
         }),
     );
 
@@ -573,6 +592,17 @@ mod tests {
                 parsed.err()
             );
         }
+
+        let binding = patch["citizenIdentity"]["initialCidBindings"][0]
+            .as_array()
+            .expect("citizen identity binding should be a three-field tuple");
+        let parsed: Result<AccountId, _> = serde_json::from_value(binding[1].clone());
+        assert!(
+            parsed.is_ok(),
+            "citizen identity account_id should deserialize: value={:?} err={:?}",
+            binding[1],
+            parsed.err()
+        );
     }
 
     #[test]
@@ -602,5 +632,45 @@ mod tests {
             "resolutionIssuance should deserialize: {:?}",
             resolution_issuance.err()
         );
+
+        let citizen_identity: Result<citizen_identity::GenesisConfig<crate::Runtime>, _> =
+            serde_json::from_value(patch["citizenIdentity"].clone());
+        assert!(
+            citizen_identity.is_ok(),
+            "citizenIdentity should deserialize: {:?}",
+            citizen_identity.err()
+        );
+    }
+
+    #[test]
+    fn genesis_contains_fixed_admin_citizen_identity_binding() {
+        let patch = genesis_config();
+        let bindings = patch["citizenIdentity"]["initialCidBindings"]
+            .as_array()
+            .expect("citizen identity bindings should be an array");
+        assert_eq!(bindings.len(), 1, "创世只预置固定基金会管理员身份");
+
+        let binding = bindings[0]
+            .as_array()
+            .expect("citizen identity binding should be a tuple");
+        assert_eq!(binding.len(), 3);
+        assert_eq!(
+            binding[0],
+            json!(LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER.as_bytes())
+        );
+        assert_eq!(
+            binding[1],
+            json!(account_to_genesis_ss58(&AccountId::new(
+                CITIZENCHAIN_GENESIS_ADMINS[0].account_id
+            )))
+        );
+        let frg_cid_number = CHINA_ZF
+            .iter()
+            .find(|institution| {
+                institution_code_from_cid_number(institution.cid_number) == Some(FRG)
+            })
+            .expect("CHINA_ZF must contain FRG")
+            .cid_number;
+        assert_eq!(binding[2], json!(frg_cid_number.as_bytes()));
     }
 }
