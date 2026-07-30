@@ -20,6 +20,7 @@ import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/contact_service.dart' show UserContact;
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/wallet_page.dart';
 import 'package:citizenapp/wallet/pages/transaction_history_page.dart';
@@ -99,7 +100,6 @@ class OnchainPaymentPanel extends StatefulWidget {
 
 class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   /// 链的 SS58 地址前缀。
-  static const int _ss58Prefix = 2027;
 
   /// 链上存在性保证金（Existential Deposit）= 111 分 = 1.11 元。
   /// 来源：primitives::core_const::ACCOUNT_EXISTENTIAL_DEPOSIT = 111
@@ -417,11 +417,11 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     }
     final amountText = AmountFormat.stripCommas(amountRaw);
 
-    // SS58 地址校验（prefix 2027）
+    // SS58 地址校验（prefix 走 kGmbSs58Prefix 单源）
     try {
       final decoded = Keyring().decodeAddress(toSs58Address);
       // 验证 prefix：重新编码后比对
-      final reEncoded = Keyring().encodeAddress(decoded, _ss58Prefix);
+      final reEncoded = Keyring().encodeAddress(decoded, kGmbSs58Prefix);
       if (reEncoded != toSs58Address) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('收款地址不是本链地址（SS58 前缀不匹配）')),

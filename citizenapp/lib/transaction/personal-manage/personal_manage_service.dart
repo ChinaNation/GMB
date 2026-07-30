@@ -411,7 +411,7 @@ class PersonalManageService {
 
     final proposerBytes = data.sublist(offset, offset + 32);
     final proposerSs58 =
-        Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
+        Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix);
     offset += 32;
 
     final amountFen = _readU128Le(data.sublist(offset, offset + 16));
@@ -441,12 +441,12 @@ class PersonalManageService {
 
     final beneficiaryBytes = data.sublist(offset, offset + 32);
     final beneficiarySs58 =
-        Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), 2027);
+        Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix);
     offset += 32;
 
     final proposerBytes = data.sublist(offset, offset + 32);
     final proposerSs58 =
-        Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
+        Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix);
 
     return CloseProposalInfo(
       proposalId: proposalId,

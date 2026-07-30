@@ -567,7 +567,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
     for (var i = 0; i < bytes.length; i++) {
       bytes[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
     }
-    return Keyring().encodeAddress(bytes, 2027);
+    return Keyring().encodeAddress(bytes, kGmbSs58Prefix);
   }
 
   String _truncateAddress(String address) {

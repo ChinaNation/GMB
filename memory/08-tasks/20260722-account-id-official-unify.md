@@ -3,6 +3,20 @@
 状态：实现完成（2026-07-24 已完成第 1—10 步；真机、fresh 链、隔离数据库、
 Cloudflare staging 和全量测试证据见第 10 步执行结果）。
 
+> ⚠️ **2026-07-30 时效横幅（命名契约仍有效，具体取值已作废）**
+>
+> 本卡确立的 `AccountId` / `account_id` / `public_key` 命名契约**继续有效**，是全仓现行规则。
+> 但第 10 步验收记录里出现的**具体账户与 CID 取值**已被 model B `//index` 重派生整体取代，
+> 不得再当作当前值引用：
+>
+> - 程伟 `account_id`：`0x9c3e18f5…`（本卡记录，已作废）→ `0x0cb1d05c…`（现行，见
+>   `primitives/cid/china/citizenchain.rs`）
+> - 法定代表人公民 CID：`GZ000-CTZN6-198805200-2026`（已作废，旧地域化 GZ 省码）
+>   → `CN220-CTZN2-198805200-2026`（现行，人主体去地域化 CN 号段）
+>
+> 第 10 步的验收文字是当时的真实记录，**保留原样不改**；取当前值一律读源码常量，
+> 不读本卡。变更来源见 `open/20260727-citizenwallet-modelb-index-derivation.md` Step 3。
+
 ## 任务需求
 
 把由助记词派生、用于签名和授权的唯一账户，在 Rust、Dart、TypeScript、SQL、JSON、SCALE、QR、Cloudflare、文档和生成物中统一为 Substrate/Polkadot SDK 的账户模型：

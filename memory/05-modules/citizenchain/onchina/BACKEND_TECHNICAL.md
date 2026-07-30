@@ -148,6 +148,24 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 `PASSKEY_COLD_SIGN` 正式提交的安全门统一在 `auth/actions.rs::require_admin_security_grant`：先消费 `X-Passkey-Assertion`，再消费 `x-cid-security-grant`，任一缺失、过期、归属不匹配或 payload hash 不匹配都 fail-closed，不允许降级为 SESSION 或只验冷签 grant。机构资料上传、资料删除、机构详情更新等链下写操作虽然不直接提交链交易，也必须按各自后端 `grant_payload` 逐字段绑定授权：上传资料为 `target/file_name/doc_type/file_size`，删除资料为 `target/doc_id/file_name`，机构详情更新为 `target/cid_number/cid_full_name/parent_cid_number/family_name/given_name/legal_representative_cid_number/legal_representative_photo_path`。
 
+链上写的 passkey 那一半由**类型闸门**强制，不靠 handler 自觉（2026-07-30 创世前审计整改）：
+`auth/passkey::require_passkey_assertion` 成功时返回 `PasskeyProof`，该类型字段私有、
+无公开构造函数，全仓唯一产出点就是这个函数；冷签会话唯一创建入口
+`Db::insert_chain_sign_session(&session, &PasskeyProof)` 把它列为必填参数。
+于是「没做 passkey 就发起链上写」是**编译期错误**而非运行期漏检。
+整改前 8 个冷签会话创建点中有 4 个只有会话态；类型闸门落地时又抓出人工复查漏掉的
+第 5 个（`complete_citizen_onchain_signature`）。
+
+passkey 的消费点统一钉在**创建冷签会话那一步**，不在 prepare 载荷步、也不在 submit 步：
+- `POST /api/v1/admin/chain/submit` 只消费钱包冷签那一半，不再要求第二次 passkey——
+  「链上写 = passkey 一次 + 钱包一次」是三档契约明文，两次 passkey 属于违约；
+  提交侧安全由会话归属校验（`session.account_id == ctx.account_id`）、签名者一致校验和
+  链上授权复核共同保证。
+- 公民上链是 prepare → 公民回签 → complete → submit 四步，那唯一一次 passkey 在
+  `complete`（真正创建冷签会话、授权链上写的一刻），prepare 只构造待签载荷属 Session 档。
+- `POST /api/v1/admin/address/chain-call` 直接返回待冷签 call、不经会话表，拿不到类型约束，
+  故在 handler 内显式断言。
+
 机构管理员列表 API 联合读取链上 `admins(account_id + cid_number + family_name + given_name)` 人员集合与 entity 岗位、`InstitutionRolePermissions` 和有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源；业务授权必须由完整 `RoleSubject + BusinessActionId + operation` 查询，不按账户或前端标签推断。
 
 链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。2026-07-24 当前 fresh 链全量投影精确为 49,593 个机构和 99,232 个账户：49,593 个机构主账户、49,593 个机构费用账户、43 个省储行质押账户，以及两和基金、安全基金、联邦公民安全基金三个独立基金账户。非营利法人“公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该基金会，共 34 项。

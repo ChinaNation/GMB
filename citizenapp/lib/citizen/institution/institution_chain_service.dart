@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'institution_models.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 机构管理提案解码服务（公权/私权共用）。
 ///
@@ -76,12 +77,12 @@ class InstitutionChainService {
 
     final beneficiaryBytes = data.sublist(offset, offset + 32);
     final beneficiarySs58 =
-        Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), 2027);
+        Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix);
     offset += 32;
 
     final proposerBytes = data.sublist(offset, offset + 32);
     final proposerSs58 =
-        Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
+        Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix);
 
     return CloseProposalInfo(
       proposalId: proposalId,

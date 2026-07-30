@@ -4,7 +4,7 @@
 
 ## 最终需求
 
-- 公民授权主体统一为 `CitizenSubject { cid_number, wallet_account }`；公民 CID 证明身份与资格，钱包签名证明操作授权，二者缺一不可。
+- 公民授权主体统一为 `CitizenSubject { cid_number, account_id }`；公民 CID 证明身份与资格，钱包签名证明操作授权，二者缺一不可。
 - 机构授权主体继续使用机构 CID + 岗位码 + 任职钱包；公民主体不增加岗位码，也不得退化为裸钱包。
 - `citizen-identity` 是公民身份、CID 与钱包绑定、资格历史及全国/省/市/镇四级人口数据的唯一真源；它不创建、不编号、不保存提案快照。
 - 投票引擎只消费 `citizen-identity` 的规范化人口数据，在具体提案内生成和保存人口快照；不得自行制造人口数据或复制完整公民名单。
@@ -13,7 +13,8 @@
 - 每个机构只能发起本机构岗位的选举；选举元数据只保留一个 `actor_cid_number` 和一个现有 `role_code`，不得支持 A 机构发起 B 机构岗位选举。
 - 删除选举元数据中重复的目标机构、另造职位编码和无真源规则编号；提案实例只使用投票引擎生成的全链唯一 `proposal_id`，业务类型由 `BusinessActionId` 表达。
 - 公民姓名在全仓统一使用 `family_name`、`given_name`；删除合并姓名字段及所有带公民前缀的姓、名别名。身份结构已经限定公民语义，不重复加前缀。
-- 普选票据、候选人快照、候选人计票和当选结果都使用完整 `CitizenSubject`，不得继续只保存钱包账户。
+- 普选票据、候选人快照和当选结果保存完整 `CitizenSubject`；候选人计票以候选 CID 为
+  唯一键，账户只保存为当次签名授权与审计字段，不得继续以钱包账户作为身份主键。
 - 有效人口分母必须包含状态正常且在快照日期护照有效的公民；护照尚未生效、已经过期、身份吊销或行政区不匹配均 fail-closed。
 - 当前正式链尚未创世，不写 migration、不保留旧 storage、旧字段、旧载荷、别名、双读或兼容分支。
 - 项目自身版本统一归零：runtime 数字版本、全部 pallet storage version 为 0，CitizenChain workspace/runtime/Node 程序包版本为 `0.0.0`；第三方依赖和 Substrate runtime API trait 协议版本不属于项目升级计数，不修改。
@@ -46,7 +47,7 @@ citizen-identity / entity
 ```rust
 CitizenSubject {
     cid_number,
-    wallet_account,
+    account_id,
 }
 
 CandidateIdentity {
@@ -186,8 +187,8 @@ ElectionMeta {
 
 ## 第 5 步完成记录（2026-07-22）
 
-- `CitizenIdentityProvider` 已删除只返回 bool 的 `can_vote`、`can_be_candidate`、`can_vote_at`，统一改为 `voting_subject`、`candidate_subject`、`voting_subject_at`，成功时返回 `CitizenSubject { cid_number, wallet_account }`，任何 CID、钱包、身份、护照、作用域或历史 revision 错配均 fail-closed。
-- 联合公投与立法公投票据已从 `(proposal_id, wallet_account)` 收口为 `(proposal_id, cid_number)`，票据值保存完整公民主体和票值；同一永久 CID 更换绑定钱包后仍不能重复投票。事件同步输出完整主体，不再把裸钱包表达为公民投票身份。
+- `CitizenIdentityProvider` 已删除只返回 bool 的 `can_vote`、`can_be_candidate`、`can_vote_at`，统一改为 `voting_subject`、`candidate_subject`、`voting_subject_at`，成功时返回 `CitizenSubject { cid_number, account_id }`，任何 CID、账户、身份、护照、作用域或历史 revision 错配均 fail-closed。
+- 联合公投与立法公投票据已从 `(proposal_id, account_id)` 收口为 `(proposal_id, cid_number)`，票据值保存完整公民主体和票值；同一永久 CID 更换绑定账户后仍不能重复投票。事件同步输出完整主体，不再把裸账户表达为公民投票身份。
 - 人口快照边界未扩大：`ProposalPopulationSnapshots` 仍只保存作用域、有效人口总数、资格 revision、判定日期和创建区块，不保存全量公民名单。`citizen-identity` 继续是人口与身份数据唯一真源，投票引擎只在提案内消费并冻结。
 - `election-vote` 本步只完成新主体 provider 的临时接线，没有提前修改选举模型。现存 `target_cid_number`、`office_code`、`rule_id`、裸钱包候选快照和 Popular 票据已复查确认，统一留给第 6 步一次性删除或替换。
 - 验证通过：`citizen-identity` 36 项、`election-vote` 14 项、`internal-vote` 95 项、`joint-vote` 13 项、`legislation-vote` 35 项、runtime 46 项，以及受影响机构、治理、发行、立法和转账模块测试；全 workspace 测试目标编译通过。

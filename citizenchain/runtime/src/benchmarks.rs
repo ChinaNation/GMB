@@ -49,5 +49,6 @@ frame_benchmarking::define_benchmarks!(
     [votingengine, VotingEngine]
     [legislation_vote, LegislationVote]
     [election_vote, ElectionVote]
+    [square_post, SquarePost]
     [runtime_upgrade, RuntimeUpgrade]
 );

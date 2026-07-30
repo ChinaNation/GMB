@@ -9,7 +9,6 @@ pub(crate) use sign_request::{
     build_domain_sign_request_bytes, build_sign_request, build_sign_request_bytes,
 };
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
@@ -164,7 +163,7 @@ pub fn login_request_body(
         action: action_login(),
         sig_alg: 1,
         account_id,
-        payload: URL_SAFE_NO_PAD.encode(system.as_bytes()),
+        payload: bytes_to_b64(system.as_bytes()),
     })
 }
 
@@ -314,27 +313,18 @@ pub fn parse_sign_response(raw: &str) -> Result<SignResponseEnvelope, QrParseErr
 pub(crate) fn public_key_hex_to_b64(value: &str) -> Option<String> {
     let cleaned = normalize_hex_no_prefix(value);
     let bytes = hex::decode(cleaned).ok()?;
-    if bytes.len() != 32 {
-        return None;
-    }
-    Some(URL_SAFE_NO_PAD.encode(bytes))
+    qr_protocol::public_key_b64(&bytes, "b.u").ok()
 }
 
 pub(crate) fn bytes_to_b64(bytes: &[u8]) -> String {
-    URL_SAFE_NO_PAD.encode(bytes)
+    qr_protocol::bytes_to_b64(bytes)
 }
 
+/// QR body 定长字段解码。实现在 qr-protocol 单源,这里只把错误映射成本模块错误类型;
+/// 不得在此重写解码逻辑(与 node 端分裂会导致同一二维码一端过一端拒)。
 fn b64_to_prefixed_hex(value: &str, len: usize, field: &str) -> Result<String, QrParseError> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(value)
-        .map_err(|_| QrParseError::BadField(format!("{} 必须为 base64url", field)))?;
-    if bytes.len() != len {
-        return Err(QrParseError::BadField(format!(
-            "{} 长度必须为 {} 字节",
-            field, len
-        )));
-    }
-    Ok(format!("0x{}", hex::encode(bytes)))
+    qr_protocol::b64_to_prefixed_hex(value, len, field)
+        .map_err(|error| QrParseError::BadField(error.to_string()))
 }
 
 fn normalize_hex_no_prefix(value: &str) -> String {
@@ -349,6 +339,7 @@ fn normalize_hex_no_prefix(value: &str) -> String {
 // 二维码协议夹具必须严格成立，断言式解包用于让协议偏差立即失败。
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     use super::*;
 
     const ACCOUNT_ID: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";

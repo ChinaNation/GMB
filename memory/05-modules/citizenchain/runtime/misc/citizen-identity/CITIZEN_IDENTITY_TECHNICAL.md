@@ -10,7 +10,7 @@
 
 - 投票身份：用于公民参与投票，以永久 `cid_number` 为 storage key，身份值保存护照有效期、状态、居住省市镇；当前签名钱包由独立双向绑定保存。
 - 参选身份：用于公民参选公职，在投票身份基础上增加出生省市镇、`family_name`、`given_name`、性别和**出生日期**（`birth_date`，YYYYMMDD 整数）。出生日期是注册局新增公民时必填、写入后不可修改的字段，链上凭此实时计算竞选公民年龄（见 `candidate_age`）。投票身份不含出生日期，姓名不得拼接成第三个字段。
-- 公民逻辑主体统一为 `CitizenSubject { cid_number, account_id }`。该结构不新增 storage；读取时由账户反向绑定取得永久 CID，再校验 CID 主键身份、CID 到账户正向绑定、身份状态和 CID Active 状态。任一缺失、吊销或错配均 fail-closed。投票票据、候选快照、计票和当选结果必须恢复成完整公民主体。
+- 公民逻辑主体统一为 `CitizenSubject { cid_number, account_id }`。该结构不新增 storage；读取时由账户反向绑定取得永久 CID，再校验 CID 主键身份、CID 到账户正向绑定、身份状态和 CID Active 状态。任一缺失、吊销或错配均 fail-closed。投票票据、候选快照和当选结果保存完整主体；候选计票表以候选 CID 为唯一键，账户只保留在快照/结果中作为当次授权审计。
 - 竞选身份的 `family_name`、`given_name` 分开保存，各自最多 128 字节且必须非空；不保存合并姓名，也不保留带公民前缀的姓名别名。
 
 ## 授权边界
@@ -92,7 +92,8 @@
 
 `citizen-issuance` 通过 `OnVotingIdentityRegistered` 回调发放一次性公民轻节点认证奖励。
 
-奖励去重键为公民身份号哈希，避免同一公民身份重复领奖。
+奖励以完整 `cid_number` 为唯一身份键，并保留 `account_id` 第二防重键。永久表和本块临时表
+都同时检查 CID 与账户；只有未领取的新 CID 绑定未领取的新账户时才允许入队。
 
 ## CID 节点永久边界
 
@@ -100,6 +101,8 @@
 
 - CID 记录写入后不得删除；
 - `VotingIdentityByCid` 不得删除，身份资料及资格历史不得从一个 CID 迁移到另一个 CID；
+- `CandidateIdentityByCid` 只能属于已有且正常的投票身份；出生地区、性别和出生日期永久
+  不可改，姓名可依法更新，非法新增、删除或在 CID 未吊销时删除候选身份均由 NodeGuard 拒绝；
 - `AccountIdByCid` 与 `CidByAccountId` 只表达当前有效签名钱包，必须一一对应并与 CID 主键身份闭环；
 - `registrar_cid_number`、`commitment`、居住省市和 `registered_at` 不得通过 runtime 升级换主体；
 - 只允许 `Active → Revoked`，`Revoked` 为不可恢复终态；

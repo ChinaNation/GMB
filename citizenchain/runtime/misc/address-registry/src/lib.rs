@@ -1,6 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-// FRAME 宏会从既定 extrinsic 载荷生成多参数分发函数；参数顺序属于链上编码契约，禁止为 lint 合并。
-#![allow(clippy::too_many_arguments)]
 //! 地址变更上链模块。
 //!
 //! 本 pallet 不保存完整行政区地址库,只保存当前地址目录版本、当前地址哈希
@@ -61,6 +59,10 @@ impl<AccountId> AddressUpdateAuthority<AccountId> for () {
 
 #[frame_support::pallet]
 pub mod pallet {
+    // FRAME 宏在本模块层生成 Call 分发代码,其参数数由 extrinsic 载荷决定;
+    // per-fn 与 call 块级 allow 都够不到那段生成代码,故放宽范围收敛到本 pallet 模块,
+    // 不扩到整个 crate —— 模块外的辅助函数参数过多仍会被 lint 抓出。
+    #![allow(clippy::too_many_arguments)]
     use super::{ActorCidNumber, ActorRoleCode, AddressUpdateAuthority};
     use frame_support::{ensure, pallet_prelude::*};
     use frame_system::pallet_prelude::*;

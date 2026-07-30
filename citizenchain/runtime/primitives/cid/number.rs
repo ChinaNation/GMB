@@ -285,7 +285,10 @@ mod tests {
             .unwrap_or_else(|e| panic!("{institution} cid should generate: {e}"));
             assert_eq!(&code[0..2], "CN");
             let parts = parse_cid_number_parts(&code).expect("person cid must parse");
-            assert!(cid_scope_codes(code.as_bytes()).is_err(), "{institution} must have no scope");
+            assert!(
+                cid_scope_codes(code.as_bytes()).is_err(),
+                "{institution} must have no scope"
+            );
             let _ = parts;
         }
     }

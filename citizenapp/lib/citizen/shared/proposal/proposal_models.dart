@@ -89,7 +89,7 @@ class RuntimeUpgradeProposalInfo {
 
   final int proposalId;
   final String actorCidNumber;
-  final String proposer; // SS58 (ss58Format 2027)
+  final String proposer; // SS58 (ss58Format 走 kGmbSs58Prefix 单源)
   final String reason; // UTF-8 decoded
   final String codeHashHex; // 32-byte hash as hex
   final String expectedPowParamsHashHex;

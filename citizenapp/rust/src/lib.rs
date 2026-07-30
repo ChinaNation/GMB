@@ -201,7 +201,7 @@ pub unsafe extern "C" fn smoldot_client_init(
     let system_version = config.system_version.unwrap_or_else(|| "0.1.0".to_string());
 
     // Initialize smoldot client (Client::new wraps platform in Arc internally)
-    let platform = DefaultPlatform::new(system_name.into(), system_version.into());
+    let platform = DefaultPlatform::new(system_name, system_version);
 
     let client = Client::new(platform);
 
@@ -543,6 +543,10 @@ pub unsafe extern "C" fn smoldot_remove_chain(
 
     // Remove chain from client (needs mutable access)
     let mut client = client_wrapper.client.lock();
+    // upstream 把返回 `TChain` 的 remove_chain 标了 #[must_use]，而本处 TChain 实例化为 `()`：
+    // 裸调用触发 unused_must_use，任何形式的绑定又触发 let_unit_value，两个 lint 互相打架。
+    // 本处确实不需要 chain 的用户数据，故只对这一条语句放宽 let_unit_value，不扩到函数或模块。
+    #[allow(clippy::let_unit_value)]
     let _ = client.remove_chain(chain_wrapper.chain_id);
 
     0 // Success
@@ -597,66 +601,6 @@ pub unsafe extern "C" fn smoldot_version() -> *mut c_char {
         .into_raw()
 }
 
-/// 获取轻节点状态快照，返回 JSON 字符串。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - 返回字符串需由 `smoldot_free_string` 释放
-// 以下同步版本已废弃，请使用对应的 *_async 版本。
-// 保留仅为编译兼容，后续将删除。
-
-/// 获取运行时版本，返回 JSON 字符串。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 获取运行时 metadata hex。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 获取账户下一个可用 nonce，返回十进制字符串。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - `account_id_hex` 必须是合法的 32 字节 hex 字符串
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 获取指定块高的 block hash。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - `block_number` 必须是合法十进制字符串
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 获取指定区块中的 extrinsics 列表，返回 JSON 数组字符串。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - `block_hash_hex` 必须是合法 UTF-8
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 提交已编码 extrinsic，返回交易哈希 hex。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - `extrinsic_hex` 必须是合法 UTF-8
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 读取 `System.Account`，返回 JSON 字符串。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - `account_id_hex` 必须是合法的 32 字节 hex 字符串
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 读取任意 storage value，返回 JSON 字符串。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - `storage_key_hex` 必须是合法 hex 字符串
-/// - 返回字符串需由 `smoldot_free_string` 释放
-/// 批量读取多个 storage value，返回 JSON 对象字符串。
-///
-/// # Safety
-/// - `chain_handle` 必须是有效链句柄
-/// - `storage_keys_json` 必须是 JSON 数组字符串
-/// - 返回字符串需由 `smoldot_free_string` 释放
 // ──── 异步 FFI 导出（不阻塞 Dart 主线程） ────
 
 fn sync_phase_name(phase: smoldot_light::SyncPhase) -> &'static str {
@@ -767,6 +711,17 @@ macro_rules! async_ffi_entry {
     };
 }
 
+/// 异步读取轻节点状态快照；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_status_snapshot_async(
     chain_handle: ChainHandle,
@@ -818,6 +773,17 @@ pub unsafe extern "C" fn smoldot_get_status_snapshot_async(
     )
 }
 
+/// 异步读取runtime 版本；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_runtime_version_async(
     chain_handle: ChainHandle,
@@ -860,6 +826,17 @@ pub unsafe extern "C" fn smoldot_get_runtime_version_async(
     )
 }
 
+/// 异步读取runtime metadata；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_metadata_async(
     chain_handle: ChainHandle,
@@ -885,6 +862,18 @@ pub unsafe extern "C" fn smoldot_get_metadata_async(
     )
 }
 
+/// 异步读取账户下一个可用 nonce；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `account_id_hex` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_account_next_index_async(
     chain_handle: ChainHandle,
@@ -930,6 +919,18 @@ pub unsafe extern "C" fn smoldot_get_account_next_index_async(
     )
 }
 
+/// 异步读取指定高度的区块哈希；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `block_number` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_block_hash_async(
     chain_handle: ChainHandle,
@@ -998,6 +999,18 @@ pub unsafe extern "C" fn smoldot_get_block_hash_async(
     )
 }
 
+/// 异步读取指定区块的 extrinsic 列表；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `block_hash_hex` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_block_extrinsics_async(
     chain_handle: ChainHandle,
@@ -1060,6 +1073,18 @@ pub unsafe extern "C" fn smoldot_get_block_extrinsics_async(
     )
 }
 
+/// 异步读取提交 extrinsic 到交易池；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `extrinsic_hex` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_submit_extrinsic_async(
     chain_handle: ChainHandle,
@@ -1101,56 +1126,18 @@ pub unsafe extern "C" fn smoldot_submit_extrinsic_async(
     )
 }
 
-#[cfg(test)]
-mod resource_constraint_tests {
-    use super::{
-        configured_log_level, NativeCapabilityExecutor, NATIVE_CAPABILITY_QUEUE_CAPACITY,
-        NATIVE_CAPABILITY_WORKERS,
-    };
-    use std::sync::{Arc, Barrier};
-
-    #[test]
-    fn native_capability_executor_has_fixed_workers_and_bounded_queue() {
-        let executor = NativeCapabilityExecutor::new().expect("executor starts");
-        let started = Arc::new(Barrier::new(NATIVE_CAPABILITY_WORKERS + 1));
-        let release = Arc::new(Barrier::new(NATIVE_CAPABILITY_WORKERS + 1));
-
-        for _ in 0..NATIVE_CAPABILITY_WORKERS {
-            let started = Arc::clone(&started);
-            let release = Arc::clone(&release);
-            executor
-                .try_spawn(Box::new(move || {
-                    started.wait();
-                    release.wait();
-                }))
-                .expect("worker blocker enqueued");
-        }
-        started.wait();
-
-        for _ in 0..NATIVE_CAPABILITY_QUEUE_CAPACITY {
-            executor
-                .try_spawn(Box::new(|| {}))
-                .expect("bounded queue slot available");
-        }
-        let error = executor
-            .try_spawn(Box::new(|| {}))
-            .expect_err("queue over capacity must fail");
-        assert_eq!(error, "native_capability_queue_full");
-
-        release.wait();
-    }
-
-    #[test]
-    fn configured_log_level_matches_dart_contract() {
-        assert_eq!(configured_log_level(0), log::LevelFilter::Off);
-        assert_eq!(configured_log_level(1), log::LevelFilter::Error);
-        assert_eq!(configured_log_level(2), log::LevelFilter::Warn);
-        assert_eq!(configured_log_level(3), log::LevelFilter::Info);
-        assert_eq!(configured_log_level(4), log::LevelFilter::Debug);
-        assert_eq!(configured_log_level(5), log::LevelFilter::Trace);
-    }
-}
-
+/// 异步读取最新块的 System::Account；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `account_id_hex` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_system_account_async(
     chain_handle: ChainHandle,
@@ -1237,6 +1224,18 @@ pub unsafe extern "C" fn smoldot_get_system_account_async(
     )
 }
 
+/// 异步读取finalized 的 System::Account；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `account_id_hex` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_finalized_system_account_async(
     chain_handle: ChainHandle,
@@ -1323,6 +1322,18 @@ pub unsafe extern "C" fn smoldot_get_finalized_system_account_async(
     )
 }
 
+/// 异步读取最新块的单个 storage 值；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `storage_key_hex` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_storage_value_async(
     chain_handle: ChainHandle,
@@ -1372,6 +1383,18 @@ pub unsafe extern "C" fn smoldot_get_storage_value_async(
     )
 }
 
+/// 异步读取finalized 的单个 storage 值；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `storage_key_hex` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_finalized_storage_value_async(
     chain_handle: ChainHandle,
@@ -1421,6 +1444,18 @@ pub unsafe extern "C" fn smoldot_get_finalized_storage_value_async(
     )
 }
 
+/// 异步读取最新块的批量 storage 值；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `storage_keys_json` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_storage_values_async(
     chain_handle: ChainHandle,
@@ -1484,6 +1519,18 @@ pub unsafe extern "C" fn smoldot_get_storage_values_async(
     )
 }
 
+/// 异步读取finalized 的批量 storage 值；结果经 `callback` 回传，本函数立即返回。
+///
+/// # Safety
+/// - `chain_handle` 必须来自 `smoldot_add_chain` 且未被 `smoldot_remove_chain` 释放；
+///   句柄失效会在运行期被检出并返回 -1，不构成 UB。
+/// - `storage_keys_json` 必须是有效的 NUL 结尾字符串；空指针与非 UTF-8 已在函数内检出并返回 -1。
+/// - `error_out` 允许为空；非空时必须是可写的 `*mut *mut c_char`。仅在返回 -1 时写入，
+///   写入的字符串所有权转移给调用方，必须用 `smoldot_free_string` 释放。
+/// - `callback` 必须在异步操作完成前一直有效，且**会在原生 worker 线程上被调用**，
+///   不是调用本函数的那个线程。
+/// - 回调拿到的 result 指针（成功路径，以 i64 传递）与 error 指针（失败路径）
+///   均转移所有权给调用方，两者都必须用 `smoldot_free_string` 释放，否则泄漏。
 #[no_mangle]
 pub unsafe extern "C" fn smoldot_get_finalized_storage_values_async(
     chain_handle: ChainHandle,
@@ -1577,10 +1624,11 @@ async fn forward_json_rpc_responses(
     >,
 ) {
     while let Some(response) = responses.next().await {
-        if !dispatch_native_response(&pending_native_requests, &response).await {
-            if raw_tx.send(response).is_err() {
-                break;
-            }
+        // 未被原生请求认领的响应才转发给 Dart 侧通道；通道关闭即结束转发循环。
+        if !dispatch_native_response(&pending_native_requests, &response).await
+            && raw_tx.send(response).is_err()
+        {
+            break;
         }
     }
 }
@@ -1743,5 +1791,58 @@ fn json_storage_value_response_from_bytes(
             "storageKey": storage_key_hex,
             "exists": false,
         }),
+    }
+}
+
+
+// ──── 测试模块统一置于文件末尾:clippy items_after_test_module 要求
+// 真实条目不得排在 #[cfg(test)] 模块之后,否则易被误读成"测试之后没有代码"。
+#[cfg(test)]
+mod resource_constraint_tests {
+    use super::{
+        configured_log_level, NativeCapabilityExecutor, NATIVE_CAPABILITY_QUEUE_CAPACITY,
+        NATIVE_CAPABILITY_WORKERS,
+    };
+    use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn native_capability_executor_has_fixed_workers_and_bounded_queue() {
+        let executor = NativeCapabilityExecutor::new().expect("executor starts");
+        let started = Arc::new(Barrier::new(NATIVE_CAPABILITY_WORKERS + 1));
+        let release = Arc::new(Barrier::new(NATIVE_CAPABILITY_WORKERS + 1));
+
+        for _ in 0..NATIVE_CAPABILITY_WORKERS {
+            let started = Arc::clone(&started);
+            let release = Arc::clone(&release);
+            executor
+                .try_spawn(Box::new(move || {
+                    started.wait();
+                    release.wait();
+                }))
+                .expect("worker blocker enqueued");
+        }
+        started.wait();
+
+        for _ in 0..NATIVE_CAPABILITY_QUEUE_CAPACITY {
+            executor
+                .try_spawn(Box::new(|| {}))
+                .expect("bounded queue slot available");
+        }
+        let error = executor
+            .try_spawn(Box::new(|| {}))
+            .expect_err("queue over capacity must fail");
+        assert_eq!(error, "native_capability_queue_full");
+
+        release.wait();
+    }
+
+    #[test]
+    fn configured_log_level_matches_dart_contract() {
+        assert_eq!(configured_log_level(0), log::LevelFilter::Off);
+        assert_eq!(configured_log_level(1), log::LevelFilter::Error);
+        assert_eq!(configured_log_level(2), log::LevelFilter::Warn);
+        assert_eq!(configured_log_level(3), log::LevelFilter::Info);
+        assert_eq!(configured_log_level(4), log::LevelFilter::Debug);
+        assert_eq!(configured_log_level(5), log::LevelFilter::Trace);
     }
 }

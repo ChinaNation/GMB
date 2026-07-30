@@ -352,7 +352,8 @@ pub mod pallet {
             let params = ActiveParams::<T>::get();
             let params_healthy = params.validate().is_ok()
                 && params.algorithm_version == primitives::pow_const::POW_ALGORITHM_VERSION;
-            let Some(target_window_ms) = params.target_window_ms().filter(|_| params_healthy) else {
+            let Some(target_window_ms) = params.target_window_ms().filter(|_| params_healthy)
+            else {
                 Self::deposit_event(Event::PowParamsUnhealthy { block: n });
                 return;
             };

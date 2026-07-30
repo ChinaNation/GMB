@@ -588,6 +588,40 @@ mod tests {
     }
 
     #[test]
+    fn either_cid_or_account_permanent_marker_rejects_reward() {
+        let (mut parent, pre, post, pre_delta, post_delta, _) = valid_transition();
+        let cid = b"GD001-CTZN1-TEST".to_vec();
+        put(&mut parent, storage_key::identity_claimed(&cid), ());
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| pre.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::RewardAlreadyClaimed)
+        );
+
+        let (mut parent, pre, post, pre_delta, post_delta, account) = valid_transition();
+        put(&mut parent, storage_key::account_rewarded(&account), ());
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| pre.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::RewardAlreadyClaimed)
+        );
+    }
+
+    #[test]
     fn genesis_must_have_no_claim_or_pending_state() {
         let empty = BTreeMap::<Vec<u8>, Vec<u8>>::new();
         assert_eq!(check_genesis_key_values(empty.iter()), Ok(()));

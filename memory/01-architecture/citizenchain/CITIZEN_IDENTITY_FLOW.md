@@ -58,7 +58,10 @@ prepare 与 complete 前各需一次 WebAuthn passkey 断言 + 管理员冷钱�
   `given_name` + 性别 + 出生日期。
   年龄只作注册门槛(≥16)校验,不进链上状态。
 
-2026-07-22 已完成投票引擎公民主体接入：资格接口返回 `CitizenSubject { cid_number, account_id }`；联合公投、立法公投和选举普选均按永久 CID 去重并在票据值中保存完整主体。候选快照、候选人计票和当选结果也已统一为完整 `CitizenSubject`，不得恢复裸账户主体。
+2026-07-30 已完成投票引擎公民主体收口：资格接口返回 `CitizenSubject { cid_number, account_id }`；
+联合公投、立法公投和选举普选均按永久 CID 去重并在票据值中保存完整主体。候选快照和
+当选结果保存完整主体，候选人计票以候选 CID 为唯一键；账户只证明当前签名授权，不得恢复
+裸账户身份主键。
 
 ## 3. 公民人口数据(citizen-identity pallet)
 

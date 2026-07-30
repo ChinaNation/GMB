@@ -366,7 +366,7 @@ class RuntimeUpgradeService {
       if (offset != data.length) return null;
 
       final proposerSs58 =
-          Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
+          Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix);
       final codeHashHex = _hexEncode(Uint8List.fromList(codeHashBytes));
 
       return RuntimeUpgradeProposalInfo(

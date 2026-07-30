@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 class ChainBootstrapApiException implements Exception {
   const ChainBootstrapApiException(this.message);
@@ -138,7 +139,7 @@ class ChainBootstrapManifest {
 
   bool get isSafeForLightClient =>
       chain.chainId == 'citizenchain' &&
-      chain.ss58Format == 2027 &&
+      chain.ss58Format == kGmbSs58Prefix &&
       lightClient.mode == 'smoldot' &&
       lightClient.truthSource == 'p2p_finalized_storage' &&
       !lightClient.apiIsTruth &&

@@ -330,6 +330,16 @@ pub(crate) async fn propose_legislation(
             &city_code,
         )
     };
+    // 链上写(PasskeyColdSign 档):会话 + passkey + 钱包冷签,三者缺一不可。
+    // passkey 凭证向下传给冷签会话创建入口,由类型保证这一步不会被跳过。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
     match action::prepare_propose_law_sign(
         &state,
         &input,
@@ -337,6 +347,7 @@ pub(crate) async fn propose_legislation(
         ctx.account_id.as_str(),
         ctx.institution_cid_number.as_str(),
         resolve_cid_number,
+        &passkey,
     )
     .await
     {
@@ -372,6 +383,15 @@ pub(crate) async fn cast_representative_vote(
             "institution cannot cast representative vote",
         );
     }
+    // 链上写(PasskeyColdSign 档):会话 + passkey + 钱包冷签,三者缺一不可。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
     match action::prepare_representative_vote_sign(
         &state,
         input.proposal_id,
@@ -379,6 +399,7 @@ pub(crate) async fn cast_representative_vote(
         input.approve,
         ctx.account_id.as_str(),
         ctx.institution_cid_number.as_str(),
+        &passkey,
     )
     .await
     {

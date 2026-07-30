@@ -233,7 +233,7 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
             return Err(rpc_err(
                 ErrorCode::InvalidParams,
                 format!("payer_sig 必须 64 字节,实际 {}", sig_bytes.len()),
-            ))?;
+            ));
         }
         let mut payer_sig = [0u8; 64];
         payer_sig.copy_from_slice(&sig_bytes);
@@ -243,25 +243,25 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
             return Err(rpc_err(
                 ErrorCode::InvalidParams,
                 "recipient_bank_cid 不属于当前清算行节点",
-            ))?;
+            ));
         }
         let payer_bank = self.read_user_bank(&intent.payer)?;
         if payer_bank.as_ref() != Some(&intent.payer_bank_cid) {
             return Err(rpc_err(
                 ErrorCode::InvalidParams,
                 "payer_bank_cid 与链上 UserBank[payer] 不一致",
-            ))?;
+            ));
         }
         let recipient_bank = self.read_user_bank(&intent.recipient)?;
         if recipient_bank.as_ref() != Some(&intent.recipient_bank_cid) {
             return Err(rpc_err(
                 ErrorCode::InvalidParams,
                 "recipient_bank_cid 与链上 UserBank[recipient] 不一致",
-            ))?;
+            ));
         }
         let rate_bp = self.read_fee_rate(&intent.recipient_bank_cid)?;
         if rate_bp == 0 {
-            return Err(rpc_err(ErrorCode::InvalidParams, "收款方清算行费率未配置"))?;
+            return Err(rpc_err(ErrorCode::InvalidParams, "收款方清算行费率未配置"));
         }
         let expected_fee = calc_fee(intent.amount, rate_bp)
             .map_err(|e| rpc_err(ErrorCode::InvalidParams, format!("手续费计算失败:{e}")))?;
@@ -272,7 +272,7 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
                     "手续费不匹配:expected={expected_fee}, actual={}",
                     intent.fee
                 ),
-            ))?;
+            ));
         }
 
         let current_block: u32 = self.client.info().best_number.saturated_into();

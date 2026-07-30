@@ -84,6 +84,12 @@
 - `citizenchain/runtime/Cargo.toml` 加 `onchain-issuance` + `pallet-assets` 依赖与 features 传播
 - `citizenchain/runtime/src/lib.rs` `construct_runtime` 加 `Assets`(pallet_index=24)+ `OnchainIssuance`(pallet_index=23)
 - `citizenchain/runtime/src/configs.rs` 配 `pallet_assets::Config` + `onchain_issuance::Config`；公开占位 call 在真正创建投票和执行资产业务前由 `RuntimeFeeRouter` 显式 `Reject`，`RuntimeCallFilter` 屏蔽 `pallet-assets` 原生 extrinsic。
+- **2026-07-30 创世前审计整改**:`execution.rs` / `monitor.rs` 的 11 个未实装执行入口由 `Ok(())` 改为
+  `Err(Error::<T>::NotImplemented)`(新增该错误变体)。外层 `RuntimeCallFilter` reject + `FeeRoute::Reject`
+  是外层防护,内层自己也必须 fail-closed,否则将来「先接回调、后写业务」会让投票
+  「通过且无任何链上副作用」形成假成功。唯一例外 `process_force_close_schedule_on_finalize`
+  在 `on_finalize` 中执行、无 Result 可返回且不得 panic,其安全性由上游 `execute_monitor_force_close`
+  的 fail-closed 保证(队列永远为空)。
 - `citizenchain/runtime/src/genesis_config_presets.rs` 注入 OnchainIssuance GenesisConfig(黑名单初始词表 + decimals 边界 + NRC subject)
 
 ### 客户端
@@ -179,7 +185,7 @@
 |---|---|---|
 | 1 | onchain-issuance lib.rs `#[pallet::call]` 实装 10 个 propose_X extrinsic 框架(call_index 0..=4 业务 / 10..=14 监管),不再为空 | [lib.rs](citizenchain/runtime/issuance/onchain-issuance/src/lib.rs) |
 | 2 | `configs.rs` 保持 `OnchainIssuance` 占位 call 为 `Reject`；实装后必须按 actor CID 费用账户支付链上操作费，实际 `cast` 才由投票签名者支付投票费 | [configs.rs](citizenchain/runtime/src/configs.rs) |
-| 3 | RuntimeCallFilter:OnchainIssuance 走默认 true(propose_X 是合法入口),Assets 仍全 reject | [configs/mod.rs](citizenchain/runtime/src/configs/mod.rs) |
+| 3 | RuntimeCallFilter:实装前 OnchainIssuance 与 Assets **都显式 reject**;实装时才把 OnchainIssuance 从拒绝组移入放行组(2026-07-30 订正:filter 已去掉 `_ => true` 通配,改逐 pallet 显式归类,新增 pallet 会编译期报错) | [configs.rs](citizenchain/runtime/src/configs.rs) |
 | 4 | citizenwallet `pallet_registry.dart` 加 `onchainIssuancePallet = 23` + 10 个 call_index 常量 | [citizenwallet/lib/signer/pallet_registry.dart](citizenwallet/lib/signer/pallet_registry.dart) |
 | 5 | citizenwallet `payload_decoder.dart` 加 OnchainIssuance(23) 路由分支 + 10 个解码器(**子任务 D 已实装完整 SCALE 解码**,非占位) | [citizenwallet/lib/signer/payload_decoder.dart](citizenwallet/lib/signer/payload_decoder.dart) |
 | 6 | **删除** `citizenwallet/lib/qr/bodies/onchain_asset_*_body.dart` 10 个错位文件 | citizenwallet/lib/qr/bodies/ |
@@ -202,7 +208,7 @@
 | 链端 construct_runtime | OnchainIssuance idx=23 / Assets idx=24 | ✅ |
 | 链端 RuntimeCall | OnchainIssuance 10 个 propose_X(0..=4 / 10..=14)| ✅ |
 | 链端费用路由 | `OnchainIssuance(_)` 占位 call → `Reject`，禁止扣费后无业务结果 | ✅ |
-| 链端 RuntimeCallFilter | Assets 全 reject / OnchainIssuance 默认通过 | ✅ |
+| 链端 RuntimeCallFilter | Assets 全 reject / OnchainIssuance 亦显式 reject(空壳未实装);filter 无通配分支 | ✅ |
 | citizenwallet PalletRegistry | onchainIssuancePallet=23 + 10 call_index | ✅ |
 | citizenwallet payload_decoder | OnchainIssuance(23) 路由 + 10 个完整 SCALE 解码器 | ✅ |
 | citizenapp constants | onchainIssuancePalletIndex=23 + 10 call 常量 | ✅ |

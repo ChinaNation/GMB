@@ -771,8 +771,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 发布费按既定 8:1:1 规则支付到矿工、国储会费用账户、安全基金账户。
   - `post_category = normal` 时 active 匿名、投票或竞选 CID 均可发布；未绑定 CID 的
     普通钱包账户不得发布。
-  - `post_category = campaign` 时 runtime 除 active CID 双向绑定外，还必须确认
-    `VotingIdentityByCid[cid_number]` 的 `citizen_status = Normal`。
+  - `post_category = campaign` 时 runtime 除 active CID 双向绑定外，还必须通过
+    `candidate_subject(account_id, Country)` 确认完整有效的竞选身份；仅有普通投票身份不允许发布。
   - Worker 同步 feed 只能信任已 finalized 或已确认入块的链上事件。
 - 禁止兼容：不兼容任何“媒体内容上链”或“链下假发布成功”的旧流程。
 - 禁止事项：
@@ -783,7 +783,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 必跑测试：
   - runtime 普通发布成功测试。
   - runtime 未认证用户发布 `campaign` 失败测试。
-  - runtime 认证用户发布 `campaign` 成功测试。
+  - runtime 竞选身份用户发布 `campaign` 成功测试。
+  - runtime 仅有投票身份的用户发布 `campaign` 失败测试。
   - runtime `SquarePost` 路由为签名者付款的零金额 `Onchain` 测试；实际最低链上费用 0.1 元和 8:1:1 分账复用现有 `OnchainFeeRouter` 测试。
   - CitizenApp 发布交易编码测试：阶段 5 已由 `citizenapp/test/8964/square_chain_service_test.dart` 覆盖。
   - Worker 链上事件解码与发布确认测试：阶段 6 已由 `citizenapp/cloudflare/test/chain_confirm.test.ts` 覆盖。
@@ -1096,7 +1097,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `cast_popular_vote`: `[pallet=22, call=2] + proposal_id + candidate_subject`
   - `cast_mutual_vote`: `[pallet=22, call=3] + proposal_id + voter_role_code + candidate_subject`
 - 编码：裸 SCALE call data；`proposal_id` 为 `u64`，`candidate_subject` 固定按 `CitizenSubject { cid_number, account_id }` 的同名字段顺序编码，Runtime 当前实现为唯一真源。
-- 签名/验签规则：外层链交易由快照内有效选民钱包签名；Popular 从 citizen-identity 的历史资格解析完整选民 `CitizenSubject`，Mutual 使用机构岗位票据。候选快照、候选计票和当选结果同样使用完整 `CitizenSubject`。
+- 签名/验签规则：外层链交易由快照内有效选民钱包签名；Popular 从 citizen-identity 的历史资格解析完整选民 `CitizenSubject`，并按 `(proposal_id, voter cid_number)` 防重；Mutual 使用 `institution cid_number + role_code + 当前管理员 account_id` 的机构岗位票据。候选快照和当选结果保存完整 `CitizenSubject`，候选计票以候选 `cid_number` 为唯一键；候选账户必须仍与该 CID 的竞选身份闭环。
 - 禁止兼容：底层 `create_popular_election` / `create_mutual_election` 外部调用物理删除，不保留旧创建载荷或过渡入口。
 - 禁止事项：
   - 禁止客户端直接向 election-vote 传入组织机构、岗位、席位、候选人或选民快照来创建选举。

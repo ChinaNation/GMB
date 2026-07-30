@@ -586,15 +586,39 @@ fn legal_representative_change(
     ))
 }
 
+/// 一次机构链签名会话的完整描述。
+///
+/// 把「发起管理员 / 机构 CID / 用途 / 待签 call / 动作码 / 业务上下文」收成一体,
+/// 避免 `build_chain_sign_output` 变成长参数列表——那样既容易在调用点串位,
+/// 也会触发 `clippy::too_many_arguments`(手写函数不走 FRAME ABI 豁免)。
+pub(crate) struct InstitutionChainSignRequest<'a> {
+    /// 发起管理员的钱包账户 account_id。
+    pub(crate) account_id: &'a str,
+    /// 目标机构 CID。
+    pub(crate) cid_number: &'a str,
+    /// 会话用途常量,落库后决定 submit 阶段的投影分支。
+    pub(crate) purpose: &'static str,
+    /// 待冷签的 extrinsic call_data。
+    pub(crate) call_data: Vec<u8>,
+    /// QR 链交易动作码 `(pallet_index << 8) | call_index`。
+    pub(crate) chain_action: u16,
+    /// 落库的业务上下文,供 submit 阶段还原操作语义。
+    pub(crate) context: serde_json::Value,
+}
+
 pub(crate) async fn build_chain_sign_output(
     state: &AppState,
-    account_id: &str,
-    cid_number: &str,
-    purpose: &'static str,
-    call_data: Vec<u8>,
-    chain_action: u16,
-    context: serde_json::Value,
+    request: InstitutionChainSignRequest<'_>,
+    passkey: &crate::auth::passkey::PasskeyProof,
 ) -> Result<PrepareInstitutionChainOutput, axum::response::Response> {
+    let InstitutionChainSignRequest {
+        account_id,
+        cid_number,
+        purpose,
+        call_data,
+        chain_action,
+        context,
+    } = request;
     let prepared = chain_submit::prepare_signing(&call_data, account_id)
         .await
         .map_err(|err| {
@@ -629,7 +653,7 @@ pub(crate) async fn build_chain_sign_output(
     };
     state
         .db
-        .insert_chain_sign_session(&session)
+        .insert_chain_sign_session(&session, passkey)
         .map_err(|err| {
             tracing::error!(error = %err, "insert institution governance session failed");
             api_error(
@@ -655,6 +679,16 @@ pub(crate) async fn prepare_institution_governance(
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    // 链上写(PasskeyColdSign 档):会话 + passkey + 钱包冷签,三者缺一不可。
+    // 凭证向下传给冷签会话创建入口,由类型保证这一步不会被跳过。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
         Err(resp) => return resp,
     };
     let binding = match auth_repo::active_node_binding(&state.db) {
@@ -756,12 +790,15 @@ pub(crate) async fn prepare_institution_governance(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.account_id.as_str(),
-        cid_number,
-        PURPOSE_INSTITUTION_GOVERNANCE,
-        chain.call_data,
-        chain.action,
-        serde_json::json!({ "cid_number": cid_number, "op": "governance" }),
+        InstitutionChainSignRequest {
+            account_id: ctx.account_id.as_str(),
+            cid_number,
+            purpose: PURPOSE_INSTITUTION_GOVERNANCE,
+            call_data: chain.call_data,
+            chain_action: chain.action,
+            context: serde_json::json!({ "cid_number": cid_number, "op": "governance" }),
+        },
+        &passkey,
     )
     .await
     {
@@ -790,6 +827,16 @@ pub(crate) async fn prepare_register_institution_admins(
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    // 链上写(PasskeyColdSign 档):会话 + passkey + 钱包冷签,三者缺一不可。
+    // 凭证向下传给冷签会话创建入口,由类型保证这一步不会被跳过。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
         Err(resp) => return resp,
     };
     if let Err(resp) = ensure_registry_admin(&ctx) {
@@ -840,16 +887,19 @@ pub(crate) async fn prepare_register_institution_admins(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.account_id.as_str(),
-        cid_number,
-        PURPOSE_INSTITUTION_REGISTER_ADMINS,
-        chain.call_data,
-        chain.action,
-        serde_json::json!({
-            "cid_number": cid_number,
-            "actor_cid_number": binding.institution_cid_number,
-            "op": "register_admins"
-        }),
+        InstitutionChainSignRequest {
+            account_id: ctx.account_id.as_str(),
+            cid_number,
+            purpose: PURPOSE_INSTITUTION_REGISTER_ADMINS,
+            call_data: chain.call_data,
+            chain_action: chain.action,
+            context: serde_json::json!({
+                "cid_number": cid_number,
+                "actor_cid_number": binding.institution_cid_number,
+                "op": "register_admins"
+            }),
+        },
+        &passkey,
     )
     .await
     {

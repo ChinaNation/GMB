@@ -25,6 +25,7 @@ import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_cache.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 固定治理机构资金业务的默认岗位码；普通机构必须由任职人明确填写动态岗位码。
 String defaultInstitutionProposerRoleCode(InstitutionInfo institution) {
@@ -994,9 +995,9 @@ class MultisigTransferService {
       final proposerBytes = data.sublist(offset, offset + 32);
 
       final beneficiarySs58 =
-          Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), 2027);
+          Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix);
       final proposerSs58 =
-          Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
+          Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix);
 
       return TransferProposalInfo(
         proposalId: proposalId,
@@ -1230,11 +1231,11 @@ class MultisigTransferService {
         actorCidNumber: actorCid.$1,
         institutionAccountId: institutionAccountId,
         beneficiary:
-            Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), 2027),
+            Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix),
         amountFen: amountBig,
         remark: remark,
         proposer:
-            Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027),
+            Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix),
       );
     } catch (e) {
       // SCALE 解码失败必须留痕，与"确实不是安全基金提案"区分开。
@@ -1274,7 +1275,7 @@ class MultisigTransferService {
         actorCidNumber: actorCid.$1,
         institutionAccountId: institutionAccountId,
         amountFen: amountBig,
-        proposer: Keyring().encodeAddress(proposerBytes, 2027),
+        proposer: Keyring().encodeAddress(proposerBytes, kGmbSs58Prefix),
       );
     } catch (e) {
       // SCALE 解码失败必须留痕，与"确实不是手续费划转提案"区分开。

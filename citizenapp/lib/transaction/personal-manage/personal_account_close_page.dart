@@ -21,6 +21,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import 'personal_manage_service.dart';
 import 'personal_proposal_history_service.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 关闭个人多签账户提案页面。
 ///
@@ -506,7 +507,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
 
   String _hexToSs58(String hex) {
     final bytes = _hexDecode(hex);
-    return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
+    return Keyring().encodeAddress(Uint8List.fromList(bytes), kGmbSs58Prefix);
   }
 
   String _toHex(List<int> bytes) {

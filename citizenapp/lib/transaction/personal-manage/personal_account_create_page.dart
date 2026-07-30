@@ -32,7 +32,6 @@ class PersonalAccountCreatePage extends StatefulWidget {
 }
 
 class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
-  static const int _ss58Prefix = 2027;
 
   final _nameController = TextEditingController();
   final _amountController = TextEditingController();
@@ -107,7 +106,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
       return derivePersonalAccountSs58(
         creatorAccountId: Uint8List.fromList(_hexDecode(wallet.accountId)),
         accountName: name,
-        ss58Prefix: _ss58Prefix,
+        ss58Prefix: kGmbSs58Prefix,
       );
     } catch (_) {
       return null;
@@ -749,7 +748,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
       ? a
       : '${a.substring(0, 6)}...${a.substring(a.length - 6)}';
   String _hexToSs58(String hex) =>
-      Keyring().encodeAddress(Uint8List.fromList(_hexDecode(hex)), _ss58Prefix);
+      Keyring().encodeAddress(Uint8List.fromList(_hexDecode(hex)), kGmbSs58Prefix);
   String _toHex(List<int> b) {
     final s = StringBuffer();
     for (final v in b) {

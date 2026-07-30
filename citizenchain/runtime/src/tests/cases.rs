@@ -1028,6 +1028,28 @@ fn runtime_call_filter_blocks_disabled_and_low_level_calls() {
 }
 
 #[test]
+fn runtime_call_filter_has_no_wildcard_arm() {
+    // `RuntimeCallFilter` 必须逐 pallet 显式归类,禁止 `_ =>` 兜底分支。
+    // 有了通配分支,新增 pallet 的 extrinsic 会默认放行、不触发编译期
+    // non-exhaustive 错误,等于把未审查的调用悄悄暴露给外部。
+    // 编译器只能保证"删掉某个 pallet 分支会报错",拦不住有人把 `_` 加回来,
+    // 故在此做源码级钉死(与 fee_route 同一策略)。
+    let source = include_str!("../configs.rs");
+    let start = source
+        .find("impl Contains<RuntimeCall> for RuntimeCallFilter")
+        .expect("RuntimeCallFilter 实现必须存在");
+    let body = &source[start..];
+    let end = body
+        .find("\n}\n")
+        .expect("RuntimeCallFilter 实现必须有结束大括号");
+    let body = &body[..end];
+    assert!(
+        !body.contains("_ =>"),
+        "RuntimeCallFilter 不得出现 `_ =>` 通配分支;新增 pallet 必须显式归类为放行或拒绝"
+    );
+}
+
+#[test]
 fn pow_digest_author_finds_pow_engine_author() {
     // pre_digest 现在存储 sr25519 公钥，PowDigestAuthor 解码后派生 AccountId。
     let public = sp_core::sr25519::Public::from_raw([21u8; 32]);
@@ -1800,6 +1822,23 @@ fn genesis_public_institutions_full_mint_counts() {
             builtin_count + primitives::cid::official_derive::public_institution_derived_count()
         );
         assert_eq!(builtin_count, 296);
+        assert_eq!(total, 49_593);
+
+        // 49,593 / 99,232 是公权口径：每个机构都有主、费账户，NRC 另有安全基金与和账户，
+        // 43 家 PRB 各有质押账户，FSC 另有联邦公民安全基金账户。
+        let public_account_count =
+            public_manage::InstitutionAccounts::<Runtime>::iter().count();
+        assert_eq!(public_account_count, 99_232);
+
+        // 私权创世公民链基金会另占一个机构及主、费两个协议账户；全创世合计为
+        // 49,594 个机构、99,234 个机构协议账户，管理员个人钱包不计入机构协议账户。
+        let private_institution_count = private_manage::Institutions::<Runtime>::iter().count();
+        let private_account_count =
+            private_manage::InstitutionAccounts::<Runtime>::iter().count();
+        assert_eq!(private_institution_count, 1);
+        assert_eq!(private_account_count, 2);
+        assert_eq!(total + private_institution_count, 49_594);
+        assert_eq!(public_account_count + private_account_count, 99_234);
 
         // 抽查:派生枚举首条必须与链上登记逐字节一致。
         let mut first: Option<(Vec<u8>, Vec<u8>, Vec<u8>)> = None;

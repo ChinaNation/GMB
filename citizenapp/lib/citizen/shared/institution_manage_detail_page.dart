@@ -828,7 +828,7 @@ class _MultisigProposalDetailPageState
   List<Widget> _buildCreateInfoRows() {
     final info = _createInfo!;
     final accountSs58 =
-        Keyring().encodeAddress(_hexDecode(info.accountId), 2027);
+        Keyring().encodeAddress(_hexDecode(info.accountId), kGmbSs58Prefix);
     return [
       _buildInfoRow('多签账户', _truncateAddress(accountSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: accountSs58));
@@ -855,7 +855,7 @@ class _MultisigProposalDetailPageState
   List<Widget> _buildCloseInfoRows() {
     final info = _closeInfo!;
     final accountSs58 =
-        Keyring().encodeAddress(_hexDecode(info.accountId), 2027);
+        Keyring().encodeAddress(_hexDecode(info.accountId), kGmbSs58Prefix);
     return [
       _buildInfoRow('多签账户', _truncateAddress(accountSs58), onCopy: () {
         Clipboard.setData(ClipboardData(text: accountSs58));
@@ -881,7 +881,7 @@ class _MultisigProposalDetailPageState
   List<Widget> _buildInstitutionCloseInfoRows() {
     final info = _institutionCloseInfo!;
     final accountSs58 =
-        Keyring().encodeAddress(_hexDecode(info.institutionAccountId), 2027);
+        Keyring().encodeAddress(_hexDecode(info.institutionAccountId), kGmbSs58Prefix);
     return [
       _buildInfoRow('机构 CID', info.actorCidNumber),
       const Divider(height: 20),

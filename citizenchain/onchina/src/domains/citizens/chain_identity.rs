@@ -187,12 +187,9 @@ pub(crate) async fn prepare_citizen_onchain_signature(
     if let Err(resp) = ensure_registry_admin(&ctx) {
         return resp;
     }
-    // 整个业务操作只消费这一次 Passkey；后续公民回签通过 operation_id 绑定。
-    if let Err(resp) =
-        crate::auth::passkey::require_passkey_assertion(&state, &headers, ctx.account_id.as_str())
-    {
-        return resp;
-    }
+    // 本步只构造待公民签名的载荷，不产生 extrinsic、不建冷签会话，属 Session 档。
+    // 整个业务操作的那一次 Passkey 消费在 `complete_citizen_onchain_signature`
+    // ——即真正创建冷签会话、授权链上写的那一步，保持「一次操作一次 passkey」。
     let citizen_account = match resolve_citizen_account(input.account_id.as_str()) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -285,6 +282,16 @@ pub(crate) async fn complete_citizen_onchain_signature(
     if let Err(resp) = ensure_registry_admin(&ctx) {
         return resp;
     }
+    // 链上写(PasskeyColdSign 档):本步凭公民回签创建管理员冷签会话，是整个
+    // 公民上链操作真正被授权的那一刻，故这里消费本次操作唯一的一次 Passkey。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
     let citizen_account = match resolve_citizen_account(input.account_id.as_str()) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -448,7 +455,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         expires_at,
         consumed_at: None,
     };
-    if let Err(err) = state.db.insert_chain_sign_session(&session) {
+    if let Err(err) = state.db.insert_chain_sign_session(&session, &passkey) {
         tracing::error!(error = %err, "insert identity push session failed");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "冷签会话落库失败");
     }

@@ -76,9 +76,12 @@ jobs:
         working-directory: citizenapp
         run: flutter pub get
 
+      # 与 citizenwallet-ci.yml 保持同一口径:warning 必须阻断,只放行 info。
+      # 原先带 --no-fatal-warnings,等于 warning 不红,两端门禁松紧不一致;
+      # 2026-07-30 创世前审计收严(改前实跑 flutter analyze 为 No issues found,不会一上来就红)。
       - name: 分析代码
         working-directory: citizenapp
-        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+        run: flutter analyze --no-fatal-infos
 
       - name: 运行测试
         working-directory: citizenapp
@@ -102,6 +105,7 @@ jobs:
         uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi
+          components: clippy
 
       - name: 读取 Flutter 版本
         id: flutter-version
@@ -141,16 +145,30 @@ jobs:
           fi
           bash citizenapp/scripts/check-chainspec-frozen.sh
 
-      # 编译 smoldot Rust FFI 库（Android arm64-v8a + armeabi-v7a）
-      - name: 编译 smoldot native library (Android ARM)
-        working-directory: citizenapp
-        run: ./scripts/build-smoldot-native.sh android
-
+      # 缓存必须排在任何 cargo 步骤之前:rust-cache 在本步骤执行时才恢复,
+      # 原先它排在原生编译之后,那次编译完全没吃到缓存(2026-07-30 创世前审计修正)。
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "citizenapp-rust-android"
           workspaces: citizenapp/rust -> target
+
+      # citizenapp/rust 是 3643 行自有代码,含聊天 MLS 端到端加密与密钥落盘信封加密,
+      # 并通过 13 个 unsafe extern "C" 入口与 Dart 交换裸指针,必须过静态门禁。
+      # smoldot-light 是 path 依赖(收编 fork),clippy 只 lint workspace 成员、不 lint 依赖,
+      # 故本门禁不会把 smoldotpow 的上游告警拖进来。
+      - name: Rust FFI clippy 门禁
+        working-directory: citizenapp/rust
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Rust FFI 单元测试
+        working-directory: citizenapp/rust
+        run: cargo test --workspace
+
+      # 编译 smoldot Rust FFI 库（Android arm64-v8a + armeabi-v7a）
+      - name: 编译 smoldot native library (Android ARM)
+        working-directory: citizenapp
+        run: ./scripts/build-smoldot-native.sh android
 
       - name: 安装 Flutter 依赖
         working-directory: citizenapp

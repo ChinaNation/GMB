@@ -185,7 +185,39 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             // runtime 升级删除对应分支；不能只解除过滤就宣称业务可用。
             RuntimeCall::OnchainIssuance(_) => false,
             RuntimeCall::OffchainTransaction(_) => false,
-            _ => true,
+
+            // ── 放行:逐 pallet 显式列出,不设 `_` 通配分支 ──
+            // 与同文件 `fee_route` 保持同一策略:新增 pallet 会触发编译期
+            // non-exhaustive 错误,强制作者显式决定放行还是拒绝,
+            // 不会因为默认放行而悄悄把未审查的 extrinsic 暴露给外部。
+            // 系统与共识基础。
+            RuntimeCall::System(_) | RuntimeCall::Timestamp(_) | RuntimeCall::Grandpa(_) => true,
+            // 交易与发行。
+            RuntimeCall::OnchainTransaction(_)
+            | RuntimeCall::MultisigTransfer(_)
+            | RuntimeCall::FullnodeIssuance(_)
+            | RuntimeCall::ResolutionIssuance(_)
+            | RuntimeCall::CitizenIssuance(_) => true,
+            // 投票引擎核心与四个 sub-pallet。
+            RuntimeCall::VotingEngine(_)
+            | RuntimeCall::InternalVote(_)
+            | RuntimeCall::JointVote(_)
+            | RuntimeCall::ElectionVote(_)
+            | RuntimeCall::LegislationVote(_) => true,
+            // 治理与协议升级。
+            RuntimeCall::RuntimeUpgrade(_)
+            | RuntimeCall::ResolutionDestroy(_)
+            | RuntimeCall::GrandpaKeyChange(_)
+            | RuntimeCall::LegislationYuan(_) => true,
+            // 实体生命周期与管理员。
+            RuntimeCall::PublicManage(_)
+            | RuntimeCall::PrivateManage(_)
+            | RuntimeCall::PersonalManage(_)
+            | RuntimeCall::PersonalAdmins(_) => true,
+            // 身份与业务索引。
+            RuntimeCall::CitizenIdentity(_)
+            | RuntimeCall::AddressRegistry(_)
+            | RuntimeCall::SquarePost(_) => true,
         }
     }
 }

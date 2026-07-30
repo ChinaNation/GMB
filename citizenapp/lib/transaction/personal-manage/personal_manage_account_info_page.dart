@@ -948,7 +948,7 @@ class _PersonalManageAccountInfoPageState
 
   String _hexToSs58(String hex) {
     final bytes = _hexDecode(hex);
-    return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
+    return Keyring().encodeAddress(Uint8List.fromList(bytes), kGmbSs58Prefix);
   }
 
   Uint8List _hexDecode(String hex) {

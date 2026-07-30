@@ -81,7 +81,17 @@ pub(crate) struct ChainSignSession {
 }
 
 impl Db {
-    pub(crate) fn insert_chain_sign_session(&self, s: &ChainSignSession) -> Result<(), String> {
+    /// 创建冷签会话 = 发起一次链上写。
+    ///
+    /// `_passkey` 是 [`PasskeyProof`](crate::auth::passkey::PasskeyProof),
+    /// 只能由 `require_passkey_assertion` 产出。三档鉴权铁律要求链上写 =
+    /// 会话 + passkey + 冷签,这里用类型把 passkey 这一半钉死:
+    /// 没做 passkey 就调本函数会编译失败,不再依赖各 handler 自觉。
+    pub(crate) fn insert_chain_sign_session(
+        &self,
+        s: &ChainSignSession,
+        _passkey: &crate::auth::passkey::PasskeyProof,
+    ) -> Result<(), String> {
         let s = ChainSignSession {
             request_id: s.request_id.clone(),
             purpose: s.purpose.clone(),
@@ -740,7 +750,7 @@ pub(crate) async fn prepare_citizen_occupy(
         "actor_role_code": actor_role_code,
         "op": "occupy",
     });
-    if let Err(resp) = require_admin_security_grant(
+    let passkey = match require_admin_security_grant(
         &state,
         &headers,
         &ctx,
@@ -748,8 +758,9 @@ pub(crate) async fn prepare_citizen_occupy(
         validated.cid_type.as_str(),
         Some(&occupy_grant_payload),
     ) {
-        return resp;
-    }
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
     let seed = cid_seed(&validated);
 
     // 发号:本地投影查重后，从同一 finalized 快照确认登记、绑定和 revision 都不存在。
@@ -817,7 +828,7 @@ pub(crate) async fn prepare_citizen_occupy(
         expires_at,
         consumed_at: None,
     };
-    if let Err(err) = state.db.insert_chain_sign_session(&session) {
+    if let Err(err) = state.db.insert_chain_sign_session(&session, &passkey) {
         tracing::error!(error = %err, "insert occupy pending session failed");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "占号会话落库失败");
     }
@@ -1113,7 +1124,7 @@ pub(crate) async fn prepare_citizen_rebind(
         "actor_role_code": actor_role_code,
         "op": "admin_rebind",
     });
-    if let Err(resp) = require_admin_security_grant(
+    let passkey = match require_admin_security_grant(
         &state,
         &headers,
         &ctx,
@@ -1121,8 +1132,9 @@ pub(crate) async fn prepare_citizen_rebind(
         cid_number.as_str(),
         Some(&rebind_grant_payload),
     ) {
-        return resp;
-    }
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
 
     let issued_at = Utc::now();
     let expires_at = issued_at + Duration::seconds(SESSION_TTL_SECS);
@@ -1192,7 +1204,7 @@ pub(crate) async fn prepare_citizen_rebind(
         expires_at,
         consumed_at: None,
     };
-    if let Err(err) = state.db.insert_chain_sign_session(&session) {
+    if let Err(err) = state.db.insert_chain_sign_session(&session, &passkey) {
         tracing::error!(error = %err, "insert rebind pending session failed");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话落库失败");
     }
@@ -1500,7 +1512,7 @@ pub(crate) async fn prepare_citizen_revoke(
         "actor_role_code": actor_role_code,
         "op": "revoke",
     });
-    if let Err(resp) = require_admin_security_grant(
+    let passkey = match require_admin_security_grant(
         &state,
         &headers,
         &ctx,
@@ -1508,8 +1520,9 @@ pub(crate) async fn prepare_citizen_revoke(
         cid_number.as_str(),
         Some(&grant_payload),
     ) {
-        return resp;
-    }
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
     match state.db.find_citizen_by_cid(cid_number.as_str()) {
         Ok(Some(_)) => {}
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "公民档案不存在"),
@@ -1570,7 +1583,7 @@ pub(crate) async fn prepare_citizen_revoke(
         expires_at,
         consumed_at: None,
     };
-    if let Err(err) = state.db.insert_chain_sign_session(&session) {
+    if let Err(err) = state.db.insert_chain_sign_session(&session, &passkey) {
         tracing::error!(error = %err, "insert revoke session failed");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "吊销会话落库失败");
     }
@@ -1955,6 +1968,11 @@ pub(crate) async fn submit_chain_sign(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // 链上写(PasskeyColdSign 档)由两原语搭成:passkey 在冷签会话创建那一步消费
+    // (由 `PasskeyProof` 类型强制),钱包冷签在本步消费。故本步不再要求第二次
+    // passkey——那会变成"一个操作两次 passkey",与三档契约的"一次"相违。
+    // 本步的会话归属校验(session.account_id == ctx.account_id)+ 签名者一致校验
+    // + 链上授权复核共同保证提交方就是发起方。
     let session = match state.db.find_chain_sign_session(input.request_id.as_str()) {
         Ok(Some(v)) => v,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "冷签会话不存在"),

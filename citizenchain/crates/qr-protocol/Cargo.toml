@@ -8,6 +8,8 @@ homepage.workspace = true
 license.workspace = true
 
 [dependencies]
+base64 = "0.22"
+hex = "0.4"
 serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 serde_yaml = "0.9"

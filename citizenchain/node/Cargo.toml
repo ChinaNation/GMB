@@ -24,8 +24,8 @@ workspace = true
 
 [dependencies]
 async-channel = "1.9"
-base64 = "0.22"
 hex = "0.4"
+qr-protocol = { path = "../crates/qr-protocol" }   # QR_V1 协议真源:action registry + 载荷编解码
 hex-literal = "0.4"
 clap = { workspace = true }
 futures = { workspace = true }

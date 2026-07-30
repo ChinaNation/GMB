@@ -379,7 +379,7 @@ void main() {
         signerPublicKeyHex: testSignerPublicKeyHex,
         payloadHex: '0x${_hexBytes(template)}',
       );
-      final accountOffset = 32 + 1 + cid.length + 32;
+      const accountOffset = 32 + 1 + cid.length + 32;
       final exactAuthorization = List<int>.from(template)
         ..setRange(accountOffset, accountOffset + 32, account);
       final input =

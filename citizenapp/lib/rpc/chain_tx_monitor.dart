@@ -14,6 +14,7 @@ import 'chain_rpc.dart';
 import 'smoldot_client.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 class _DecodedTransferEvent {
   const _DecodedTransferEvent({
@@ -56,7 +57,6 @@ class ChainTxMonitor {
   void Function(String ss58Address, double newBalance)? onBalanceChanged;
 
   /// SS58 前缀。
-  static const int _ss58Prefix = 2027;
 
   /// 每次补同步最多连续处理的区块数，避免手机长时间离线后一次性压节点。
   static const int _maxBlocksPerRun = 120;
@@ -759,7 +759,7 @@ class ChainTxMonitor {
 
   String _publicKeyToSs58(Uint8List normalizedAccountId) {
     try {
-      return Keyring().encodeAddress(normalizedAccountId.toList(), _ss58Prefix);
+      return Keyring().encodeAddress(normalizedAccountId.toList(), kGmbSs58Prefix);
     } catch (_) {
       return '0x${_hexEncode(normalizedAccountId)}';
     }

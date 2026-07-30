@@ -23,21 +23,21 @@ pub(crate) fn append_audit_log(
     // 目标 CID 只作关联列 target_cid:人主体目标 R5 去地域化不载省市,机构目标省市也不代表办理局。
     // 单一真源 resolve_node_scope(与审计读侧管理员作用域同源);节点未绑定机构 = 非法调用,
     // 丢弃不写(禁止兜底/退化,绝不落到错误分区)。
-    let (province_code, city_code) =
-        match crate::domains::projection::resolve_node_scope(&state.db) {
-            Ok(Some((_is_federal, scope))) => {
-                let city = (scope.city_code != "000").then_some(scope.city_code);
-                (scope.province_code, city)
-            }
-            Ok(None) => {
-                tracing::warn!(action = %log_action, "append audit dropped: node unbound, no registrar scope");
-                return;
-            }
-            Err(err) => {
-                tracing::warn!(action = %log_action, error = %err, "append audit dropped: resolve node scope failed");
-                return;
-            }
-        };
+    let (province_code, city_code) = match crate::domains::projection::resolve_node_scope(&state.db)
+    {
+        Ok(Some((_is_federal, scope))) => {
+            let city = (scope.city_code != "000").then_some(scope.city_code);
+            (scope.province_code, city)
+        }
+        Ok(None) => {
+            tracing::warn!(action = %log_action, "append audit dropped: node unbound, no registrar scope");
+            return;
+        }
+        Err(err) => {
+            tracing::warn!(action = %log_action, error = %err, "append audit dropped: resolve node scope failed");
+            return;
+        }
+    };
     if let Err(err) = state.db.with_client(move |conn| {
         conn.execute(
             "INSERT INTO audit(

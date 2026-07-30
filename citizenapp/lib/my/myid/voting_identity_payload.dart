@@ -13,8 +13,9 @@ import 'dart:typed_data';
 
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+
 /// CitizenChain SS58 前缀。
-const int _ss58Prefix = 2027;
 
 enum CitizenIdentityConsentLevel { voting, candidate }
 
@@ -45,7 +46,7 @@ class VotingIdentityConsentPayload {
   /// 0x 小写 hex,32 字节公民钱包公钥。
   final String accountId;
 
-  /// SS58(prefix=2027)展示地址。
+  /// SS58(prefix 走 kGmbSs58Prefix 单源)展示地址。
   final String ss58Address;
 
   /// YYYYMMDD 整数。
@@ -212,7 +213,7 @@ class VotingIdentityConsentPayload {
         identityLevel: CitizenIdentityConsentLevel.voting,
         cidNumber: cidNumber,
         accountId: _bytesToLowerHex(walletBytes),
-        ss58Address: Keyring().encodeAddress(walletBytes.toList(), _ss58Prefix),
+        ss58Address: Keyring().encodeAddress(walletBytes.toList(), kGmbSs58Prefix),
         validFrom: validFrom,
         validUntil: validUntil,
         statusNormal: status == 0,

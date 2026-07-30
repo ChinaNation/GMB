@@ -21,7 +21,7 @@ use crate::core::institution_call::{
     ProposeAddInstitutionAccountArgs, ProposeCloseInstitutionArgs,
 };
 use crate::institution::accounts::derive::derive_account_bytes;
-use crate::institution::admins::{build_chain_sign_output, code_bytes};
+use crate::institution::admins::{build_chain_sign_output, code_bytes, InstitutionChainSignRequest};
 use crate::institution::subjects::model::{CreateAccountInput, DeleteAccountInput};
 use crate::institution::subjects::service::{
     institution_account_kind_label, is_protocol_account_name, validate_account_name,
@@ -113,6 +113,16 @@ pub(crate) async fn create_account(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // 链上写(PasskeyColdSign 档):会话 + passkey + 钱包冷签,三者缺一不可。
+    // 凭证向下传给冷签会话创建入口,由类型保证这一步不会被跳过。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
     // 账户名格式校验 + 制度专属保留名拒绝(永久质押/安全基金/两和基金)。
     let account_name = match validate_account_name(&input.account_name) {
         Ok(v) => v,
@@ -141,16 +151,19 @@ pub(crate) async fn create_account(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.account_id.as_str(),
-        &cid_number,
-        PURPOSE_INSTITUTION_ADD_ACCOUNT,
-        chain.call_data,
-        chain.action,
-        serde_json::json!({
-            "cid_number": cid_number.clone(),
-            "op": "add_account",
-            "account_name": account_name.clone(),
-        }),
+        InstitutionChainSignRequest {
+            account_id: ctx.account_id.as_str(),
+            cid_number: &cid_number,
+            purpose: PURPOSE_INSTITUTION_ADD_ACCOUNT,
+            call_data: chain.call_data,
+            chain_action: chain.action,
+            context: serde_json::json!({
+                "cid_number": cid_number.clone(),
+                "op": "add_account",
+                "account_name": account_name.clone(),
+            }),
+        },
+        &passkey,
     )
     .await
     {
@@ -184,6 +197,7 @@ pub(crate) async fn list_accounts(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // 只读查询(Session 档):三档铁律规定读操作只要有效会话,不得要求 passkey。
     let cid_number = cid_number.trim().to_string();
     // 机构存在性与作用域仍以本地 subjects 表确认;账户明细一律从链上读取。
     let Some((inst, _)) = (match state.db.get_institution_with_accounts(&cid_number) {
@@ -232,6 +246,16 @@ pub(crate) async fn delete_account(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // 链上写(PasskeyColdSign 档):会话 + passkey + 钱包冷签,三者缺一不可。
+    // 凭证向下传给冷签会话创建入口,由类型保证这一步不会被跳过。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
+        Err(resp) => return resp,
+    };
     // 协议账户(主/费用/两和基金/安全基金/永久质押/清算)永不可关闭。
     if is_protocol_account_name(&account_name) {
         return api_error(StatusCode::CONFLICT, 1007, "协议账户不可删除");
@@ -267,16 +291,19 @@ pub(crate) async fn delete_account(
     });
     let output = match build_chain_sign_output(
         &state,
-        ctx.account_id.as_str(),
-        &cid_number,
-        PURPOSE_INSTITUTION_CLOSE_ACCOUNT,
-        chain.call_data,
-        chain.action,
-        serde_json::json!({
-            "cid_number": cid_number.clone(),
-            "op": "close_account",
-            "account_name": account_name.clone(),
-        }),
+        InstitutionChainSignRequest {
+            account_id: ctx.account_id.as_str(),
+            cid_number: &cid_number,
+            purpose: PURPOSE_INSTITUTION_CLOSE_ACCOUNT,
+            call_data: chain.call_data,
+            chain_action: chain.action,
+            context: serde_json::json!({
+                "cid_number": cid_number.clone(),
+                "op": "close_account",
+                "account_name": account_name.clone(),
+            }),
+        },
+        &passkey,
     )
     .await
     {

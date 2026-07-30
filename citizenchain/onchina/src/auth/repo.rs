@@ -408,9 +408,8 @@ fn authorization_scope_from_sources(
             })?;
         return Ok((Some(province_name), None, None));
     }
-    institution_scope.ok_or_else(|| {
-        format!("{SCOPE_ERROR_PREFIX}binding institution scope is required")
-    })
+    institution_scope
+        .ok_or_else(|| format!("{SCOPE_ERROR_PREFIX}binding institution scope is required"))
 }
 
 pub(crate) fn derive_candidate_authorization_scope_conn(
@@ -1147,11 +1146,7 @@ mod tests {
     /// 非 Tier1 机构给出作用域后即通过,不再要求本地投影命中。
     #[test]
     fn non_tier1_accepts_scope_derived_without_projection() {
-        let derived_from_cid = Some((
-            Some("贵州省".to_string()),
-            Some("绥阳市".to_string()),
-            None,
-        ));
+        let derived_from_cid = Some((Some("贵州省".to_string()), Some("绥阳市".to_string()), None));
         let scope = authorization_scope_from_sources("SFGY", None, derived_from_cid)
             .expect("私权机构作用域可由机构 CID 派生");
         assert_eq!(
@@ -1163,8 +1158,8 @@ mod tests {
     /// 机构 CID 的 R5 = 省2 + 市3,私权机构也能解出——这是缺投影时的兜底真源。
     #[test]
     fn private_institution_cid_yields_province_and_city() {
-        let (province, city) = cid_scope_codes(b"GZ018-SFGYR-201206100-2026")
-            .expect("私权机构 CID 必须能解出省市码");
+        let (province, city) =
+            cid_scope_codes(b"GZ018-SFGYR-201206100-2026").expect("私权机构 CID 必须能解出省市码");
         assert_eq!(&province, b"GZ");
         assert_eq!(&city, b"018");
     }

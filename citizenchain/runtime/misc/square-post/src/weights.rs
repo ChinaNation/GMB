@@ -15,8 +15,13 @@ pub trait WeightInfo {
 pub struct SubstrateWeight<T>(PhantomData<T>);
 
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+    /// 2026-07-30 以 Campaign 类别、真实候选人身份校验路径执行 50×20 次 benchmark。
+    /// 读取帖子、CID 双向绑定、CID 主记录、投票身份、候选人身份、时间戳和 CID 发帖计数，
+    /// 写入帖子与 CID 发帖计数；证明大小保守取 3,834 字节。
     fn publish_post() -> Weight {
-        Weight::from_parts(30_000_000, 0).saturating_add(T::DbWeight::get().reads_writes(2, 2))
+        Weight::from_parts(30_000_000, 3_834)
+            .saturating_add(T::DbWeight::get().reads(8))
+            .saturating_add(T::DbWeight::get().writes(2))
     }
 
     // 首扣：价格/CID/机构账户 + 转账 + Active 状态 + 双向调度索引。
@@ -52,7 +57,9 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 
 impl WeightInfo for () {
     fn publish_post() -> Weight {
-        Weight::zero()
+        Weight::from_parts(30_000_000, 3_834)
+            .saturating_add(frame_support::weights::constants::RocksDbWeight::get().reads(8))
+            .saturating_add(frame_support::weights::constants::RocksDbWeight::get().writes(2))
     }
 
     fn subscribe() -> Weight {

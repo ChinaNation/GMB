@@ -1398,6 +1398,11 @@ pub mod pallet {
         /// 复用删批量占号释放出的 `call_index(7)`。
         #[pallet::call_index(7)]
         #[pallet::weight(<T as Config>::WeightInfo::admin_rebind_cid_account_id())]
+        // 8 个参数逐字节镜像 CidRebindAuthorization 签名载荷,属链上编码契约。
+        // citizenwallet payload_decoder 逐字段解码并中文展示(两色识别要求
+        // expected_binding_revision / expires_at / new_account_signature 三个防重放
+        // 字段单独可见),合并成结构体会同时改 SCALE 编码和破坏该展示,故只放宽本函数。
+        #[allow(clippy::too_many_arguments)]
         pub fn admin_rebind_cid_account_id(
             origin: OriginFor<T>,
             actor_cid_number: CidNumberBound,

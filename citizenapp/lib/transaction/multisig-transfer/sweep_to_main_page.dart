@@ -16,6 +16,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 治理机构手续费划转提案创建页面。
 ///
@@ -86,7 +87,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
 
   String _accountIdToSs58(String hex) {
     final bytes = _hexToBytes(hex);
-    return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
+    return Keyring().encodeAddress(Uint8List.fromList(bytes), kGmbSs58Prefix);
   }
 
   Future<void> _fetchBalance() async {

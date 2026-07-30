@@ -158,6 +158,15 @@ pub(crate) async fn propose_platform_price(
         Ok(value) => value,
         Err(response) => return response,
     };
+    // 链上写(PasskeyColdSign 档):平台调价要发 extrinsic,会话 + passkey + 冷签缺一不可。
+    let passkey = match crate::auth::passkey::require_passkey_assertion(
+        &state,
+        &headers,
+        ctx.account_id.as_str(),
+    ) {
+        Ok(proof) => proof,
+        Err(response) => return response,
+    };
     let Some(membership_level) = PlatformMembershipLevel::parse(&input.membership_level) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "invalid membership_level");
     };
@@ -221,7 +230,7 @@ pub(crate) async fn propose_platform_price(
         expires_at,
         consumed_at: None,
     };
-    if let Err(err) = state.db.insert_chain_sign_session(&session) {
+    if let Err(err) = state.db.insert_chain_sign_session(&session, &passkey) {
         tracing::error!(error = %err, "insert platform price chain sign session failed");
         return api_error(
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -183,6 +183,13 @@ pub(crate) async fn prepare_chain_call(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    // 链上写(PasskeyColdSign 档):本入口产出待冷签的地址上链 call,
+    // 不经冷签会话表,拿不到 PasskeyProof 的类型约束,故在此显式断言。
+    if let Err(resp) =
+        crate::auth::passkey::require_passkey_assertion(&state, &headers, ctx.account_id.as_str())
+    {
+        return resp;
+    }
     if let (Some(province_code), Some(city_code)) = (&input.province_code, &input.city_code) {
         if let Err(resp) = ensure_code_scope(&ctx, province_code.trim(), city_code.trim()) {
             return resp;

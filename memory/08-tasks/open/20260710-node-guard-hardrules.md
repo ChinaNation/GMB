@@ -249,7 +249,7 @@
 当前公民认证奖励在身份登记 extrinsic 内立即铸发。只比较整块父/后状态时，同块转账、手续费和其他余额变化会与奖励混合，节点无法严格证明每名公民实际收到精确金额。为获得可独立验证的证据，方案把“资格排队”留在登记 extrinsic，把实际铸发移动到同一块 `on_finalize`：
 
 1. 登记回调按现有双重防重、人数上限和奖励档位规则写入本块待发队列；
-2. `NodeGuard` 从 finalize 前视图读取队列，按父状态独立验证首次身份、CID 哈希、账户、防重、人数与档位；
+2. `NodeGuard` 从 finalize 前视图读取队列，按父状态独立验证首次身份、完整 CID、账户、防重、人数与档位；
 3. runtime 在 `on_finalize` 逐笔发放并清空队列，最终链上语义仍是“登记成功的同一区块到账”；
 4. 节点把全节点奖励与公民奖励合并为一个 finalize 发行计划，按账户汇总后核对余额、`Balances::TotalIssuance` 和全部审计表，禁止未登记的 finalize 账户变化；同一账户同时是矿工和新公民时也能正确相加，不会误拒。
 
@@ -312,9 +312,9 @@
 ### runtime 与节点规则
 
 - `citizen-issuance` 回调改为本块资格排队，实际奖励在同块 `on_finalize` 逐项铸发；新增连续队列、
-  CID 哈希/账户临时防重和 finalize 后完整清理，永久状态仍只有累计人数与双重领取墓碑。
+  完整 CID/账户临时防重和 finalize 后完整清理，永久状态仍只有累计人数与双重领取墓碑。
 - 节点新增 `node_guard::citizen_issuance`，用 RAW key、节点 SCALE 镜像和编译期
-  `primitives::citizen_const` 复核首次身份、CID 哈希、反向索引、队列连续性、防重、人数上限与档位。
+  `primitives::citizen_const` 复核首次身份、完整 CID、反向索引、队列连续性、防重、人数上限与档位。
 - `fullnode_issuance` 不再独占账户/总发行差额；全节点与公民奖励统一登记到
   `FinalizeIssuancePlan`，按账户合并后核对 `System::Account` 与 `Balances::TotalIssuance`，
   同一账户同时领取两类奖励也必须精确相加。
@@ -340,7 +340,7 @@
   `GD000-CTZN6-616532784-2026`；矿工节点产出 block#1，禁用挖矿的全节点经 WSS 网络导入。
 - 两端 block#1 哈希一致：
   `0x702e65e7b64ae7df80dbfb1e16e99ea9909ba302628c3c9d6fc722f6714050c5`。
-- `RewardedCount=1`，`PendingRewardCount` 不存在，身份、CID 哈希领取墓碑和账户领取墓碑均存在。
+- `RewardedCount=1`，`PendingRewardCount` 不存在，身份、完整 CID 领取墓碑和账户领取墓碑均存在。
 - Alice 同时是矿工和新公民：PoW 奖励 999,900 + 公民奖励 999,900；身份登记制度费 100，
   余额由 1,000,000,000,000 增至 1,000,001,999,700，净增 1,999,700，闭环一致。
 - 按已确认验收口径再执行不同账户场景：Alice 出块并代注册，Bob 以自己的公民签名首次登记；两端
@@ -579,7 +579,7 @@
 - `AdminAccount` 字段序、管理员 kind/status 判别值、护宪职务单源已与治理骨架镜像对齐。
 - `InstitutionInfo` 字段序及 `Pending=0/Active=1/Closed=2` 已与机构生命周期镜像对齐。
 - `CidRecord` 七字段声明序及 `Active=0/Revoked=1` 已与公民 CID 镜像对齐。
-- `PendingCertificationReward=(who,cid_number_hash)` 与 `PendingRewards` 的 Twox64Concat key 已两端钉死。
+- `PendingCertificationReward=(account_id,cid_number)` 与 `PendingRewards` 的 Twox64Concat key 已两端钉死。
 - `LastRewardAudit=(block,miner,wallet,amount)`、奖励钱包和 `Balances::TotalIssuance` RAW key 已钉死。
 - `LawVersion` 十字段声明序、Tier/LawStatus/VoteType 判别值和创世 Law[0] 已由 runtime 测试钉死，
   ConstitutionGuard 真实创世测试继续验证 node 镜像。

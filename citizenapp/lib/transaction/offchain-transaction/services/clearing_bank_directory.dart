@@ -142,7 +142,7 @@ class ClearingBankDirectory {
     final account = Uint8List.fromList(Keyring().decodeAddress(userAddress));
     final raw = await _chainRpc.fetchStorage(_userBankKey(account));
     if (raw == null || raw.length != 32) return null;
-    return Keyring().encodeAddress(raw.toList(), 2027);
+    return Keyring().encodeAddress(raw.toList(), kGmbSs58Prefix);
   }
 
   Future<List<ClearingBankNodeEndpoint>> _fetchAllEndpoints() async {
@@ -194,7 +194,7 @@ class ClearingBankDirectory {
     offset += 4;
     final registeredBy = Keyring().encodeAddress(
       raw.sublist(offset, offset + 32).toList(),
-      2027,
+      kGmbSs58Prefix,
     );
     return ClearingBankNodeEndpoint(
       cidNumber: cidNumber,

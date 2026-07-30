@@ -21,7 +21,7 @@
 
 1. `citizen-identity` 校验注册局权限、公民钱包签名、CID 和居住地作用域，写入投票身份；
 2. 回调校验永久与本块临时双重防重、人数上限和奖励非零，只写入待发队列；
-3. 节点从 finalize 前视图读取完整队列，独立复核首次身份、CID 哈希、反向索引、领取资格和奖励档位；
+3. 节点从 finalize 前视图读取完整队列，独立复核首次身份、规范 `cid_number`、反向索引、领取资格和奖励档位；
 4. runtime 在同块 `on_finalize` 逐项 `deposit_creating`，写入永久防重状态与累计人数并清空临时状态；
 5. 节点把公民奖励和全节点 PoW 奖励汇总为同一个 finalize 发行计划，精确核对账户与总发行变化。
 
@@ -33,14 +33,14 @@
 永久状态：
 
 - `RewardedCount`：累计成功领取人数，同时决定下一笔奖励所处档位；
-- `IdentityRewardClaimed`：按 `cid_number_hash` 防止同一公民身份重复领取；
+- `IdentityRewardClaimed`：按完整规范 `cid_number` 防止同一公民身份重复领取；
 - `AccountRewarded`：按钱包账户防止换绑 CID 后重复领取。
 
 仅在本块 finalize 前存在的临时状态：
 
 - `PendingRewardCount`：本块待发数量；
-- `PendingRewards[index]`：连续序号对应的 `(who, cid_number_hash)`；
-- `PendingIdentityRewardClaimed`：本块 CID 哈希防重；
+- `PendingRewards[index]`：连续序号对应的 `(account_id, cid_number)`；
+- `PendingIdentityRewardClaimed`：本块完整 CID 防重；
 - `PendingAccountRewarded`：本块账户防重。
 
 `on_finalize` 后四类临时状态必须全部删除；缺号、重复、残留、非规范 key 或提前改写永久
@@ -50,15 +50,15 @@
 
 - `index < CITIZEN_ISSUANCE_HIGH_REWARD_COUNT` 时使用高额奖励；之后使用常规奖励；
 - `RewardedCount` 不得超过 `CITIZEN_ISSUANCE_MAX_COUNT`；
-- 同一 CID 哈希和同一账户都只能成功领取一次；
+- 同一 CID 和同一账户都只能成功领取一次；必须同时是未领取的新 CID 与未领取的新账户才可发放；
 - 同块重复登记由临时防重表拦截，跨块重复由永久防重表拦截；
 - 节点从编译期常量和父状态累计数逐项推导金额，不信任 runtime 事件或 metadata；
 - 同一账户同时是本块矿工和新公民时，两笔奖励必须按账户求和后精确到账。
 
 ## 5. 事件
 
-- `CertificationRewardIssued { who, cid_number_hash, reward }`：实际铸发并写入永久状态后发出；
-- `CertificationRewardSkipped { who, cid_number_hash, reason }`：回调因永久/临时重复、上限或金额转换失败而跳过。
+- `CertificationRewardIssued { account_id, cid_number, reward }`：实际铸发并写入永久状态后发出；
+- `CertificationRewardSkipped { account_id, cid_number, reason }`：回调因永久/临时重复、上限或金额转换失败而跳过。
 
 `Balances::Issued` 在对应 `CertificationRewardIssued` 之前发生；事件只用于审计，不是节点守卫的信任输入。
 
@@ -75,7 +75,7 @@ finalize，`src/weights.rs` 由 Substrate benchmark CLI 重新生成；当前测
 
 - 创世只能包含 FRAME 规范空状态：存储版本 0、两个计数的精确零值；
 - 父状态不得残留待发队列，finalize 前队列必须连续且不超过本块 extrinsic 数；
-- 身份必须首次以 `VotingIdentityByCid` 出现，CID 哈希、`AccountIdByCid` 与 `CidByAccountId` 必须双向一致；
+- 身份必须首次以 `VotingIdentityByCid` 出现，队列中的完整 CID、`AccountIdByCid` 与 `CidByAccountId` 必须双向一致；
 - 永久和临时双重防重、人数边界、档位金额必须逐项一致；
 - finalize 后队列必须清空，永久标记和累计数必须精确推进；
 - 未登记的 `CitizenIssuance` key 变化、收款账户变化或总发行变化一律 fail-closed。
@@ -96,3 +96,12 @@ finalize，`src/weights.rs` 由 Substrate benchmark CLI 重新生成；当前测
   `0x26d751b62ef23cc5d5884153c1782f67a5922b1d2246f16c5e610e5e034823a6`；Alice 获 PoW
   奖励并支付登记费后净增 999,800 分，Bob 新账户精确收到公民奖励 999,900 分；
 - 临时 chainspec、节点数据库、测试签名代码和测试密钥材料已全部删除。
+
+## 9. CID 直接键与双重防重验收（2026-07-30）
+
+- `IdentityRewardClaimed` 与 `PendingIdentityRewardClaimed` 已从派生哈希改为完整规范
+  `cid_number`；账户永久/临时表继续保留，任一键重复即拒绝；
+- FRAME benchmark 50×20 真实记录 7 reads / 8 writes，CID map 最大值 49 字节，
+  proof size 3,593 字节；
+- 单元测试 16/16、身份集成测试 7/7、NodeGuard 发行专项 9/9 通过；
+- 生产 release Node 与当前源码 WASM 构建成功；隔离 fresh 节点通过 NodeGuard 自检。

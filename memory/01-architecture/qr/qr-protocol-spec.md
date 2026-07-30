@@ -318,6 +318,24 @@ citizenchain/crates/qr-protocol/registry/reject_reasons.yaml
 
 `memory/01-architecture/qr/qr-action-registry.md` 是人类可读登记表和审查入口;代码、测试、生成和跨端校验必须以 `citizenchain/crates/qr-protocol/registry/*` 为准。各端不得再手写第二套 action 常量、中文标签、字段标签或签名判定分支。
 
+### 12.1 载荷字段编解码代码真源(2026-07-30 收归)
+
+QR body 里的定长字段(公钥 `b.u` 32 字节、签名 `b.s` 64 字节)统一用 base64url(no padding)
+承载,进入 Rust 侧后一律转成 ADR-040 规范文本(小写 `0x` + 十六进制)。host 侧唯一实现:
+
+```text
+citizenchain/crates/qr-protocol/src/codec.rs
+  b64_to_prefixed_hex(value, expected_len, field)  # 解码 + 长度校验
+  bytes_to_b64(bytes)                              # 编码
+  public_key_b64(bytes, field)                     # 32 字节公钥编码(长度不符即拒)
+  PUBLIC_KEY_BYTES = 32 / SIGNATURE_BYTES = 64
+```
+
+`node/src/governance/signing.rs` 与 `onchina/src/core/qr/mod.rs` 原各有一份自写实现
+(行为相同但错误类型与文案不同),已于创世前审计收归到上面这一份,两侧只保留
+错误类型映射。**禁止再各自实现**:两份解码一旦在长度校验或大小写上出现分毫差异,
+同一个二维码就会在一端通过、另一端拒绝。
+
 当前已知散落实现只允许作为待收归对象,不得继续作为协议真源:
 
 - `citizenapp/lib/qr/*`

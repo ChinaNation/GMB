@@ -107,11 +107,7 @@ pub(super) fn gate_error_response(err: GateError) -> axum::response::Response {
         GateError::Db(message) => {
             // 完整原因只进服务端日志;响应只带不含敏感信息的短码,避免泄露库结构。
             tracing::error!(error = %message, "login gate state error");
-            api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "login state error",
-            )
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, "login state error")
         }
     }
 }

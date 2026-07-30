@@ -1,0 +1,95 @@
+name: Web Gate
+
+# 中文注释:TypeScript 侧门禁。覆盖此前完全没有 CI 的三个项目:
+#   citizenapp/cloudflare          线上 Worker(广场/聊天/会员/创作者),32 个测试文件从未自动跑过
+#   citizenweb                     官网,有 lint 脚本但零 workflow 引用
+#   citizenchain/onchina/frontend  控制台前端,有 build(tsc)但零 workflow 引用
+# citizenchain/node/frontend 的 build 已在 citizenchain-ci.yml 的 Tauri 打包前跑,不在此重复。
+#
+# 为什么挂 push 而不是 pull_request:
+#   AGENTS.md 禁分支硬规则要求一切工作直接落 main、禁建任何分支,不会再有 PR,
+#   挂 pull_request 等于永不触发(ai-guardrails.yml 就是这么失效了几个月的)。
+#
+# 三个 job 并行,单个通常几十秒。不按 commit 载荷做 job 级分流:
+#   github.event.commits 在 >20 提交、强推等场景下不完整,用它做门禁开关会漏检;
+#   多跑两个一分钟的 job 远比漏一次检查便宜。
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/web-gate.yml"
+      - "citizenapp/cloudflare/**"
+      - "citizenweb/**"
+      - "citizenchain/onchina/frontend/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cloudflare:
+    name: CitizenApp Worker 类型检查与测试
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizenapp/cloudflare
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: citizenapp/cloudflare/package-lock.json
+      - name: 安装依赖
+        run: npm ci
+      # types:check 专门检测 worker-configuration.d.ts 是否与 wrangler.toml 脱节。
+      # 该守卫早就写好,但此前没有任何 CI 调它,导致创世资产重烘焙后类型文件陈旧无人发现。
+      - name: 校验 Worker 类型文件未过期
+        run: npm run types:check
+      - name: 类型检查
+        run: npm run typecheck
+      - name: 单元测试
+        run: npm test
+
+  citizenweb:
+    name: 官网 Lint 与构建
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizenweb
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: citizenweb/package-lock.json
+      - name: 安装依赖
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: 构建
+        run: npm run build
+
+  onchina-frontend:
+    name: OnChina 控制台前端构建
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: citizenchain/onchina/frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: citizenchain/onchina/frontend/package-lock.json
+      - name: 安装依赖
+        run: npm ci
+      # build 脚本内含 tsc,类型错误即红。
+      - name: 类型检查与构建
+        run: npm run build

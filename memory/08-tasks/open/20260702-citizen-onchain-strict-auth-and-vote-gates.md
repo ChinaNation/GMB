@@ -51,7 +51,7 @@
   - **OnChina 最严档**:`operation_auth.rs` 新增 `CitizenOnchainPush`
     (`CITIZEN_ONCHAIN_PUSH`)归 PasskeyColdSign,不占 Tier1 治理能力边界;
     `chain_identity.rs` 的 prepare/complete 各消费一次 grant(target=cid_number,
-    载荷绑定 `{cid_number, wallet_account}`);前端 `citizens/api.ts` 两接口经
+    载荷绑定 `{cid_number, account_id}`);前端 `citizens/api.ts` 两接口经
     `createScanSignSecurityGrant` 取 grant 后携 `x-cid-security-grant` 调用,
     `CitizenDetailPage` 接入 `useScanSignGrant` 弹管理员冷签确认;dist 已重建。
   - **候选人性别上链**:citizen-identity 新增 `CitizenSex`(Male=0/Female=1),

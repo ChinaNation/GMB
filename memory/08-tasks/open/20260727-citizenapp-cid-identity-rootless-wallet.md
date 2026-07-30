@@ -488,3 +488,58 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
   `commitment=blake2_256(account_id)`、居住省市为空且无吊销。
 - fresh 链进程已停止，RPC 19944 已关闭；临时链目录从 `/tmp` 移入 macOS 废纸篓，
   源路径不存在且仍可恢复。
+
+## S6 奖励、投票、候选人与竞选发布安全收口（2026-07-30，完成）
+
+- 公民认证奖励的唯一身份键改为完整规范 `cid_number`，账户保留为第二防重键和收款账户。
+  `IdentityRewardClaimed` / `PendingIdentityRewardClaimed` 直接使用 CID；
+  `AccountRewarded` / `PendingAccountRewarded` 保持不变。任一 CID 或账户已有永久/本块记录
+  即拒绝，只有新 CID + 新账户才可发放；没有 CID 不会触发身份登记回调。
+- NodeGuard 使用同一完整 CID SCALE/RAW key 复核连续队列、投票身份首次出现、CID↔账户
+  双向绑定和 CID/账户两套永久及临时标记。专项测试明确覆盖 CID 已领但换新账户、账户已领
+  但换新 CID、同块 CID 重复和同块账户重复。
+- 创世数量断言补齐公私权边界：49,593 个机构 / 99,232 个协议账户仅指公权目录；
+  私权公民链基金会另计 1 个机构和主、费 2 个协议账户，因此全创世为 49,594 个机构 /
+  99,234 个机构协议账户；管理员个人钱包不计入该账户数。
+- Popular 公民投票继续按 `(proposal_id, voter cid_number)` 防重；候选快照和结果保存
+  `CitizenSubject`，候选计票表以候选 CID 为唯一键。候选人必须通过
+  `candidate_subject`，仅有普通投票身份不能进入候选快照。
+- Mutual 机构互选继续使用 `institution cid_number + role_code + 当前管理员 account_id`
+  的岗位票据；管理员记录唯一布局保持
+  `account_id + cid_number + family_name + given_name`，没有恢复账户即权限或机构全体
+  admins 快照。
+- `SquarePost::publish_post` 的 `campaign` 类别改为 runtime、CitizenApp、Worker 三层
+  统一要求竞选身份；仅有投票身份或匿名 CID 均拒绝。runtime 错误统一为
+  `CampaignRequiresCandidateIdentity`。
+- NodeGuard 将 `CandidateIdentityByCid` 纳入 RAW 生命周期保护：候选身份必须依附 Active
+  CID 与 Normal 投票身份；出生地区、性别和出生日期不可改；姓名可依法更新；删除只允许
+  CID 与投票身份一并进入吊销终态。
+- 使用当前源码 WASM 和 FRAME Benchmark CLI 53.0.0、50 steps、20 repeats 重算
+  `citizen-issuance`、`citizen-identity`、`election-vote` 权重；`square-post::publish_post`
+  实测为 8 reads / 2 writes / proof 3,834 bytes，并已把现有 benchmark 挂入 runtime 注册表。
+- 回归结果：`citizen-issuance` 16 项单测 + 7 项集成、发行 NodeGuard 9 项、
+  候选生命周期 NodeGuard 6 项、`election-vote` 17 项、`square-post` 27 项、
+  runtime 52 项全部通过；生产 release Node 从当前源码与 WASM 构建成功。
+- 临时 `citizenchain-fresh --tmp` 真实启动并通过 NodeGuard 自检；RPC 为 0 peers、
+  `isSyncing=false`、best/finalized #0，六项项目 runtime 版本均为 0。block #0 为
+  `0x6d2d148acba895a197e2be4eb9aa6df95b6f66036fd43556e2e004059bea1734`，
+  state root 为
+  `0xe3a5c53f1a834169cec9800a19825f6f3abf709862ee8531ba140fa2d9c963df`，
+  metadata 为 228,802 字节；节点已停止，RPC 19944 已关闭。
+- 本步没有执行正式创世、冻结、GitHub 推送、WASM CI、其它软件 CI 或部署。下一步必须先
+  输出正式创世与首次冻结技术方案，取得用户确认和 runtime 二次确认后才能执行。
+
+## S6.1 创世前格式残留清零（2026-07-30，完成）
+
+- 对 S6 改动执行全工作区 `cargo fmt --all`，只产生机械格式调整：
+  `onchina/src/auth/actions.rs`、`onchina/src/auth/login/onchain_gate.rs`、
+  `onchina/src/auth/repo.rs`、`onchina/src/core/runtime_ops.rs`、
+  `runtime/misc/pow-difficulty/src/lib.rs`、
+  `runtime/primitives/cid/generator.rs`、`runtime/primitives/cid/number.rs`。
+  未改变业务逻辑、存储布局、签名域、交易载荷或协议。
+- `cargo fmt --all -- --check` 与 `git diff --check` 均通过；格式和空白残留已清零。
+- 回归验证：OnChina 179 项、CID primitives 80 项、PoW 13 项、runtime 52 项全部通过。
+  精确创世数量、CID 身份闭环、候选身份、竞选发布和费用路由断言继续通过。
+- 使用 `WASM_BUILD_FROM_SOURCE=1`、单构建任务和关闭增量缓存的生产 release Node 构建成功；
+  项目根 `target/debug/incremental` 与 `target/release/incremental` 均无跨次残留。
+- 本步没有正式创世、冻结、提交、GitHub 推送、WASM CI、其它软件 CI 或部署。

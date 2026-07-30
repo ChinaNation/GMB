@@ -496,7 +496,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   String _publicKeyToSs58(String publicKey) {
-    return Keyring().encodeAddress(_hexDecode(publicKey), 2027);
+    return Keyring().encodeAddress(_hexDecode(publicKey), kGmbSs58Prefix);
   }
 
   Future<Uint8List> _signPayloadWithWallet({

@@ -180,7 +180,10 @@ PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取�
 节点逐块强制：
 
 - 公民 CID 不得删除或换注册局、承诺、居住省市、登记高度，只允许 `Active → Revoked`，吊销后逐字冻结；
-- 公民投票身份必须永久以 CID 为主键，`VotingIdentityByCid` 不得删除；`AccountIdByCid` 与 `CidByAccountId` 只表达当前有效签名钱包账户并必须双向闭环；
+- 公民投票身份必须永久以 CID 为主键，`VotingIdentityByCid` 不得删除；`CandidateIdentityByCid`
+  必须依附正常投票身份，出生地区、性别和出生日期不可改，姓名可依法更新，删除只允许与
+  CID 吊销及投票身份吊销同时成立；`AccountIdByCid` 与 `CidByAccountId` 只表达当前有效
+  签名钱包账户并必须双向闭环；
 - 公私权 CID 不得同时占用；普通机构可以依法修改身份字段或删除，删除时必须同步清除其账户和索引；
 - block#0 精确机构不得删除、跨公私权命名空间复制，且机构码、创建高度和镇码不得替换；名称和法定代表人仍可依法更新；
 - 固定治理机构和国家单例只允许约定创世 CID，运行期不得新造同类身份；
@@ -192,8 +195,9 @@ PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取�
 
 - runtime 身份登记回调只建立本块待发队列，实际铸发在同块 `on_finalize` 完成；
 - 节点从 `primitives::citizen_const` 编译期常量、父状态累计人数和连续队列独立推导每笔金额；
-- 每笔必须对应首次出现的 `VotingIdentityByCid`，CID 哈希、`AccountIdByCid` 和 `CidByAccountId` 必须闭环；
-- CID 哈希和账户同时做永久与本块临时防重，禁止同块重复、跨块重复、同一账户或同一 CID 重领以及超过总人数上限；
+- 每笔必须对应首次出现的 `VotingIdentityByCid`，队列完整 CID、`AccountIdByCid` 和 `CidByAccountId` 必须闭环；
+- 完整 CID 和账户同时做永久与本块临时防重，任一键已有记录即拒绝；禁止同块重复、
+  跨块重复、同一账户或同一 CID 重领以及超过总人数上限；
 - finalize 前不得提前推进永久累计/防重状态，finalize 后必须精确推进并清空全部临时 key；
 - 公民奖励和 PoW 奖励进入同一 `FinalizeIssuancePlan`；账户 free balance、账户其他字段及
   `Balances::TotalIssuance` 必须与汇总计划完全一致，未登记账户的 finalize 变化直接拒绝；
@@ -286,7 +290,7 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 |---|---|---|
 | 固定治理骨架 | 89 个公权保护身份使用 `PublicAdmins/PublicManage`，私权创世公民链基金会使用 `PrivateAdmins/PrivateManage`；对应管理员、岗位、岗位权限、任职表均使用规范 key | 机构码/CID/协议主账户/管理员总数；强制 LR 与创世固定岗位的代码/名称/固定权限/所属 CID/精确席位；固定岗位任职不变量。额外普通动态岗位允许存在。基金会额外校验一名管理员兼任三个岗位以及法定代表人账户与 `LR` 任职一致。主账户只校验协议账户完整性，不作授权 key |
 | 全节点发行 | `RewardWalletByMiner`、`LastAuthoredBlockByMiner`、`RewardedBlockCount:u32`、`TotalFullnodeIssued:u128`、`LastRewardAudit:(u32,AccountId,AccountId,u128)` | 高度 `1..=9_999_999` 每块固定 `999_900` 分；作者、钱包、累计、审计、账户完整字段和 `Balances::TotalIssuance` 差额精确 |
-| 公民发行 | `RewardedCount:u64`、CID/账户永久墓碑、`PendingRewardCount:u32`、`PendingRewards<Twox64Concat,u32,(AccountId,Hash)>`、两张临时墓碑 | 队列 `0..count-1` 连续；finalize 后临时状态清空；前 `14_436_417` 人 `999_900` 分，其后 `99_900` 分；CID 与账户均只领一次 |
+| 公民发行 | `RewardedCount:u64`、CID/账户永久墓碑、`PendingRewardCount:u32`、`PendingRewards<Twox64Concat,u32,(AccountId,CidNumber)>`、两张临时墓碑 | 队列 `0..count-1` 连续；finalize 后临时状态清空；前 `14_436_417` 人 `999_900` 分，其后 `99_900` 分；CID 与账户任一重复即拒绝 |
 | GenesisPallet | `Phase`、`DeveloperUpgradeEnabled`、`CitizensDeclaration`、`CountryDeclaration`、`CitizenMax`，`StorageVersion=0` | 三个创世事实逐字冻结；只允许含 `:code` 的 `(Genesis,true) → (Operation,false)` 原子单向转换；旧 `TargetBlockTimeMs` 与未知 key 拒绝 |
 | 省储行固定发行 | pallet `StorageVersion=0`、`LastSettledYear:u32`、`TotalProvincialBankInterestIssued:u128`、`LastProvincialBankInterestAudit:(u32,u32,u128)`；43 个 `System::Account[stake_account]` | block#0 本金逐户等于 `stake_amount` 且永久不变；87,600 块/年，100→1 BP 连续 100 年；利息只发 `main_account`，审计、账户与总发行精确闭环；未知 pallet key 拒绝 |
 | 公民 CID | `CitizenIdentity::CidRegistry<Blake2_128Concat,CidNumber,CidRecord>` | `registrar_account/commitment/省码/市码/registered_at` 不变；只允许 `Active=0 → Revoked=1`，吊销后冻结 |
@@ -520,3 +524,17 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 - 第 21 节及更早章节中的 fresh、preview 和历史冻结哈希只用于追溯各阶段守卫验收，
   均不得作为部署、网络连接或重新创世依据。正式创世后 NodeGuard 继续保护链上既有状态；
   runtime 只能走链上升级，不得通过重烘焙创世绕过守卫。
+
+## 23. CID 奖励键与候选身份生命周期补强（2026-07-30）
+
+- 公民发行 RAW 契约改为待发项 `(account_id, cid_number)`，完整 CID 与账户分别使用永久和
+  本块临时墓碑；任一键已领取即拒绝，不能通过换 CID 或换账户绕过；
+- `CandidateIdentityByCid` 纳入相关前缀、完整状态和逐块 delta 扫描；候选身份必须依附
+  Active CID 与 Normal 投票身份，出生地区、性别、出生日期不可改，姓名更新高度必须等于
+  当前块，删除只接受 CID 与投票身份同步吊销；
+- 发行专项 9/9、候选生命周期专项 6/6 通过；生产 release Node 构建成功；
+- 隔离 fresh 节点通过 NodeGuard 启动自检，block #0 为
+  `0x6d2d148acba895a197e2be4eb9aa6df95b6f66036fd43556e2e004059bea1734`，
+  state root 为
+  `0xe3a5c53f1a834169cec9800a19825f6f3abf709862ee8531ba140fa2d9c963df`。
+  该值只用于当前源码验收，不是新的正式创世或部署锚点。

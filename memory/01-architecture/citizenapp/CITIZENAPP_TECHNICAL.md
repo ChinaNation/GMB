@@ -17,6 +17,7 @@ iOS 最低系统版本统一为 16.0；Runner、RunnerTests 与全部 CocoaPods 
 
 - CitizenApp 保存助记词/seed 并执行签名，但钱包软件不等于链账户；业务模型中的链账户统一命名为 `account_id` 或准确的 `<role>_account_id`。
 - `account_id` 的文本形式统一为小写 `0x` 加 64 位十六进制；界面需要人类可读地址时，从账户字节派生 `ss58_address`，不得把 SS58 作为授权或 Isar 关系主键。
+- SS58 前缀唯一常量是 `lib/citizen/shared/account_derivation.dart` 的 `kGmbSs58Prefix`（对齐链端 `core_const::SS58_FORMAT`）。2026-07-30 创世前审计已把散落在 24 个文件里的局部 `_ss58Prefix`/`_ss58Format` 声明与裸写 `2027` 全部收敛到该单源；此后禁止再在任何页面、service 或 rpc 层重新声明前缀常量或直接写字面量 `2027`。
 - 公钥统一为 `public_key` 或准确的签名角色名；不得再新增 `wallet_pubkey`、`admin_pubkey`、`wallet_address` 等同义字段。
 - Isar 旧业务数据将在对应实施步骤删除重建；secure storage 中的助记词、seed 和私钥必须保留，并按未改变的派生规则得到同一账户。
 - 完整目标与进度见 ADR-040 和任务卡 `20260722-account-id-official-unify.md`；本文件后续旧名称在对应步骤完成前只记录当前实现。
@@ -543,7 +544,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   更新动态字段。首次无缓存时价格显示占位且订阅按钮禁用。手动刷新以及订阅、换档、取消等
   动权操作必须绕过展示缓存重新核验 finalized 状态和价格；Cloudflare 回执镜像重试不得
   阻塞页面链读。
-- 认证用户必须同时满足钱包反查永久 CID、CID Active、CID↔钱包双向绑定一致和 `VotingIdentityByCid` 完整有效；任一条件缺失都是未认证。身份认证与会员档位彼此独立（ADR-036）。普通动态 / 普通文章三档会员都可发布但额度不同；竞选动态 / 竞选文章按完整 `CandidateIdentityByCid` 派生的竞选身份（`candidate`）校验，与会员档无关。当前 runtime 的 `campaign` 链上发布仍按有效投票身份拦截（voting+）；App 业务侧（compose / SquarePublishService / Worker `prepareUpload`·`confirm`）按更严的竞选身份 `candidate` 校验；若未来要求链上也强制 Candidate 身份，必须按 runtime 二次确认规则单独修改。
+- 认证用户必须同时满足钱包反查永久 CID、CID Active、CID↔钱包双向绑定一致和 `VotingIdentityByCid` 完整有效；任一条件缺失都是未认证。身份认证与会员档位彼此独立（ADR-036）。普通动态 / 普通文章三档会员都可发布但额度不同；竞选动态 / 竞选文章必须由完整 `CandidateIdentityByCid` 派生的竞选身份（`candidate`）发布，与会员档无关。runtime `SquarePost::publish_post`、App（compose / SquarePublishService）和 Worker（`prepareUpload` / `confirm`）三层都校验竞选身份；仅有投票身份或匿名 CID 一律拒绝竞选内容。
 - 广场默认分类为推荐；用户可切换关注、竞选，后续可按产品需要增加最新分类。推荐流初期只做可解释规则，不做黑盒模型。
 - 广场媒体内容不存链上，不改造 CitizenChain 全节点存储媒体；`manifest.json` 存 Cloudflare R2，图片/首图经 Worker 有界校验后由服务端写 Cloudflare Images，视频全部使用绑定精确字节和最长时长的 Cloudflare Stream TUS，经签名 Images delivery / Stream playback URL 访问。
 - CitizenChain 负责发布交易入块、统一链上交易收费、竞选发布权限校验、发布索引和事件；`SquarePost` pallet index 为 `34`、发布 call index 为 `0`。同一 pallet 的订阅 call、状态、价格、扣款和自动续费契约见 P-TX-014/P-STORAGE-006。

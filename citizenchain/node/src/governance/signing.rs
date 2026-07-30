@@ -7,7 +7,6 @@
 // 4. 后端按本地 session 校验 request id 与签名公钥 → 构建 signed extrinsic → 提交到链
 
 use crate::shared::rpc;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use codec::Encode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -57,28 +56,14 @@ pub(crate) fn chain_action_code(call_data: &[u8]) -> Result<u16, String> {
     Ok(((call_data[0] as u16) << 8) | call_data[1] as u16)
 }
 
+// QR body 定长字段的 base64url 编解码统一走 qr-protocol 单源,
+// 本文件不再自带第二份实现(与 onchina 分裂会导致同一二维码一端过一端拒)。
 pub(crate) fn public_key_b64(signer_public_key_bytes: &[u8]) -> Result<String, String> {
-    if signer_public_key_bytes.len() != 32 {
-        return Err("公钥长度必须为 32 字节".to_string());
-    }
-    Ok(URL_SAFE_NO_PAD.encode(signer_public_key_bytes))
+    qr_protocol::public_key_b64(signer_public_key_bytes, "b.u").map_err(|e| e.to_string())
 }
 
 pub(crate) fn payload_b64(payload: &[u8]) -> String {
-    URL_SAFE_NO_PAD.encode(payload)
-}
-
-fn b64_to_prefixed_hex(value: &str, expected_len: usize, field: &str) -> Result<String, String> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(value)
-        .map_err(|e| format!("{field} base64url 解码失败: {e}"))?;
-    if bytes.len() != expected_len {
-        return Err(format!(
-            "{field} 长度无效：期望 {expected_len} 字节，实际 {}",
-            bytes.len()
-        ));
-    }
-    Ok(format!("0x{}", hex::encode(bytes)))
+    qr_protocol::bytes_to_b64(payload)
 }
 
 fn deserialize_b64_signer_public_key<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -86,7 +71,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let value = String::deserialize(deserializer)?;
-    b64_to_prefixed_hex(&value, 32, "b.u").map_err(serde::de::Error::custom)
+    qr_protocol::b64_to_prefixed_hex(&value, qr_protocol::PUBLIC_KEY_BYTES, "b.u")
+        .map_err(serde::de::Error::custom)
 }
 
 fn deserialize_b64_signature<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -94,7 +80,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let value = String::deserialize(deserializer)?;
-    b64_to_prefixed_hex(&value, 64, "b.s").map_err(serde::de::Error::custom)
+    qr_protocol::b64_to_prefixed_hex(&value, qr_protocol::SIGNATURE_BYTES, "b.s")
+        .map_err(serde::de::Error::custom)
 }
 
 fn remember_chain_sign_session(
@@ -221,7 +208,6 @@ pub struct QrSignRequest {
 /// QR_V1/k=2 签名响应 body(离线设备 → 节点桌面端)。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct SignResponseBody {
     #[serde(rename = "u", deserialize_with = "deserialize_b64_signer_public_key")]
     pub signer_public_key: String,
@@ -232,7 +218,6 @@ pub struct SignResponseBody {
 /// QR_V1/k=2 sign_response envelope。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct QrSignResponse {
     #[serde(rename = "p")]
     pub proto: String,

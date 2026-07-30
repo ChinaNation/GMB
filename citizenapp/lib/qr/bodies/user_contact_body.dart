@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 
 import 'package:citizenapp/qr/envelope.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// kind = user_contact(**固定码**,envelope 顶层无 id / issued_at / expires_at)
 class UserContactBody implements QrBody {
@@ -63,7 +64,7 @@ class UserContactBody implements QrBody {
     if (value.isEmpty || value != value.trim()) return false;
     try {
       final accountId = Keyring().decodeAddress(value);
-      return Keyring().encodeAddress(accountId, 2027) == value;
+      return Keyring().encodeAddress(accountId, kGmbSs58Prefix) == value;
     } catch (_) {
       return false;
     }

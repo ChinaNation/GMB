@@ -94,8 +94,8 @@ pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, 
     // 人与机构的 CID 生成方式彻底分开:人只吃公钥/码/年,不吃省市;撞号仅由桶数 1e12 决定,
     // 由 registry nonce 探测吸收。
     let (r5, n9) = if code::is_person_code(&institution_code) {
-        let number =
-            hash_u64(&format!("{}|{}|{}", input.public_key, code_str, input.year)) % 1_000_000_000_000;
+        let number = hash_u64(&format!("{}|{}|{}", input.public_key, code_str, input.year))
+            % 1_000_000_000_000;
         let high3 = number / 1_000_000_000; // 0..=999
         let low9 = number % 1_000_000_000;
         (format!("CN{high3:03}"), format!("{low9:09}"))

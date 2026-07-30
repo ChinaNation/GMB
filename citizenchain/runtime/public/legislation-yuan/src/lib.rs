@@ -9,8 +9,6 @@
 //! 业务壳通过它创建立法投票提案,投票终态经核心 `LegislationVoteResultCallback` 回调写回本壳。
 
 #![cfg_attr(not(feature = "std"), no_std)]
-// FRAME 宏从既定法律提案载荷生成多参数分发函数；不能为 lint 改变链上编码字段顺序。
-#![allow(clippy::too_many_arguments)]
 
 pub mod types;
 pub mod weights;
@@ -36,6 +34,10 @@ pub const MAX_IMMUTABLE_ARTICLES: u32 = 32;
 
 #[frame_support::pallet]
 pub mod pallet {
+    // FRAME 宏在本模块层生成 Call 分发代码,其参数数由 extrinsic 载荷决定;
+    // per-fn 与 call 块级 allow 都够不到那段生成代码,故放宽范围收敛到本 pallet 模块,
+    // 不扩到整个 crate —— 模块外的辅助函数参数过多仍会被 lint 抓出。
+    #![allow(clippy::too_many_arguments)]
     use super::*;
     use crate::weights::WeightInfo;
     use entity_primitives::{
@@ -637,7 +639,6 @@ pub mod pallet {
         /// 立法(新法):立法机构议员/委员发起,走立法投票。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_enact_law())]
-        #[allow(clippy::too_many_arguments)]
         pub fn propose_enact_law(
             origin: OriginFor<T>,
             tier: Tier,
@@ -708,7 +709,6 @@ pub mod pallet {
         /// 修法:针对既有法律提交新版本(整部全文快照),走立法投票。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_amend_law())]
-        #[allow(clippy::too_many_arguments)]
         pub fn propose_amend_law(
             origin: OriginFor<T>,
             law_id: u64,

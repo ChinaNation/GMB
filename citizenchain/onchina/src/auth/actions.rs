@@ -201,13 +201,8 @@ async fn ensure_signer_on_chain_admin(
     actor_cid_number: &str,
     account_id: &str,
 ) -> Result<(), axum::response::Response> {
-    ensure_account_id_on_chain_admin(
-        db,
-        actor_cid_number,
-        account_id,
-        "not an on-chain admin",
-    )
-    .await
+    ensure_account_id_on_chain_admin(db, actor_cid_number, account_id, "not an on-chain admin")
+        .await
 }
 
 pub(crate) async fn prepare_admin_action(
@@ -390,13 +385,7 @@ pub(crate) async fn commit_admin_action(
     //    所有可 commit 动作(Session 已在上方拒绝)一律走此校验。
     let account_id = match input.account_id.as_deref() {
         Some(v) => v,
-        None => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "account_id is required",
-            )
-        }
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "account_id is required"),
     };
     let signature = match input.signature.as_deref() {
         Some(v) => v,
@@ -416,8 +405,7 @@ pub(crate) async fn commit_admin_action(
     ) {
         return resp;
     }
-    if let Err(resp) =
-        ensure_signer_on_chain_admin(&state.db, &actor_cid_number, account_id).await
+    if let Err(resp) = ensure_signer_on_chain_admin(&state.db, &actor_cid_number, account_id).await
     {
         return resp;
     }
@@ -492,14 +480,22 @@ pub(crate) fn require_admin_security_grant(
     action_type: AdminActionType,
     target: &str,
     request_payload: Option<&serde_json::Value>,
-) -> Result<(), axum::response::Response> {
+// 返回 `PasskeyProof` 而不是 `()`:该凭证是下游冷签会话创建入口
+// (`Db::insert_chain_sign_session`)的必填参数,把"链上写必须先过 passkey"
+// 从运行期约定升级成编译期约束,调用方拿不到凭证就发不出链交易。
+) -> Result<crate::auth::passkey::PasskeyProof, axum::response::Response> {
     // 本地写(Passkey):会话 + passkey 断言 + 角色校验;不再有只会话的写动作。
     if action_type.auth_type() == AdminOperationAuth::Passkey {
-        crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.account_id)?;
-        return ensure_action_role_allowed(ctx, &action_type);
+        let passkey = crate::auth::passkey::require_passkey_assertion(
+            state,
+            headers,
+            &ctx.account_id,
+        )?;
+        ensure_action_role_allowed(ctx, &action_type)?;
+        return Ok(passkey);
     }
     consume_admin_security_grant(state, headers, ctx, action_type, target, request_payload)
-        .map(|_| ())
+        .map(|(_, passkey)| passkey)
 }
 
 pub(crate) fn consume_admin_security_grant(
@@ -509,9 +505,11 @@ pub(crate) fn consume_admin_security_grant(
     action_type: AdminActionType,
     target: &str,
     request_payload: Option<&serde_json::Value>,
-) -> Result<AdminSecurityGrant, axum::response::Response> {
+// 同时返回冷签 grant 与 passkey 凭证:grant 供本次动作防重放,
+// 凭证供下游冷签会话创建入口做编译期校验,两者都不能丢。
+) -> Result<(AdminSecurityGrant, crate::auth::passkey::PasskeyProof), axum::response::Response> {
     // PasskeyColdSign 档:先消费 passkey 断言(fail-closed,绝不降档),再消费冷签 grant。
-    crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.account_id)?;
+    let passkey = crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.account_id)?;
     if action_type.auth_type() == AdminOperationAuth::Passkey {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
@@ -572,7 +570,7 @@ pub(crate) fn consume_admin_security_grant(
         Ok(consumed)
     });
     match result {
-        Ok(grant) => Ok(grant),
+        Ok(grant) => Ok((grant, passkey)),
         Err(err) => Err(admin_action_error(err)),
     }
 }

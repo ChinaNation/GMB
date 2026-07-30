@@ -603,7 +603,7 @@ pub async fn verify_activate_admin(
         &format!(
             "success account_id={} cid_number={}",
             &signer_account_id[..10],
-            &decoded_cid_number
+            decoded_cid_number
         ),
     ) {
         eprintln!("[审计] activate_institution_admin success 日志写入失败: {e}");
@@ -725,7 +725,7 @@ pub fn deactivate_admin(
         &format!(
             "success account_id={} cid_number={}",
             &account_id[..account_id.len().min(10)],
-            &cid_number
+            cid_number
         ),
     ) {
         eprintln!("[审计] deactivate_admin success 日志写入失败: {e}");

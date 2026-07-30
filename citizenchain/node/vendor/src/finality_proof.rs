@@ -194,7 +194,7 @@ where
             "Requested finality proof for descendant of #{} while we only have finalized #{}.",
             block, finalized_number,
         );
-        trace!(target: LOG_TARGET, "{}", &err);
+        trace!(target: LOG_TARGET, "{}", err);
         return Err(FinalityProofError::BlockNotYetFinalized);
     }
 

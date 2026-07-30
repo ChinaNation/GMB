@@ -347,7 +347,7 @@ fn two_party_smoke_json(request_json: *const c_char) -> Result<String, String> {
     .map_err(|error| format!("创建 Alice OpenMLS group 失败: {error:?}"))?;
 
     let (_, welcome, _) = alice_group
-        .add_members(&alice_provider, &alice_signer, &[bob_key_package.clone()])
+        .add_members(&alice_provider, &alice_signer, std::slice::from_ref(&bob_key_package))
         .map_err(|error| format!("添加 Bob KeyPackage 失败: {error:?}"))?;
     alice_group
         .merge_pending_commit(&alice_provider)
@@ -792,7 +792,7 @@ fn decode_hex_field(field_name: &str, value: &str) -> Result<Vec<u8>, String> {
     if normalized.is_empty() {
         return Err(format!("{field_name} 不能为空"));
     }
-    if normalized.len() % 2 != 0 {
+    if !normalized.len().is_multiple_of(2) {
         return Err(format!("{field_name} hex 长度必须为偶数"));
     }
     hex::decode(normalized).map_err(|error| format!("{field_name} 不是合法 hex: {error}"))

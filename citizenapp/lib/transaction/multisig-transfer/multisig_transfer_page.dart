@@ -23,6 +23,7 @@ import 'package:citizenapp/rpc/transfer_rpc.dart' show TransferRpc;
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 机构转账提案创建页面。
 class MultisigTransferPage extends StatefulWidget {
@@ -90,7 +91,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
 
   String _accountIdToSs58(String hex) {
     final bytes = _hexToBytes(hex);
-    return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
+    return Keyring().encodeAddress(Uint8List.fromList(bytes), kGmbSs58Prefix);
   }
 
   Future<void> _fetchBalance() async {

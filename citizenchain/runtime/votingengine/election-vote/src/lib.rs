@@ -202,7 +202,7 @@ pub mod pallet {
         CandidateNotInSnapshot,
         /// 普选选民不具备 citizen-identity 投票资格。
         VoterNotEligible,
-        /// 候选人 CID 与当前账户绑定不是 citizen-identity 返回的完整主体。
+        /// 候选人 CID、当前账户与竞选身份未形成 citizen-identity 认可的完整主体。
         CandidateSubjectInvalid,
         /// 选举缺少与模式匹配的资格作用域。
         ElectionScopeMissing,

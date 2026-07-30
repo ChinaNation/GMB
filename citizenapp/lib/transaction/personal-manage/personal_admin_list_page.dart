@@ -364,7 +364,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
     }
   }
 
-  /// 把规范 AccountId 编码为 GMB SS58 地址(prefix=2027),并做两端截断
+  /// 把规范 AccountId 编码为 GMB SS58 地址(prefix 走 kGmbSs58Prefix 单源),并做两端截断
   /// 以适配 monospace 11 字号的 ListTile title 行宽。
   ///
   /// 编码失败(理论上不会发生,数据来自链上 storage)兜底返回原 AccountId。
@@ -378,7 +378,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       for (var i = 0; i < bytes.length; i++) {
         bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
       }
-      final ss58 = _keyring.encodeAddress(bytes, 2027);
+      final ss58 = _keyring.encodeAddress(bytes, kGmbSs58Prefix);
       if (ss58.length <= 24) return ss58;
       return '${ss58.substring(0, 12)}…${ss58.substring(ss58.length - 8)}';
     } catch (_) {

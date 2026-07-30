@@ -373,14 +373,26 @@ pub(crate) async fn passkey_status(
     }
 }
 
+/// passkey 断言已成功消费的凭证。
+///
+/// 字段私有且本模块不提供任何公开构造函数,全仓唯一产出点是
+/// [`require_passkey_assertion`]。凡是要求"链上写必须先过 passkey"的下游入口
+/// (如冷签会话创建)都把它作为必填参数,于是"忘记做 passkey 就发链交易"
+/// 变成编译期错误,而不是靠每个 handler 自觉调用——那正是本轮审计发现
+/// 8 个冷签会话创建点里有 4 个漏做 passkey 的根因。
+#[derive(Debug)]
+pub(crate) struct PasskeyProof(());
+
 /// Passkey / PasskeyColdSign 档 step-up:消费 `X-Passkey-Assertion` 头的一次性断言令牌。
 ///
 /// 头缺失 / 令牌无效过期 / RP 未配 → 拒(fail-closed,绝不降档到 Session)。
+///
+/// 成功时返回 [`PasskeyProof`],作为下游链上写入口的通行凭证。
 pub(crate) fn require_passkey_assertion(
     state: &AppState,
     headers: &HeaderMap,
     account_id: &str,
-) -> Result<(), Response> {
+) -> Result<PasskeyProof, Response> {
     // RP 未配置(部署缺 env / 非安全上下文)→ 直接拒,不放行。
     if let Err(err) = build_webauthn() {
         tracing::error!(error = %err, "passkey config invalid; rejecting step-up");
@@ -411,7 +423,7 @@ pub(crate) fn require_passkey_assertion(
             "passkey assertion invalid or expired",
         ));
     }
-    Ok(())
+    Ok(PasskeyProof(()))
 }
 
 #[cfg(test)]

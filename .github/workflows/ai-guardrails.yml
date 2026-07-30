@@ -1,11 +1,19 @@
 name: AI Guardrails
 
+# 中文注释:本 workflow 原先只挂 pull_request。但 AGENTS.md 禁分支硬规则(2026-07-29)
+# 要求一切工作直接落 main、禁建任何分支,仓库最后一次 PR 合并停在 2026-04-21,
+# 于是这道门禁事实上几个月没触发过——它承载的两个守卫(文档/残留门禁、
+# pallet 注册表与链上索引一致性)全部失效。2026-07-30 创世前审计补 push 触发。
+# pull_request 分支保留,以防将来恢复 PR 流程。
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
-  group: ai-guardrails-${{ github.event.pull_request.number }}
+  # push 事件没有 pull_request.number,统一用 ref 作并发组键。
+  group: ai-guardrails-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -14,7 +22,8 @@ permissions:
 
 jobs:
   guardrails:
-    if: github.event.pull_request.draft == false
+    # 只在 PR 草稿态跳过;push 事件没有 draft 概念,必须放行。
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: 文档与残留门禁
     runs-on: ubuntu-latest
     steps:
@@ -25,10 +34,15 @@ jobs:
 
       - name: 检查文档更新与残留清理
         env:
-          BASE_REF: origin/${{ github.base_ref }}
+          # PR 事件比目标分支;push 事件比上一次推送的 SHA。
+          # 脚本对全 0 SHA(首推/强推)会自动退回 HEAD~1。
+          BASE_REF: >-
+            ${{ github.event_name == 'pull_request'
+                && format('origin/{0}', github.base_ref)
+                || github.event.before }}
         run: ./.github/scripts/check-ai-guardrails.sh
 
       # 前端 pallet 注册表(citizenwallet/citizenapp)必须与链上 construct_runtime 索引一致:
-      # 链上 pallet 重排后 Dart 未同步会往错误 pallet 发交易。每个 PR 静态比对,漂移即红。
+      # 链上 pallet 重排后 Dart 未同步会往错误 pallet 发交易。每次推送静态比对,漂移即红。
       - name: 校验 pallet 注册表与链上一致
         run: node .github/scripts/check-pallet-registry-sync.mjs

@@ -310,6 +310,9 @@ pub mod pallet {
         MetadataImmutable,
         /// 单块强制销毁队列已满。
         ScheduleFull,
+        /// 业务尚未实装(ADR-011 任务卡 A/B)。执行入口一律拒绝,
+        /// 禁止形成"投票通过但无任何链上副作用"的假成功。
+        NotImplemented,
     }
 
     /// 业务 pallet 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。

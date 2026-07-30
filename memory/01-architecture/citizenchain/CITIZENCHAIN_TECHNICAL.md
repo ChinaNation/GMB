@@ -79,7 +79,13 @@ citizenchain/
 - 进程模型：OnChina 是公民链内置二进制能力，由节点桌面端设置页“链上中国平台”入口手动拉起为子进程、退出时一并停掉；节点启动后默认不启动 OnChina，避免只挖矿节点承担管理后台服务。OnChina 经节点 RPC 读写链，对内网托管 HTTPS API 与前端，固定入口为 `https://onchina.local:8964`。桌面 = 节点运维台，浏览器 = 机构管理员，并存不冲突。
 - 工作台模型：登录账户属于哪个链上机构 admins 人员集合，就显示哪个机构候选；同一账户属于多个机构时先选择机构。工作台操作列表和每次链写都必须按该账户的有效岗位任职与 `RoleBusinessPermission` 过滤，不能因登录成功获得机构业务权限。注册局是 `workspace` 的一类，司法院、立法院、学校、公司、公益组织等机构按自己的工作台 UI 进入“操作 / 显示 / 记录”页面。
 - 数据两层：链上最小身份 + 承诺哈希(选择性/绑定触发上链)；链下明细存本市内嵌 PostgreSQL + 本地/NAS 文件仓库(文件哈希上链验真)。
-- 创世机构：49,593 个公权机构和私权非营利法人“公民链技术发展基金会”统一在创世阶段上链。公民链基金会使用 `PrivateManage/PrivateAdmins`，其 CID、协议账户、一名程伟管理员、同一账户的三项固定岗位任职、机构阈值 2 和法定代表人引用来自 runtime primitives 单一常量源；OnChina 运行期读取链上机构、admins、岗位权限和有效任职，并用本地投影补齐展示字段，不生成第二套机构授权真源。
+- 创世机构精确为 49,593 个公权机构 + 1 个私权非营利法人“公民链技术发展基金会”，
+  合计 49,594 个机构；公权协议账户为 99,232 个，基金会另有主、费 2 个协议账户，
+  全创世合计 99,234 个机构协议账户。管理员个人钱包不计入机构协议账户。公民链基金会
+  使用 `PrivateManage/PrivateAdmins`，其 CID、协议账户、一名程伟管理员、同一账户的
+  三项固定岗位任职、机构阈值 2 和法定代表人引用来自 runtime primitives 单一常量源；
+  OnChina 运行期读取链上机构、admins、岗位权限和有效任职，并用本地投影补齐展示字段，
+  不生成第二套机构授权真源。
 - 公民档案先本地建档并发电子护照,不要求链账户;注册局推送链上投票身份时才录入 `account_id`、要求目标公民签名,并由注册局管理员提交 `CitizenIdentity.register_voting_identity`。
 - 当前进度：
   - Step0：crate 骨架 + node 拉起子进程的最小贯通（已完成）。
@@ -352,6 +358,24 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
 - fresh 验收必须读取 RPC 的 block 0、health、六项项目 Runtime 版本、metadata、genesis hash 与 state root，并在结束后停止节点。与既有 bootnode 的 genesis 不一致只说明正式 chainspec 尚未统一，不得通过削弱 NodeGuard 或复用旧链数据规避。
 - 2026-07-22 最终验收：block #0/genesis hash `0x4bd7e3f65f5ad4788e6ac8917abce9b0683f0c93d286766a7512854084ff0dd9`，state root `0xd15b1a20d972f0cc5f64aa9a08a09f6793fe51886f9445c6dc953c0f9d438f7b`，`peers=0`、`isSyncing=false`，六项项目 Runtime 版本均为 `0`，metadata 二进制 220,247 字节；验收节点已停止，未生成正式 chainspec。
 
+## 14.1 外部调用准入与费率路由：两处都不设通配分支
+
+`runtime/src/configs.rs` 的两个 `RuntimeCall` 匹配统一采用**逐 pallet 显式归类、无 `_` 兜底**：
+
+- `RuntimeFeeRouter::fee_route` — 历来如此，默认 `FeeRoute::Reject`。
+- `RuntimeCallFilter::contains` — 2026-07-30 创世前审计整改。整改前是 `_ => true`
+  （默认放行），新增 pallet 的 extrinsic 会自动对外暴露且不触发任何编译期提醒；
+  现改为把 28 个 `RuntimeCall` 变体全部列出（拒绝 4 个：`Balances` / `Assets` /
+  `OnchainIssuance` / `OffchainTransaction`，放行 24 个）。
+
+这样新增 pallet 会触发编译期 non-exhaustive 错误，强制作者显式决定放行还是拒绝。
+编译器只能拦住「删掉某个 pallet 分支」，拦不住有人把 `_ => true` 加回来，故另配源码级
+回归测试 `runtime/src/tests/cases.rs::runtime_call_filter_has_no_wildcard_arm` 钉死这一点。
+
+> 注：只有带 `#[pallet::call]` 的 pallet 才会出现在 `RuntimeCall` 中。`TransactionPayment`、
+> `ProvincialBankInterest`、`PowDifficulty`、`GenesisPallet`、`PublicAdmins`、`PrivateAdmins`
+> 六个 pallet 不暴露 extrinsic，因此 34 个 pallet 对应 28 个 `RuntimeCall` 变体。
+
 ## 15. 正式创世前全仓静态与测试门禁
 
 - 2026-07-25 已通过
@@ -362,6 +386,22 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
   自动续费、取消、暂停恢复与价格重确认测试均通过，本轮没有修改订阅业务逻辑。
 - FRAME 宏生成的既定 extrinsic 参数 ABI、固定上游 vendor 和测试断言只允许使用最窄、
   带中文原因的 lint 范围；不得以此扩展为 production 全局静音。
+- **2026-07-30 创世前审计复核：上条「2026-07-25 已通过」当时已不成立，门禁实际是红的**，
+  共 10 条错误（`citizen-identity` 参数超阈值 1 条来自当日提交 `51148c76`；
+  `node/vendor/finality_proof.rs` 冗余借用 1 条从 2026-03-26 起就红着；
+  `node/admins/management/activation.rs` 冗余借用 2 条；
+  `node/transaction/offchain/rpc.rs` `return Err(..)?` 冗余 6 条）。全部已修，
+  当前 `cargo clippy --workspace --all-targets -- -D warnings` **exit=0**。
+- `clippy::too_many_arguments` 的放宽范围按「够得着的最窄一层」选，不是一律 crate 级：
+  - 手写辅助函数**一律不放宽**，按设计把长参数收成描述结构体
+    （本轮把 `prepare_legislation_sign`、`build_chain_sign_output` 各收成 3 参数）。
+  - FRAME `#[pallet::call]` 中单个 extrinsic 超阈值 → per-fn `#[allow]`
+    （`citizen-identity::admin_rebind_cid_account_id`、`public-manage`、`private-manage`）。
+  - 宏在 pallet **模块层**生成的 Call 分发代码超阈值 → per-fn 与 call 块级 `#[allow]` 都够不到，
+    只能用模块内部属性 `#![allow(...)]`（`address-registry`、`legislation-yuan`）；
+    这仍窄于原先的 crate 级，模块外辅助函数的参数过多依然会被抓出。
+- 该门禁此前**只靠手工跑、没有进 CI**，这正是它红了几个月无人发现的原因；
+  修完必须补 CI job，否则还会再漂。
 - 本轮只完成正式创世前代码质量验收；没有烘焙 chainspec、切换节点数据、触发 GitHub CI、
   部署节点或转入资金。
 - 第8.1步最终冻结源码提交为

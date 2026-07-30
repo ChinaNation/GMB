@@ -6,6 +6,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 // ──── 投票进度组件 ────
 
@@ -568,7 +569,7 @@ class ProposalStatusBadge extends StatelessWidget {
 String _publicKeyToSS58(String publicKey) {
   final hex = publicKey.startsWith('0x') ? publicKey.substring(2) : publicKey;
   final bytes = _hexDecode(hex);
-  return Keyring().encodeAddress(bytes, 2027);
+  return Keyring().encodeAddress(bytes, kGmbSs58Prefix);
 }
 
 Uint8List _hexDecode(String hex) {

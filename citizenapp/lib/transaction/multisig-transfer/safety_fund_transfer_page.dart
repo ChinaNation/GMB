@@ -20,6 +20,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
 /// 国家储委会安全基金转账提案创建页面。
 ///
@@ -94,7 +95,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
 
   String _accountIdToSs58(String hex) {
     final bytes = _hexToBytes(hex);
-    return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
+    return Keyring().encodeAddress(Uint8List.fromList(bytes), kGmbSs58Prefix);
   }
 
   Future<void> _fetchBalance() async {

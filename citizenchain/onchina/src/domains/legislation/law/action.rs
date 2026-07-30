@@ -7,6 +7,7 @@
 use super::model::ProposeLawInput;
 use super::service::{build_propose_law_call, build_representative_vote_call};
 use crate::core::institution_call::ChainCall;
+use crate::auth::passkey::PasskeyProof;
 use crate::domains::citizens::occupy::{ChainSignSession, SESSION_TTL_SECS};
 use crate::{api_error, AppState};
 use axum::http::StatusCode;
@@ -18,6 +19,26 @@ use uuid::Uuid;
 
 pub(crate) const PURPOSE_LEGISLATION_PROPOSE: &str = "LEGISLATION_PROPOSE";
 pub(crate) const PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE: &str = "LEGISLATION_REPRESENTATIVE_VOTE";
+
+/// 一次立法链签名会话的完整描述。
+///
+/// 把「请求前缀 / 用途 / 发起管理员 / 归属机构 / 待签链调用 / 操作上下文」收成一体,
+/// 避免 `prepare_legislation_sign` 变成长参数列表——那样既容易在调用点串位,
+/// 也会触发 `clippy::too_many_arguments`(手写函数不走 FRAME ABI 豁免)。
+struct LegislationSignRequest<'a> {
+    /// request_id 前缀,区分提案与表决两类会话。
+    request_prefix: &'a str,
+    /// 会话用途常量,落库后决定 submit 阶段的投影分支。
+    purpose: &'a str,
+    /// 发起管理员的钱包账户 account_id。
+    account_id: &'a str,
+    /// 发起机构 CID。
+    institution_cid_number: &'a str,
+    /// 待冷签的链调用(call_data + 动作码)。
+    chain: ChainCall,
+    /// 落库的业务上下文,供 submit 阶段还原操作语义。
+    operation_context: Value,
+}
 
 /// 所有立法链交易 prepare 接口统一返回请求编号和请求二维码载荷。
 #[derive(Debug, Serialize)]
@@ -34,21 +55,25 @@ pub(crate) async fn prepare_propose_law_sign(
     account_id: &str,
     institution_cid_number: &str,
     resolve_cid_number: impl Fn(&[u8; 4]) -> Option<String>,
+    passkey: &PasskeyProof,
 ) -> Result<LegislationSignOutput, Response> {
     let chain = build_propose_law_call(input, proposer_code, resolve_cid_number)
         .map_err(|error| api_error(StatusCode::UNPROCESSABLE_ENTITY, 2001, error.code()))?;
     prepare_legislation_sign(
         state,
-        "leg-propose",
-        PURPOSE_LEGISLATION_PROPOSE,
-        account_id,
-        institution_cid_number,
-        chain,
-        json!({
-            "tier": input.tier,
-            "scope_code": input.scope_code,
-            "vote_type": input.vote_type,
-        }),
+        LegislationSignRequest {
+            request_prefix: "leg-propose",
+            purpose: PURPOSE_LEGISLATION_PROPOSE,
+            account_id,
+            institution_cid_number,
+            chain,
+            operation_context: json!({
+                "tier": input.tier,
+                "scope_code": input.scope_code,
+                "vote_type": input.vote_type,
+            }),
+        },
+        passkey,
     )
     .await
 }
@@ -61,19 +86,23 @@ pub(crate) async fn prepare_representative_vote_sign(
     approve: bool,
     account_id: &str,
     institution_cid_number: &str,
+    passkey: &PasskeyProof,
 ) -> Result<LegislationSignOutput, Response> {
     prepare_legislation_sign(
         state,
-        "leg-representative-vote",
-        PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE,
-        account_id,
-        institution_cid_number,
-        build_representative_vote_call(proposal_id, voter_role_code, approve),
-        json!({
-            "proposal_id": proposal_id,
-            "voter_role_code": voter_role_code,
-            "approve": approve,
-        }),
+        LegislationSignRequest {
+            request_prefix: "leg-representative-vote",
+            purpose: PURPOSE_LEGISLATION_REPRESENTATIVE_VOTE,
+            account_id,
+            institution_cid_number,
+            chain: build_representative_vote_call(proposal_id, voter_role_code, approve),
+            operation_context: json!({
+                "proposal_id": proposal_id,
+                "voter_role_code": voter_role_code,
+                "approve": approve,
+            }),
+        },
+        passkey,
     )
     .await
 }
@@ -81,13 +110,17 @@ pub(crate) async fn prepare_representative_vote_sign(
 /// 统一读取实时 nonce/runtime/创世哈希，保存短期会话并生成完整审阅载荷。
 async fn prepare_legislation_sign(
     state: &AppState,
-    request_prefix: &str,
-    purpose: &str,
-    account_id: &str,
-    institution_cid_number: &str,
-    chain: ChainCall,
-    operation_context: Value,
+    request: LegislationSignRequest<'_>,
+    passkey: &PasskeyProof,
 ) -> Result<LegislationSignOutput, Response> {
+    let LegislationSignRequest {
+        request_prefix,
+        purpose,
+        account_id,
+        institution_cid_number,
+        chain,
+        operation_context,
+    } = request;
     let prepared = crate::core::chain_submit::prepare_signing(&chain.call_data, account_id)
         .await
         .map_err(|error| {
@@ -125,7 +158,7 @@ async fn prepare_legislation_sign(
     };
     state
         .db
-        .insert_chain_sign_session(&session)
+        .insert_chain_sign_session(&session, passkey)
         .map_err(|error| {
             tracing::error!(error = %error, purpose, "insert legislation chain sign session failed");
             api_error(

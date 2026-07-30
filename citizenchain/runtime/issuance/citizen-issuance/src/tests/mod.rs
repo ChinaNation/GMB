@@ -191,6 +191,28 @@ fn same_citizen_identity_only_rewards_once() {
 }
 
 #[test]
+fn same_citizen_identity_with_different_account_only_rewards_once() {
+    new_test_ext().execute_with(|| {
+        let cid_number = notify_voting_identity_registered(1, &citizen_cid_number("CID-ONLY-ONCE"));
+        notify_voting_identity_registered(2, &citizen_cid_number("CID-ONLY-ONCE"));
+
+        // 奖励的唯一身份键是 CID；即使调用方换成从未领取过的新账户，同一 CID 也不能重领。
+        assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
+        assert_eq!(Balances::free_balance(2), 0);
+        assert_eq!(RewardedCount::<Test>::get(), 1);
+        assert!(IdentityRewardClaimed::<Test>::contains_key(&cid_number));
+        assert!(!AccountRewarded::<Test>::contains_key(2));
+        System::assert_last_event(RuntimeEvent::CitizenIssuance(
+            Event::<Test>::CertificationRewardSkipped {
+                account_id: 2,
+                cid_number,
+                reason: SkipReason::DuplicateCitizenIdentity,
+            },
+        ));
+    });
+}
+
+#[test]
 fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
@@ -353,6 +375,37 @@ fn same_block_pending_tables_prevent_duplicate_account_reward() {
             &first_cid
         ));
         assert!(!PendingAccountRewarded::<Test>::contains_key(1));
+    });
+}
+
+#[test]
+fn same_block_pending_tables_prevent_duplicate_cid_reward_after_account_change() {
+    new_test_ext().execute_with(|| {
+        let cid_number = queue_voting_identity_registered(1, &citizen_cid_number("PENDING-CID"));
+        queue_voting_identity_registered(2, &citizen_cid_number("PENDING-CID"));
+
+        // finalize 前也必须同时锁住 CID 与账户；这里命中 CID 锁，新账户不会进入待发队列。
+        assert_eq!(PendingRewardCount::<Test>::get(), 1);
+        assert!(PendingIdentityRewardClaimed::<Test>::contains_key(
+            &cid_number
+        ));
+        assert!(PendingAccountRewarded::<Test>::contains_key(1));
+        assert!(!PendingAccountRewarded::<Test>::contains_key(2));
+        System::assert_last_event(RuntimeEvent::CitizenIssuance(
+            Event::<Test>::CertificationRewardSkipped {
+                account_id: 2,
+                cid_number: cid_number.clone(),
+                reason: SkipReason::DuplicateCitizenIdentity,
+            },
+        ));
+
+        CitizenIssuance::on_finalize(System::block_number());
+        assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
+        assert_eq!(Balances::free_balance(2), 0);
+        assert_eq!(RewardedCount::<Test>::get(), 1);
+        assert!(IdentityRewardClaimed::<Test>::contains_key(&cid_number));
+        assert!(AccountRewarded::<Test>::contains_key(1));
+        assert!(!AccountRewarded::<Test>::contains_key(2));
     });
 }
 

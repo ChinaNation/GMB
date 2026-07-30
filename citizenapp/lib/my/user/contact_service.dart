@@ -231,7 +231,6 @@ class UserContactService {
         _chainReader = chainReader ?? CitizenIdentityChainReader(),
         _autoSync = autoSync;
 
-  static const int _ss58Prefix = 2027;
   static const String _contactsPrefix = 'contact_book_by_cid:';
   static const String _pendingPrefix = 'contact_pending_by_cid:';
   static const String _syncPrefix = 'contact_sync_by_cid:';
@@ -742,7 +741,7 @@ class UserContactService {
     if (trimmed.isEmpty) throw const FormatException('地址为空');
     try {
       final bytes = Keyring().decodeAddress(trimmed);
-      final normalized = Keyring().encodeAddress(bytes, _ss58Prefix);
+      final normalized = Keyring().encodeAddress(bytes, kGmbSs58Prefix);
       if (normalized != trimmed) {
         throw const FormatException('联系人地址不是本链 SS58 地址');
       }

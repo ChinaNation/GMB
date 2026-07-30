@@ -131,6 +131,23 @@ lib/
 
 ## 4. 关键流程
 
+### 4.0 SS58 前缀单源（2026-07-30 创世前审计收敛）
+
+GMB 链 SS58 前缀 **2027** 的唯一常量是：
+
+```dart
+// citizenapp/lib/citizen/shared/account_derivation.dart
+const int kGmbSs58Prefix = 2027;   // 对齐链端 primitives::core_const::SS58_FORMAT
+```
+
+收敛前，前缀在 **24 个文件**里各自复制：钱包、rpc、qr、通讯录、投票身份、机构详情、
+多签转账、个人多签、清算行目录、广场提案等各写一份 `_ss58Prefix = 2027` 或
+`_ss58Format = 2027`，`personal_admin_list_page.dart` 甚至直接裸写 `2027`。
+全部已改为 `import` 单源。
+
+**此后禁止**在任何页面、service、rpc 层重新声明前缀常量或直接写字面量 `2027`；
+链端一旦改 `SS58_FORMAT`，改一处即可全端同步，不必再全仓搜数字。
+
 ### 4.1 创建热钱包
 
 1. 生成 `bip39` 助记词

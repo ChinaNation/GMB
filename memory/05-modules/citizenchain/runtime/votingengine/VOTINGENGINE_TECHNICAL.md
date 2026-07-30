@@ -50,7 +50,7 @@ proposal_id 快照进行。
 
 OnChina 本地数据库只能用于注册局录入和界面提示，不能作为链上投票资格真源。
 
-2026-07-22 资格读取已统一返回 `CitizenSubject { cid_number, account_id }`。联合公投、立法公投和 Popular 选举均以 `(proposal_id, cid_number)` 唯一去重，票据值保存完整主体；同一永久 CID 更换绑定账户后不能再投一票。候选快照、候选计票和当选结果也已统一为完整主体。人口快照仍只保存作用域、有效总数、资格 revision、判定日期和创建区块，不枚举公民名单。
+2026-07-30 资格读取统一返回 `CitizenSubject { cid_number, account_id }`。联合公投、立法公投和 Popular 选举均以 `(proposal_id, cid_number)` 唯一去重，票据值保存完整主体；同一永久 CID 更换绑定账户后不能再投一票。候选快照和当选结果保存完整主体，候选计票表以候选 CID 为唯一键；当前绑定账户只用于签名授权与审计。人口快照仍只保存作用域、有效总数、资格 revision、判定日期和创建区块，不枚举公民名单。
 
 ## 人口作用域
 
@@ -136,7 +136,9 @@ legislation-vote/
 - `election-vote` 创建入口按 `ElectionMode` 强制检查资格来源：Popular 必须有人口作用域，Mutual 必须取得已绑定岗位主体快照。
 - 普选人口作用域写入 `ElectionMeta`，完整人口数据写入核心 `ProposalPopulationSnapshots`；互选不写公民作用域，按 VotePlan 中属于唯一 `actor_cid_number` 的一个或多个 `RoleSubject` 写入核心 `VoterSnapshot`，并以 `MutualElectionVotesByTicket` 保存完整岗位票据。`MutualVoters`、调用方选民参数和 `MaxMutualVoters` 已删除。
 - 多席位计票允许完整落入剩余席位的并列组共同当选；并列组跨越席位边界时拒绝结果。
-- 候选快照、Popular 票据、候选计票和当选结果全部使用 `CitizenSubject`；钱包只提供签名身份，CID 只提供公民身份，二者缺一不可。
+- 候选快照和当选结果保存 `CitizenSubject`，Popular 票据保存当次完整投票主体，候选计票表
+  以候选 `cid_number` 为唯一键。候选人必须由 `candidate_subject` 校验为竞选身份；
+  当前钱包账户只证明签名授权，换绑不得形成第二候选人或第二张公民票。
 
 ## 清理
 
@@ -198,7 +200,9 @@ legislation-vote/
 - Runtime registry 共注册 19 条：核心 4、内部 2、联合 5、立法 6、选举 2。
 - 核心权重为 35/24/10/22 ms，其中公开终结 35 ms 是保守调度包络并另叠加实际 Track 权重；`process_pending_execution` 另显式叠加 `SystemWeightInfo::set_code()`，runtime 升级不再被普通回调静态权重掩盖。
 - 内部权重沿用既有实测；联合和立法已按资格历史存储重新生成，公民公投写票均真实计入 snapshot 绑定、快照元数据和账户资格版本读取。
-- 选举最后一票按候选人数 `c` 线性计费：Popular 基础约 `47.6m ps`、Mutual 基础约 `38.7m ps`，两者每候选人约增加 `1.56m ps`；Popular 读为 `10+c`，Mutual 读为 `7+c`，写均为 9。
+- 2026-07-30 使用当前源码 WASM、50 steps、20 repeats 重算选举权重。最后一票按候选人数
+  `c` 线性计费：Popular 基础约 `54.4m ps`、Mutual 基础约 `51.1m ps`，两者每候选人
+  约增加 `1.94m ps`；Popular 读为 `12+c`、Mutual 读为 `11+c`，写均为 10。
 - joint 人口准备和立法签署类 benchmark 无法在通用基准创世态完整构造生产 provider 权限，调用注解使用“实测主体与生产 provider 保守上界取 max”，重生生成文件不会移除安全上界。
 - `ProposalTrackHandler` 同时返回 stage timeout、Track chunk cleanup、Track terminal cleanup 权重；手动终结、自动终结和清理维护均按具体 Track 实际值计账。
 - 三条维护预算维持最大区块权重的 `1/4`、`1/4`、`1/8`，合计 62.5%；在 60 秒最大计算区块下，每条管线均可容纳至少一个最重任务。

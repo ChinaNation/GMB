@@ -134,7 +134,6 @@ typedef WalletSubkeyRegistrar = Future<void> Function({
 });
 
 class WalletManager {
-  static const int _ss58Format = 2027;
 
   /// 账户派生序号上界(`//index` 的 index 最大值)。账户0 为锚点主账户,
   /// 追加账户序号取 `1.._maxAccountIndex`。与 citizenwallet 冷端同源。
@@ -442,10 +441,10 @@ class WalletManager {
     }
     // 用本链前缀重新编码并逐字比较，拒绝其他网络和非规范地址。
     final normalizedSs58Address =
-        Keyring().encodeAddress(publicKeyBytes, _ss58Format);
+        Keyring().encodeAddress(publicKeyBytes, kGmbSs58Prefix);
     if (normalizedSs58Address != trimmed) {
       throw Exception(
-        '地址前缀不匹配（本链 SS58 前缀为 $_ss58Format），请确认地址来自本链',
+        '地址前缀不匹配（本链 SS58 前缀为 $kGmbSs58Prefix），请确认地址来自本链',
       );
     }
 
@@ -1166,7 +1165,7 @@ class WalletManager {
   _Account0 _deriveAccount(List<int> seed, int index) {
     final child = Uint8List.fromList(_childMiniSecret(seed, index));
     final pair = Keyring.sr25519.fromSeed(child);
-    pair.ss58Format = _ss58Format;
+    pair.ss58Format = kGmbSs58Prefix;
     final publicKeyBytes = pair.bytes().toList(growable: false);
     return _Account0(
       childMiniSecret: child,
@@ -1594,7 +1593,7 @@ class WalletManager {
         ..accountId = normalizedAccountId
         ..masterId = normalizedAccountId
         ..alg = 'sr25519'
-        ..ss58 = _ss58Format
+        ..ss58 = kGmbSs58Prefix
         ..createdAtMillis = createdAtMillis
         ..source = source
         ..signMode = 'local'
@@ -1627,7 +1626,7 @@ class WalletManager {
       ss58Address: ss58Address,
       accountId: normalizedAccountId,
       alg: 'sr25519',
-      ss58: _ss58Format,
+      ss58: kGmbSs58Prefix,
       createdAtMillis: createdAtMillis,
       source: source,
       signMode: 'local',
@@ -1679,7 +1678,7 @@ class WalletManager {
         // 冷钱包无派生概念,masterId 亦取其 accountId,保持 masterId 字段全表非空。
         ..masterId = normalizedAccountId
         ..alg = 'sr25519'
-        ..ss58 = _ss58Format
+        ..ss58 = kGmbSs58Prefix
         ..createdAtMillis = createdAtMillis
         ..source = 'imported'
         ..signMode = 'external'
@@ -1700,7 +1699,7 @@ class WalletManager {
       ss58Address: ss58Address,
       accountId: _normalizeAccountId(accountId),
       alg: 'sr25519',
-      ss58: _ss58Format,
+      ss58: kGmbSs58Prefix,
       createdAtMillis: createdAtMillis,
       source: 'imported',
       signMode: 'external',

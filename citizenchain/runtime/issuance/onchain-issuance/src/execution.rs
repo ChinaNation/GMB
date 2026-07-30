@@ -11,8 +11,13 @@
 //! - OnchainAssetMeta 同时记录机构 CID 与资产执行账户，二者职责分离
 //!
 //! 当前框架阶段只搭函数签名 + doc 占位,实装在后续任务卡 A 完成。
+//!
+//! **未实装期一律 fail-closed**:本模块所有执行入口返回 `Error::NotImplemented`,
+//! 不返回 `Ok(())`。外层虽已有 `RuntimeCallFilter` reject 与 `FeeRoute::Reject` 双闸,
+//! 但那是外层防护;内层自己也必须拒绝,才能保证将来"先接回调、后写业务"时
+//! 投票会明确失败,而不是静默通过。
 
-use crate::pallet::{Config, OnchainAssetId};
+use crate::pallet::{Config, Error, OnchainAssetId};
 use crate::proposal::{BurnProposal, CloseProposal, IssueProposal, MintProposal, TransferProposal};
 use frame_support::pallet_prelude::*;
 
@@ -34,32 +39,36 @@ pub fn execute_issue<T: Config>(
 where
     BalanceOf<T>: From<u128>,
 {
-    // TODO: implement business logic
-    Ok(())
+    // 业务未实装(ADR-011 任务卡 A)。返回 Err 而非 Ok:执行入口必须 fail-closed,
+    // 否则将来先接回调后写业务时,投票会"通过且无任何链上副作用"形成假成功。
+    Err(Error::<T>::NotImplemented.into())
 }
 
 /// 增发(调 pallet_assets::mint_into + emit Minted)。
 pub fn execute_mint<T: Config>(
     _proposal: MintProposal<T::AccountId, BalanceOf<T>>,
 ) -> DispatchResult {
-    // TODO: implement business logic
-    Ok(())
+    // 业务未实装(ADR-011 任务卡 A)。返回 Err 而非 Ok:执行入口必须 fail-closed,
+    // 否则将来先接回调后写业务时,投票会"通过且无任何链上副作用"形成假成功。
+    Err(Error::<T>::NotImplemented.into())
 }
 
 /// 销毁(调 pallet_assets::burn_from + emit Burned)。
 pub fn execute_burn<T: Config>(
     _proposal: BurnProposal<T::AccountId, BalanceOf<T>>,
 ) -> DispatchResult {
-    // TODO: implement business logic
-    Ok(())
+    // 业务未实装(ADR-011 任务卡 A)。返回 Err 而非 Ok:执行入口必须 fail-closed,
+    // 否则将来先接回调后写业务时,投票会"通过且无任何链上副作用"形成假成功。
+    Err(Error::<T>::NotImplemented.into())
 }
 
 /// 转账(调 pallet_assets::transfer + emit Transferred)。
 pub fn execute_transfer<T: Config>(
     _proposal: TransferProposal<T::AccountId, BalanceOf<T>>,
 ) -> DispatchResult {
-    // TODO: implement business logic
-    Ok(())
+    // 业务未实装(ADR-011 任务卡 A)。返回 Err 而非 Ok:执行入口必须 fail-closed,
+    // 否则将来先接回调后写业务时,投票会"通过且无任何链上副作用"形成假成功。
+    Err(Error::<T>::NotImplemented.into())
 }
 
 /// 关闭资产(调 pallet_assets::start_destroy + 销毁余额 + emit AssetClosed)。
@@ -67,8 +76,9 @@ pub fn execute_transfer<T: Config>(
 /// ADR-011 v2 8.1 节:必须 with_transaction 包裹,保证 OnchainIssuance::Assets.state 与
 /// pallet_assets::Asset.status 原子同步。
 pub fn execute_close<T: Config>(_proposal: CloseProposal) -> DispatchResult {
-    // TODO: implement business logic
-    Ok(())
+    // 业务未实装(ADR-011 任务卡 A)。返回 Err 而非 Ok:执行入口必须 fail-closed,
+    // 否则将来先接回调后写业务时,投票会"通过且无任何链上副作用"形成假成功。
+    Err(Error::<T>::NotImplemented.into())
 }
 
 /// 业务 callback 入口:VotingEngine InternalVote 通过后路由到对应 execute_*。
@@ -79,8 +89,9 @@ pub fn dispatch_internal_callback<T: Config>(
     _action: [u8; 4],
     _proposal_data: &[u8],
 ) -> DispatchResult {
-    // TODO: route by ACTION constant to_account_id execute_issue / execute_mint / ...
-    Ok(())
+    // ACTION 路由未实装(ADR-011 任务卡 A):目标为 execute_issue / execute_mint / ...。
+    // 未实装期间一律 fail-closed,禁止静默返回成功。
+    Err(Error::<T>::NotImplemented.into())
 }
 
 /// AssetId 自增辅助(NextAssetId 单调递增,从 1 开始)。

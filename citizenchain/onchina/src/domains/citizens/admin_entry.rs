@@ -206,6 +206,9 @@ pub(crate) fn persist_citizen_record(
     onchain_tx_hash: &str,
     finalized: &FinalizedCitizenIdentity,
 ) -> Result<CitizenRecord, axum::response::Response> {
+    // 落库的账户与 revision 一律取自 finalized 链读快照,不取请求体、也不取本地投影:
+    // 本地档案是链上绑定的投影,来源必须唯一。绑定无效(号未占/已吊销/无当前账户)时
+    // fail-closed 直接拒,绝不落一条 account_id 为空或指向旧账户的档案。
     let Some((citizen_account_id, binding_revision)) = finalized.active_binding() else {
         return Err(api_error(
             StatusCode::BAD_GATEWAY,
@@ -213,6 +216,7 @@ pub(crate) fn persist_citizen_record(
             "finalized CID 绑定无效",
         ));
     };
+    // 账户与块哈希统一按 ADR-040 规范文本落库:小写 0x + 十六进制。
     let citizen_account_id = format!("0x{}", hex::encode(citizen_account_id));
     let binding_finalized_block_hash = format!("0x{}", hex::encode(finalized.finalized_block_hash));
     // 匿名占号:档案选填,出生日期可空,不解析成 NaiveDate(空串会 panic),按字符串原样落库。
