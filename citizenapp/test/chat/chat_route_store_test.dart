@@ -3,6 +3,9 @@ import 'package:citizenapp/chat/storage/chat_store.dart';
 
 import '../support/isar_test_env.dart';
 
+const _ownerCidNumber = 'CN220-CTZN2-100000001-2026';
+const _peerCidNumber = 'CN220-CTZN2-100000002-2026';
+
 void main() {
   useIsolatedIsar();
 
@@ -10,9 +13,9 @@ void main() {
     final store = ChatStore();
 
     await store.upsertRouteRecord(
+      _ownerCidNumber,
       const ChatRoute(
-        peerAccountId:
-            '0x2222222222222222222222222222222222222222222222222222222222222222',
+        peerCidNumber: _peerCidNumber,
         routeDisplayName: 'Bob',
         deviceId: 'bob-phone',
         devicePublicKey: '0a0b',
@@ -22,16 +25,15 @@ void main() {
       ),
     );
 
-    final created = await store.getRouteRecord(
-        '0x2222222222222222222222222222222222222222222222222222222222222222');
+    final created = await store.getRouteRecord(_ownerCidNumber, _peerCidNumber);
     expect(created, isNotNull);
     expect(created!.routeDisplayName, 'Bob');
     expect(created.nearbyPeerHint, 'bob-nearby');
 
     await store.upsertRouteRecord(
+      _ownerCidNumber,
       ChatRoute(
-        peerAccountId:
-            '0x2222222222222222222222222222222222222222222222222222222222222222',
+        peerCidNumber: _peerCidNumber,
         routeDisplayName: 'Bob New',
         deviceId: created.deviceId,
         devicePublicKey: created.devicePublicKey,
@@ -41,7 +43,7 @@ void main() {
       ),
     );
 
-    final routes = await store.readRouteRecords();
+    final routes = await store.readRouteRecords(_ownerCidNumber);
     expect(routes, hasLength(1));
     expect(routes.single.routeDisplayName, 'Bob New');
     expect(routes.single.createdAtMillis, created.createdAtMillis);

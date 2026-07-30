@@ -109,9 +109,8 @@ class WalletLocalCleanupException implements Exception {
   String toString() => '钱包已删除，但本机安全存储清理未完成：${failures.join('；')}';
 }
 
-/// 通讯录专用密钥材料。**身份账户**(CID 绑定账户,可任意 `//n`)的 child mini-secret
-/// 只在 [WalletManager] 内参与 HKDF,业务层只能拿到已域隔离的加密钥和索引钥,不能借此
-/// 签名、恢复钱包或推导其他业务密钥。
+/// 通讯录专用密钥材料。材料只从 CID 稳定数据根派生，当前绑定账户仅负责签名鉴权和
+/// 包装数据根；业务层不能借此签名、恢复钱包或推导其他用途的子钥。
 class ContactKeyMaterial {
   const ContactKeyMaterial({
     required this.encryptionKey,
@@ -122,12 +121,14 @@ class ContactKeyMaterial {
   final Uint8List indexKey;
 }
 
-/// 注册 P-256 设备子钥的钩子：给定 walletIndex/accountId 与一个对绑定消息做该身份
-/// 账户 sr25519 签名的闭包（返回 `0x` hex）。由 app 启动注入实现，避免 wallet/core
+/// 注册 P-256 设备子钥的钩子：给定当前 CID 绑定三元组与一个对绑定消息做当前账户
+/// sr25519 签名的闭包（返回 `0x` hex）。由 app 启动注入实现，避免 wallet/core
 /// 反向依赖 8964 层。**触发时机 = 进入需 CID 页面时按需绑定**（见
-/// [WalletManager.bindDeviceSubkeyToAccountId]），不在钱包创建 / 导入时注册。
+/// [WalletManager.bindDeviceSubkeyToCurrentBinding]），不在钱包创建 / 导入时注册。
 typedef WalletSubkeyRegistrar = Future<void> Function({
   required int walletIndex,
+  required String cidNumber,
+  required int bindingRevision,
   required String accountId,
   required Future<String> Function(Uint8List bindingMessage) signBinding,
 });
@@ -166,8 +167,8 @@ class WalletManager {
   /// child，绝不存母种子 / 助记词。
   static SecureSeedStore _store = HardwareBoundSeedVault();
 
-  /// 通讯录专用密钥是从**身份账户 child** 域隔离派生后的 64 字节材料，静默保存在系统
-  /// 安全存储；它不需要每次查看通讯录都重复触发生物识别。
+  /// CID 数据根派生的通讯录专用密钥，静默保存在系统安全存储；它不需要每次查看
+  /// 通讯录都重复触发生物识别。
   static VaultBlobStore _contactKeyStore = SecureStorageBlobStore();
 
   /// 每只热钱包共享一把 P-256 硬件设备子钥，物理键由 walletIndex 隔离。
@@ -184,19 +185,15 @@ class WalletManager {
   static set debugDeviceSubkey(DeviceSubkey deviceSubkey) =>
       _deviceSubkey = deviceSubkey;
 
-  /// 本地静止态数据密钥（LDK）信封金库。
-  ///
-  /// LDK 一次生成、终身不变，由账户 child 派生的 KEK 包裹后落地；换绑只重 wrap，
-  /// 已落盘的聊天/MLS/附件/通讯录密文一个字节都不用重写。日常读走
-  /// [_localDataKeyCacheName] 静默缓存，不重复触发生物识别（与通讯录钥同一策略）。
-  static LocalDataKeyVault get _localKeyVault =>
-      LocalDataKeyVault(_LocalKeyBlobStoreAdapter(_contactKeyStore));
+  /// CID 稳定数据根信封金库。数据根由 CID 层发放，钱包创建或导入不得自行生成。
+  static CidDataRootVault get _cidDataRootVault =>
+      CidDataRootVault(_LocalKeyBlobStoreAdapter(_contactKeyStore));
 
-  static String _localDataKeyCacheName(String accountId) =>
-      'citizenapp_local_data_key_cache_$accountId';
+  static String _cidDataRootCacheName(String cidNumber) =>
+      'citizenapp_cid_data_root_cache_${Uri.encodeComponent(cidNumber)}';
 
   /// 设备子钥绑定钩子（app 启动注入；为空则跳过，用于测试 / 未接后端）。由
-  /// [bindDeviceSubkeyToAccountId] 在进入需 CID 页面时调用，不在钱包创建 / 导入时触发。
+  /// [bindDeviceSubkeyToCurrentBinding] 在进入需 CID 页面时调用，不在钱包创建 / 导入时触发。
   /// 「每次动钱动权都验证」现由硬件金库读 child 时的原子生物识别实现,
   /// 不再需要操作层 local_auth 软门禁。
   static WalletSubkeyRegistrar? _subkeyRegistrar;
@@ -380,10 +377,6 @@ class WalletManager {
       source: 'created',
     );
     try {
-      await _persistContactKeys(profile.accountId, account0.childMiniSecret);
-      // 本地静止态数据密钥（LDK）与通讯录钥同批预置：此刻 child 在手，零额外生物识别。
-      await persistLocalDataKeyWithSecret(
-          profile.accountId, account0.childMiniSecret);
       await _verifyWalletPersisted(profile);
       // 设备子钥**不在此注册**：子钥只服务广场 / 聊天 / 通讯录等需 CID 的场景，而建钱包
       // 这一刻账户必然还没有 CID（后端 device/register 要求已绑 CID）。只用钱包和交易的
@@ -418,10 +411,6 @@ class WalletManager {
         source: 'imported',
       );
       try {
-        await _persistContactKeys(profile.accountId, account0.childMiniSecret);
-        // 本地静止态数据密钥（LDK）与通讯录钥同批预置：此刻 child 在手，零额外生物识别。
-        await persistLocalDataKeyWithSecret(
-            profile.accountId, account0.childMiniSecret);
         await _verifyWalletPersisted(profile);
         // 与创建同理，设备子钥不在导入时注册：换设备导入的账户可能早已有 CID，也可能
         // 从未注册过 CID，一律等进入需 CID 页面时由门禁按需绑定（幂等 upsert，绑定即把
@@ -695,8 +684,8 @@ class WalletManager {
       if (row != null) {
         await isar.accountEntitys.delete(row.id);
       }
-      // 账户生命周期结束时一并清除该账户全部本机流水、同步游标和通讯录缓存，
-      // 避免重新派生前仍能读到已删除账户的旧状态。
+      // 账户生命周期结束时只清账户自身的流水和同步游标。通讯录等公民数据归
+      // 永久 CID，删除旧账户（包括换绑后的旧账户）不得删除或迁移 CID 数据。
       await isar.localTxEntitys
           .filter()
           .accountIdEqualTo(accountId)
@@ -705,13 +694,10 @@ class WalletManager {
           .filter()
           .accountIdEqualTo(accountId)
           .deleteAll();
-      for (final key in _contactCacheKeys(accountId)) {
-        await isar.appKvEntitys.deleteByKey(key);
-      }
       remaining =
           await isar.accountEntitys.filter().masterIdEqualTo(masterId).count();
     });
-    // 删空 = 该助记词已无可用账户，交给整钱包删除统一清账户 child、LDK、钱包 KEK
+    // 删空 = 该助记词已无可用账户，交给整钱包删除统一清账户 child、CID 数据根包装、钱包 KEK
     // 与 P-256 设备子钥，避免先清一半后再次进入清理。
     if (remaining == 0) {
       await deleteWallet(walletIndex);
@@ -782,11 +768,9 @@ class WalletManager {
       return isar.accountEntitys.where().findAll();
     });
     await WalletIsar.instance.writeTxn((isar) async {
-      for (final account in accounts) {
-        for (final key in _contactCacheKeys(account.accountId)) {
-          await isar.appKvEntitys.deleteByKey(key);
-        }
-      }
+      // “清空钱包”是明确的本机隐私擦除动作；按 CID 清除本机通讯录密文，
+      // 不再把任一旧/新钱包账户误当作数据归属主键。
+      await _deleteAllCidContactRowsInTxn(isar);
       await isar.walletProfileEntitys.clear();
       // 清空钱包 = 清空全部账户行。
       await isar.accountEntitys.clear();
@@ -824,6 +808,10 @@ class WalletManager {
       }
       await _deleteAccountScopedSecrets(account.accountId, failures);
     }
+    await _clearActiveCidDataRootIfOwnedBy(
+      accounts.map((account) => account.accountId).toSet(),
+      failures,
+    );
     for (final wallet in wallets.where((row) => row.signMode == 'local')) {
       await _deleteWalletWideSecrets(wallet.walletIndex, failures);
     }
@@ -882,7 +870,8 @@ class WalletManager {
     }
 
     // 删钱包 = 删这套助记词下的全部账户。先取全部账户 accountId，事务提交后逐个
-    // 清账户 child、通讯录钥和 LDK；账户0(= target.accountId)必在其中，兜底再删一次。
+    // 清账户 child；仅删除热钱包时才执行本机 CID 隐私数据清理，删除冷钱包不得
+    // 影响当前热钱包控制的 CID 数据。
     final accountRows = await WalletIsar.instance.read((isar) {
       return isar.accountEntitys
           .filter()
@@ -902,12 +891,10 @@ class WalletManager {
       if (current == null) {
         throw Exception('未找到钱包');
       }
-      // 删除钱包同时终止该钱包在本机的通讯录生命周期；云端密文仍可在用户
-      // 重新导入同一助记词后恢复，但本机缓存、待同步操作和状态不得残留。
-      for (final accountId in accountIds) {
-        for (final key in _contactCacheKeys(accountId)) {
-          await isar.appKvEntitys.deleteByKey(key);
-        }
+      // 用户明确删除热钱包时按 CID 清本机通讯录密文；链上/云端 CID 数据不受
+      // 影响。账户自主换绑只切换控制凭证，不经过这里，也绝不删除 CID 数据。
+      if (current.signMode == 'local') {
+        await _deleteAllCidContactRowsInTxn(isar);
       }
       await isar.walletProfileEntitys.delete(current.id);
       // 连带删除该助记词下全部账户行(含账户0),避免钱包已删但账户行残留。
@@ -955,8 +942,9 @@ class WalletManager {
   /// 清除已删除钱包/账户的全部本机秘密。每一项独立尝试，最后统一报告失败。
   ///
   /// [deleteAccountKeys] / [deleteWalletWideKeys] 仅对热钱包为 true：冷钱包没有 child、
-  /// 钱包 KEK 或设备子钥。账户级通讯录钥和 LDK 缓存仍按 accountId 清除，防止历史
-  /// 异常数据残留；删除单个非末账户时只开 [deleteAccountKeys]，保留整钱包共享子钥。
+  /// 钱包 KEK 或设备子钥。删除当前 CID 绑定账户时同时清除本机 CID 数据根包装与缓存，
+  /// 链上 CID 数据不受影响；重新导入当前账户后可再次接管。删除单个非末账户时只开
+  /// [deleteAccountKeys]，保留整钱包共享子钥。
   Future<void> _cleanupDeletedWalletSecrets({
     required int walletIndex,
     required Set<String> accountIds,
@@ -977,6 +965,7 @@ class WalletManager {
       }
       await _deleteAccountScopedSecrets(accountId, failures);
     }
+    await _clearActiveCidDataRootIfOwnedBy(accountIds, failures);
     if (deleteWalletWideKeys) {
       await _deleteWalletWideSecrets(walletIndex, failures);
     }
@@ -991,23 +980,36 @@ class WalletManager {
   ) async {
     await _attemptWalletCleanup(
       failures,
-      '通讯录密钥($accountId)',
-      () => _contactKeyStore.delete(_contactKeyName(accountId)),
-    );
-    await _attemptWalletCleanup(
-      failures,
       '旧通讯录密钥($accountId)',
       () => _contactKeyStore.delete(_legacyContactKeyName(accountId)),
     );
     await _attemptWalletCleanup(
       failures,
-      '本地数据密钥信封($accountId)',
-      () => _localKeyVault.deleteForAccount(accountId),
+      '旧账户级通讯录密钥($accountId)',
+      () => _contactKeyStore.delete('citizenapp_contacts_key_$accountId'),
+    );
+  }
+
+  Future<void> _clearActiveCidDataRootIfOwnedBy(
+    Set<String> accountIds,
+    List<String> failures,
+  ) async {
+    final active = await _cidDataRootVault.readActiveBinding();
+    if (active == null || !accountIds.contains(active.accountId)) return;
+    await _attemptWalletCleanup(
+      failures,
+      'CID 数据根信封(${active.cidNumber})',
+      _cidDataRootVault.clearActiveBinding,
     );
     await _attemptWalletCleanup(
       failures,
-      '本地数据密钥缓存($accountId)',
-      () => _contactKeyStore.delete(_localDataKeyCacheName(accountId)),
+      'CID 数据根缓存(${active.cidNumber})',
+      () => _contactKeyStore.delete(_cidDataRootCacheName(active.cidNumber)),
+    );
+    await _attemptWalletCleanup(
+      failures,
+      'CID 通讯录密钥(${active.cidNumber})',
+      () => _contactKeyStore.delete(_contactKeyName(active.cidNumber)),
     );
   }
 
@@ -1131,8 +1133,8 @@ class WalletManager {
 
   /// 助记词 → 母种子 → 账户0(`//0`)；母种子派生完成后立即清零。
   ///
-  /// 返回的 [_Account0] 持有账户0 的 child mini-secret 与公开身份，供上层存储、
-  /// 派生通讯录钥与本地数据密钥；用完须调 [_Account0.dispose] 清零 child。
+  /// 返回的 [_Account0] 持有账户0 的 child mini-secret 与公开身份，供上层存储；
+  /// 用完须调 [_Account0.dispose] 清零 child。
   Future<_Account0> _deriveAccount0FromMnemonic(String mnemonic) async {
     final seed = await _mnemonicToMiniSecret(mnemonic);
     try {
@@ -1195,212 +1197,193 @@ class WalletManager {
     await _loadSigningKey(walletIndex);
   }
 
-  /// 读取指定**身份账户**([accountId])的通讯录专用密钥。
+  /// 读取当前 CID 的通讯录专用密钥。
   ///
-  /// 身份主键 = CID 号:通讯录密钥从**身份账户 child** 域隔离派生(按 accountId 精确取
-  /// 硬件金库 child,与 [signForAccountId] 同源,非恒账户0)。walletIndex 由该账户所属
-  /// 钱包推得。首次读 child(触发生物识别)并持久化;换绑到新账户后密文重加密属换绑
-  /// 重建(死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
+  /// [accountId] 只用于确认调用者仍是链上 finalized 的当前绑定账户；密钥从 CID 稳定
+  /// 数据根派生，换绑后不会改变，也不读取此前账户的 child、公钥或设备状态。
   Future<ContactKeyMaterial> ensureContactKeyMaterialForAccountId(
     String accountId,
   ) async {
-    final stored = await _readContactKeys(accountId);
+    final active = await _requireActiveCidBinding(accountId);
+    final stored = await _readContactKeys(active.cidNumber);
     if (stored != null) return stored;
-
-    final account = await getAccountByAccountId(accountId);
-    if (account == null) {
-      throw const WalletAuthException('通讯录账户不存在');
-    }
-    final profile = await _requireHotWalletProfileByMasterId(account.masterId);
-    final childHex =
-        await _readAccountKeyOrThrow(profile.walletIndex, accountId);
-    final child = Uint8List.fromList(_hexToBytes(childHex));
-    try {
-      final derived = await _deriveContactKeys(accountId, child);
-      await _writeContactKeys(accountId, derived);
-      return derived;
-    } finally {
-      child.fillRange(0, child.length, 0);
-    }
+    final root = await ensureCidDataRootForCurrentBinding(accountId);
+    final derived = await _deriveContactKeys(active.cidNumber, root);
+    await _writeContactKeys(active.cidNumber, derived);
+    return derived;
   }
 
-  /// 读取指定**身份账户**的本地静止态数据密钥（LDK），供聊天正文 / MLS 状态 /
+  /// 读取当前 CID 的稳定数据根，供聊天正文 / MLS 状态 /
   /// 附件 / 通讯录本地 KV 的落盘加密使用。
   ///
-  /// 先读静默缓存；缓存缺失才回落到"读 child(触发一次生物识别) → 解包 → 回填缓存"。
-  /// 钱包创建 / 导入时 child 本就在手，已由 [persistLocalDataKeyWithSecret] 预置，
-  /// 正常使用路径不会弹生物识别。
-  Future<LocalDataKey> ensureLocalDataKeyForAccountId(String accountId) async {
-    final cached = await _readCachedLocalDataKey(accountId);
-    if (cached != null) return cached;
-
+  /// [accountId] 必须与本机已激活的 finalized 绑定一致。缓存缺失时，仅使用当前账户
+  /// child 解包当前版本的数据根；绝不生成新根，也绝不回退读取此前账户。
+  Future<CidDataRoot> ensureCidDataRootForCurrentBinding(
+    String accountId,
+  ) async {
+    final active = await _requireActiveCidBinding(accountId);
+    final cached = await _readCachedCidDataRoot(active.cidNumber);
+    if (cached != null &&
+        await CidDataRootVault.dataRootHash(cached) == active.dataRootHash) {
+      return cached;
+    }
     final account = await getAccountByAccountId(accountId);
     if (account == null) {
-      throw const WalletAuthException('本地数据密钥账户不存在');
+      throw const WalletAuthException('当前 CID 绑定账户不存在');
     }
     final profile = await _requireHotWalletProfileByMasterId(account.masterId);
     final childHex =
         await _readAccountKeyOrThrow(profile.walletIndex, accountId);
     final child = Uint8List.fromList(_hexToBytes(childHex));
     try {
-      final ldk = await _localKeyVault.ensureForAccount(
+      final root = await _cidDataRootVault.readForCurrentBinding(
+        cidNumber: active.cidNumber,
+        bindingRevision: active.bindingRevision,
         accountId: accountId,
         accountSecret: child,
       );
-      await _writeCachedLocalDataKey(accountId, ldk);
-      return ldk;
+      await _writeCachedCidDataRoot(active.cidNumber, root);
+      return root;
     } finally {
       child.fillRange(0, child.length, 0);
     }
   }
 
-  /// 钱包创建 / 导入时预置 LDK（child 已在手，零额外生物识别）。
-  static Future<void> persistLocalDataKeyWithSecret(
-    String accountId,
-    List<int> accountSecret,
-  ) async {
-    final ldk = await _localKeyVault.ensureForAccount(
-      accountId: accountId,
-      accountSecret: accountSecret,
-    );
-    await _writeCachedLocalDataKey(accountId, ldk);
-  }
-
-  /// CID 换绑：把 LDK 重新 wrap 到新身份账户。
+  /// 用 finalized 新绑定账户安装 CID 层发放的稳定数据根。
   ///
-  /// **LDK 本身不变**，因此聊天 / MLS / 附件 / 通讯录已落盘的密文继续可解，
-  /// 不需要全盘重加密（死契约 [[cid-rebind-subkeys-must-auto-migrate]] 的 O(1) 落法）。
-  Future<void> rewrapLocalDataKeyForRebind({
-    required String oldAccountId,
-    required String newAccountId,
+  /// 正确顺序是：新账户包装并读回校验 → 激活精确绑定 → 写 CID 缓存与派生钥。金库在
+  /// 激活成功后自行清理低版本包装；本方法没有此前账户参数，也不依赖此前设备在线。
+  Future<void> installCidDataRootForCurrentBinding({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required CidDataRoot dataRoot,
+    required String dataRootHash,
   }) async {
-    final vault = _localKeyVault;
-    var ldk = await _readCachedLocalDataKey(oldAccountId);
-
-    final account = await getAccountByAccountId(newAccountId);
+    final previous = await _cidDataRootVault.readActiveBinding();
+    final account = await getAccountByAccountId(accountId);
     if (account == null) {
-      throw const WalletAuthException('换绑目标账户不存在');
+      throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
     }
     final profile = await _requireHotWalletProfileByMasterId(account.masterId);
-    final newChildHex =
-        await _readAccountKeyOrThrow(profile.walletIndex, newAccountId);
-    final newChild = Uint8List.fromList(_hexToBytes(newChildHex));
+    final childHex =
+        await _readAccountKeyOrThrow(profile.walletIndex, accountId);
+    final child = Uint8List.fromList(_hexToBytes(childHex));
     try {
-      if (ldk != null) {
-        // 缓存命中：只需用新账户 child wrap 一次，无需再解旧账户。
-        await vault.writeForAccount(
-          accountId: newAccountId,
-          accountSecret: newChild,
-          ldk: ldk,
-        );
-      } else {
-        // 缓存缺失：回落到解旧账户再重 wrap（需旧账户 child）。
-        final oldAccount = await getAccountByAccountId(oldAccountId);
-        List<int>? oldChild;
-        if (oldAccount != null) {
-          try {
-            final oldProfile =
-                await _requireHotWalletProfileByMasterId(oldAccount.masterId);
-            oldChild = _hexToBytes(await _readAccountKeyOrThrow(
-                oldProfile.walletIndex, oldAccountId));
-          } on Exception {
-            // 旧账户 child 已不可读（钱包被删 / 金库条目已清）：换绑仍须成功，
-            // 退化为给新账户新建一把 LDK。旧密文随旧账户一起作废，属预期。
-            oldChild = null;
-          }
-        }
-        ldk = oldChild == null
-            ? await vault.ensureForAccount(
-                accountId: newAccountId,
-                accountSecret: newChild,
-              )
-            : await vault.rewrapForRebind(
-                oldAccountId: oldAccountId,
-                oldAccountSecret: oldChild,
-                newAccountId: newAccountId,
-                newAccountSecret: newChild,
-              );
+      final verified = await _cidDataRootVault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        accountSecret: child,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
+      );
+      await _writeCachedCidDataRoot(cidNumber, verified);
+      await _writeContactKeys(
+        cidNumber,
+        await _deriveContactKeys(cidNumber, verified),
+      );
+      // 新根与派生钥都已验证落地后，旧账户级命名只作为清理目标，不参与接管。
+      for (final removedAccountId in <String>{
+        accountId,
+        if (previous != null) previous.accountId,
+      }) {
+        await _contactKeyStore.delete(_legacyContactKeyName(removedAccountId));
+        await _contactKeyStore
+            .delete('citizenapp_contacts_key_$removedAccountId');
+        await _contactKeyStore
+            .delete('citizenapp_local_data_key_cache_$removedAccountId');
       }
-      await _writeCachedLocalDataKey(newAccountId, ldk);
     } finally {
-      newChild.fillRange(0, newChild.length, 0);
-    }
-
-    if (newAccountId != oldAccountId) {
-      await vault.deleteForAccount(oldAccountId);
-      await _contactKeyStore.delete(_localDataKeyCacheName(oldAccountId));
+      child.fillRange(0, child.length, 0);
     }
   }
 
-  /// 删除某账户的 LDK（wrap 与缓存一并清除）。
-  ///
-  /// 删后该账户名下本地密文永久不可读，仅在钱包删除等确认不再需要数据时调用。
-  Future<void> deleteLocalDataKeyForAccountId(String accountId) async {
-    await _localKeyVault.deleteForAccount(accountId);
-    await _contactKeyStore.delete(_localDataKeyCacheName(accountId));
+  /// 只读核对本机数据根金库是否已激活精确 finalized 绑定，不触发私钥读取。
+  Future<bool> hasInstalledCidDataRootBinding({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required String dataRootHash,
+  }) async {
+    final active = await _cidDataRootVault.readActiveBinding();
+    return active != null &&
+        active.cidNumber == cidNumber &&
+        active.bindingRevision == bindingRevision &&
+        active.accountId == accountId &&
+        active.dataRootHash == dataRootHash;
   }
 
-  static Future<LocalDataKey?> _readCachedLocalDataKey(String accountId) async {
-    final raw = await _contactKeyStore.read(_localDataKeyCacheName(accountId));
+  Future<CidDataRootBinding> _requireActiveCidBinding(
+    String accountId,
+  ) async {
+    final active = await _cidDataRootVault.readActiveBinding();
+    if (active == null || active.accountId != accountId) {
+      throw const WalletAuthException('当前 CID 绑定尚未完成数据根接管');
+    }
+    return active;
+  }
+
+  static Future<CidDataRoot?> _readCachedCidDataRoot(String cidNumber) async {
+    final raw = await _contactKeyStore.read(_cidDataRootCacheName(cidNumber));
     if (raw == null || raw.isEmpty) return null;
     try {
       final bytes = base64Decode(raw);
       if (bytes.length != 32) return null;
-      return LocalDataKey(Uint8List.fromList(bytes));
+      return CidDataRoot(Uint8List.fromList(bytes));
     } on FormatException {
       return null;
     }
   }
 
-  static Future<void> _writeCachedLocalDataKey(
-    String accountId,
-    LocalDataKey ldk,
+  static Future<void> _writeCachedCidDataRoot(
+    String cidNumber,
+    CidDataRoot dataRoot,
   ) =>
       _contactKeyStore.write(
-        _localDataKeyCacheName(accountId),
-        base64Encode(ldk.bytes),
+        _cidDataRootCacheName(cidNumber),
+        base64Encode(dataRoot.bytes),
       );
 
-  static String _contactKeyName(String accountId) =>
-      'citizenapp_contacts_key_$accountId';
+  static String _contactKeyName(String cidNumber) =>
+      'citizenapp_cid_contacts_key_${Uri.encodeComponent(cidNumber)}';
 
   /// 仅用于彻底清除旧密钥名；目标态读写绝不回退旧密钥。
   static String _legacyContactKeyName(String accountId) =>
       'wallet_contacts_key_v1_$accountId';
 
-  static List<String> _contactCacheKeys(String accountId) => <String>[
-        'contact_book_by_account:$accountId',
-        'contact_pending_by_account:$accountId',
-        'contact_sync_by_account:$accountId',
-        'contact_cloud_reset_by_account:$accountId',
-        // 旧缓存只删不读，避免已废弃的 account_id 关系索引重新进入目标态。
-        'contacts:$accountId',
-        'contact_pending_ops:$accountId',
-        'contact_sync_state:$accountId',
-      ];
-
-  static Future<void> _persistContactKeys(
-    String accountId,
-    List<int> accountSecret,
-  ) async {
-    final material = await _deriveContactKeys(accountId, accountSecret);
-    await _writeContactKeys(accountId, material);
+  /// 删除全部 CID 归属的本机通讯录行。
+  ///
+  /// 只能在“清空钱包”或明确删除当前热钱包的隐私擦除流程中调用；普通账户删除、
+  /// CID 换绑和旧账户秘密清理都不得调用。
+  static Future<void> _deleteAllCidContactRowsInTxn(Isar isar) async {
+    final rows = await isar.appKvEntitys.where().findAll();
+    final ids = rows
+        .where(
+          (row) =>
+              row.key.startsWith('contact_book_by_cid:') ||
+              row.key.startsWith('contact_pending_by_cid:') ||
+              row.key.startsWith('contact_sync_by_cid:'),
+        )
+        .map((row) => row.id)
+        .toList(growable: false);
+    if (ids.isNotEmpty) {
+      await isar.appKvEntitys.deleteAll(ids);
+    }
   }
 
-  /// 从**指定账户**（[accountSecret] = 该账户 child mini-secret）域隔离派生通讯录
-  /// 加密钥 / 索引钥（HKDF）。创建期喂账户0、换绑后喂身份账户 child,非恒账户0。
+  /// 从 CID 稳定数据根域隔离派生通讯录加密钥与索引钥。
   static Future<ContactKeyMaterial> _deriveContactKeys(
-    String accountId,
-    List<int> accountSecret,
+    String cidNumber,
+    CidDataRoot dataRoot,
   ) async {
-    // 先哈希 accountId 形成固定 32 字节 salt，严格对应通讯录密码学契约。
-    final salt = (await Sha256().hash(utf8.encode(accountId))).bytes;
+    final salt = (await Sha256().hash(utf8.encode(cidNumber))).bytes;
     Future<Uint8List> derive(String info) async {
       final key = await Hkdf(
         hmac: Hmac.sha256(),
         outputLength: 32,
       ).deriveKey(
-        secretKey: SecretKey(accountSecret),
+        secretKey: SecretKey(dataRoot.bytes),
         nonce: salt,
         info: utf8.encode(info),
       );
@@ -1408,17 +1391,16 @@ class WalletManager {
     }
 
     return ContactKeyMaterial(
-      encryptionKey: await derive('citizenapp.contacts/encryption'),
-      indexKey: await derive('citizenapp.contacts/index'),
+      encryptionKey:
+          await derive('${LocalKeyPurpose.contactsCloud.domain}/encryption'),
+      indexKey: await derive('${LocalKeyPurpose.contactsCloud.domain}/index'),
     );
   }
 
   static Future<ContactKeyMaterial?> _readContactKeys(
-    String accountId,
+    String cidNumber,
   ) async {
-    // 旧派生域密钥不可用于新 CID 密文契约，发现即删除，不做兼容读取。
-    await _contactKeyStore.delete(_legacyContactKeyName(accountId));
-    final raw = await _contactKeyStore.read(_contactKeyName(accountId));
+    final raw = await _contactKeyStore.read(_contactKeyName(cidNumber));
     if (raw == null || raw.isEmpty) return null;
     try {
       final bytes = base64Decode(raw);
@@ -1433,22 +1415,16 @@ class WalletManager {
   }
 
   static Future<void> _writeContactKeys(
-    String accountId,
+    String cidNumber,
     ContactKeyMaterial material,
   ) async {
-    await _contactKeyStore.delete(_legacyContactKeyName(accountId));
     final bytes = Uint8List(64)
       ..setAll(0, material.encryptionKey)
       ..setAll(32, material.indexKey);
     await _contactKeyStore.write(
-      _contactKeyName(accountId),
+      _contactKeyName(cidNumber),
       base64Encode(bytes),
     );
-  }
-
-  static Future<void> _deleteContactKeys(String accountId) async {
-    await _contactKeyStore.delete(_contactKeyName(accountId));
-    await _contactKeyStore.delete(_legacyContactKeyName(accountId));
   }
 
   /// 读严档账户0 child → 派生并校验 sr25519 密钥对。
@@ -1519,7 +1495,7 @@ class WalletManager {
     return _readAccountKeyOrThrow(walletIndex, profile.accountId);
   }
 
-  /// 把设备子钥绑定到指定**身份账户** [identityAccountId]。
+  /// 把设备子钥绑定到指定 CID 的 finalized 当前绑定版本。
   ///
   /// 两种时机共用本方法:
   /// 1. **首次绑定**——用户初次进入需 CID 的页面(广场 / 聊天 / 通讯录 / 创作者 / 会员)时
@@ -1530,9 +1506,13 @@ class WalletManager {
   /// **P-256 硬件子钥按 walletIndex 存，身份换绑时不删不重生**(与 accountId 解耦)；
   /// 只用**身份账户的 child** 重签绑定证明(经 [signForAccountId]，弹一次生物识别)，
   /// 后端 `device/register` 把 p256 归属到身份账户。整只钱包删除时必须同步删除该
-  /// walletIndex 的硬件子钥。见死契约 [[cid-rebind-subkeys-must-auto-migrate]]：换绑
-  /// Finalized 后必自动成功更换。无 registrar(未接后端 / 测试)时静默跳过。
-  Future<void> bindDeviceSubkeyToAccountId(String identityAccountId) async {
+  /// walletIndex 的硬件子钥。换绑 finalized 后由当前新账户重签绑定证明并接管；
+  /// 不读取或要求此前账户材料。无 registrar(未接后端 / 测试)时静默跳过。
+  Future<void> bindDeviceSubkeyToCurrentBinding({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) async {
     final registrar = _subkeyRegistrar;
     if (registrar == null) {
       return;
@@ -1543,20 +1523,15 @@ class WalletManager {
     }
     await registrar(
       walletIndex: wallet.walletIndex,
-      accountId: identityAccountId,
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
       signBinding: (message) async {
-        final signature = await signForAccountId(identityAccountId, message);
+        final signature = await signForAccountId(accountId, message);
         return '0x${_toHex(signature.toList(growable: false))}';
       },
     );
   }
-
-  /// 清除旧身份账户 [accountId] 的通讯录密钥缓存(CID 换绑重建时用)。
-  ///
-  /// 换绑后通讯录归属新账户、密文按新账户 child 重加密([[cid-rebind-subkeys-must-auto-migrate]]);
-  /// 旧账户的通讯录密钥不再有用,须删除以免残留。密钥可从 child 幂等重派,删除安全。
-  Future<void> deleteContactKeysForAccountId(String accountId) =>
-      _deleteContactKeys(accountId);
 
   /// 前置检查：设备必须有锁屏（生物识别 / 数字 / 图案 / PIN），否则拒绝
   /// 创建 / 导入热钱包（D3 fail-closed）。
@@ -1804,7 +1779,8 @@ class WalletManager {
       }
     });
     if (accountId != null) {
-      await _deleteContactKeys(accountId!);
+      await _contactKeyStore.delete(_legacyContactKeyName(accountId!));
+      await _contactKeyStore.delete('citizenapp_contacts_key_$accountId');
       await _store.deleteAccountKey(
           walletIndex: walletIndex, accountId: accountId!);
       await _store.deleteWalletKey(walletIndex: walletIndex);

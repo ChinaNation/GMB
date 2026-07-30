@@ -87,14 +87,11 @@
 - 通讯录卡以公开资料昵称为主标题，私人备注、CID、SS58 分行展示；修改操作只编辑
   私人备注。公开资料缓存和用户主页直接按联系人 CID 寻址，不再为已入库联系人重复
   account→CID 链读。
-- CID 换绑时，本地联系人按永久 CID 合并；持久化
-  `contact_cloud_reset_by_account:` 标记，先分页删除属主 CID 下全部旧密文，再用
-  新身份账户 child 密钥全量重传。删除中断时标记不清除，下次同步继续；另补了
-  “旧账户本地为空、新账户已有联系人”不会在重建时丢失的边界测试。
-- 本地目标键改为 `contact_book_by_account:`、`contact_pending_by_account:`、
-  `contact_sync_by_account:`、`contact_cloud_reset_by_account:`；数据库打开时删除
-  旧三前缀。安全存储改用 `citizenapp_contacts_key_`，旧
-  `wallet_contacts_key_v1_` 只删不读。
+- CID 换绑不删除、不重建、不全量重传联系人密文；新绑定账户接管同一 CID 稳定
+  数据根后直接读取原数据。账户间搬运和云端重建标记均已删除。
+- 本地目标键为 `contact_book_by_cid:`、`contact_pending_by_cid:`、
+  `contact_sync_by_cid:`；废弃账户分区只清理不读取。安全存储只保留 CID 数据根
+  派生用途钥，废弃账户密钥名只删不读。
 - 本步骤仍按已确认边界保存可离线读取的本地联系人副本；本地副本的字段级静止态
   加密归独立任务 `20260728-citizenapp-chat-local-data-encryption`，后续必须与聊天
   正文、搜索索引和换绑重封装一起实施，不在本步骤建立第二套临时加密流程。

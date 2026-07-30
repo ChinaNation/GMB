@@ -186,7 +186,7 @@ class ChatCloudTransport implements ChatTransport {
       );
     }
     try {
-      // 路由键 = 收件人 CID 号；proto envelope 内嵌 recipient_account_id 仍供 MLS/归属。
+      // 收件人 CID 同时是信封、MLS 名册和 Worker 投递的唯一身份键。
       final json = await _postJson('/v1/chat/envelopes', {
         'envelope_id': envelope.envelopeId,
         'sender_device_id': envelope.senderDeviceId,
@@ -324,8 +324,7 @@ Map<String, dynamic> _decodeResponse(http.Response response, Uri uri) {
 }
 
 MlsKeyPackage _keyPackageFromJson(Map<String, dynamic> json) => MlsKeyPackage(
-      // account_id = 设备所有者账户（MLS 名册对齐）；cid_number = 其身份主键（寻址）。
-      accountId: (json['account_id'] ?? '').toString(),
+      // MLS 名册、KeyPackage 所有权与寻址统一使用 cid_number。
       cidNumber: (json['cid_number'] ?? '').toString(),
       deviceId: (json['device_id'] ?? '').toString(),
       devicePublicKey: (json['device_public_key_hex'] ?? '').toString(),

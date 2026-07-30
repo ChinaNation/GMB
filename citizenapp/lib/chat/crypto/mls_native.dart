@@ -69,14 +69,14 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     final response = _bindings.callJson(
       _bindings.createKeyPackage,
       {
-        'account_id': identity.accountId,
+        'cid_number': identity.cidNumber,
         'device_id': identity.deviceId,
         if (_stateStore != null) 'state_store_dir': _stateStore.path,
         if (_stateStore != null) 'state_key_hex': _stateStore.stateKeyHex,
       },
     );
     return MlsKeyPackage(
-      accountId: identity.accountId,
+      cidNumber: identity.cidNumber,
       deviceId: identity.deviceId,
       devicePublicKey: (response['device_public_key'] ?? '').toString(),
       keyPackageId: (response['key_package_id'] ?? '').toString(),
@@ -102,7 +102,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
   @override
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccountId,
+    required String recipientCidNumber,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   }) async {
@@ -113,11 +113,11 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
       _bindings.encrypt,
       {
         'state_store_dir': stateStore.path,
-      'state_key_hex': stateStore.stateKeyHex,
-        'account_id': identity.accountId,
+        'state_key_hex': stateStore.stateKeyHex,
+        'cid_number': identity.cidNumber,
         'device_id': identity.deviceId,
         'conversation_id': conversationId,
-        'recipient_account_id': recipientAccountId,
+        'recipient_cid_number': recipientCidNumber,
         'plaintext_hex': _bytesToHex(plaintext),
         if (recipientKeyPackage != null)
           'recipient_key_package_hex': recipientKeyPackage.keyPackageHex,
@@ -167,8 +167,8 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
       _bindings.decrypt,
       {
         'state_store_dir': stateStore.path,
-      'state_key_hex': stateStore.stateKeyHex,
-        'account_id': identity.accountId,
+        'state_key_hex': stateStore.stateKeyHex,
+        'cid_number': identity.cidNumber,
         'device_id': identity.deviceId,
         'conversation_id': message.conversationId,
         'wire_message_hex': message.wireHex,
@@ -199,7 +199,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     final response = _bindings.callJson(_bindings.groupCreate, {
       'state_store_dir': stateStore.path,
       'state_key_hex': stateStore.stateKeyHex,
-      'account_id': identity.accountId,
+      'cid_number': identity.cidNumber,
       'device_id': identity.deviceId,
       'group_id': groupId,
     });
@@ -220,7 +220,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     final response = _bindings.callJson(_bindings.groupAddMembers, {
       'state_store_dir': stateStore.path,
       'state_key_hex': stateStore.stateKeyHex,
-      'account_id': identity.accountId,
+      'cid_number': identity.cidNumber,
       'device_id': identity.deviceId,
       'group_id': groupId,
       'key_packages_hex':
@@ -250,7 +250,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
   @override
   Future<GroupCommitBundle> removeMembers(
     String groupId,
-    List<String> memberAccountIds,
+    List<String> memberCidNumbers,
   ) async {
     final identity = _requireIdentity();
     final stateStore = _requireStateStore();
@@ -258,12 +258,12 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     final response = _bindings.callJson(_bindings.groupRemoveMembers, {
       'state_store_dir': stateStore.path,
       'state_key_hex': stateStore.stateKeyHex,
-      'account_id': identity.accountId,
+      'cid_number': identity.cidNumber,
       'device_id': identity.deviceId,
       'group_id': groupId,
-      'member_account_ids': memberAccountIds,
+      'member_cid_numbers': memberCidNumbers,
     });
-    final removed = (response['removed_account_ids'] as List?)
+    final removed = (response['removed_cid_numbers'] as List?)
             ?.map((item) => item.toString())
             .toList() ??
         const <String>[];
@@ -275,7 +275,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
         (response['commit_wire_hex'] ?? '').toString(),
         MlsMessageKind.application,
       ),
-      removedAccountIds: removed,
+      removedCidNumbers: removed,
     );
   }
 
@@ -290,7 +290,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     final response = _bindings.callJson(_bindings.groupCreateMessage, {
       'state_store_dir': stateStore.path,
       'state_key_hex': stateStore.stateKeyHex,
-      'account_id': identity.accountId,
+      'cid_number': identity.cidNumber,
       'device_id': identity.deviceId,
       'group_id': groupId,
       'plaintext_hex': _bytesToHex(plaintext),
@@ -310,7 +310,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     final response = _bindings.callJson(_bindings.groupProcess, {
       'state_store_dir': stateStore.path,
       'state_key_hex': stateStore.stateKeyHex,
-      'account_id': identity.accountId,
+      'cid_number': identity.cidNumber,
       'device_id': identity.deviceId,
       'group_id': wire.conversationId,
       'wire_message_hex': wire.wireHex,
@@ -346,7 +346,7 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     final response = _bindings.callJson(_bindings.groupState, {
       'state_store_dir': stateStore.path,
       'state_key_hex': stateStore.stateKeyHex,
-      'account_id': identity.accountId,
+      'cid_number': identity.cidNumber,
       'device_id': identity.deviceId,
       'group_id': groupId,
     });

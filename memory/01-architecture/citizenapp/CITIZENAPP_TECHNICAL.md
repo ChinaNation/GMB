@@ -27,7 +27,7 @@ iOS 最低系统版本统一为 16.0；Runner、RunnerTests 与全部 CocoaPods 
 - 手机机密存储：`flutter_secure_storage`（Keychain/Keystore）
 - 手机业务存储：Isar
 - 链上通信：smoldot PoW 轻节点 + Rust 原生 typed capability（异步 FFI，不阻塞主线程）（`lib/rpc/` + `smoldotdart/` + `smoldotpow/`）
-- P2P Chat 路线：聊天 Tab + 链账户 `account_id` 聊天身份 + Cloudflare 瞬时密文/信令转发 + WebRTC 设备附件 + 近场无网点对点通信；消息、会话和附件只保存在设备，区块链节点不参与聊天
+- P2P Chat 路线：聊天 Tab + 永久 `cid_number` 聊天身份 + 当前绑定账户签名鉴权 + Cloudflare 瞬时密文/信令转发 + WebRTC 设备附件 + 近场无网点对点通信；消息、会话和附件只保存在设备，区块链节点不参与聊天
 - 外部接口：Cloudflare Worker 承接聊天控制面、广场、会员、支付、媒体资源和端到端加密通讯录密文。通讯录账户与私人名称明文只在设备；公民、机构、管理员与清算行身份统一由 smoldot 读取 finalized runtime storage。
 - 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/onchina/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 OnChina 联网更新行政区。
 - 公权机构包：安装包内置 `assets/public_institutions/`。生成器在同一个 finalized 块分页读取 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts`，生成 43 省、49,593 条机构的本地查询索引。manifest 保存块号、块哈希、创世哈希、状态根、分片哈希和机构根，Isar 只缓存该链快照。绑定、付款和权限判断必须精确读取当前 finalized 链状态。
@@ -150,13 +150,21 @@ citizenapp 不采用“首启强制弹出全部权限”的模式，按平台权
 
 ### 2.6 P2P Chat 技术架构
 
-citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 链账户 `account_id` 聊天身份 + Cloudflare 瞬时转发 + WebRTC 设备附件 + 近场无网点对点通信”架构：
+citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 永久 `cid_number` 聊天身份 + 当前绑定账户签名鉴权 + Cloudflare 瞬时转发 + WebRTC 设备附件 + 近场无网点对点通信”架构：
 
 - 用户入口：公民端在“多签”Tab 与“交易”Tab 之间提供“聊天”Tab；互联网聊天和近场聊天的消息都在“聊天”Tab 集中显示，用户不选择底层通信模式。聊天页顶栏为“搜索框 + 右上角加号”：搜索框进独立搜索页（会话 / 联系人 / 聊天记录三段）；加号弹出五个入口——扫一扫、收付款、发私信、发群聊、加好友。五者全部复用既有链路（交易扫码统一分派、全 App 唯一用户二维码、通讯录选人、建群、扫码加好友），聊天页不自建重复实现。
-- 聊天账户：CitizenApp 当前链账户 `account_id` 是用户可见聊天身份，也是聊天窗口内发起既有转账功能时的收付款账户；首次进入需要 CID 的功能时，由当前绑定账户一次性签署 P-256 设备子钥归属证明，此后会话登录只使用 P-256 设备子钥，钱包 child mini-secret 不进入聊天运行态。
-- 互联网聊天：Worker 校验 `account_id` session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
+- 聊天身份：用户可见且永久的聊天身份是 `cid_number`；当前绑定 `account_id` 只负责
+  设备登记签名、会话鉴权和聊天内付款。首次进入需要 CID 的功能时，由当前绑定账户
+  一次性签署 P-256 设备子钥归属证明，此后会话登录只使用 P-256 设备子钥，钱包 child
+  mini-secret 不进入聊天运行态。
+- 互联网聊天：Worker 校验 CID、绑定版本、当前账户三元组 session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
 - 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入 `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；通讯录不复制公开资料。头像下固定按公开昵称、SS58 地址及复制按钮、CID、关注/关注者/帖子三项计数展示；SS58 只从当前绑定规范 `account_id` 即时派生，原始 AccountId 不展示、不复制，CID 单独展示且无复制按钮。
-- 通讯录：联系人关系永久主键是 `cid_number`，本机按当前身份账户隔离保存 `cid_number + account_id + ss58_address + contact_remark + 时间戳`；公开昵称、头像和签名仍以 CID 从公开资料读取，不复制进通讯录。Cloudflare D1 只保存由 CID 当前绑定账户 child 域隔离密钥生成的 AES-256-GCM 单联系人密文和以目标 CID 计算的 HMAC `contact_id`，用于同一身份换设备恢复；属主 CID 写入密文并参与 AAD。Worker 不持有密钥，也不能读取联系人 CID、账户、SS58 或私人备注。扫码添加只接受用户码：先把码内账户经链上双向绑定解析成 CID，收款码不得兼作联系人码。
+- 通讯录：联系人关系永久主键是 `cid_number`；公开昵称、头像和签名仍以 CID 从公开
+  资料读取，不复制进通讯录。Cloudflare D1 只保存由 CID 稳定数据根
+  `contacts-cloud` 用途子钥生成的 AES-256-GCM 单联系人密文和以目标 CID 计算的
+  HMAC `contact_id`，用于同一身份换设备恢复；属主 CID 写入密文并参与 AAD。
+  Worker 不持有通讯录用途子钥，也不能读取联系人 CID、账户、SS58 或私人备注。
+  扫码添加只接受用户码：先把码内账户经链上双向绑定解析成 CID，收款码不得兼作联系人码。
 - 附件：Worker 只转发 SDP/ICE，附件经 WebRTC DTLS DataChannel 设备间传输；Chat 禁止使用 R2。
 - 近场通信：不设计独立“局域网模式”，不要求同一路由器；Android 优先 Nearby Connections，必要时回退 Wi-Fi Direct / Wi-Fi Aware / BLE；iOS 使用 Multipeer Connectivity；Android 与 iOS 跨平台近场通过 BLE GATT 做发现和短消息控制。
 - 删除边界：区块链节点聊天、桌面通信节点设置、手机节点配对和云端聊天内容存储均不得恢复。
@@ -176,7 +184,11 @@ citizenapp 的链连接目标不是 API-only，而是“端上轻节点 + Cloudf
 - 离线状态：设备网络不可用；只展示本地缓存和可离线准备的签名内容，不承诺链上最新状态。
 - 启动清单：Cloudflare Worker 已提供 `GET /v1/chain/bootstrap`，返回链身份、推荐 bootnodes、聊天/广场入口和受控广播状态，不返回远端 checkpoint、轻同步资产或 RPC URL；启动清单不是链上状态真源。App 初始化轻节点时会先尝试读取该清单，校验 `chain_id/protocol_id/stateRoot/SS58` 与本地 `chainspec.json` 一致后，才把推荐 bootnodes 注入内存版 chainspec；清单不可用或不匹配时继续使用本地 assets。
 - 生命周期：`SmoldotClientManager.ensureStarted()` 是轻节点唯一启动闸口，合并并发初始化并允许失败重试；`dispose()` 异步等待原生 chain/client 释放，生命周期代际切换后旧初始化、旧同步和旧重试不得覆盖新状态。`main.dart` 不再全局预热轻节点；状态进度读取只等待初始化，finalized 读取、交易提交和链事件订阅统一等待同步完成。
-- 非链页面边界：广场浏览和“我的”头像身份徽章只读取按 `account_id` 隔离的 `visitor/voting/candidate` 本地展示快照，不得因此启动 smoldot；快照不是授权、发布或身份真源。广场发布、电子护照详情、交易和治理等主动链流程仍读取 finalized 链状态。轻节点已由其他主动流程进入 operational 后，常驻页面只监听状态变化刷新一次快照，不轮询。
+- 非链页面边界：广场浏览和“我的”头像身份徽章只读取按永久 `cid_number` 隔离的
+  `visitor/voting/candidate` 本地展示快照；换绑账户后继续使用同一快照。快照不是
+  授权、发布或身份真源。广场发布、电子护照详情、交易和治理等主动链流程仍读取
+  finalized 链状态。轻节点已由其他主动流程进入 operational 后，常驻页面只监听
+  状态变化为当前 CID 刷新一次快照，不轮询。
 - 交易提交：App 本地完成签名。P2P 可用时优先通过轻节点提交；P2P 不可用但网络可用时，可把已签名 extrinsic 交给受控 API 广播到 RPC service node。API 只转发完整签名交易，不接触私钥、不改载荷、不保存原始 extrinsic body、不把广播成功显示成链上成功；最终成功仍必须来自 finalized runtime storage 或区块事件。
 - 广场与聊天：广场媒体/feed 走 Worker/D1/R2/KV；Chat 只使用 Worker/DO 瞬时转发和 D1 最小设备数据，区块链节点不承担聊天中继或媒体存储。
 
@@ -724,9 +736,14 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   `device/register` 读到「无 CID」时旁路缓存回源核实一次，不拿占号前的空值拒绝刚上链的身份。
 - 设备子钥生命周期归属整只热钱包：CID 换绑继续复用同一 `walletIndex` 子钥并重签归属
   证明；删除非末账户不得删除。整钱包删除、末账户级联删除或 `clearWallet()` 必须同时
-  清除账户 child、通讯录密钥、LDK 信封与缓存、钱包 KEK 及 P-256 设备子钥。清理逐项
-  尝试，不能因一个安全存储错误跳过后续密钥，最后以 `WalletLocalCleanupException`
-  汇总残留。
+  清除账户 child、钱包 KEK 及 P-256 设备子钥；仅当被删账户是本机已激活 CID 的当前
+  绑定账户时，才清除该 CID 数据根包装、缓存和用途子钥。清理逐项尝试，不能因一个
+  安全存储错误跳过后续密钥，最后以 `WalletLocalCleanupException` 汇总残留。
+- CID 私有数据密钥采用三层模型：业务数据永久归 `cid_number`；每个 CID 只有一把稳定
+  `CidDataRoot`；当前 `account_id` 的 child 只派生 KEK 包装该数据根。绑定 finalized 后，
+  当前新账户凭一次性挑战领取同一数据根，完成“新包装写入 → 读回摘要校验 → 激活精确
+  `(cid_number, binding_revision, account_id, data_root_hash)` 标记”后才删除低版本包装。
+  全过程不读取、不要求此前账户私钥、公钥、签名或设备。
 - 注册身份前的余额闸：门槛 = 链上 `OnchainTransaction.OnchainMinFee + Balances.ExistentialDeposit`，
   两个数现取自链上 metadata。**交易费常量的真源恒为区块链常量库 `primitives::fee_policy`，
   runtime 只把它转发到 metadata（`OnchainMinFee` / `OnchainFeeRate` / `VoteFlatFee`），

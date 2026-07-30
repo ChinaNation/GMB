@@ -14,7 +14,11 @@ class _StubStore extends ChatStore {
   final List<ChatStoredMessage> _messages;
 
   @override
-  Future<List<ChatStoredMessage>> readMessages(String conversationId) async =>
+  Future<List<ChatStoredMessage>> readMessages({
+    required String ownerCidNumber,
+    required String currentAccountId,
+    required String conversationId,
+  }) async =>
       _messages
           .where((message) => message.conversationId == conversationId)
           .toList(growable: false);
@@ -28,9 +32,9 @@ ChatStoredMessage _stickerStored(
       envelopeId: 'env-$stickerId',
       conversationId: 'conv-st',
       direction: 'incoming',
-      senderAccountId:
+      senderCidNumber:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
-      recipientAccountId:
+      recipientCidNumber:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
       messageKind: ChatMessageKind.sticker,
       deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -47,6 +51,7 @@ Widget _host({
     MaterialApp(
       home: ChatPage(
         conversationId: 'conv-st',
+        ownerCidNumber: 'CN220-CTZN2-100000001-2026',
         accountId:
             '0x1111111111111111111111111111111111111111111111111111111111111111',
         peerUserId:

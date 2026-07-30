@@ -83,7 +83,7 @@ class SquareAuthor {
   final String? displayName;
 
   /// 作者头像对象键（profile.json 的 avatar_object_key）；缺失或读取失败时由
-  /// ProfileAvatar 按账户稳定选择本地默认照片。
+  /// ProfileAvatar 优先按永久 CID 稳定选择本地默认照片；纯访客才按账户兜底。
   final String? avatarObjectKey;
 
   /// 作者链上身份档（徽章颜色）：visitor/voting/candidate/null。
@@ -103,7 +103,7 @@ class SquareAuthor {
 
   String get title {
     // 默认昵称稳定种子按身份主键 cid_number（与资料页/头像一致）；cid 缺失回落账户。
-    return ProfilePresentation.forAccountId(cidNumber ?? accountId)
+    return ProfilePresentation.forIdentityKey(cidNumber ?? accountId)
         .resolveDisplayName(
       publicName: displayName,
     );

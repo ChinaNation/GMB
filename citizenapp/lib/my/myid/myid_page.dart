@@ -427,6 +427,17 @@ class _PassportIdentityCard extends StatelessWidget {
         MyIdTier.candidate => 'candidate',
       };
 
+  /// 是否在右上角挂「当前身份」徽章。
+  ///
+  /// 当前卡才挂，且**纯访客（无 CID）不挂**：投票/竞选必有 CID，匿名已注册有 CID
+  /// （`registeredCid` 非空），只有从未占号的纯访客不挂。链读失败时 `current` 恒 false，
+  /// 天然不挂——「不挂徽章」绝不能把「没读到链」冒充成「没注册」。
+  bool get _showsCurrentBadge {
+    if (!current) return false;
+    if (tier != MyIdTier.visitor) return true;
+    return registeredCid != null && registeredCid!.trim().isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     final badgeStyle = identityBadgeStyle(
@@ -457,7 +468,8 @@ class _PassportIdentityCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: EdgeInsets.only(right: current ? 88 : 0),
+                // 徽章不挂时不预留其 88px 位置，避免纯访客卡标题行右侧留空。
+                padding: EdgeInsets.only(right: _showsCurrentBadge ? 88 : 0),
                 child: Row(
                   children: [
                     IdentityBadge(
@@ -517,7 +529,7 @@ class _PassportIdentityCard extends StatelessWidget {
               ],
             ],
           ),
-          if (current)
+          if (_showsCurrentBadge)
             Positioned(
               top: 0,
               right: 0,

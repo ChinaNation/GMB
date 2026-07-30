@@ -57,7 +57,7 @@ class _FakeSubkey extends DeviceSubkey {
 class _FakeChatStore extends ChatStore {
   bool cleared = false;
   @override
-  Future<void> clearAllForAccountId(String accountId) async {
+  Future<void> clearAllForCidNumber(String cidNumber) async {
     cleared = true;
   }
 }

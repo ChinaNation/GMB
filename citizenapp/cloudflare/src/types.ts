@@ -52,6 +52,8 @@ interface WorkerSecretsAndOptionalVars {
   TOPUP_SETTLE_TOKEN?: string;
   // 付款意图 HMAC 密钥，只放 Worker Secret；用于把登录账户、付款钱包和报价绑定为短期令牌。
   TOPUP_INTENT_SECRET?: string;
+  // CID 稳定数据根的 32 字节 AES-GCM 主密钥，只允许 Worker Secret 注入。
+  CID_DATA_ROOT_MASTER_KEY?: string;
 }
 
 /// Wrangler 会把配置值推导为字面量；Worker 运行期仍需接受测试覆盖值和控制台注入的字符串。
@@ -77,6 +79,8 @@ export type Env = RuntimeBindings & WorkerSecretsAndOptionalVars;
 export interface SessionState {
   /// 用户唯一身份主键。会话即以 cid_number 为身份。
   cid_number: string;
+  /// 签发本会话时的 CID 单调绑定版本；每请求必须与 finalized 精确一致。
+  binding_revision: number;
   /// 签发本会话时该 cid_number 链上绑定的钱包账户;用于定位设备子钥 + 每请求复查绑定。
   account_id: string;
   device_key_hash: string;
@@ -88,6 +92,7 @@ export interface LoginChallengeRow {
   challenge_id: string;
   /// 挑战归属的唯一身份主键；account_id 只是该挑战要求的签名账户。
   cid_number: string;
+  binding_revision: number;
   account_id: string;
   signing_payload: string;
   expires_at: number;
@@ -99,6 +104,8 @@ export interface DeviceSubkeyRow {
   cid_number: string;
   /// 设备标识 = P-256 公钥的 sha256(同一身份多设备各一行)。
   device_id: string;
+  /// 该设备证明被当前账户授权时的 CID 绑定版本。
+  binding_revision: number;
   /// 生成该子钥的钱包账户(换绑后由链上绑定校验判活/失效)。
   account_id: string;
   p256_public_key: string;

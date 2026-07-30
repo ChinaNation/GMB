@@ -167,18 +167,17 @@ class CreatorService {
   }
 
   /// 身份账户（CID 绑定账户，单源 [IdentityAccountCache]）：`set_creator_plans` 链上
-  /// 交易的唯一签名者。与 [SquareSessionProvider.ensureSession] 同口径，故与
-  /// `session.accountId` 的一致性校验、平台会员快照读、finalized 落地键天然对齐。
+  /// 交易的唯一签名者。档位与待提交证明归属永久 CID，账户只记录签名事实。
   Future<ResolvedIdentity> _requireIdentity() async {
     final identity = await IdentityAccountCache.instance.resolve();
-    if (identity == null) {
-      throw const CreatorException('请先在「我的 → 我的钱包」创建热钱包');
+    if (identity == null || !identity.isRegistered) {
+      throw const CreatorException('请先注册并绑定公民 CID');
     }
     return identity;
   }
 
-  String _pendingMirrorKey(String accountId) =>
-      'creator_plan_mirror_pending:$accountId';
+  String _pendingMirrorKey(String creatorCidNumber) =>
+      'creator_plan_mirror_pending_by_cid:$creatorCidNumber';
 
   Future<SharedPreferences> get _prefs async {
     final preferences = _preferences;
@@ -187,7 +186,8 @@ class CreatorService {
   }
 
   Future<void> _writePendingMirror({
-    required String accountId,
+    required String creatorCidNumber,
+    required String signerAccountId,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
@@ -195,26 +195,27 @@ class CreatorService {
   }) async {
     final prefs = await _prefs;
     final saved = await prefs.setString(
-      _pendingMirrorKey(accountId),
+      _pendingMirrorKey(creatorCidNumber),
       jsonEncode({
         'tx_hash': txHash,
         'block_hash': blockHashHex,
         'signed_extrinsic_hex': signedExtrinsicHex,
+        'signer_account_id': signerAccountId,
         'tiers': tiers.map((tier) => tier.toJson()).toList(growable: false),
       }),
     );
     if (!saved) throw StateError('无法保存创作者展示镜像重试记录');
   }
 
-  Future<void> _clearPendingMirror(String accountId) async {
+  Future<void> _clearPendingMirror(String creatorCidNumber) async {
     final prefs = await _prefs;
-    await prefs.remove(_pendingMirrorKey(accountId));
+    await prefs.remove(_pendingMirrorKey(creatorCidNumber));
   }
 
   Future<void> _retryPendingMirror(SquareSession session) async {
     try {
       final prefs = await _prefs;
-      final raw = prefs.getString(_pendingMirrorKey(session.accountId));
+      final raw = prefs.getString(_pendingMirrorKey(session.cidNumber));
       if (raw == null) return;
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return;
@@ -239,7 +240,7 @@ class CreatorService {
         signedExtrinsicHex: signedExtrinsicHex,
         tiers: tiers,
       );
-      await prefs.remove(_pendingMirrorKey(session.accountId));
+      await prefs.remove(_pendingMirrorKey(session.cidNumber));
     } on Exception {
       // 保留待同步记录；页面仍以 finalized 链上价格为真源，不阻断创作者功能。
     }
@@ -262,13 +263,15 @@ class CreatorService {
     );
     try {
       await _appendLocalTransaction(
+        creatorCidNumber: creatorCidNumber,
         accountId: accountId,
         txHash: txHash,
         blockHashHex: blockHashHex,
         signedExtrinsicHex: signedExtrinsicHex,
       );
       await _writePendingMirror(
-        accountId: accountId,
+        creatorCidNumber: creatorCidNumber,
+        signerAccountId: accountId,
         txHash: txHash,
         blockHashHex: blockHashHex,
         signedExtrinsicHex: signedExtrinsicHex,
@@ -287,7 +290,7 @@ class CreatorService {
         signedExtrinsicHex: signedExtrinsicHex,
         tiers: tiers,
       );
-      await _clearPendingMirror(accountId);
+      await _clearPendingMirror(creatorCidNumber);
     } on Exception {
       // 保留待同步记录；下次进入创作者页只重试 HTTP。
     }
@@ -305,15 +308,17 @@ class CreatorService {
     }
   }
 
-  /// 本地按钱包账户保留有限条 finalized 交易证明；Cloudflare 成功后也不删除链上交易记录。
+  /// 本地按永久 CID 保留有限条 finalized 交易证明；签名账户留在证明内部作为
+  /// 不可变交易事实，Cloudflare 成功后也不删除链上交易记录。
   Future<void> _appendLocalTransaction({
+    required String creatorCidNumber,
     required String accountId,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
   }) async {
     final prefs = await _prefs;
-    final key = 'subscription_tx_history:$accountId';
+    final key = 'subscription_tx_history_by_cid:$creatorCidNumber';
     final raw = prefs.getString(key);
     final history = <Map<String, dynamic>>[];
     if (raw != null) {
@@ -328,6 +333,7 @@ class CreatorService {
       'tx_hash': txHash,
       'block_hash': blockHashHex,
       'signed_extrinsic_hex': signedExtrinsicHex,
+      'signer_account_id': accountId,
     });
     if (history.length > 50) history.removeRange(0, history.length - 50);
     await prefs.setString(key, jsonEncode(history));

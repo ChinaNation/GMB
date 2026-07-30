@@ -131,6 +131,7 @@ function fakeEnv(options: FakeEnvOptions): Env {
   const kv = new Map<string, unknown>();
   const session: SessionState = {
     cid_number: VIEWER_CID,
+    binding_revision: 1,
     account_id: viewerAccount,
     device_key_hash: 'a'.repeat(64),
     created_at: 0,

@@ -116,6 +116,12 @@ class _ContactBookPageState extends State<ContactBookPage> {
         _loading = false;
       });
       await _loadProfiles(contacts);
+      try {
+        final refreshed = await _service.refreshContactBindings();
+        if (mounted) setState(() => _contacts = refreshed);
+      } on Exception {
+        // 页面仍可离线展示 CID 关系；转账前会再次严格链读并禁止使用旧地址。
+      }
       await _sync();
     } on Exception catch (error) {
       if (!mounted) return;
@@ -222,19 +228,37 @@ class _ContactBookPageState extends State<ContactBookPage> {
   }
 
   Future<void> _transfer(UserContact contact) async {
+    final UserContact current;
+    try {
+      current = await _service.resolveCurrentContact(contact.cidNumber);
+    } on Exception catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('无法确认联系人当前钱包：$error')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _contacts = [
+        for (final item in _contacts)
+          if (item.cidNumber == current.cidNumber) current else item,
+      ];
+    });
     if (widget.mode == ContactPickMode.pickForTransfer) {
-      Navigator.of(context).pop(contact);
+      Navigator.of(context).pop(current);
       return;
     }
     final opener = widget.transferOpener;
     if (opener != null) {
-      await opener(context, toSs58Address: contact.ss58Address);
+      await opener(context, toSs58Address: current.ss58Address);
       return;
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => OnchainPaymentPage(
-          initialToAddress: contact.ss58Address,
+          initialToAddress: current.ss58Address,
         ),
       ),
     );
@@ -242,12 +266,12 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Future<void> _message(UserContact contact) async {
     final profile = _profileOf(contact);
-    final title = ProfilePresentation.forAccountId(contact.accountId)
+    final title = ProfilePresentation.forIdentityKey(contact.cidNumber)
         .resolveDisplayName(publicName: profile?.displayName);
     final opener = widget.directChatOpener ?? openDirectChat;
     await opener(
       context,
-      peerAccountId: contact.accountId,
+      peerCidNumber: contact.cidNumber,
       title: title,
     );
   }
@@ -276,17 +300,17 @@ class _ContactBookPageState extends State<ContactBookPage> {
     if (mounted) setState(() => _contacts = contacts);
   }
 
-  void _open(UserContact contact) {
+  Future<void> _open(UserContact contact) async {
     switch (widget.mode) {
       case ContactPickMode.pickForTransfer:
         // 交易发起:把选中的联系人返回给收款栏。
-        Navigator.of(context).pop(contact);
+        await _transfer(contact);
       case ContactPickMode.pickForMessage:
         // 发私信:点联系人直接打开与其的一对一聊天(复用统一私信收口)。
-        unawaited(_message(contact));
+        await _message(contact);
       case ContactPickMode.browse:
         // 资料页按通讯录关系主键 cid_number 直接寻址。
-        unawaited(_openProfile(contact));
+        await _openProfile(contact);
     }
   }
 
@@ -309,7 +333,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
     final visible = _contacts.where((contact) {
       if (query.isEmpty) return true;
       final profile = _profileOf(contact);
-      final publicName = ProfilePresentation.forAccountId(contact.accountId)
+      final publicName = ProfilePresentation.forIdentityKey(contact.cidNumber)
           .resolveDisplayName(publicName: profile?.displayName)
           .toLowerCase();
       return contact.contactRemark.toLowerCase().contains(query) ||
@@ -432,7 +456,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   String _contactDisplayName(UserContact contact) {
     final profile = _profileOf(contact);
-    return ProfilePresentation.forAccountId(contact.accountId)
+    return ProfilePresentation.forIdentityKey(contact.cidNumber)
         .resolveDisplayName(publicName: profile?.displayName);
   }
 }
@@ -466,7 +490,7 @@ class _ContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final publicName = ProfilePresentation.forAccountId(contact.accountId)
+    final publicName = ProfilePresentation.forIdentityKey(contact.cidNumber)
         .resolveDisplayName(publicName: profile?.displayName);
     final bio = profile?.bio.trim() ?? '';
     final remark = contact.contactRemark;
@@ -484,7 +508,7 @@ class _ContactCard extends StatelessWidget {
             child: Row(
               children: [
                 ProfileAvatar(
-                  seed: contact.accountId,
+                  seed: contact.cidNumber,
                   size: 52,
                   imageUrl: avatarUrl,
                   imageHeaders: avatarHeaders,

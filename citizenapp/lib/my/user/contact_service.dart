@@ -11,6 +11,7 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/security/local_cipher.dart';
 import 'package:citizenapp/security/local_data_key.dart';
@@ -213,7 +214,7 @@ class ContactCryptor {
   List<int> _aad(String id) => utf8.encode('$_domain|$ownerCidNumber|$id');
 }
 
-/// 本地优先的加密通讯录服务。Isar 保存按 accountId 隔离的可用缓存与待同步操作；
+/// 本地优先的加密通讯录服务。Isar 保存按永久 CID 隔离的可用缓存与待同步操作；
 /// Cloudflare 只接收 [SquareEncryptedContact]，网络失败不会阻塞本地增删改。
 class UserContactService {
   UserContactService({
@@ -221,27 +222,28 @@ class UserContactService {
     SquareSessionProvider? sessionProvider,
     SquareApiClient? apiClient,
     IdentityAccountCache? identityAccountCache,
+    CitizenIdentityChainReader? chainReader,
     bool autoSync = true,
   })  : _walletManager = walletManager ?? WalletManager(),
         _sessionProvider = sessionProvider ?? SquareSessionProvider.instance,
         _apiClient = apiClient ?? SquareApiClient(),
         _identityAccountCache = identityAccountCache,
+        _chainReader = chainReader ?? CitizenIdentityChainReader(),
         _autoSync = autoSync;
 
   static const int _ss58Prefix = 2027;
-  static const String _contactsPrefix = 'contact_book_by_account:';
-  static const String _pendingPrefix = 'contact_pending_by_account:';
-  static const String _syncPrefix = 'contact_sync_by_account:';
-  static const String _cloudResetPrefix = 'contact_cloud_reset_by_account:';
+  static const String _contactsPrefix = 'contact_book_by_cid:';
+  static const String _pendingPrefix = 'contact_pending_by_cid:';
+  static const String _syncPrefix = 'contact_sync_by_cid:';
 
   final WalletManager _walletManager;
   final SquareSessionProvider _sessionProvider;
   final SquareApiClient _apiClient;
   final IdentityAccountCache? _identityAccountCache;
+  final CitizenIdentityChainReader _chainReader;
   final bool _autoSync;
 
-  /// 通讯录归属 = **身份账户**(CID 绑定账户,唯一身份主键);通讯录密钥从身份账户
-  /// child 派生、云会话 accountId 亦身份账户,三者一致(彻底切,不留账户0)。
+  /// 通讯录永久归属 CID；当前绑定账户仅负责解锁 CID 数据根和云会话鉴权。
   IdentityAccountCache get _identityCache =>
       _identityAccountCache ?? IdentityAccountCache.instance;
 
@@ -252,33 +254,105 @@ class UserContactService {
 
   /// 通讯录只属于当前 CID 身份，调用方不得用交易付款钱包覆盖其身份账户。
   Future<List<UserContact>> getContacts() async {
-    final accountId = await _requireIdentityAccountId();
-    return _getContacts(accountId);
+    final owner = await _requireIdentityOwner();
+    return _getContacts(owner);
   }
 
-  Future<List<UserContact>> _getContacts(String accountId) async {
-    return _readContacts(accountId);
+  Future<List<UserContact>> _getContacts(_ContactOwner owner) async {
+    return _readContacts(owner);
+  }
+
+  /// 从同一个 finalized 区块批量刷新全部联系人当前绑定账户。
+  ///
+  /// 绑定快照只是可更新缓存；联系人关系与备注仍只归 CID。失效或不闭环的 CID
+  /// 不会用旧账户冒充有效绑定，也不会因此删除用户的联系人关系。
+  Future<List<UserContact>> refreshContactBindings() async {
+    final owner = await _requireIdentityOwner();
+    final contacts = await _readContacts(owner);
+    if (contacts.isEmpty) return contacts;
+    final bindings = await _chainReader.readBindingsByCidNumbers(
+      contacts.map((contact) => contact.cidNumber),
+    );
+    return _applyBindingSnapshots(owner, contacts, bindings);
+  }
+
+  /// 转账等账户敏感动作前，按 CID 严格读取 finalized 当前绑定。
+  ///
+  /// 链读失败、CID 未激活或双向绑定不闭环时直接失败，禁止回退通讯录旧地址。
+  Future<UserContact> resolveCurrentContact(String contactCidNumber) async {
+    final owner = await _requireIdentityOwner();
+    final cidNumber = requireCidNumber(contactCidNumber);
+    final contacts = await _readContacts(owner);
+    final index =
+        contacts.indexWhere((contact) => contact.cidNumber == cidNumber);
+    if (index < 0) throw Exception('未找到联系人');
+    final binding = await _chainReader.readBindingByCidNumber(cidNumber);
+    if (binding == null) {
+      throw StateError('联系人 CID 当前没有有效钱包绑定');
+    }
+    final refreshed = await _applyBindingSnapshots(
+      owner,
+      contacts,
+      <String, CitizenBindingChainSnapshot>{cidNumber: binding},
+    );
+    return refreshed.firstWhere((contact) => contact.cidNumber == cidNumber);
+  }
+
+  Future<List<UserContact>> _applyBindingSnapshots(
+    _ContactOwner owner,
+    List<UserContact> contacts,
+    Map<String, CitizenBindingChainSnapshot> bindings,
+  ) async {
+    final refreshed = contacts.toList(growable: true);
+    final changed = <UserContact>[];
+    for (var index = 0; index < refreshed.length; index++) {
+      final contact = refreshed[index];
+      final binding = bindings[contact.cidNumber];
+      if (binding == null) continue;
+      final accountId = requireAccountId(binding.accountIdText);
+      if (accountId == contact.accountId) continue;
+      final next = contact.copyWith(
+        accountId: accountId,
+        ss58Address: ss58FromAccountIdText(accountId),
+        updatedAt: _nextTimestamp(contact.updatedAt),
+      );
+      refreshed[index] = next;
+      changed.add(next);
+    }
+    if (changed.isEmpty) return _sorted(refreshed);
+
+    final pending = (await _readPending(owner)).toList(growable: true);
+    for (final contact in changed) {
+      pending
+        ..removeWhere((item) => item.cidNumber == contact.cidNumber)
+        ..add(_PendingContactOp.upsert(contact.cidNumber, contact.updatedAt));
+    }
+    await _writeSnapshot(owner, refreshed, pending);
+    await _setSyncState(owner, ContactSyncPhase.pending);
+    if (_autoSync) unawaited(_syncOwner(owner));
+    return _sorted(refreshed);
   }
 
   /// 返回通讯录当前所属的身份账户，供扫码页做“不能添加自己”校验。
-  Future<String> getAccountId() async => await _requireIdentityAccountId();
+  Future<String> getAccountId() async =>
+      (await _requireIdentityOwner()).accountId;
 
   Future<ContactImportResult> addContact({
     required String cidNumber,
     required String ss58Address,
     required String contactRemark,
   }) async {
-    final ownerAccountId = await _requireIdentityAccountId();
+    final owner = await _requireIdentityOwner();
     final normalizedCidNumber = requireCidNumber(cidNumber);
     final normalizedSs58Address = normalizeSs58Address(ss58Address);
     final contactAccountId = accountIdFromSs58(normalizedSs58Address);
     final normalizedRemark = normalizeContactRemark(contactRemark);
-    if (contactAccountId == ownerAccountId) {
+    if (normalizedCidNumber == owner.cidNumber ||
+        contactAccountId == owner.accountId) {
       throw const FormatException('不能把自己加入通讯录');
     }
 
-    final contacts =
-        (await _readContacts(ownerAccountId)).toList(growable: true);
+    final contacts = (await _readContacts(owner)).toList(growable: true);
     final index =
         contacts.indexWhere((item) => item.cidNumber == normalizedCidNumber);
     final created = index < 0;
@@ -307,12 +381,12 @@ class UserContactService {
       contacts[index] = contact;
     }
     await _writeContactsAndPending(
-      ownerAccountId,
+      owner,
       contacts,
       _PendingContactOp.upsert(contact.cidNumber, contact.updatedAt),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(ownerAccountId));
+      unawaited(_syncOwner(owner));
     }
     return ContactImportResult(contact: contact, created: created);
   }
@@ -321,11 +395,10 @@ class UserContactService {
     String contactCidNumber,
     String contactRemark,
   ) async {
-    final ownerAccountId = await _requireIdentityAccountId();
+    final owner = await _requireIdentityOwner();
     final normalizedContactCidNumber = requireCidNumber(contactCidNumber);
     final normalizedRemark = normalizeContactRemark(contactRemark);
-    final contacts =
-        (await _getContacts(ownerAccountId)).toList(growable: true);
+    final contacts = (await _getContacts(owner)).toList(growable: true);
     final index = contacts
         .indexWhere((item) => item.cidNumber == normalizedContactCidNumber);
     if (index < 0) {
@@ -336,7 +409,7 @@ class UserContactService {
       updatedAt: _nextTimestamp(contacts[index].updatedAt),
     );
     await _writeContactsAndPending(
-      ownerAccountId,
+      owner,
       contacts,
       _PendingContactOp.upsert(
         contacts[index].cidNumber,
@@ -344,19 +417,19 @@ class UserContactService {
       ),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(ownerAccountId));
+      unawaited(_syncOwner(owner));
     }
     return _sorted(contacts);
   }
 
   Future<List<UserContact>> deleteContact(String contactCidNumber) async {
-    final ownerAccountId = await _requireIdentityAccountId();
+    final owner = await _requireIdentityOwner();
     final normalizedContactCidNumber = requireCidNumber(contactCidNumber);
-    final contacts = (await _getContacts(ownerAccountId))
+    final contacts = (await _getContacts(owner))
         .where((item) => item.cidNumber != normalizedContactCidNumber)
         .toList(growable: false);
     await _writeContactsAndPending(
-      ownerAccountId,
+      owner,
       contacts,
       _PendingContactOp.delete(
         normalizedContactCidNumber,
@@ -364,7 +437,7 @@ class UserContactService {
       ),
     );
     if (_autoSync) {
-      unawaited(_syncWallet(ownerAccountId));
+      unawaited(_syncOwner(owner));
     }
     return _sorted(contacts);
   }
@@ -373,20 +446,23 @@ class UserContactService {
   /// 绝不覆盖本机有效缓存；下一次正常写入会修复对应云端记录。
   /// 同步入口同样只接受身份账户；付款钱包和调用方参数不能改变密文归属。
   Future<List<UserContact>> sync() async {
-    return _syncWallet(await _requireIdentityAccountId());
+    return _syncOwner(await _requireIdentityOwner());
   }
 
-  Future<List<UserContact>> _syncWallet(String accountId) async {
-    await _setSyncState(accountId, ContactSyncPhase.syncing);
+  Future<List<UserContact>> _syncOwner(_ContactOwner owner) async {
+    await _setSyncState(owner, ContactSyncPhase.syncing);
     try {
-      final keys =
-          await _walletManager.ensureContactKeyMaterialForAccountId(accountId);
+      final keys = await _walletManager.ensureContactKeyMaterialForAccountId(
+        owner.accountId,
+      );
       final session = await _sessionProvider.ensureSession();
-      if (session == null || session.accountId != accountId) {
-        throw const SquareApiException('通讯录云同步需要当前 CID 身份账户会话');
+      if (session == null ||
+          session.accountId != owner.accountId ||
+          session.cidNumber != owner.cidNumber) {
+        throw const SquareApiException('通讯录云同步需要当前 CID 与绑定账户的精确会话');
       }
       final cryptor = ContactCryptor(
-        ownerCidNumber: requireCidNumber(session.cidNumber),
+        ownerCidNumber: owner.cidNumber,
         keys: keys,
       );
       final cloudRecords = <SquareEncryptedContact>[];
@@ -400,25 +476,9 @@ class UserContactService {
         cursor = page.nextCursor;
       } while (cursor != null);
 
-      // CID 换绑会更换端到端密钥。旧密文无法用新密钥识别，必须先按属主 CID
-      // 清空旧不透明记录，再用本地明文权威副本重建。标记在全量删除成功前不移除，
-      // 中途断网后下次同步会继续删除剩余记录。
-      final resetCloud =
-          await _readKv('$_cloudResetPrefix$accountId') == 'true';
-      if (resetCloud) {
-        for (final record in cloudRecords) {
-          await _apiClient.deleteEncryptedContact(
-            session: session,
-            contactId: record.contactId,
-          );
-        }
-        cloudRecords.clear();
-        await _deleteKvKeys(<String>['$_cloudResetPrefix$accountId']);
-      }
-
-      final pending = await _readPending(accountId);
+      final pending = await _readPending(owner);
       final pendingCidNumbers = pending.map((item) => item.cidNumber).toSet();
-      final local = await _readContacts(accountId);
+      final local = await _readContacts(owner);
       final merged = <String, UserContact>{};
       final localByContactId = <String, UserContact>{};
       for (final contact in local) {
@@ -441,7 +501,7 @@ class UserContactService {
           merged[contact.cidNumber] = contact;
         }
       }
-      await _writeContacts(accountId, merged.values.toList(growable: false));
+      await _writeContacts(owner, merged.values.toList(growable: false));
 
       for (final op in List<_PendingContactOp>.from(pending)) {
         if (op.action == _PendingAction.delete) {
@@ -457,73 +517,23 @@ class UserContactService {
             contact: await cryptor.encrypt(contact),
           );
         }
-        await _removePending(accountId, op);
+        await _removePending(owner, op);
       }
-      final result = await _readContacts(accountId);
-      await _setSyncState(accountId, ContactSyncPhase.synced);
+      final result = await _readContacts(owner);
+      await _setSyncState(owner, ContactSyncPhase.synced);
       return result;
     } on Exception catch (error) {
-      final pending = await _readPending(accountId);
+      final pending = await _readPending(owner);
       final phase =
           pending.isEmpty ? ContactSyncPhase.offline : ContactSyncPhase.failed;
-      await _setSyncState(accountId, phase, message: error.toString());
-      return _readContacts(accountId);
+      await _setSyncState(owner, phase, message: error.toString());
+      return _readContacts(owner);
     }
-  }
-
-  /// CID 换绑重建:把通讯录从旧身份账户 [oldAccountId] 迁到新身份账户 [newAccountId]
-  /// (死契约 [[cid-rebind-subkeys-must-auto-migrate]])。
-  ///
-  /// 本地明文缓存直接搬(无需解密),每条造 upsert 待办以强制用**新账户 child 密钥**重加密
-  /// 上云;随后清旧账户本地缓存与通讯录密钥,并触发一次新账户云同步。上云失败落既有待办
-  /// 机制,下次 sync 自动重试——最终一致收敛到新账户。迁移只搬本地权威副本,不依赖旧云端
-  /// 密文可解(旧密钥已换),故换绑后旧密钥即可安全丢弃。
-  Future<void> migrateContactsToNewIdentity(
-    String oldAccountId,
-    String newAccountId,
-  ) async {
-    final oldNorm = requireAccountId(oldAccountId);
-    final newNorm = requireAccountId(newAccountId);
-    if (oldNorm == newNorm) return;
-
-    final oldContacts = await _readContacts(oldNorm);
-    // 新账户换绑前通常无通讯录；按永久 CID 合并，同 CID 以旧身份本地副本为准。
-    // 即使旧账户本地为空，也要把新账户已有缓存全部置为待上传，避免云快照清空后
-    // 非 pending 的本地记录在合并阶段被误删。
-    final merged = <String, UserContact>{};
-    for (final contact in await _readContacts(newNorm)) {
-      merged[contact.cidNumber] = contact;
-    }
-    for (final contact in oldContacts) {
-      merged[contact.cidNumber] = contact;
-    }
-    final contacts = merged.values.toList(growable: false);
-    if (contacts.isNotEmpty) {
-      // 全量 upsert 待办:强制用新账户 child 密钥重新加密上云。
-      final pending = contacts
-          .map((contact) =>
-              _PendingContactOp.upsert(contact.cidNumber, contact.updatedAt))
-          .toList(growable: false);
-      await _writeSnapshot(newNorm, contacts, pending);
-    }
-    // 云端记录属于永久 CID，但旧记录的 contact_id 与密文均由旧账户 child 密钥生成。
-    // 持久化重建标记，确保删除旧快照成功后才上传新密文。
-    await _writeKv('$_cloudResetPrefix$newNorm', 'true');
-    // 清旧账户本地缓存(明文/待办/同步态)与通讯录密钥,杜绝残留。
-    await _deleteKvKeys(<String>[
-      '$_contactsPrefix$oldNorm',
-      '$_pendingPrefix$oldNorm',
-      '$_syncPrefix$oldNorm',
-      '$_cloudResetPrefix$oldNorm',
-    ]);
-    await _walletManager.deleteContactKeysForAccountId(oldNorm);
-    // 触发新账户云重建(内部吞异常并落待办,不阻断换绑重建主流程)。
-    await _syncWallet(newNorm);
   }
 
   Future<ContactSyncState> readSyncState() async {
-    final accountId = await _requireIdentityAccountId();
-    final raw = await _readKv('$_syncPrefix$accountId');
+    final owner = await _requireIdentityOwner();
+    final raw = await _readKv(owner, '$_syncPrefix${owner.cidNumber}');
     if (raw == null) {
       return const ContactSyncState(phase: ContactSyncPhase.idle);
     }
@@ -545,17 +555,21 @@ class UserContactService {
     }
   }
 
-  /// 通讯录归属的**身份账户** accountId(身份主键 = CID 号)。无热钱包 / 无身份则抛。
-  Future<String> _requireIdentityAccountId() async {
-    final accountId = await _identityCache.accountId();
-    if (accountId == null || accountId.isEmpty) {
-      throw const WalletAuthException('请先创建默认热钱包');
+  /// 解析通讯录永久属主与当前授权账户；未注册 CID 必须失败关闭。
+  Future<_ContactOwner> _requireIdentityOwner() async {
+    final identity = await _identityCache.resolve();
+    final snapshot = identity?.snapshot;
+    if (identity == null || snapshot == null) {
+      throw const WalletAuthException('请先注册 CID 身份');
     }
-    return accountId;
+    return _ContactOwner(
+      cidNumber: requireCidNumber(snapshot.cidNumber),
+      accountId: requireAccountId(identity.accountId),
+    );
   }
 
-  Future<List<UserContact>> _readContacts(String accountId) async {
-    final raw = await _readKv('$_contactsPrefix$accountId');
+  Future<List<UserContact>> _readContacts(_ContactOwner owner) async {
+    final raw = await _readKv(owner, '$_contactsPrefix${owner.cidNumber}');
     if (raw == null || raw.isEmpty) return const <UserContact>[];
     try {
       final decoded = jsonDecode(raw);
@@ -569,8 +583,8 @@ class UserContactService {
     }
   }
 
-  Future<List<_PendingContactOp>> _readPending(String accountId) async {
-    final raw = await _readKv('$_pendingPrefix$accountId');
+  Future<List<_PendingContactOp>> _readPending(_ContactOwner owner) async {
+    final raw = await _readKv(owner, '$_pendingPrefix${owner.cidNumber}');
     if (raw == null || raw.isEmpty) return const <_PendingContactOp>[];
     try {
       final decoded = jsonDecode(raw);
@@ -585,40 +599,42 @@ class UserContactService {
   }
 
   Future<void> _writeContactsAndPending(
-    String accountId,
+    _ContactOwner owner,
     List<UserContact> contacts,
     _PendingContactOp next,
   ) async {
-    final pending = (await _readPending(accountId)).toList(growable: true)
+    final pending = (await _readPending(owner)).toList(growable: true)
       ..removeWhere((item) => item.cidNumber == next.cidNumber)
       ..add(next);
-    await _writeSnapshot(accountId, contacts, pending);
-    await _setSyncState(accountId, ContactSyncPhase.pending);
+    await _writeSnapshot(owner, contacts, pending);
+    await _setSyncState(owner, ContactSyncPhase.pending);
   }
 
   Future<void> _removePending(
-      String accountId, _PendingContactOp completed) async {
-    final pending = (await _readPending(accountId))
+      _ContactOwner owner, _PendingContactOp completed) async {
+    final pending = (await _readPending(owner))
         .where((item) =>
             item.cidNumber != completed.cidNumber ||
             item.updatedAt > completed.updatedAt)
         .toList(growable: false);
-    await _writePending(accountId, pending);
+    await _writePending(owner, pending);
   }
 
   Future<void> _writeSnapshot(
-    String accountId,
+    _ContactOwner owner,
     List<UserContact> contacts,
     List<_PendingContactOp> pending,
   ) async {
     // 两份都在事务外先加密，不让密码学运算占住 Isar 写事务。
-    final contactsKey = '$_contactsPrefix$accountId';
-    final pendingKey = '$_pendingPrefix$accountId';
+    final contactsKey = '$_contactsPrefix${owner.cidNumber}';
+    final pendingKey = '$_pendingPrefix${owner.cidNumber}';
     final sealedContacts = await _sealKv(
+      owner,
       contactsKey,
       jsonEncode(_sorted(contacts).map((item) => item.toJson()).toList()),
     );
     final sealedPending = await _sealKv(
+      owner,
       pendingKey,
       jsonEncode(pending.map((item) => item.toJson()).toList()),
     );
@@ -628,21 +644,24 @@ class UserContactService {
     });
   }
 
-  Future<void> _writeContacts(String accountId, List<UserContact> contacts) =>
+  Future<void> _writeContacts(
+          _ContactOwner owner, List<UserContact> contacts) =>
       _writeKv(
-        '$_contactsPrefix$accountId',
+        owner,
+        '$_contactsPrefix${owner.cidNumber}',
         jsonEncode(_sorted(contacts).map((item) => item.toJson()).toList()),
       );
 
   Future<void> _writePending(
-          String accountId, List<_PendingContactOp> pending) =>
+          _ContactOwner owner, List<_PendingContactOp> pending) =>
       _writeKv(
-        '$_pendingPrefix$accountId',
+        owner,
+        '$_pendingPrefix${owner.cidNumber}',
         jsonEncode(pending.map((item) => item.toJson()).toList()),
       );
 
   Future<void> _setSyncState(
-    String accountId,
+    _ContactOwner owner,
     ContactSyncPhase phase, {
     String? message,
   }) async {
@@ -653,7 +672,8 @@ class UserContactService {
     );
     syncState.value = state;
     await _writeKv(
-      '$_syncPrefix$accountId',
+      owner,
+      '$_syncPrefix${owner.cidNumber}',
       jsonEncode(<String, Object?>{
         'phase': phase.name,
         'updated_at': state.updatedAt,
@@ -662,54 +682,52 @@ class UserContactService {
     );
   }
 
-
-  /// 本地 KV 密文层的子钥缓存(按归属账户)。
+  /// 本地 KV 密文层的子钥缓存；CID 是属主，账户只标识本次有效绑定。
   final Map<String, Uint8List> _localKvKeys = <String, Uint8List>{};
 
   /// 取某条 KV 的本地加密子钥。
   ///
-  /// 四个前缀都以 `:<accountId>` 结尾,归属账户可直接从键名解析,无需层层透传。
   /// 用 `LocalKeyPurpose.contactsLocal` 而**不复用云端通讯录钥**:两者域隔离,
   /// 本地密文被拿到也不等于同时暴露云端密文。
-  Future<Uint8List> _localKvKey(String kvKey) async {
-    final accountId = kvKey.substring(kvKey.indexOf(':') + 1);
-    final cached = _localKvKeys[accountId];
+  Future<Uint8List> _localKvKey(_ContactOwner owner) async {
+    final bindingKey = '${owner.cidNumber}|${owner.accountId}';
+    final cached = _localKvKeys[bindingKey];
     if (cached != null) return cached;
-    final ldk = await _walletManager.ensureLocalDataKeyForAccountId(accountId);
-    final key = await ldk.subkey(LocalKeyPurpose.contactsLocal);
-    _localKvKeys[accountId] = key;
+    final dataRoot = await _walletManager.ensureCidDataRootForCurrentBinding(
+      owner.accountId,
+    );
+    final key = await dataRoot.subkey(LocalKeyPurpose.contactsLocal);
+    _localKvKeys[bindingKey] = key;
     return key;
   }
 
   /// AAD 绑完整 KV 键名,防止三份(通讯录 / 待同步 / 同步态)密文被互换。
-  Future<String> _sealKv(String kvKey, String value) async => LocalCipher
-      .encryptString(key: await _localKvKey(kvKey), plaintext: value, aad: kvKey);
+  Future<String> _sealKv(
+          _ContactOwner owner, String kvKey, String value) async =>
+      LocalCipher.encryptString(
+          key: await _localKvKey(owner), plaintext: value, aad: kvKey);
 
-  Future<String> _openKv(String kvKey, String blob) async => LocalCipher
-      .decryptString(key: await _localKvKey(kvKey), blob: blob, aad: kvKey);
+  Future<String> _openKv(
+          _ContactOwner owner, String kvKey, String blob) async =>
+      LocalCipher.decryptString(
+          key: await _localKvKey(owner), blob: blob, aad: kvKey);
 
   /// 读本地 KV 并解密。解密失败直接抛 [LocalCipherException],不静默返回 null——
   /// 静默会被上层当成"本地无缓存"而拉云端整表覆盖,悄悄丢掉待同步的本地改动。
-  Future<String?> _readKv(String key) async {
+  Future<String?> _readKv(_ContactOwner owner, String key) async {
     final blob = await WalletIsar.instance.read((isar) async {
       return (await isar.appKvEntitys.getByKey(key))?.stringValue;
     });
     if (blob == null || blob.isEmpty) return null;
-    return _openKv(key, blob);
+    return _openKv(owner, key, blob);
   }
 
   /// 加密在事务外完成,不让密码学运算占住 Isar 写事务。
-  Future<void> _writeKv(String key, String value) async {
-    final sealed = await _sealKv(key, value);
-    await WalletIsar.instance.writeTxn((isar) => _putKvInTxn(isar, key, sealed));
+  Future<void> _writeKv(_ContactOwner owner, String key, String value) async {
+    final sealed = await _sealKv(owner, key, value);
+    await WalletIsar.instance
+        .writeTxn((isar) => _putKvInTxn(isar, key, sealed));
   }
-
-  Future<void> _deleteKvKeys(List<String> keys) =>
-      WalletIsar.instance.writeTxn((isar) async {
-        for (final key in keys) {
-          await isar.appKvEntitys.deleteByKey(key);
-        }
-      });
 
   Future<void> _putKvInTxn(Isar isar, String key, String value) async {
     final row = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
@@ -764,6 +782,17 @@ class UserContactService {
     }
     return normalized;
   }
+}
+
+/// 通讯录的永久属主与本次有效授权账户。
+class _ContactOwner {
+  const _ContactOwner({
+    required this.cidNumber,
+    required this.accountId,
+  });
+
+  final String cidNumber;
+  final String accountId;
 }
 
 enum _PendingAction { upsert, delete }

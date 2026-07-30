@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-/// 钱包账户 account_id（MLS 名册/归属）与身份主键 cid_number（寻址路由）语义分离。
+/// CID 是 MLS 名册与投递的唯一身份键；当前账户只建立绑定会话。
 const _bobAccountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
 const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
@@ -46,9 +46,8 @@ void main() {
         'recipient_device_id',
         'envelope',
       });
-      // 路由键是收件人身份主键 CID 号；钱包账户 account_id 只在 proto 内嵌供 MLS/归属。
+      // 请求只携带收件人 CID，不允许另带账户路由。
       expect(body['recipient_cid_number'], _bobCidNumber);
-      expect(body.containsKey('recipient_account_id'), isFalse);
       return _json({'ok': true, 'delivery_state': 'sent'});
     });
 
@@ -112,8 +111,7 @@ void main() {
     );
 
     expect(package.keyPackageBytes, [1, 2, 3]);
-    // account_id 是 MLS 名册身份，cid_number 是寻址主键，二者语义分离且都要解出。
-    expect(package.accountId, _bobAccountId);
+    // CID 同时是 MLS 名册身份和投递主键；钱包账户不进入 KeyPackage。
     expect(package.cidNumber, _bobCidNumber);
   });
 
@@ -154,9 +152,9 @@ ChatEnvelope _sampleEnvelope() => ChatEnvelope(
       protocolVersion: 1,
       envelopeId: 'env-1',
       conversationId: 'dm:alice:bob',
-      senderAccountId:
+      senderCidNumber:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId: _bobAccountId,
+      recipientCidNumber: _bobAccountId,
       senderDeviceId: 'alice-phone',
       mlsWireMessage: [1, 2, 3],
       createdAtMillis: Int64(1),

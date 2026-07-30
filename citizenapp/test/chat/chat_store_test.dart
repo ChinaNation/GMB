@@ -5,12 +5,11 @@ import 'package:citizenapp/chat/storage/chat_store.dart';
 
 import '../support/isar_test_env.dart';
 
-/// 钱包账户 account_id（信封内嵌，供 MLS/归属）与身份主键 cid_number（出站队列/
-/// 待投递媒体的路由键）语义分离，测试两者不可混用。
-const _bobAccountId =
-    '0x2222222222222222222222222222222222222222222222222222222222222222';
+/// CID 是信封、MLS 名册和待投递路由的唯一身份键；当前钱包账户只解锁本地密钥。
 const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
-const _carolAccountId = 'carol-wallet';
+const _ownerCidNumber = 'CN220-CTZN2-100000001-2026';
+const _aliceAccountId =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _carolCidNumber = 'CN220-CTZN2-100000003-2026';
 
 void main() {
@@ -26,15 +25,16 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-store',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId: _bobAccountId,
+      senderCidNumber: _ownerCidNumber,
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 10,
       ttlMillis: 60000,
     );
 
     await store.saveOutgoingEnvelope(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       envelope: envelope,
       envelopeBytes: envelope.writeToBuffer(),
       recipientCidNumber: _bobCidNumber,
@@ -43,32 +43,44 @@ void main() {
       plaintext: 'hi',
     );
     await store.markOutgoingDelivery(
+      ownerCidNumber: _ownerCidNumber,
       envelopeId: 'env-store',
       state: ChatMessageDeliveryState.sent,
     );
 
-    final outgoing = await store.readMessages('conv-store');
+    final outgoing = await store.readMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+      conversationId: 'conv-store',
+    );
     expect(outgoing.single.deliveryState, ChatMessageDeliveryState.sent);
     expect(outgoing.single.plaintext, 'hi');
 
     await store.savePendingInbound(
+      ownerCidNumber: _ownerCidNumber,
       envelope: envelope,
       envelopeBytes: envelope.writeToBuffer(),
       reason: 'waiting for welcome',
     );
-    expect(await store.pendingInboundCount(), 1);
+    expect(await store.pendingInboundCount(_ownerCidNumber), 1);
 
-    final pending = await store.takePendingInbound('conv-store');
+    final pending =
+        await store.takePendingInbound(_ownerCidNumber, 'conv-store');
     expect(pending.single.envelopeId, 'env-store');
-    expect(await store.pendingInboundCount(), 0);
+    expect(await store.pendingInboundCount(_ownerCidNumber), 0);
 
     await store.saveIncomingEnvelope(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       envelope: envelope,
       envelopeBytes: envelope.writeToBuffer(),
       messageKind: ChatMessageKind.text,
       plaintext: 'hi back',
     );
-    final conversations = await store.readConversationPreviews();
+    final conversations = await store.readConversationPreviews(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+    );
     expect(conversations.single.unreadCount, 1);
     expect(conversations.single.lastMessage, 'hi back');
   });
@@ -83,9 +95,8 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-delete',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId: _bobAccountId,
+      senderCidNumber: _ownerCidNumber,
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 10,
       ttlMillis: 60000,
@@ -97,15 +108,16 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-keep',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId: _carolAccountId,
+      senderCidNumber: _ownerCidNumber,
+      recipientCidNumber: _carolCidNumber,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 20,
       ttlMillis: 60000,
     );
 
     await store.saveOutgoingEnvelope(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       envelope: targetEnvelope,
       envelopeBytes: targetEnvelope.writeToBuffer(),
       recipientCidNumber: _bobCidNumber,
@@ -114,11 +126,14 @@ void main() {
       plaintext: 'delete me',
     );
     await store.savePendingInbound(
+      ownerCidNumber: _ownerCidNumber,
       envelope: targetEnvelope,
       envelopeBytes: targetEnvelope.writeToBuffer(),
       reason: 'waiting',
     );
     await store.saveOutgoingEnvelope(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       envelope: keptEnvelope,
       envelopeBytes: keptEnvelope.writeToBuffer(),
       recipientCidNumber: _carolCidNumber,
@@ -127,23 +142,43 @@ void main() {
       plaintext: 'keep me',
     );
 
-    expect(await store.outboundQueueCount(), 2);
-    expect(await store.pendingInboundCount(), 1);
+    expect(await store.outboundQueueCount(_ownerCidNumber), 2);
+    expect(await store.pendingInboundCount(_ownerCidNumber), 1);
 
-    await store.deleteConversation('conv-delete');
+    await store.deleteConversation(_ownerCidNumber, 'conv-delete');
 
-    expect(await store.readMessages('conv-delete'), isEmpty);
-    expect(await store.pendingInboundCount(), 0);
-    expect(await store.outboundQueueCount(), 1);
+    expect(
+      await store.readMessages(
+        ownerCidNumber: _ownerCidNumber,
+        currentAccountId: _aliceAccountId,
+        conversationId: 'conv-delete',
+      ),
+      isEmpty,
+    );
+    expect(await store.pendingInboundCount(_ownerCidNumber), 0);
+    expect(await store.outboundQueueCount(_ownerCidNumber), 1);
 
-    final conversations = await store.readConversationPreviews();
+    final conversations = await store.readConversationPreviews(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+    );
     expect(conversations.single.conversationId, 'conv-keep');
-    expect((await store.readMessages('conv-keep')).single.plaintext, 'keep me');
+    expect(
+      (await store.readMessages(
+        ownerCidNumber: _ownerCidNumber,
+        currentAccountId: _aliceAccountId,
+        conversationId: 'conv-keep',
+      ))
+          .single
+          .plaintext,
+      'keep me',
+    );
   });
 
   test('待设备投递媒体队列:登记 / 按对端读 / 删 / 会话删连带清理', () async {
     final store = ChatStore();
     await store.recordOutgoingMedia(
+      ownerCidNumber: _ownerCidNumber,
       attachmentId: 'att-1',
       recipientCidNumber: _bobCidNumber,
       conversationId: 'conv-a',
@@ -152,6 +187,7 @@ void main() {
       byteSize: 100,
     );
     await store.recordOutgoingMedia(
+      ownerCidNumber: _ownerCidNumber,
       attachmentId: 'att-2',
       recipientCidNumber: _carolCidNumber,
       conversationId: 'conv-b',
@@ -159,9 +195,10 @@ void main() {
       contentType: 'video/mp4',
       byteSize: 200,
     );
-    expect(await store.outgoingMediaCount(), 2);
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 2);
 
     final forBob = await store.readPendingOutgoingMedia(
+      ownerCidNumber: _ownerCidNumber,
       recipientCidNumber: _bobCidNumber,
     );
     expect(forBob.single.attachmentId, 'att-1');
@@ -169,12 +206,16 @@ void main() {
     expect(forBob.single.conversationId, 'conv-a');
     expect(forBob.single.byteSize, 100);
 
-    await store.deleteOutgoingMedia('att-1', _bobCidNumber); // 收到 ack 后删除
-    expect(await store.outgoingMediaCount(), 1);
+    await store.deleteOutgoingMedia(
+      _ownerCidNumber,
+      'att-1',
+      _bobCidNumber,
+    ); // 收到 ack 后删除
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 1);
 
     // 删会话 conv-b 连带清理其待投递媒体,不留孤儿。
-    await store.deleteConversation('conv-b');
-    expect(await store.outgoingMediaCount(), 0);
+    await store.deleteConversation(_ownerCidNumber, 'conv-b');
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 0);
   });
 
   test('群媒体:同一 attachmentId 发多成员各占一行,按成员删', () async {
@@ -185,6 +226,7 @@ void main() {
       'CN220-CTZN2-100000006-2026',
     ]) {
       await store.recordOutgoingMedia(
+        ownerCidNumber: _ownerCidNumber,
         attachmentId: 'att-grp',
         recipientCidNumber: memberCidNumber,
         conversationId: 'grp:a:n',
@@ -193,18 +235,23 @@ void main() {
         byteSize: 100,
       );
     }
-    expect(await store.outgoingMediaCount(), 3);
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 3);
     // 仅 c 收到 ack → 删 c 的行,b/d 待投递保留。
-    await store.deleteOutgoingMedia('att-grp', 'CN220-CTZN2-100000005-2026');
-    expect(await store.outgoingMediaCount(), 2);
+    await store.deleteOutgoingMedia(
+      _ownerCidNumber,
+      'att-grp',
+      'CN220-CTZN2-100000005-2026',
+    );
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 2);
     final forB = await store.readPendingOutgoingMedia(
+        ownerCidNumber: _ownerCidNumber,
         recipientCidNumber: 'CN220-CTZN2-100000004-2026');
     expect(forB.single.attachmentId, 'att-grp');
   });
 
-  test('clearAllForAccountId 连带清理该 accountId 会话的待投递媒体', () async {
+  test('clearAllForCidNumber 连带清理该 CID 会话的待投递媒体', () async {
     final store = ChatStore();
-    // 以出站信封建立 accountId=alice 的会话行(conversationId=conv-own)。
+    // 以出站信封建立 owner CID 的会话行(conversationId=conv-own)。
     final envelope = const MlsWireMessage(
       wireBytes: [1],
       cipherSuite: 'MLS_128',
@@ -212,14 +259,15 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-own',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId: _bobAccountId,
+      senderCidNumber: _ownerCidNumber,
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 1,
       ttlMillis: 60000,
     );
     await store.saveOutgoingEnvelope(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       envelope: envelope,
       envelopeBytes: envelope.writeToBuffer(),
       recipientCidNumber: _bobCidNumber,
@@ -228,6 +276,7 @@ void main() {
       plaintext: 'hi',
     );
     await store.recordOutgoingMedia(
+      ownerCidNumber: _ownerCidNumber,
       attachmentId: 'att-own',
       recipientCidNumber: _bobCidNumber,
       conversationId: 'conv-own',
@@ -235,18 +284,16 @@ void main() {
       contentType: 'image/jpeg',
       byteSize: 5,
     );
-    expect(await store.outgoingMediaCount(), 1);
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 1);
 
-    await store.clearAllForAccountId(
-        '0x1111111111111111111111111111111111111111111111111111111111111111');
-    expect(await store.outgoingMediaCount(), 0);
+    await store.clearAllForCidNumber(_ownerCidNumber);
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 0);
   });
 
   test('searchMessages 跨会话按解码摘要检索：大小写不敏感、时间倒序、limit 截断', () async {
     final store = ChatStore();
-    const sender =
-        '0x1111111111111111111111111111111111111111111111111111111111111111';
-    const peer = _bobAccountId;
+    const sender = _ownerCidNumber;
+    const peer = _bobCidNumber;
 
     Future<void> save({
       required String envelopeId,
@@ -261,13 +308,15 @@ void main() {
         messageKind: MlsMessageKind.application,
       ).toEnvelope(
         envelopeId: envelopeId,
-        senderAccountId: sender,
-        recipientAccountId: peer,
+        senderCidNumber: sender,
+        recipientCidNumber: peer,
         senderDeviceId: 'alice-phone',
         createdAtMillis: createdAtMillis,
         ttlMillis: 60000,
       );
       await store.saveOutgoingEnvelope(
+        ownerCidNumber: _ownerCidNumber,
+        currentAccountId: _aliceAccountId,
         envelope: envelope,
         envelopeBytes: envelope.writeToBuffer(),
         recipientCidNumber: _bobCidNumber,
@@ -297,24 +346,34 @@ void main() {
     );
 
     // 跨会话命中并按时间倒序（conv-search-2 的 env-c 比 conv-search-1 的 env-a 新）
-    final ordered =
-        await store.searchMessages(accountId: sender, keyword: '开会');
+    final ordered = await store.searchMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: sender,
+      keyword: '开会',
+    );
     expect(
       ordered.map((item) => item.envelopeId).toList(),
       <String>['env-search-c', 'env-search-a'],
     );
 
     // limit 截断保留最新的一条
-    final limited =
-        await store.searchMessages(accountId: sender, keyword: '开会', limit: 1);
+    final limited = await store.searchMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: sender,
+      keyword: '开会',
+      limit: 1,
+    );
     expect(
       limited.map((item) => item.envelopeId).toList(),
       <String>['env-search-c'],
     );
 
     // 大小写不敏感
-    final caseInsensitive =
-        await store.searchMessages(accountId: sender, keyword: 'material');
+    final caseInsensitive = await store.searchMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: sender,
+      keyword: 'material',
+    );
     expect(
       caseInsensitive.map((item) => item.envelopeId).toList(),
       <String>['env-search-b'],
@@ -322,10 +381,28 @@ void main() {
 
     // 空关键词 / 空账户不检索；他人账户查不到本账户消息
     expect(
-      await store.searchMessages(accountId: sender, keyword: '   '),
+      await store.searchMessages(
+        ownerCidNumber: _ownerCidNumber,
+        currentAccountId: sender,
+        keyword: '   ',
+      ),
       isEmpty,
     );
-    expect(await store.searchMessages(accountId: '', keyword: '开会'), isEmpty);
-    expect(await store.searchMessages(accountId: peer, keyword: '开会'), isEmpty);
+    expect(
+      await store.searchMessages(
+        ownerCidNumber: '',
+        currentAccountId: sender,
+        keyword: '开会',
+      ),
+      isEmpty,
+    );
+    expect(
+      await store.searchMessages(
+        ownerCidNumber: 'CN220-CTZN2-999999999-2026',
+        currentAccountId: peer,
+        keyword: '开会',
+      ),
+      isEmpty,
+    );
   });
 }

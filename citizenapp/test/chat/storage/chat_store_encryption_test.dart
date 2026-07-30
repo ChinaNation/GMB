@@ -18,8 +18,8 @@ void main() {
 
   const accountId = '0x'
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-  const peerAccountId = '0x'
-      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const ownerCidNumber = 'CN220-CTZN2-100000001-2026';
+  const peerCidNumber = 'CN220-CTZN2-100000002-2026';
 
   ChatEnvelope envelopeOf({
     required String envelopeId,
@@ -29,8 +29,8 @@ void main() {
     return ChatEnvelope()
       ..envelopeId = envelopeId
       ..conversationId = conversationId
-      ..senderAccountId = peerAccountId
-      ..recipientAccountId = accountId
+      ..senderCidNumber = peerCidNumber
+      ..recipientCidNumber = ownerCidNumber
       ..senderDeviceId = 'dev-1'
       ..mlsMessageKind = MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION
       ..createdAtMillis = Int64(createdAtMillis);
@@ -39,6 +39,8 @@ void main() {
   Future<void> saveText(ChatStore store, String envelopeId, String text,
       {String conversationId = 'conv-1', int at = 1000}) {
     return store.saveIncomingEnvelope(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: accountId,
       envelope: envelopeOf(
         envelopeId: envelopeId,
         conversationId: conversationId,
@@ -86,11 +88,27 @@ void main() {
     const secret = '你好，公民';
     await saveText(store, 'env-1', secret);
 
-    final messages = await store.readMessages('conv-1');
+    final messages = await store.readMessages(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId:
+          '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      conversationId: 'conv-1',
+    );
     expect(messages.single.plaintext, secret);
 
-    final previews = await store.readConversationPreviews(accountId: accountId);
+    final previews = await store.readConversationPreviews(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: accountId,
+    );
     expect(previews.single.lastMessage, secret);
+    expect(
+      await store.readMessages(
+        ownerCidNumber: 'CN220-CTZN2-999999999-2026',
+        currentAccountId: accountId,
+        conversationId: 'conv-1',
+      ),
+      isEmpty,
+    );
   });
 
   test('搜索：中文、英文、数字均可子串命中', () async {
@@ -100,7 +118,11 @@ void main() {
     await saveText(store, 'env-3', 'order 12345', at: 3000);
 
     Future<List<String>> hit(String q) async {
-      final rows = await store.searchMessages(accountId: accountId, keyword: q);
+      final rows = await store.searchMessages(
+        ownerCidNumber: ownerCidNumber,
+        currentAccountId: accountId,
+        keyword: q,
+      );
       return rows.map((r) => r.envelopeId).toList()..sort();
     }
 
@@ -112,8 +134,11 @@ void main() {
   test('搜索大小写不敏感', () async {
     final store = ChatStore();
     await saveText(store, 'env-1', 'Hello World');
-    final rows =
-        await store.searchMessages(accountId: accountId, keyword: 'HELLO');
+    final rows = await store.searchMessages(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: accountId,
+      keyword: 'HELLO',
+    );
     expect(rows, hasLength(1));
   });
 
@@ -124,8 +149,11 @@ void main() {
     await saveText(store, 'env-1', 'bcab', at: 1000);
     await saveText(store, 'env-2', 'xabcx', at: 2000);
 
-    final rows =
-        await store.searchMessages(accountId: accountId, keyword: 'abc');
+    final rows = await store.searchMessages(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: accountId,
+      keyword: 'abc',
+    );
     expect(rows.map((r) => r.envelopeId), <String>['env-2'],
         reason: '假阳性 bcab 必须被滤掉，只留真正包含 abc 的记录');
   });
@@ -133,8 +161,11 @@ void main() {
   test('搜索：单字符查询无 bigram，仍能通过回落扫描命中', () async {
     final store = ChatStore();
     await saveText(store, 'env-1', '公民钱包');
-    final rows =
-        await store.searchMessages(accountId: accountId, keyword: '钱');
+    final rows = await store.searchMessages(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: accountId,
+      keyword: '钱',
+    );
     expect(rows, hasLength(1));
   });
 
@@ -142,7 +173,8 @@ void main() {
     final store = ChatStore();
     await saveText(store, 'env-1', '今天天气很好');
     final rows = await store.searchMessages(
-      accountId: accountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: accountId,
       keyword: '完全不相干的词',
     );
     expect(rows, isEmpty);
@@ -154,13 +186,18 @@ void main() {
 
     // 直接篡改密文，模拟密钥不匹配/密文损坏
     await WalletIsar.instance.writeTxn((isar) async {
-      final row = await isar.chatMessageEntitys.getByEnvelopeId('env-1');
+      final row = await isar.chatMessageEntitys
+          .getByOwnerCidNumberEnvelopeId(ownerCidNumber, 'env-1');
       row!.plaintextCipher = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-      await isar.chatMessageEntitys.putByEnvelopeId(row);
+      await isar.chatMessageEntitys.putByOwnerCidNumberEnvelopeId(row);
     });
 
     await expectLater(
-      store.readMessages('conv-1'),
+      store.readMessages(
+        ownerCidNumber: ownerCidNumber,
+        currentAccountId: accountId,
+        conversationId: 'conv-1',
+      ),
       throwsA(isA<LocalCipherException>()),
     );
   });

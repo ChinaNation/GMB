@@ -2,7 +2,9 @@
 
 ## 1. 目标边界
 
-CitizenApp Chat 对所有拥有链账户 `account_id` 的用户开放，不依赖会员。`ss58_address` 只用于展示和边界输入，OpenMLS 设备密钥与钱包私钥严格分离。
+CitizenApp Chat 对所有已注册永久 `cid_number` 的用户开放，不依赖会员。CID 是消息、
+会话、MLS 名册、设备池和投递的唯一身份键；当前绑定 `account_id` 只负责签名鉴权与
+聊天内付款，`ss58_address` 只用于展示和边界输入。OpenMLS 设备密钥与钱包私钥严格分离。
 
 数据归属固定为：
 
@@ -17,7 +19,7 @@ CitizenApp Chat 对所有拥有链账户 `account_id` 的用户开放，不依�
 发送设备
   -> OpenMLS 生成 ChatEnvelope
   -> 本机 Isar 写入待发送队列
-  -> Worker 校验 `account_id` session 与登记设备
+  -> Worker 校验 `cid_number + binding_revision + account_id` session 与登记设备
   -> Durable Object WebSocket 在当前请求内转发密文
   -> 接收设备立即 OpenMLS 解密并写入本机
 ```
@@ -51,15 +53,18 @@ WebRTC 只使用公共 STUN 发现候选地址，不配置中继服务。NAT 环
 ## 3. 身份与密钥
 
 ```text
-聊天账户 = `account_id`（小写 `0x` + 64 位十六进制 AccountId）
-会话登录 = 已绑定的硬件 P-256 设备子钥静默签名
-端到端加密 = OpenMLS device_id + 设备密钥 + KeyPackage
+聊天身份 = 永久 `cid_number`
+签名授权 = CID 当前 finalized 绑定的 `account_id`
+会话登录 = 当前绑定三元组下登记的硬件 P-256 设备子钥静默签名
+端到端加密 = CID + OpenMLS device_id + 设备密钥 + KeyPackage
 ```
 
-聊天页的用户展示复用统一 `ProfilePresentation` / `ProfileAvatar`：调用方已有公开昵称时优先使用；名称缺失或错误传入完整/截断账户时，按对方账户稳定选择本地默认昵称。真实头像缺失时使用同一账户对应的本地默认照片；账户只显示在标题下方的账户行，不得充当昵称。
+聊天页的用户展示复用统一 `ProfilePresentation` / `ProfileAvatar`：调用方已有公开昵称时
+优先使用；名称缺失时按对方 CID 稳定选择本地默认昵称和照片。当前账户只允许显示在明确
+标注的账户行，不得充当昵称、头像种子、会话身份或路由键。
 
-通讯录联系人三点菜单的“私信”直接复用 `openDirectChat()`：`peerAccountId` 使用联系人
-CID 当前绑定的链账户 `account_id`，标题使用统一公开昵称或稳定本地昵称。联系人私人
+通讯录联系人三点菜单的“私信”直接复用 `openDirectChat()`：`peerCidNumber` 使用联系人
+永久 CID，标题使用统一公开昵称或按 CID 稳定生成的本地昵称。联系人私人
 `contact_remark` 只属于通讯录，不进入 Chat 路由真源；该入口不得复制聊天页面、
 会话创建或传输逻辑。
 
@@ -68,14 +73,19 @@ CID 当前绑定的链账户 `account_id`，标题使用统一公开昵称或稳
 设备登记签名字段：
 
 ```text
+cid_number
+binding_revision
 account_id
 device_id
-device_public_key
+device_public_key_hex
 expires_at
 nonce
 ```
 
-Worker 从 session 派生 `account_id`，查询 `square_device_subkeys.p256_public_key` 验签。签名不落库，nonce 只以 SHA-256 哈希落库。
+Worker 从 session 派生 CID、绑定版本和当前账户，先与同一 finalized 链快照中的当前
+绑定三元组精确核对，再按 `cid_number + device_id` 查询
+`square_device_subkeys.p256_public_key` 验签。签名不落库，nonce 只以 SHA-256 哈希落库，
+防重放唯一保护 CID，不因钱包换绑重置。
 
 ## 4. 消息协议
 
@@ -87,8 +97,8 @@ Worker 从 session 派生 `account_id`，查询 `square_device_subkeys.p256_publ
 protocol_version
 envelope_id
 conversation_id
-sender_account_id
-recipient_account_id
+sender_cid_number
+recipient_cid_number
 sender_device_id
 mls_wire_message
 encrypted_metadata
@@ -116,11 +126,11 @@ ratchet_tree
 
 - `POST /v1/chat/devices/register`：登记设备公钥和 APNs/FCM Token。
 - `POST /v1/chat/keypackages`：发布一次性 OpenMLS KeyPackage。
-- `GET /v1/chat/keypackages/{account_id}`：列出有效 KeyPackage。
+- `GET /v1/chat/keypackages/{cid_number}`：列出有效 KeyPackage。
 - `POST /v1/chat/keypackages/consume`：原子读取后硬删除 KeyPackage。
 - `POST /v1/chat/envelopes`：当前请求内转发 OpenMLS 密文。
 - `POST /v1/chat/signals`：当前请求内转发 SDP、ICE 和 `peer_ready`。
-- `GET /v1/chat/ws`：按 `account_id` 和设备建立实时连接。
+- `GET /v1/chat/ws`：按 `cid_number + binding_revision + account_id + device_id` 建立实时连接。
 
 Durable Object 使用 hibernatable WebSocket，不写 Storage。接收设备不存在时返回 `queued`，不会创建消息记录。
 
@@ -128,6 +138,8 @@ Durable Object 使用 hibernatable WebSocket，不写 Storage。接收设备不�
 
 ```text
 chat_devices
+  cid_number
+  binding_revision
   account_id
   device_id
   device_public_key
@@ -137,6 +149,8 @@ chat_devices
   created_at
 
 chat_keypackages
+  cid_number
+  binding_revision
   account_id
   device_id
   key_package_id
@@ -152,11 +166,11 @@ chat_device_binding_nonces
   created_at
 ```
 
-CID 换绑时不得删除 `chat_device_binding_nonces`，也不得关闭按 `cid_number` 命名的
-`ChatRealtimeObject`。二者属于同一身份换绑前后共享的 CID 级状态；删除或关闭会误伤
-刚完成换绑的新账户。换绑止损只允许按旧 `account_id` 删除 `chat_devices`、
-`chat_keypackages` 及账户登录/设备子钥材料。整身份注销才允许关闭 CID 实时对象并清除
-CID 级 nonce。
+CID 换绑后，Worker 以新 finalized 绑定三元组为准，先撤销旧 Session，再按 CID 删除
+绑定版本或账户不等于新三元组的 `chat_devices`、`chat_keypackages` 和设备子钥，并精确
+关闭旧三元组的 WebSocket。按 CID 命名的 `ChatRealtimeObject` 命名空间和 CID 级
+`chat_device_binding_nonces` 继续保留；不得删除整个对象或重置 nonce。整身份注销才允许
+关闭该 CID 的全部实时连接并清除 CID 级 nonce。
 
 Chat 的普通消息、会话和 ≤100MB 附件禁止使用 R2；>100MB 薪火会员附件只允许进入
 `CHAT_RELAY` 瞬时密文桶并按领取确认或 24 小时生命周期删除。当前本地 Cloudflare
@@ -170,7 +184,7 @@ Chat 的普通消息、会话和 ≤100MB 附件禁止使用 R2；>100MB 薪火�
 ```json
 {
   "kind": "chat_wake",
-  "sender_account_id": "..."
+  "sender_cid_number": "..."
 }
 ```
 
@@ -206,15 +220,14 @@ iOS 已启用 `remote-notification` 后台模式和 `aps-environment` entitlemen
 
 ## 8. 本地存储
 
-- `ChatConversationEntity`：本机会话索引。
-- `ChatMessageEntity`：本机消息。
-- `ChatRouteCacheEntity`：对方账户、设备公钥、安全码和近场提示。
-- `ChatOutboundQueueEntity`：发送设备待重试密文；送达在线设备后立即删除。
-- `ChatOutgoingMediaEntity`：待设备投递的媒体(离线补发)——字节留本机缓存,对方上线时按当前 Documents 目录**重算**缓存路径(`ChatFlow.attachmentCachePath`,不存绝对路径,避免重装/迁移失效)重发 WebRTC 字节,收到 ack 后删行;存 `conversationId`(供会话删连带清),按 `attachmentId` 唯一、按 `recipientAccountId` 索引。
-- `ChatPendingInboundEntity`：Welcome 尚未处理时的本机 application 暂存。
-- OpenMLS provider storage：设备私有 MLS 状态。
-- `chat/attachments/`：设备私有媒体缓存(收发媒体经流式落盘/复制进入)。
-- `chat/attachments/.tmp/`：接收端字节流的临时落盘目录;`.part` 文件在完整校验通过后移入缓存,拒收/截断时删除。
+- `ChatConversationEntity`：按 `ownerCidNumber + conversationId` 唯一的本机会话索引。
+- `ChatMessageEntity`：按 `ownerCidNumber + envelopeId` 唯一的本机消息；信封只记录发送方和接收方 CID。
+- `ChatRouteCacheEntity`：按属主 CID 分区，保存对方永久 CID、设备公钥、安全码和近场提示。
+- `ChatOutboundQueueEntity`：按属主 CID 分区的发送设备待重试密文；送达在线设备后立即删除。
+- `ChatOutgoingMediaEntity`：按属主 CID 分区的待设备投递媒体；收件人路由键为永久 CID。字节留本机缓存，对方上线时按当前 Documents 目录重算缓存路径，不持久化绝对路径，收到 ack 后删行。
+- `ChatPendingInboundEntity`、群镜像和乱序 Commit：全部按属主 CID 分区；MLS 名册只使用 CID。
+- OpenMLS provider storage：`chat/by_cid/<owner_cid_number>/mls/<device_id>/`。
+- 媒体密文缓存：`chat/by_cid/<owner_cid_number>/attachments/`；接收临时文件位于其短命明文目录，完整校验后封存，拒收或截断时删除。
 
 删除某个会话只影响当前设备。注销身份时当前绑定 `account_id` 只完成授权；Worker 以
 `cid_number` 为唯一删除主键，先关闭该 CID 实时连接，再按 CID 硬删除跨历次换绑账户的
@@ -225,7 +238,7 @@ iOS 已启用 `remote-notification` 后台模式和 `aps-environment` entitlemen
 
 Chat 与广场权限分离：
 
-- Chat：所有钱包用户可用。
+- Chat：所有已注册 CID 用户可用，当前绑定账户只负责鉴权。
 - 广场浏览：必须有钱包 session；无订阅账户每日最多返回 100 条内容，有效会员不限产品浏览量。
 - 广场发布：无订阅账户禁止；有效会员按三档套餐发布（ADR-036，会员与身份解耦）。发帖分类权限按身份档（竞选内容须竞选身份 `candidate`）、用量额度按会员档，二者互不影响（用户 2026-07-16）。
 - 防机器人、盗链和异常用量属于第 2 步，本步骤不提前加入双轨逻辑。
@@ -259,7 +272,7 @@ Chat 与广场权限分离：
   只接受 userContact，先由 SS58 派生账户并链读双向绑定 CID 后加入通讯录，钱包标签
   不写入私人备注；`transfer`/`dispatch` 模式把 userContact 作为收款人进入转账。
   缺少 CID 的 userTransfer 收款码不得再兼作联系人码。**不新造带金额收款码**。
-- 聊天搜索页(2026-07-23)：新增 `chat/chat_search_page.dart`,一个输入框三段结果(会话 / 联系人 / 聊天记录)。会话按 `title`/`lastMessage`、联系人按备注名/账户在内存过滤(公开昵称需联网,搜索页不引入网络依赖);聊天记录走新增的 `ChatStore.searchMessages({accountId, keyword, limit=50})`——按 `accountId` 索引收窄后在内存匹配,**`plaintext` 存的是编码载荷,必须先经 `ChatPayloadCodec.decode(...).summary` 解码再匹配**(裸匹配会漏正文并错配媒体元数据),大小写不敏感、时间倒序截断,**不为搜索改表结构或加索引**。点结果一律复用 `openGroupChat` / `openDirectChat`,不复刻 ChatPage 装配;异步检索用递增序号丢弃过期结果。聊天记录命中**只打开所在会话,不定位到具体消息**(消息级锚点需 ChatPage 支持滚动定位,另列后续任务)。
+- 聊天搜索页（2026-07-23，2026-07-29 CID 终态订正）：一个输入框分会话、联系人、聊天记录三段结果。会话按标题/最近消息搜索；联系人只在本地匹配私人备注、CID 和 finalized 当前账户快照，打开私信时始终传联系人 CID。聊天记录由 `ChatStore.searchMessages({ownerCidNumber, currentAccountId, keyword, limit})` 查询：`ownerCidNumber` 是唯一数据分区与索引归属，`currentAccountId` 只用于解开当前账户对 CID 数据根的包装；候选消息解密后再以 `ChatPayloadCodec.decode(...).summary` 复验真实子串，避免截断 HMAC token 假阳性。点结果统一复用 `openGroupChat` / `openDirectChat`，聊天记录命中只打开所在会话，不另造账户身份路径。
 
 外部控制台待完成：
 

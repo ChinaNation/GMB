@@ -63,6 +63,13 @@ class _FakeContacts extends UserContactService {
   Future<List<UserContact>> getContacts() async => contacts;
 
   @override
+  Future<List<UserContact>> refreshContactBindings() async => contacts;
+
+  @override
+  Future<UserContact> resolveCurrentContact(String cidNumber) async =>
+      contacts.singleWhere((contact) => contact.cidNumber == cidNumber);
+
+  @override
   Future<List<UserContact>> sync() async {
     syncState.value = const ContactSyncState(phase: ContactSyncPhase.synced);
     return contacts;
@@ -108,6 +115,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'token',
         cidNumber: "CN220-CTZN2-198805200-2026",
+        bindingRevision: 1,
         accountId: _accountId,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       );
@@ -202,7 +210,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final fallback =
-        ProfilePresentation.forAccountId(_contactAccountId).fallbackName;
+        ProfilePresentation.forIdentityKey(_contactCidNumber).fallbackName;
     expect(find.text(fallback), findsOneWidget);
     expect(find.text('SS58：$_contactAddress'), findsOneWidget);
   });
@@ -279,15 +287,15 @@ void main() {
   });
 
   testWidgets('私信复用统一聊天入口并使用公开昵称', (tester) async {
-    String? openedPeerAccountId;
+    String? openedPeerCidNumber;
     String? openedTitle;
     Future<void> opener(
       BuildContext context, {
-      required String peerAccountId,
+      required String peerCidNumber,
       required String title,
     }) async {
       // 注入只用于断言路由参数，不替代正式 openDirectChat 实现。
-      openedPeerAccountId = peerAccountId;
+      openedPeerCidNumber = peerCidNumber;
       openedTitle = title;
     }
 
@@ -298,19 +306,19 @@ void main() {
     await tester.tap(find.text('私信'));
     await tester.pump();
 
-    expect(openedPeerAccountId, _contactAccountId);
+    expect(openedPeerCidNumber, _contactCidNumber);
     expect(openedTitle, 'Rhett');
   });
 
   testWidgets('发私信模式点联系人直接开私聊、无操作菜单', (tester) async {
-    String? openedPeerAccountId;
+    String? openedPeerCidNumber;
     String? openedTitle;
     Future<void> opener(
       BuildContext context, {
-      required String peerAccountId,
+      required String peerCidNumber,
       required String title,
     }) async {
-      openedPeerAccountId = peerAccountId;
+      openedPeerCidNumber = peerCidNumber;
       openedTitle = title;
     }
 
@@ -325,7 +333,7 @@ void main() {
     await tester.tap(find.text('Rhett'));
     await tester.pump();
 
-    expect(openedPeerAccountId, _contactAccountId);
+    expect(openedPeerCidNumber, _contactCidNumber);
     expect(openedTitle, 'Rhett');
   });
 }

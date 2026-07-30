@@ -45,7 +45,7 @@ void main() {
 
     // 默认昵称稳定种子按身份主键 cid_number（samplePost 作者的 cid）。
     expect(
-      find.text(ProfilePresentation.forAccountId('CN001-CTZN-000000001-2026')
+      find.text(ProfilePresentation.forIdentityKey('CN001-CTZN-000000001-2026')
           .fallbackName),
       findsOneWidget,
     );

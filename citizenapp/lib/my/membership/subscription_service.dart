@@ -161,6 +161,7 @@ class SubscriptionService {
   }) async {
     await _requireHotWallet();
     final identity = await _requireIdentity();
+    final cidNumber = identity.snapshot!.cidNumber;
     try {
       final result = await _rpc.subscribePlatform(
         fromSs58Address: identity.ss58Address,
@@ -172,7 +173,8 @@ class SubscriptionService {
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: identity.accountId,
+        subscriberCidNumber: cidNumber,
+        signerAccountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -192,6 +194,7 @@ class SubscriptionService {
   Future<void> cancel({TxPoolWatchCallback? onWatchEvent}) async {
     await _requireHotWallet();
     final identity = await _requireIdentity();
+    final cidNumber = identity.snapshot!.cidNumber;
     try {
       final result = await _rpc.cancelPlatform(
         fromSs58Address: identity.ss58Address,
@@ -201,7 +204,8 @@ class SubscriptionService {
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: identity.accountId,
+        subscriberCidNumber: cidNumber,
+        signerAccountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -224,6 +228,7 @@ class SubscriptionService {
   }) async {
     await _requireHotWallet();
     final identity = await _requireIdentity();
+    final cidNumber = identity.snapshot!.cidNumber;
     try {
       final result = await _rpc.changePlatformPlan(
         fromSs58Address: identity.ss58Address,
@@ -235,7 +240,8 @@ class SubscriptionService {
         onWatchEvent: onWatchEvent,
       );
       await _confirm(
-        accountId: identity.accountId,
+        subscriberCidNumber: cidNumber,
+        signerAccountId: identity.accountId,
         txHash: result.txHash,
         blockHashHex: result.blockHashHex,
         signedExtrinsicHex: result.signedExtrinsicHex,
@@ -260,12 +266,11 @@ class SubscriptionService {
   }
 
   /// 身份账户（CID 绑定账户，单源 [IdentityAccountCache]）：链上订阅交易的唯一签名者。
-  /// 与 [SquareSessionProvider.ensureSession] 同口径（会话 accountId 也取身份账户），
-  /// 故 `_confirm` 的本地/Cloudflare 证明键与 `session.accountId` 校验天然一致。
+  /// 本地待提交证明归属永久 CID；账户只记录当时的签名与付款事实。
   Future<ResolvedIdentity> _requireIdentity() async {
     final identity = await IdentityAccountCache.instance.resolve();
-    if (identity == null) {
-      throw const SubscriptionException('请先在「我的 → 我的钱包」创建热钱包');
+    if (identity == null || !identity.isRegistered) {
+      throw const SubscriptionException('请先注册并绑定公民 CID');
     }
     return identity;
   }
@@ -276,12 +281,14 @@ class SubscriptionService {
     return SharedPreferences.getInstance();
   }
 
-  String _pendingKey(String accountId) =>
-      'platform_subscription_mirror_pending:$accountId';
+  String _pendingKey(String subscriberCidNumber) =>
+      'platform_subscription_mirror_pending_by_cid:$subscriberCidNumber';
 
-  /// finalized 回执先按钱包账户落本地，再提交 Cloudflare；HTTP 失败只重试证明，不再签名。
+  /// finalized 回执按永久 CID 落本地，再提交 Cloudflare；当时的签名账户只作为
+  /// 交易事实写入证明。HTTP 失败只重试证明，不再签名。
   Future<void> _confirm({
-    required String accountId,
+    required String subscriberCidNumber,
+    required String signerAccountId,
     required String txHash,
     required String blockHashHex,
     required String signedExtrinsicHex,
@@ -293,16 +300,17 @@ class SubscriptionService {
       'block_hash': blockHashHex,
       'signed_extrinsic_hex': signedExtrinsicHex,
       'action': action,
+      'signer_account_id': signerAccountId,
       if (membershipLevel != null) 'membership_level': membershipLevel,
     };
     try {
-      await _storeLocalProof(accountId, proof);
+      await _storeLocalProof(subscriberCidNumber, proof);
     } on Exception {
       // 链上已 finalized；本地缓存异常不能让用户重新签名。
     }
     try {
       final session = await _session.ensureSession();
-      if (session == null || session.accountId != accountId) return;
+      if (session == null || session.cidNumber != subscriberCidNumber) return;
       await _api.confirmPlatformSubscription(
         session: session,
         txHash: txHash,
@@ -311,7 +319,7 @@ class SubscriptionService {
         action: action,
         membershipLevel: membershipLevel,
       );
-      await _removePendingProof(accountId, txHash);
+      await _removePendingProof(subscriberCidNumber, txHash);
     } on Exception {
       // 保留本地证明；下次打开会员页只重试 HTTP。
     }
@@ -321,8 +329,8 @@ class SubscriptionService {
     try {
       final session = await _session.ensureSession();
       if (session == null) return;
-      final accountId = session.accountId;
-      final pending = await _readList(_pendingKey(accountId));
+      final subscriberCidNumber = session.cidNumber;
+      final pending = await _readList(_pendingKey(subscriberCidNumber));
       for (final proof in List<Map<String, dynamic>>.from(pending)) {
         final txHash = proof['tx_hash'];
         final blockHashHex = proof['block_hash'];
@@ -342,7 +350,7 @@ class SubscriptionService {
           action: action,
           membershipLevel: proof['membership_level'] as String?,
         );
-        await _removePendingProof(accountId, txHash);
+        await _removePendingProof(subscriberCidNumber, txHash);
       }
     } on Exception {
       // 保留未完成证明；链上订阅与自动续费不依赖 Cloudflare。
@@ -350,13 +358,14 @@ class SubscriptionService {
   }
 
   Future<void> _storeLocalProof(
-      String accountId, Map<String, dynamic> proof) async {
-    final pending = await _readList(_pendingKey(accountId));
+      String subscriberCidNumber, Map<String, dynamic> proof) async {
+    final pending = await _readList(_pendingKey(subscriberCidNumber));
     pending.removeWhere((item) => item['tx_hash'] == proof['tx_hash']);
     pending.add(proof);
-    await (await _prefs).setString(_pendingKey(accountId), jsonEncode(pending));
+    await (await _prefs)
+        .setString(_pendingKey(subscriberCidNumber), jsonEncode(pending));
 
-    final historyKey = 'subscription_tx_history:$accountId';
+    final historyKey = 'subscription_tx_history_by_cid:$subscriberCidNumber';
     final history = await _readList(historyKey);
     history.removeWhere((item) => item['tx_hash'] == proof['tx_hash']);
     history.add(proof);
@@ -364,14 +373,20 @@ class SubscriptionService {
     await (await _prefs).setString(historyKey, jsonEncode(history));
   }
 
-  Future<void> _removePendingProof(String accountId, String txHash) async {
-    final pending = await _readList(_pendingKey(accountId));
+  Future<void> _removePendingProof(
+    String subscriberCidNumber,
+    String txHash,
+  ) async {
+    final pending = await _readList(_pendingKey(subscriberCidNumber));
     pending.removeWhere((item) => item['tx_hash'] == txHash);
     final prefs = await _prefs;
     if (pending.isEmpty) {
-      await prefs.remove(_pendingKey(accountId));
+      await prefs.remove(_pendingKey(subscriberCidNumber));
     } else {
-      await prefs.setString(_pendingKey(accountId), jsonEncode(pending));
+      await prefs.setString(
+        _pendingKey(subscriberCidNumber),
+        jsonEncode(pending),
+      );
     }
   }
 

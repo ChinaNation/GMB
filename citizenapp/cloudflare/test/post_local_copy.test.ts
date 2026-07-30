@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Miniflare } from 'miniflare';
 
 import worker from '../src/index';
@@ -16,6 +16,31 @@ const ACCOUNT_A = `0x${'11'.repeat(32)}`;
 const ACCOUNT_B = `0x${'22'.repeat(32)}`;
 const CID_A = 'CN220-CTZN2-100000001-2026';
 const CID_B = 'CN220-CTZN2-100000002-2026';
+vi.mock('../src/chain/identity', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/chain/identity')>();
+  return {
+    ...actual,
+    fetchChainIdentityStateByCid: vi.fn(async (_env: unknown, cidNumber: string) => {
+      const accountId = cidNumber === CID_A
+        ? ACCOUNT_A
+        : cidNumber === CID_B
+          ? ACCOUNT_B
+          : '';
+      return {
+        account_id: accountId,
+        binding_revision: accountId ? 1 : 0,
+        identity_level: 'visitor' as const,
+        has_voting_identity: false,
+        has_candidate_identity: false,
+        cid_number: cidNumber,
+        checked_at: 0,
+      };
+    }),
+  };
+});
+vi.mock('../src/auth/wallet_signature', () => ({
+  verifyWalletSignature: vi.fn(async () => true),
+}));
 const SCHEMA_SQL = readFileSync(
   resolve(process.cwd(), 'migrations/0001_square_core.sql'),
   'utf8',
@@ -123,6 +148,74 @@ describe('本人发布内容本地副本回灌 API', () => {
       'SELECT COUNT(*) AS count FROM square_browse_days',
     ).first<{ count: number }>();
     expect(browseRows?.count).toBe(0);
+  });
+
+  it('通过完整 Worker HTTP 入口和真实 D1 为 finalized 当前账户创建 CID 数据根', async () => {
+    const challengeBody = JSON.stringify({
+      cid_number: CID_A,
+      account_id: ACCOUNT_A,
+    });
+    const challengeResponse = await worker.fetch(
+      new Request(
+        'https://worker.test/v1/square/identity/takeover/challenge',
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'content-length': String(new TextEncoder().encode(challengeBody).byteLength),
+          },
+          body: challengeBody,
+        },
+      ),
+      harness.env,
+    );
+    expect(challengeResponse.status).toBe(200);
+    const challenge = await responseJson(challengeResponse);
+
+    const takeoverBody = JSON.stringify({
+      cid_number: CID_A,
+      account_id: ACCOUNT_A,
+      binding_revision: challenge.binding_revision,
+      challenge_id: challenge.challenge_id,
+      signature: '0xcurrent-account-signature',
+    });
+    const takeoverResponse = await worker.fetch(
+      new Request('https://worker.test/v1/square/identity/takeover', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(new TextEncoder().encode(takeoverBody).byteLength),
+        },
+        body: takeoverBody,
+      }),
+      harness.env,
+    );
+    expect(takeoverResponse.status).toBe(200);
+    const granted = await responseJson(takeoverResponse);
+    expect(decodeBase64(granted.cid_data_root_base64 as string)).toHaveLength(32);
+    expect(granted).toMatchObject({
+      cid_number: CID_A,
+      account_id: ACCOUNT_A,
+      binding_revision: 1,
+    });
+
+    const stored = await harness.env.DB.prepare(
+      `SELECT cid_number, active_binding_revision, active_account_id, data_root_hash
+        FROM cid_data_roots WHERE cid_number = ?`,
+    )
+      .bind(CID_A)
+      .first<{
+        cid_number: string;
+        active_binding_revision: number;
+        active_account_id: string;
+        data_root_hash: string;
+      }>();
+    expect(stored).toEqual({
+      cid_number: CID_A,
+      active_binding_revision: 1,
+      active_account_id: ACCOUNT_A,
+      data_root_hash: granted.data_root_hash,
+    });
   });
 
   it('同毫秒按 post_id 稳定分页且拒绝非法 limit/cursor', async () => {
@@ -264,6 +357,8 @@ async function createHarness(): Promise<Harness> {
     kvNamespaces: ['SQUARE_CACHE'],
     bindings: {
       HASH_KEY: 'post-local-copy-test-rate-key',
+      CHAIN_GENESIS_HASH: `0x${'12'.repeat(32)}`,
+      CID_DATA_ROOT_MASTER_KEY: `0x${'34'.repeat(32)}`,
     },
   });
   const env = await miniflare.getBindings<Env>();
@@ -305,6 +400,7 @@ async function registerAccount(
   const now = Date.now();
   const session: SessionState = {
     cid_number: cidNumber,
+    binding_revision: 1,
     account_id: accountId,
     device_key_hash: deviceId,
     created_at: now,
@@ -322,14 +418,16 @@ async function registerAccount(
       has_voting_identity: false,
       has_candidate_identity: false,
       cid_number: cidNumber,
+      binding_revision: 1,
       checked_at: now,
     }),
   );
   await env.DB.prepare(
     `INSERT INTO square_device_subkeys
-      (cid_number, device_id, account_id, p256_public_key, issued_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(cidNumber, deviceId, accountId, publicKey, now, now, now).run();
+      (cid_number, device_id, binding_revision, account_id, p256_public_key,
+        issued_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(cidNumber, deviceId, 1, accountId, publicKey, now, now, now).run();
   return {
     account_id: accountId,
     cid_number: cidNumber,

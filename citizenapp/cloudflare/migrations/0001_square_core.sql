@@ -5,6 +5,7 @@
 CREATE TABLE square_login_challenges (
   challenge_id TEXT PRIMARY KEY,
   cid_number TEXT NOT NULL,
+  binding_revision INTEGER NOT NULL CHECK(binding_revision > 0),
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   signing_payload TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
@@ -15,6 +16,28 @@ CREATE INDEX idx_square_login_challenges_account_id
 CREATE INDEX idx_square_login_challenges_cid_number
   ON square_login_challenges(cid_number, expires_at);
 
+-- CID 稳定数据根：数据根归 cid_number 永久所有，不归任何钱包账户。
+-- 当前账户字段只记录已经完成领取的 finalized 绑定版本，换绑不改变密封数据根。
+CREATE TABLE cid_data_roots (
+  cid_number TEXT PRIMARY KEY,
+  sealed_data_root TEXT NOT NULL,
+  seal_nonce TEXT NOT NULL,
+  data_root_hash TEXT NOT NULL CHECK(
+    length(data_root_hash) = 64
+    AND data_root_hash NOT GLOB '*[^0-9a-f]*'
+  ),
+  active_binding_revision INTEGER NOT NULL CHECK(active_binding_revision > 0),
+  active_account_id TEXT NOT NULL CHECK(
+    length(active_account_id) = 66
+    AND substr(active_account_id, 1, 2) = '0x'
+    AND substr(active_account_id, 3) NOT GLOB '*[^0-9a-f]*'
+  ),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_cid_data_roots_active_binding
+  ON cid_data_roots(active_binding_revision, active_account_id);
+
 -- 广场会话强一致索引。明文 token 只交给客户端，D1 与 KV 键仅保存其 SHA-256；
 -- cid_number 是注销范围，account_id 只记录签发该凭证时的当前绑定账户，供换绑吊销筛选。
 CREATE TABLE square_sessions (
@@ -23,6 +46,7 @@ CREATE TABLE square_sessions (
     AND session_token_hash NOT GLOB '*[^0-9a-f]*'
   ),
   cid_number TEXT NOT NULL,
+  binding_revision INTEGER NOT NULL CHECK(binding_revision > 0),
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
@@ -37,6 +61,7 @@ CREATE INDEX idx_square_sessions_cid_account
 CREATE TABLE square_device_subkeys (
   cid_number TEXT NOT NULL,
   device_id TEXT NOT NULL,
+  binding_revision INTEGER NOT NULL CHECK(binding_revision > 0),
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   p256_public_key TEXT NOT NULL CHECK(
     length(p256_public_key) = 130
@@ -355,9 +380,10 @@ CREATE INDEX idx_chain_extrinsic_relays_tx_hash
 -- Chat 云端只保存建立端到端通道所需的最小公开材料。
 -- Chat 消息、会话、附件及联系人明文禁止进入 D1、KV、R2 或 Durable Object Storage。
 -- 设备名册按身份主键 cid_number 归属(收件寻址单元);account_id 为登记该设备的当前绑定
--- 钱包账户(设备所有者,绑定签名主体),换绑后旧设备失效由重新注册处理。
+-- 钱包账户(设备登记签名主体)；每次使用都核验 CID finalized 当前绑定，旧账户登记自然失效。
 CREATE TABLE chat_devices (
   cid_number TEXT NOT NULL,
+  binding_revision INTEGER NOT NULL CHECK(binding_revision > 0),
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   device_id TEXT NOT NULL,
   device_public_key_hex TEXT NOT NULL,
@@ -373,6 +399,7 @@ CREATE INDEX idx_chat_devices_cid_number
 -- KeyPackage 按身份主键 cid_number 归属(拉取/领取寻址单元);account_id 为发布设备的所有者账户。
 CREATE TABLE chat_keypackages (
   cid_number TEXT NOT NULL,
+  binding_revision INTEGER NOT NULL CHECK(binding_revision > 0),
   account_id TEXT NOT NULL CHECK(length(account_id) = 66 AND substr(account_id, 1, 2) = '0x' AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'),
   device_id TEXT NOT NULL,
   key_package_id TEXT PRIMARY KEY,

@@ -12,6 +12,7 @@ const String kOwner =
 SquareSession fakeSession() => SquareSession(
       sessionToken: 'tok',
       cidNumber: "CN220-CTZN2-198805200-2026",
+      bindingRevision: 1,
       accountId: kOwner,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
     );

@@ -1,19 +1,23 @@
 /// 用户公开资料缺失时的唯一展示规则。
 ///
-/// 默认昵称、头像和背景只由钱包账户稳定派生，不持久化、不上传，也不参与
-/// 身份或权限判断。同一账户在不同页面、设备和重启后得到相同结果。
+/// 默认昵称、头像和背景由永久 CID 稳定派生；无 CID 的访客才用当前账户兜底。
+/// 这些展示值不持久化、不上传，也不参与身份或权限判断。
 class ProfilePresentation {
   const ProfilePresentation._({
-    required this.accountId,
+    required this.identityKey,
     required this.fallbackName,
     required this.avatarAsset,
     required this.bannerAsset,
   });
 
-  final String accountId;
+  /// 永久 CID；仅未注册访客允许传当前 `account_id` 作为稳定兜底。
+  final String identityKey;
   final String fallbackName;
   final String avatarAsset;
   final String bannerAsset;
+
+  static final RegExp _accountIdPattern = RegExp(r'^0x[0-9a-f]{64}$');
+  static final RegExp _ss58Pattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]{40,64}$');
 
   static const List<String> _namePrefixes = <String>[
     '晨光',
@@ -76,10 +80,11 @@ class ProfilePresentation {
     'assets/profile_defaults/couleur-tomatoes-10368988_1280.jpg',
   ];
 
-  factory ProfilePresentation.forAccountId(String accountId) {
-    accountId = accountId.trim();
-    // 空账户只用于页面尚未加载钱包时的稳定占位，不代表真实用户。
-    final seed = accountId.isEmpty ? 'citizenapp-default-profile' : accountId;
+  factory ProfilePresentation.forIdentityKey(String identityKey) {
+    identityKey = identityKey.trim();
+    // 空身份键只用于页面尚未完成加载时的稳定占位，不代表真实用户。
+    final seed =
+        identityKey.isEmpty ? 'citizenapp-default-profile' : identityKey;
     final namePrefix = _stableHash(seed, 0x4e414d45) % _namePrefixes.length;
     final nameSuffix = _stableHash(seed, 0x4e49434b) % _nameSuffixes.length;
     final avatarIndex = _stableHash(seed, 0x41564154) % assets.length;
@@ -88,7 +93,7 @@ class ProfilePresentation {
       bannerIndex = (bannerIndex + 1) % assets.length;
     }
     return ProfilePresentation._(
-      accountId: accountId,
+      identityKey: identityKey,
       fallbackName: '${_namePrefixes[namePrefix]}${_nameSuffixes[nameSuffix]}',
       avatarAsset: assets[avatarIndex],
       bannerAsset: assets[bannerIndex],
@@ -100,18 +105,22 @@ class ProfilePresentation {
   /// 本机钱包名不得传入本方法。任何账户本身或截断账户也不会被接受为昵称。
   String resolveDisplayName({String? publicName}) {
     final normalized = publicName?.trim() ?? '';
-    if (normalized.isNotEmpty && !_isAccountDerived(normalized)) {
+    if (normalized.isNotEmpty && !_isIdentityOrAccountDerived(normalized)) {
       return normalized;
     }
     return fallbackName;
   }
 
-  bool _isAccountDerived(String candidate) {
-    if (accountId.isEmpty) return false;
-    if (candidate == accountId) return true;
-    if (accountId.length <= 12) return false;
-    final prefix = accountId.substring(0, 6);
-    final suffix = accountId.substring(accountId.length - 6);
+  bool _isIdentityOrAccountDerived(String candidate) {
+    if (_accountIdPattern.hasMatch(candidate) ||
+        _ss58Pattern.hasMatch(candidate)) {
+      return true;
+    }
+    if (identityKey.isEmpty) return false;
+    if (candidate == identityKey) return true;
+    if (identityKey.length <= 12) return false;
+    final prefix = identityKey.substring(0, 6);
+    final suffix = identityKey.substring(identityKey.length - 6);
     return candidate == '$prefix...$suffix' || candidate == '$prefix…$suffix';
   }
 

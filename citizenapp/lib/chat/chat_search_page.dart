@@ -32,6 +32,7 @@ class ChatSearchPage extends StatefulWidget {
     super.key,
     this.store,
     this.contactService,
+    this.cidNumber,
     this.accountId,
     this.directChatOpener,
     this.groupChatOpener,
@@ -39,6 +40,9 @@ class ChatSearchPage extends StatefulWidget {
 
   final ChatStore? store;
   final UserContactService? contactService;
+
+  /// 当前永久身份主键；不传则页面自行读取链上闭环缓存。
+  final String? cidNumber;
 
   /// 当前身份账户（CID 绑定账户）；不传则页面自行读取。
   final String? accountId;
@@ -56,6 +60,7 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
   final TextEditingController _controller = TextEditingController();
 
   String _accountId = '';
+  String _cidNumber = '';
   List<ChatConversationPreview> _conversations =
       const <ChatConversationPreview>[];
   List<UserContact> _contacts = const <UserContact>[];
@@ -80,11 +85,15 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
   }
 
   Future<void> _load() async {
-    final accountId = widget.accountId ??
-        await IdentityAccountCache.instance.accountId() ??
-        '';
-    final conversations =
-        await _store.readConversationPreviews(accountId: accountId);
+    final identity = widget.cidNumber != null && widget.accountId != null
+        ? null
+        : await IdentityAccountCache.instance.resolve();
+    final accountId = widget.accountId ?? identity?.accountId ?? '';
+    final cidNumber = widget.cidNumber ?? identity?.snapshot?.cidNumber ?? '';
+    final conversations = await _store.readConversationPreviews(
+      ownerCidNumber: cidNumber,
+      currentAccountId: accountId,
+    );
     List<UserContact> contacts;
     try {
       contacts = await _contactService.getContacts();
@@ -95,6 +104,7 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
     if (!mounted) return;
     setState(() {
       _accountId = accountId;
+      _cidNumber = cidNumber;
       _conversations = conversations;
       _contacts = contacts;
       _loading = false;
@@ -110,7 +120,8 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
     }
     final seq = ++_searchSeq;
     final hits = await _store.searchMessages(
-      accountId: _accountId,
+      ownerCidNumber: _cidNumber,
+      currentAccountId: _accountId,
       keyword: query,
     );
     if (!mounted || seq != _searchSeq) return;
@@ -152,7 +163,7 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
     final opener = widget.directChatOpener ?? openDirectChat;
     await opener(
       context,
-      peerAccountId: preview.peerAccountId,
+      peerCidNumber: preview.peerCidNumber,
       title: preview.title,
     );
   }
@@ -160,9 +171,9 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
   Future<void> _openContact(UserContact contact) async {
     final opener = widget.directChatOpener ?? openDirectChat;
     final title = contact.contactRemark.isEmpty
-        ? ProfilePresentation.forAccountId(contact.accountId).fallbackName
+        ? ProfilePresentation.forIdentityKey(contact.cidNumber).fallbackName
         : contact.contactRemark;
-    await opener(context, peerAccountId: contact.accountId, title: title);
+    await opener(context, peerCidNumber: contact.cidNumber, title: title);
   }
 
   /// 聊天记录命中：只打开消息所在会话，不定位到具体消息。
@@ -258,7 +269,7 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
                                 for (final item in contactHits)
                                   ListTile(
                                     key: ValueKey(
-                                      'search-contact-${item.accountId}',
+                                      'search-contact-${item.cidNumber}',
                                     ),
                                     leading: const Icon(
                                       Icons.account_circle_rounded,
@@ -266,8 +277,8 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
                                     ),
                                     title: Text(
                                       item.contactRemark.isEmpty
-                                          ? ProfilePresentation.forAccountId(
-                                              item.accountId,
+                                          ? ProfilePresentation.forIdentityKey(
+                                              item.cidNumber,
                                             ).fallbackName
                                           : item.contactRemark,
                                     ),

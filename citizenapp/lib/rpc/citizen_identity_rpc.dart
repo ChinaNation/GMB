@@ -152,7 +152,7 @@ class CitizenIdentityRpc {
       waitForFinalized: true,
     );
     // 交易即使 Dispatch Failed 也会进入 finalized 区块；必须按该精确区块的存储确认
-    // 新账户与 revision+1 已生效，才能让 MyIdService 迁移本地子钥/联系人/LDK。
+    // 新账户与 revision+1 已生效，MyIdService 才能让当前新账户接管 CID 数据根与设备子钥。
     await verifyFinalizedBindingState(
       cidNumber: cidNumber,
       expectedAccountId: newAccountId,

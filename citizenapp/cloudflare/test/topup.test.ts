@@ -75,9 +75,12 @@ describe('topup 稳定币充值后端', () => {
   it('confirm 篡改 intent → 拒绝且不访问 EVM', async () => {
     const env = makeEnv(new FakeDb());
     const intent = await createIntent(env, ACCOUNT_ID);
+    const [payload, signature] = intent.split('.');
+    // 固定翻转签名首字符；不能把末字符无条件替换成 x，否则原字符恰好为 x 时没有篡改。
+    const tamperedSignature = `${signature.startsWith('A') ? 'B' : 'A'}${signature.slice(1)}`;
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-    await expect(confirm(env, `${intent.slice(0, -1)}x`)).rejects.toMatchObject({
+    await expect(confirm(env, `${payload}.${tamperedSignature}`)).rejects.toMatchObject({
       code: 'topup_intent_invalid',
     });
     expect(fetch).not.toHaveBeenCalled();

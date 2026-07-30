@@ -12,6 +12,7 @@ const _accountId =
 SquareSession _session() => const SquareSession(
       sessionToken: 'session',
       cidNumber: _cidNumber,
+      bindingRevision: 1,
       accountId: _accountId,
       expiresAt: 4102444800000,
     );

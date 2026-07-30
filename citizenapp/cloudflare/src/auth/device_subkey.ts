@@ -23,6 +23,8 @@ const P256_SIG_BYTES = 64; // r(32) || s(32)
 export const DEVICE_SKEW_MS = 5 * 60 * 1000;
 
 export interface DeviceBindingInput {
+  cid_number: string;
+  binding_revision: number;
   account_id: string;
   p256_public_key: string;
   issued_at: number;
@@ -32,6 +34,8 @@ export interface DeviceBindingInput {
 /// 签名，证明该 P-256 子钥属于此钱包。SCALE 拼接顺序须与公民端逐字节一致。
 export function buildDeviceBindingSigningMessage(input: DeviceBindingInput): Uint8Array {
   const scalePayload = concatBytes(
+    scaleString(input.cid_number),
+    u64Le(input.binding_revision),
     scaleString(input.account_id),
     scaleString(input.p256_public_key),
     u64Le(input.issued_at),

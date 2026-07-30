@@ -57,7 +57,7 @@ class ProfileHeaderCard extends StatelessWidget {
   bool get _membershipActive => profile?.membershipActive ?? false;
 
   String get _name {
-    return ProfilePresentation.forAccountId(cidNumber).resolveDisplayName(
+    return ProfilePresentation.forIdentityKey(cidNumber).resolveDisplayName(
       publicName: profile?.displayName,
     );
   }

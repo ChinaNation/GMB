@@ -8,8 +8,8 @@ import 'package:citizenapp/citizen/public/city_institution_list_page.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 公民-公权 tab:公权机构目录浏览 + 订阅(ADR-018 §九 卡B)。
 ///
@@ -17,13 +17,13 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// (匹配仍用全名)。右侧按选中项展示:关注=我订阅的机构(跨省扁平);某省=该省市列表
 /// (点市进机构列表)。**读全程本地优先(秒开),在线增量丢后台**,绝不阻塞转圈。
 class PublicTab extends StatefulWidget {
-  const PublicTab({super.key, this.repository, this.accountIdProvider});
+  const PublicTab({super.key, this.repository, this.cidNumberProvider});
 
   /// 测试注入;生产为本地 Isar 实现。
   final PublicInstitutionRepository? repository;
 
-  /// 活动钱包AccountId(关注分组按AccountId隔离);测试可注入,默认读 WalletManager。
-  final Future<String?> Function()? accountIdProvider;
+  /// 当前已注册公民的永久 CID；关注关系按 CID 隔离，换绑账户后保持不变。
+  final Future<String?> Function()? cidNumberProvider;
 
   @override
   State<PublicTab> createState() => _PublicPageState();
@@ -54,7 +54,7 @@ class _PublicPageState extends State<PublicTab> {
 
   /// 当前选中:`关注` 或省 code;省名/展示名由 [_selectedProvince] 解析。
   String _selected = _kFollowGroup;
-  String? _activeAccountId;
+  String? _subscriberCidNumber;
 
   List<_CityVm> _cities = const [];
   List<PublicInstitutionEntity> _subscribed = const [];
@@ -74,10 +74,11 @@ class _PublicPageState extends State<PublicTab> {
     _bootstrap();
   }
 
-  Future<String?> _resolveAccountId() async {
-    final provider = widget.accountIdProvider;
+  Future<String?> _resolveCidNumber() async {
+    final provider = widget.cidNumberProvider;
     if (provider != null) return provider();
-    return (await WalletManager().getWallet())?.accountId;
+    final identity = await IdentityAccountCache.instance.resolve();
+    return identity?.snapshot?.cidNumber;
   }
 
   Future<void> _bootstrap() async {
@@ -86,10 +87,10 @@ class _PublicPageState extends State<PublicTab> {
     // 字典还在灌 Isar,市名会暂时回退 code(001),字典就绪后须清脏缓存重新 join,
     // 否则永远停在 001(根因见任务卡 20260623-citizenapp-public-city-001-timing-fix)。
     unawaited(_syncThenRefresh());
-    final accountId = await _resolveAccountId();
+    final cidNumber = await _resolveCidNumber();
     if (!mounted) return;
     setState(() {
-      _activeAccountId = accountId;
+      _subscriberCidNumber = cidNumber;
       // 省份是固定行政区(43 省),始终全显,与数据是否加载无关。
       _provinces = publicProvinceItems();
     });
@@ -119,9 +120,9 @@ class _PublicPageState extends State<PublicTab> {
         _contentLoading = true;
         _contentError = null;
       });
-      final subs = _activeAccountId == null
+      final subs = _subscriberCidNumber == null
           ? <PublicInstitutionEntity>[]
-          : await _repo.listSubscribed(_activeAccountId!);
+          : await _repo.listSubscribed(_subscriberCidNumber!);
       // 预 join 关注机构的所属地(省名·市名),不在 build 里 await。
       final areas = <String, String>{};
       for (final inst in subs) {

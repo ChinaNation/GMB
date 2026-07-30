@@ -211,8 +211,8 @@ class _SquareHomePageState extends State<SquareHomePage> {
         _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
       return;
     }
-    // 身份账户廉价读（命中缓存或乐观回退账户0，不启动 smoldot），与 _identityAddress
-    // （= loadCurrent 的身份账户）同口径做去重键。
+    // 身份账户廉价读只接受已命中的缓存，不启动 smoldot；未命中返回空，
+    // 绝不虚构账户0为已注册身份。
     final accountId =
         await IdentityAccountCache.instance.accountId(allowChainRead: false) ??
             '';

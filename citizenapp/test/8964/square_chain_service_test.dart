@@ -85,6 +85,7 @@ void main() {
         CitizenIdentityChainSnapshot(
           cidNumber: 'CN001-CTZN-000000001-2026',
           accountId: Uint8List(32),
+          bindingRevision: 1,
           votingIdentity: _votingIdentityBytes(citizenStatus: 0),
           candidateIdentity: _candidateIdentityBytes(),
         ),
@@ -102,6 +103,7 @@ void main() {
         CitizenIdentityChainSnapshot(
           cidNumber: 'CN001-CTZN-000000002-2026',
           accountId: Uint8List(32),
+          bindingRevision: 1,
           votingIdentity: null,
         ),
       ),

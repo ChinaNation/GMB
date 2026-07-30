@@ -13,6 +13,7 @@ const CHANGED_CID = 'CN220-CTZN2-199001010-2026';
 vi.mock('../src/chain/identity', () => ({
   fetchChainIdentityState: vi.fn(async (_env: unknown, accountId: string) => ({
     account_id: accountId,
+    binding_revision: 1,
     identity_level: 'visitor',
     has_voting_identity: false,
     has_candidate_identity: false,
@@ -24,6 +25,7 @@ vi.mock('../src/chain/identity', () => ({
 interface ChallengeRow {
   challenge_id: string;
   cid_number: string;
+  binding_revision: number;
   account_id: string;
   signing_payload: string;
   expires_at: number;
@@ -33,6 +35,7 @@ interface ChallengeRow {
 interface SessionIndexRow {
   session_token_hash: string;
   cid_number: string;
+  binding_revision: number;
   account_id: string;
   created_at: number;
   expires_at: number;
@@ -50,20 +53,23 @@ class AuthStmt {
       this.db.challenges.set(this.binds[0] as string, {
         challenge_id: this.binds[0] as string,
         cid_number: this.binds[1] as string,
-        account_id: this.binds[2] as string,
-        signing_payload: this.binds[3] as string,
-        expires_at: this.binds[4] as number,
+        binding_revision: this.binds[2] as number,
+        account_id: this.binds[3] as string,
+        signing_payload: this.binds[4] as string,
+        expires_at: this.binds[5] as number,
         used_at: null
       });
       return { meta: { changes: 1 } };
     } else if (this.sql.includes('UPDATE square_login_challenges')) {
       const row = this.db.challenges.get(this.binds[1] as string);
       const cidNumber = this.binds[2] as string;
-      const accountId = this.binds[3] as string;
-      const claimedAt = this.binds[4] as number;
+      const bindingRevision = this.binds[3] as number;
+      const accountId = this.binds[4] as string;
+      const claimedAt = this.binds[5] as number;
       if (
         row &&
         row.cid_number === cidNumber &&
+        row.binding_revision === bindingRevision &&
         row.account_id === accountId &&
         row.used_at === null &&
         row.expires_at > claimedAt
@@ -80,9 +86,10 @@ class AuthStmt {
       this.db.sessions.set(this.binds[0] as string, {
         session_token_hash: this.binds[0] as string,
         cid_number: this.binds[1] as string,
-        account_id: this.binds[2] as string,
-        created_at: this.binds[3] as number,
-        expires_at: this.binds[4] as number
+        binding_revision: this.binds[2] as number,
+        account_id: this.binds[3] as string,
+        created_at: this.binds[4] as number,
+        expires_at: this.binds[5] as number
       });
       return { meta: { changes: 1 } };
     } else if (this.sql.includes('DELETE FROM square_sessions WHERE session_token_hash')) {
@@ -107,13 +114,18 @@ class AuthStmt {
     }
     return null;
   }
-  // 登录按 (cid_number, account_id) 取该身份+账户下的全部设备子钥(可多设备)。
+  // 登录按当前 (cid_number, binding_revision, account_id) 取全部设备子钥（可多设备）。
   async all<T>(): Promise<{ results: T[] }> {
     if (this.sql.includes('FROM square_device_subkeys')) {
       const cid = this.binds[0] as string;
-      const accountId = this.binds[1] as string;
+      const bindingRevision = this.binds[1] as number;
+      const accountId = this.binds[2] as string;
       const results = [...this.db.subkeys.values()]
-        .filter((row) => row.cid_number === cid && row.account_id === accountId)
+        .filter((row) =>
+          row.cid_number === cid
+          && row.binding_revision === bindingRevision
+          && row.account_id === accountId
+        )
         .map((row) => ({ p256_public_key: row.p256_public_key }));
       return { results: results as T[] };
     }
@@ -124,6 +136,7 @@ class AuthStmt {
 interface StoredSubkey {
   cid_number: string;
   device_id: string;
+  binding_revision: number;
   account_id: string;
   p256_public_key: string;
 }
@@ -191,6 +204,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     db.subkeys.set(`${TEST_CID}:${deviceId}`, {
       cid_number: TEST_CID,
       device_id: deviceId,
+      binding_revision: 1,
       account_id: ACCOUNT_ID,
       p256_public_key: pubHex
     });
@@ -247,6 +261,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     expect([...kv.store.keys()].join('\n')).not.toContain(sessionToken);
     expect(db.sessions.get(sessionTokenHash)).toMatchObject({
       cid_number: TEST_CID,
+      binding_revision: 1,
       account_id: ACCOUNT_ID
     });
   });
@@ -276,6 +291,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     identityMock
       .mockResolvedValueOnce({
         account_id: ACCOUNT_ID,
+        binding_revision: 1,
         identity_level: 'visitor',
         has_voting_identity: false,
         has_candidate_identity: false,
@@ -284,6 +300,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
       })
       .mockResolvedValueOnce({
         account_id: ACCOUNT_ID,
+        binding_revision: 2,
         identity_level: 'visitor',
         has_voting_identity: false,
         has_candidate_identity: false,
@@ -404,6 +421,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     db.sessions.set('a'.repeat(64), {
       session_token_hash: 'a'.repeat(64),
       cid_number: TEST_CID,
+      binding_revision: 1,
       account_id: ACCOUNT_ID,
       created_at: 1,
       expires_at: 999
@@ -411,6 +429,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     db.sessions.set('b'.repeat(64), {
       session_token_hash: 'b'.repeat(64),
       cid_number: TEST_CID,
+      binding_revision: 1,
       account_id: ACCOUNT_ID,
       created_at: 1,
       expires_at: 1001

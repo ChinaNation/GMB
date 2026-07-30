@@ -97,8 +97,9 @@ void main() {
       throwsA(anything),
     );
     // 异常路径同样不能把明文留在盘上
-    final leftovers =
-        plainDir.existsSync() ? plainDir.listSync() : const <FileSystemEntity>[];
+    final leftovers = plainDir.existsSync()
+        ? plainDir.listSync()
+        : const <FileSystemEntity>[];
     expect(leftovers, isEmpty, reason: '解密失败也必须清掉半截明文');
   });
 

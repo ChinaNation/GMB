@@ -19,6 +19,7 @@ const MAC = 'A'.repeat(22); // 16 字节
 function sessionKv(): KVNamespace {
   const sessionA: SessionState = {
     cid_number: CID_X,
+    binding_revision: 1,
     account_id: ACCOUNT_A,
     device_key_hash: 'a'.repeat(64),
     created_at: 0,
@@ -26,6 +27,7 @@ function sessionKv(): KVNamespace {
   };
   const sessionB: SessionState = {
     cid_number: CID_X,
+    binding_revision: 2,
     account_id: ACCOUNT_B,
     device_key_hash: 'b'.repeat(64),
     created_at: 0,

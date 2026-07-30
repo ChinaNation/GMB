@@ -14,6 +14,7 @@ import 'package:citizenapp/8964/services/square_api_client.dart';
 SquareSession _session() => SquareSession(
       sessionToken: 'tok',
       cidNumber: "CN220-CTZN2-198805200-2026",
+      bindingRevision: 1,
       accountId:
           '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,

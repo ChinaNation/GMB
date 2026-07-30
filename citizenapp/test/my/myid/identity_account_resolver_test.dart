@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 const _account0 =
@@ -36,6 +37,7 @@ Account _acc(int index, String accountId) => Account(
 CitizenIdentityChainSnapshot _anonSnapshot() => CitizenIdentityChainSnapshot(
       cidNumber: 'CID-TEST-0001',
       accountId: Uint8List(32),
+      bindingRevision: 1,
       votingIdentity: null,
       candidateIdentity: null,
     );
@@ -99,7 +101,99 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test('按 CID 读取绑定锚定同一 finalized 区块并校验双向闭环', () async {
+    const cidNumber = 'CN220-CTZN2-100000001-2026';
+    final accountId = Uint8List.fromList(List<int>.filled(32, 0xaa));
+    final cidScale = CitizenIdentityChainReader.encodeBoundedBytes(
+      cidNumber.codeUnits,
+    );
+    String key(String storageName, Uint8List data) =>
+        CitizenIdentityChainReader.hexEncode(
+          CitizenIdentityChainReader.storageMapKey(
+            'CitizenIdentity',
+            storageName,
+            data,
+          ),
+        );
+    final chainRpc = _BindingChainRpc(<String, Uint8List>{
+      key('AccountIdByCid', cidScale): accountId,
+      key('CidRegistry', cidScale): Uint8List.fromList([
+        ..._bounded('FEDERAL_REGISTRY-CID'),
+        ...List<int>.filled(32, 7),
+        ..._bounded('GD'),
+        ..._bounded('0755'),
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+      ]),
+      key('BindingRevisionByCid', cidScale):
+          Uint8List.fromList([2, 0, 0, 0, 0, 0, 0, 0]),
+      key('CidByAccountId', accountId):
+          CitizenIdentityChainReader.encodeBoundedBytes(cidNumber.codeUnits),
+    });
+
+    final result = await CitizenIdentityChainReader(chainRpc: chainRpc)
+        .readBindingByCidNumber(cidNumber);
+
+    expect(result, isNotNull);
+    expect(result!.accountIdText, _accountIdText(accountId));
+    expect(result.bindingRevision, 2);
+    expect(
+      chainRpc.blockHashes.toSet(),
+      {'0x${List<String>.filled(32, '00').join()}'},
+    );
+  });
+
+  test('按 CID 读取时反向账户映射不一致必须失败关闭', () async {
+    const cidNumber = 'CN220-CTZN2-100000001-2026';
+    final accountId = Uint8List.fromList(List<int>.filled(32, 0xbb));
+    final cidScale = CitizenIdentityChainReader.encodeBoundedBytes(
+      cidNumber.codeUnits,
+    );
+    String key(String storageName, Uint8List data) =>
+        CitizenIdentityChainReader.hexEncode(
+          CitizenIdentityChainReader.storageMapKey(
+            'CitizenIdentity',
+            storageName,
+            data,
+          ),
+        );
+    final chainRpc = _BindingChainRpc(<String, Uint8List>{
+      key('AccountIdByCid', cidScale): accountId,
+      key('CidRegistry', cidScale): Uint8List.fromList([
+        ..._bounded('FEDERAL_REGISTRY-CID'),
+        ...List<int>.filled(32, 7),
+        ..._bounded('GD'),
+        ..._bounded('0755'),
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+      ]),
+      key('BindingRevisionByCid', cidScale):
+          Uint8List.fromList([1, 0, 0, 0, 0, 0, 0, 0]),
+      key('CidByAccountId', accountId):
+          CitizenIdentityChainReader.encodeBoundedBytes('OTHER-CID'.codeUnits),
+    });
+
+    final result = await CitizenIdentityChainReader(chainRpc: chainRpc)
+        .readBindingByCidNumber(cidNumber);
+
+    expect(result, isNull);
+  });
 }
+
+List<int> _bounded(String value) =>
+    CitizenIdentityChainReader.encodeBoundedBytes(value.codeUnits);
+
+String _accountIdText(Uint8List bytes) =>
+    CitizenIdentityChainReader.hexEncode(bytes);
 
 class _FakeWalletManager extends WalletManager {
   _FakeWalletManager(this._wallet, this._accounts);
@@ -120,5 +214,25 @@ class _FakeReader extends CitizenIdentityChainReader {
       String accountId) async {
     if (accountId == throwFor) throw StateError('chain down');
     return _chain[accountId];
+  }
+}
+
+class _BindingChainRpc extends ChainRpc {
+  _BindingChainRpc(this.storage);
+
+  final Map<String, Uint8List> storage;
+  final List<String> blockHashes = <String>[];
+
+  @override
+  Future<({Uint8List blockHash, int blockNumber})>
+      fetchFinalizedBlock() async => (blockHash: Uint8List(32), blockNumber: 7);
+
+  @override
+  Future<Uint8List?> fetchStorageAtBlock(
+    String storageKeyHex,
+    String blockHashHex,
+  ) async {
+    blockHashes.add(blockHashHex);
+    return storage[storageKeyHex];
   }
 }

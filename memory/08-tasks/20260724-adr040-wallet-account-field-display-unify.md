@@ -45,19 +45,13 @@ onchina `before_hash/after_hash/actor_public_key` 均 0x、`_isCanonicalHex32`=`
 
 ## 收尾两项(2026-07-24 完成)
 
-### chat MLS FFI 账户键统一(非 FRB,是 serde JSON-over-FFI)
-发现:Dart 侧(`mls_native.dart`)早已迁移 ADR-040,发 `account_id`/`recipient_account_id`/`member_account_ids`;
-Rust 侧(`chat_mls.rs`)仍用 `owner_account`/`recipient_account`/`member_accounts` —— **两侧键失配,整个
-chat MLS 原生路径当前是坏的**(开发期零用户没端到端跑过,故未暴露)。非命名洁癖,是真 bug。
-修复(让 Rust 对齐已迁移的 Dart 线格式):
-- `chat_mls.rs` 4 个 token 全仓改名(word-boundary,无冲突):`owner_account`→`account_id`(52 行)、
-  `recipient_account`→`recipient_account_id`、`member_accounts`→`member_account_ids`、
-  输出键 `removed_accounts`→`removed_account_ids`。含结构体字段/require_non_empty 标签/JSON 收发键/测试/注释。
-  ★ MLS BasicCredential 内容 `format!("{}:{}", account, device_id)` 只改变量名、**值/线格式不变**。
-- Dart `mls_native.dart:260` 读取键 `removed_accounts`→`removed_account_ids` 同步。
-- 与 `qr-protocol/tests/registry_consistency.rs` 的 `REMOVED_AMBIGUOUS_ACCOUNT_FIELDS` 禁用名守卫
-  (含 `owner_account`/`wallet_account`)方向一致,守卫保留。
-验证:cargo test --lib chat_mls **3 passed 0 failed**;dart analyze mls_native.dart 无错。
+### Chat MLS 身份键终态订正（2026-07-29）
+
+2026-07-24 曾仅按 ADR-040 统一账户字段名；该阶段性线格式已被 CID 身份主键终态彻底替换。
+当前 Dart/Rust FFI、MLS BasicCredential、群成员名册、信封与本地存储都只用 `cid_number`
+表达用户身份；`account_id` 只存在于当前绑定账户的签名授权边界，不进入 Chat 身份协议，
+不保留旧线格式或兼容分支。当前验收见主任务卡
+`open/20260727-citizenapp-cid-identity-rootless-wallet.md` 第 4 步记录。
 
 ### 命名文档对齐 ADR-040(memory/07-ai/unified-naming.md)
 代码已全面迁移(onchina/citizenapp 统一 `account_id`/`ss58_address`/`public_key`),`wallet_*` 仅剩文档残留。

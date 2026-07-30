@@ -43,6 +43,8 @@ void main() {
 
     await registrar.register(
       walletIndex: 0,
+      cidNumber: 'CN220-CTZN2-198805200-2026',
+      bindingRevision: 1,
       accountId: accountId,
       signBinding: (_) async => '0xBINDINGSIG',
       issuedAtMillis: 1700000000000,

@@ -90,20 +90,23 @@ class _ProfilePageState extends State<MyTab> {
   String? _operationalIdentityAccount;
   bool _localStateLoaded = false;
 
-  /// 身份账户(CID 绑定账户)ID，单源 [IdentityAccountCache]；链读失败乐观回退账户0，
-  /// 无热钱包空串。头像/背景 seed、昵称、「我的主页」入参都跟随它。
+  /// 身份账户（CID 当前绑定账户）ID，单源 [IdentityAccountCache]；无 CID 时账户0
+  /// 只作访客展示账户，链读失败不虚构身份。头像/背景 seed、昵称和主页入参跟随 CID。
   String _identityAccountId = '';
+
+  /// 当前身份永久 CID；徽章、公开资料和业务数据都以它作为归属主键。
+  String _identityCidNumber = '';
 
   /// 用户身份账户 ID（展示口径）= 当前身份账户（CID 绑定账户，非恒账户0）。
   String get _communicationAccountId => _identityAccountId;
 
   /// 公开昵称唯一真源是 CID 资料的 display_name；资料尚未缓存时稳定兜底。
   /// 本机 walletName 只用于钱包列表，绝不进入此展示链路。
-  String get _nickname => ProfilePresentation.forAccountId(
+  String get _nickname => ProfilePresentation.forIdentityKey(
         _publicProfile?.cidNumber ?? _communicationAccountId,
       ).resolveDisplayName(publicName: _publicProfile?.displayName);
 
-  /// 默认钱包徽章信号：颜色只来自账户级链上身份快照，勾来自会员匹配。
+  /// 默认钱包徽章信号：颜色只来自 CID 级链上身份快照，勾来自会员匹配。
   String? get _defaultWalletMembershipLevel => _membership?.membershipLevel;
   bool get _defaultWalletMembershipActive => _membership?.active ?? false;
 
@@ -182,16 +185,16 @@ class _ProfilePageState extends State<MyTab> {
     final generation = ++_loadGeneration;
     final profile = await _userProfileService.getState();
     final defaultWallet = await _walletManager.getDefaultWallet();
-    // 身份账户（CID 绑定账户；链读失败乐观回退账户0，无热钱包空串）。
-    final identityAccountId = await IdentityAccountCache.instance.accountId() ??
-        defaultWallet?.accountId ??
-        '';
+    // CID 是快照归属主键；当前绑定账户只负责链读和签名。
+    final identity = await IdentityAccountCache.instance.resolve();
+    final identityAccountId =
+        identity?.accountId ?? defaultWallet?.accountId ?? '';
+    final identityCidNumber = identity?.snapshot?.cidNumber ?? '';
     String? identityLevel;
     try {
-      // 徽章快照键 = 身份账户(与 MyIdService/square 写入口径一致;彻底切,不读账户0)。
-      final snapshot = identityAccountId.isEmpty
+      final snapshot = identityCidNumber.isEmpty
           ? null
-          : await _badgeSnapshotStore.read(identityAccountId);
+          : await _badgeSnapshotStore.read(identityCidNumber);
       identityLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
@@ -202,11 +205,13 @@ class _ProfilePageState extends State<MyTab> {
     if (!mounted || generation != _loadGeneration) {
       return;
     }
-    final identityChanged = identityAccountId != _identityAccountId;
+    final identityChanged = identityAccountId != _identityAccountId ||
+        identityCidNumber != _identityCidNumber;
     setState(() {
       _userProfile = profile;
       _defaultWallet = defaultWallet;
       _identityAccountId = identityAccountId;
+      _identityCidNumber = identityCidNumber;
       _defaultWalletIdentityLevel = identityLevel;
       if (identityChanged) {
         _publicProfile = null;
@@ -236,11 +241,12 @@ class _ProfilePageState extends State<MyTab> {
     }
     if (wallet == null) return;
     final walletAccountId = wallet.accountId;
-    // 去重键 / votingAccountId 比对 / 徽章快照键都以身份账户为准（CID 绑定账户，
-    // 与身份展示同口径；链读失败乐观回退账户0）。默认钱包本身是否被换掉仍按钱包
-    // 账户做再入守卫，避免 account0 与 //n 混淆导致守卫误判。
-    final identityAccountId =
-        await IdentityAccountCache.instance.accountId() ?? walletAccountId;
+    // 账户用于当前签名者比对，CID 用于徽章快照归属。默认钱包本身是否被换掉仍按
+    // 钱包账户做再入守卫，避免账户0 与子账户混淆导致守卫误判。
+    final identity = await IdentityAccountCache.instance.resolve();
+    final identityAccountId = identity?.accountId ?? walletAccountId;
+    final identityCidNumber =
+        identity?.snapshot?.cidNumber ?? _identityCidNumber;
     if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
     if (identityAccountId.isEmpty ||
         _operationalIdentityAccount == identityAccountId) {
@@ -259,14 +265,21 @@ class _ProfilePageState extends State<MyTab> {
       refreshedLevel = state.identityLevel;
     } else if (state.status == MyIdStatus.queryFailed) {
       // 链上一人一 CID 一账户一身份,故无多身份冲突;仅链读失败时回落徽章快照。
-      final snapshot = await _badgeSnapshotStore.read(identityAccountId);
+      final snapshot = identityCidNumber.isEmpty
+          ? null
+          : await _badgeSnapshotStore.read(identityCidNumber);
       refreshedLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
       };
     }
     if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
-    setState(() => _defaultWalletIdentityLevel = refreshedLevel);
+    setState(() {
+      _identityCidNumber = state.cidNumber?.trim().isNotEmpty == true
+          ? state.cidNumber!.trim()
+          : identityCidNumber;
+      _defaultWalletIdentityLevel = refreshedLevel;
+    });
   }
 
   Future<void> _refreshRemoteState(int generation) async {
@@ -768,7 +781,7 @@ class _HeaderBackground extends StatelessWidget {
     final file = hasImage ? File(path!) : null;
     final validImage = file != null && file.existsSync();
 
-    final fallback = ProfilePresentation.forAccountId(seed).bannerAsset;
+    final fallback = ProfilePresentation.forIdentityKey(seed).bannerAsset;
     final ImageProvider<Object> backgroundImage;
     if (validImage) {
       backgroundImage = FileImage(file);

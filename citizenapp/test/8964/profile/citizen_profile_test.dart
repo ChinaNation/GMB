@@ -50,6 +50,7 @@ http.Response _ok(Map<String, dynamic> body) => http.Response(
 SquareSession _session() => SquareSession(
       sessionToken: 'tok',
       cidNumber: "CN220-CTZN2-198805200-2026",
+      bindingRevision: 1,
       accountId: _owner,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       signRequest: (_) async => 'test-device-signature',
@@ -76,7 +77,7 @@ void main() {
       expect(named.resolvedDisplayName, '张三');
 
       final unnamed = CitizenProfile.fromJson(_profileJson(displayName: ''));
-      final fallback = ProfilePresentation.forAccountId(
+      final fallback = ProfilePresentation.forIdentityKey(
         'CN001-CTZN-000000001-2026',
       ).fallbackName;
       expect(unnamed.resolvedDisplayName, fallback);
@@ -84,24 +85,35 @@ void main() {
     });
 
     test('local defaults are stable and reject account-derived nicknames', () {
-      final first = ProfilePresentation.forAccountId(_owner);
-      final second = ProfilePresentation.forAccountId(_owner);
+      const cidNumber = 'CN001-CTZN-000000001-2026';
+      final first = ProfilePresentation.forIdentityKey(cidNumber);
+      final second = ProfilePresentation.forIdentityKey(cidNumber);
       final short =
-          '${_owner.substring(0, 6)}...${_owner.substring(_owner.length - 6)}';
+          '${cidNumber.substring(0, 6)}...${cidNumber.substring(cidNumber.length - 6)}';
+      const accountId =
+          '0x2222222222222222222222222222222222222222222222222222222222222222';
 
       expect(second.fallbackName, first.fallbackName);
       expect(second.avatarAsset, first.avatarAsset);
       expect(second.bannerAsset, first.bannerAsset);
       expect(first.avatarAsset, isNot(first.bannerAsset));
+      expect(
+          first.resolveDisplayName(publicName: accountId), first.fallbackName);
       expect(first.resolveDisplayName(publicName: _owner), first.fallbackName);
+      expect(
+          first.resolveDisplayName(publicName: cidNumber), first.fallbackName);
       expect(first.resolveDisplayName(publicName: short), first.fallbackName);
       expect(ProfilePresentation.assets, hasLength(11));
     });
 
     test('SquareAuthor never falls back to its wallet account', () {
-      const author = SquareAuthor(accountId: _owner, displayName: '');
-      expect(
-          author.title, ProfilePresentation.forAccountId(_owner).fallbackName);
+      const author = SquareAuthor(
+        accountId: _owner,
+        cidNumber: 'CN001-CTZN-000000001-2026',
+        displayName: '',
+      );
+      expect(author.title,
+          ProfilePresentation.forIdentityKey(author.cidNumber!).fallbackName);
       expect(author.title, isNot(_owner));
     });
 

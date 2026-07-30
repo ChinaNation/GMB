@@ -7,6 +7,9 @@ import 'package:citizenapp/chat/chat_payload.dart';
 import 'package:citizenapp/chat/proto/chat_envelope.pb.dart' as pb;
 import 'package:citizenapp/chat/storage/chat_store.dart';
 
+const _aliceCidNumber = 'CN220-CTZN2-100000001-2026';
+const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
+
 ChatStoredMessage _stored({
   required String envelopeId,
   required ChatMessageKind kind,
@@ -19,12 +22,8 @@ ChatStoredMessage _stored({
     envelopeId: envelopeId,
     conversationId: 'dm:alice:bob',
     direction: direction,
-    senderAccountId: outgoing
-        ? '0x1111111111111111111111111111111111111111111111111111111111111111'
-        : '0x2222222222222222222222222222222222222222222222222222222222222222',
-    recipientAccountId: outgoing
-        ? '0x2222222222222222222222222222222222222222222222222222222222222222'
-        : '0x1111111111111111111111111111111111111111111111111111111111111111',
+    senderCidNumber: outgoing ? _aliceCidNumber : _bobCidNumber,
+    recipientCidNumber: outgoing ? _bobCidNumber : _aliceCidNumber,
     messageKind: kind,
     deliveryState: state,
     createdAtMillis: 1000,
@@ -40,8 +39,7 @@ void main() {
         kind: ChatMessageKind.text,
         plaintext: ChatPayloadCodec.encode(ChatContent.text('hello')),
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
     ) as TextMessage;
     expect(outgoing.text, 'hello');
     expect(outgoing.status, MessageStatus.sent);
@@ -56,8 +54,7 @@ void main() {
         state: ChatMessageDeliveryState.receivedByDevice,
         plaintext: ChatPayloadCodec.encode(ChatContent.text('hi')),
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
     ) as TextMessage;
     expect(incoming.text, 'hi');
     expect(incoming.status, MessageStatus.delivered);
@@ -84,8 +81,7 @@ void main() {
         kind: ChatMessageKind.image,
         plaintext: payload,
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
       resolveLocalMediaPath: (c) =>
           c.attachmentId == 'att-1' ? '/cache/p.jpg' : null,
     ) as ImageMessage;
@@ -118,8 +114,7 @@ void main() {
         kind: ChatMessageKind.image,
         plaintext: payload,
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
       resolveLocalMediaPath: (_) => null,
     ) as ImageMessage;
     expect(msg.source, '');
@@ -146,8 +141,7 @@ void main() {
         kind: ChatMessageKind.video,
         plaintext: payload,
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
       resolveLocalMediaPath: (_) => '/cache/clip.mp4',
     ) as VideoMessage;
     expect(msg.name, 'clip.mp4');
@@ -182,8 +176,7 @@ void main() {
         kind: ChatMessageKind.file,
         plaintext: payload,
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
       resolveLocalMediaPath: (_) => '/cache/doc.pdf',
     ) as FileMessage;
     expect(msg.name, 'doc.pdf');
@@ -202,8 +195,7 @@ void main() {
         kind: ChatMessageKind.sticker,
         plaintext: payload,
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
     ) as CustomMessage;
     // 贴纸走 Message.custom,由 chat_page 的 customMessageBuilder 按 id 渲染;
     // id 只经 metadata 携带,不占正文文本。
@@ -228,8 +220,7 @@ void main() {
         kind: ChatMessageKind.image,
         plaintext: payload,
       ),
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      currentCidNumber: _aliceCidNumber,
       resolveLocalMediaPath: (_) {
         resolverCalled = true;
         return '/cache/big.jpg';

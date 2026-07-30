@@ -87,8 +87,15 @@ class _SquareComposePageState extends State<SquareComposePage> {
       ? _articleKey.currentState as ComposeBodyCollector?
       : _postKey.currentState as ComposeBodyCollector?;
 
-  Future<SquareLocalMediaDraft> _persistMedia(SquareLocalMediaDraft media) =>
-      ComposeDraftMedia.persist(_draftId, media);
+  Future<SquareLocalMediaDraft> _persistMedia(
+    SquareLocalMediaDraft media,
+  ) async {
+    final cidNumber = _identity?.cidNumber;
+    if (cidNumber == null || cidNumber.isEmpty) {
+      throw StateError('保存草稿媒体前必须取得当前 CID');
+    }
+    return ComposeDraftMedia.persist(cidNumber, _draftId, media);
+  }
 
   /// 内容变化触发：防抖 800ms 后自动保存草稿。
   void _scheduleAutosave() {
@@ -99,20 +106,20 @@ class _SquareComposePageState extends State<SquareComposePage> {
 
   /// 快照当前内容存草稿；空内容不存（已存过则删除）。
   Future<void> _saveDraft() async {
-    final accountId = _identity?.accountId;
-    if (accountId == null || accountId.isEmpty) return;
+    final cidNumber = _identity?.cidNumber;
+    if (cidNumber == null || cidNumber.isEmpty) return;
     final snapshot = _activeBody?.snapshot();
     if (snapshot == null) return;
     if (snapshot.isEmpty) {
       if (_draftSaved) {
-        await _draftStore.delete(accountId, _draftId);
+        await _draftStore.delete(cidNumber, _draftId);
         _draftSaved = false;
       }
       return;
     }
     await _draftStore.save(SquareComposeDraft(
       draftId: _draftId,
-      accountId: accountId,
+      cidNumber: cidNumber,
       contentFormat: _type.contentFormat,
       postCategory: _type.category,
       title: snapshot.title,
@@ -132,9 +139,9 @@ class _SquareComposePageState extends State<SquareComposePage> {
   }
 
   Future<void> _deleteCurrentDraft() async {
-    final accountId = _identity?.accountId;
-    if (accountId == null || !_draftSaved) return;
-    await _draftStore.delete(accountId, _draftId);
+    final cidNumber = _identity?.cidNumber;
+    if (cidNumber == null || !_draftSaved) return;
+    await _draftStore.delete(cidNumber, _draftId);
     _draftSaved = false;
   }
 
@@ -207,15 +214,15 @@ class _SquareComposePageState extends State<SquareComposePage> {
   }
 
   Future<void> _openDrafts() async {
-    final accountId = _identity?.accountId;
-    if (accountId == null || accountId.isEmpty) return;
+    final cidNumber = _identity?.cidNumber;
+    if (cidNumber == null || cidNumber.isEmpty) return;
     // 先把当前内容落盘，避免进草稿箱丢失。
     _autosaveTimer?.cancel();
     await _saveDraft();
     if (!mounted) return;
     final selected = await Navigator.of(context).push<SquareComposeDraft>(
       MaterialPageRoute<SquareComposeDraft>(
-        builder: (_) => DraftsPage(accountId: accountId, store: _draftStore),
+        builder: (_) => DraftsPage(cidNumber: cidNumber, store: _draftStore),
       ),
     );
     if (selected == null || !mounted) return;

@@ -353,15 +353,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void _openChatWithUser() {
-    // DM 目标标识暂用 profile.account_id（当前绑定账户）；chat 模块迁移 cid 后再对齐。
-    final peerAccountId = _profile?.accountId.trim() ?? '';
-    if (peerAccountId.isEmpty) {
+    final peerCidNumber = widget.cidNumber.trim();
+    if (peerCidNumber.isEmpty) {
       _snack('资料尚未加载，请稍后再试');
       return;
     }
     _directChat(
       context,
-      peerAccountId: peerAccountId,
+      peerCidNumber: peerCidNumber,
       title: _displayName,
     );
   }
@@ -392,7 +391,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   /// 公开昵称只取后端 `display_name`；缺失时按 CID 稳定生成本地占位昵称。
   String get _displayName {
-    return ProfilePresentation.forAccountId(widget.cidNumber)
+    return ProfilePresentation.forIdentityKey(widget.cidNumber)
         .resolveDisplayName(
       publicName: _profile?.displayName,
     );
@@ -411,7 +410,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Widget _bannerWidget() {
     final fallback = Image.asset(
-      ProfilePresentation.forAccountId(widget.cidNumber).bannerAsset,
+      ProfilePresentation.forIdentityKey(widget.cidNumber).bannerAsset,
       fit: BoxFit.cover,
     );
     final url = _mediaUrl(_profile?.bannerObjectKey);

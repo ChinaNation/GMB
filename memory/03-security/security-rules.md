@@ -9,7 +9,14 @@
 - 创世没有真实法定代表人资料时不得填充假数据，不得把首位管理员默认为法定代表人；依赖法定代表人的业务在任命完成前必须拒绝执行
 - permit 必须短期有效
 - CitizenApp 私密聊天消息、会话和附件只能保存在通信双方设备，禁止写入 Cloudflare D1、R2、KV 或 Durable Object Storage。
-- CitizenApp 通讯录明文只能保存在用户设备；为实现同一身份跨设备恢复，Cloudflare D1 只允许保存由 CID 当前绑定账户 child 域隔离密钥在端侧生成的单联系人 AES-256-GCM 密文、以目标 `cid_number` 计算的 HMAC `contact_id`、nonce、MAC 和更新时间。密文载荷必须包含属主 CID、联系人 CID、当前 `account_id`、对应 `ss58_address`、私人 `contact_remark` 与时间戳；属主 CID 同时进入 AAD。联系人 CID、钱包账户、SS58、私人备注、公开昵称、关系明文及解密密钥禁止以明文进入 Cloudflare；身份换绑必须先删除属主 CID 下的旧密文快照，再以新绑定账户密钥重建；账户注销必须立即硬删除全部通讯录密文。
+- CitizenApp 通讯录明文只能保存在用户设备；为实现同一身份跨设备恢复，Cloudflare D1
+  只允许保存由 CID 稳定数据根 `contacts-cloud` 用途子钥在端侧生成的单联系人
+  AES-256-GCM 密文、以目标 `cid_number` 计算的 HMAC `contact_id`、nonce、MAC 和
+  更新时间。密文载荷必须包含属主 CID、联系人 CID、当前 `account_id`、对应
+  `ss58_address`、私人 `contact_remark` 与时间戳；属主 CID 同时进入 AAD。联系人 CID、
+  钱包账户、SS58、私人备注、公开昵称、关系明文及用途子钥禁止以明文进入 Cloudflare。
+  换绑不删除、不重建通讯录密文；当前新账户接管同一 CID 数据根后继续使用。CID 注销
+  必须立即硬删除全部通讯录密文。
 - Chat 推送只能发送固定唤醒类型和发送方钱包账户，禁止携带明文、密文、附件地址、会话摘要或通知预览
 - 用户注销的唯一删除主键是 `cid_number`：当前绑定 `account_id` 只用于会话、finalized
   双向绑定复核和注销签名授权，不得用于缩小或推导删除范围。授权通过后必须先关闭该 CID
@@ -24,9 +31,14 @@
   KV 前缀枚举作为完整注销真源。
 - CitizenApp 的 P-256 设备子钥按热钱包 `walletIndex` 存于 Android Keystore / iOS
   Secure Enclave：CID 换绑只重签归属证明，不删除或重生；整只热钱包删除、删除末账户
-  级联钱包删除及全量清空钱包时，必须同时销毁全部账户 child、通讯录密钥、本地数据密钥
-  信封与缓存、钱包 KEK 和该 `walletIndex` 的设备子钥。任一安全存储删除失败不得阻断
-  其它项，全部尝试后统一报告；冷钱包和删除非末账户不得误删整钱包共享设备子钥。
+  级联钱包删除及全量清空钱包时，必须销毁全部账户 child、钱包 KEK 和该
+  `walletIndex` 的设备子钥；只有被删账户拥有本机当前激活 CID 绑定时，才清该 CID
+  数据根包装、缓存和用途子钥。任一安全存储删除失败不得阻断其它项，全部尝试后统一
+  报告；冷钱包和删除非末账户不得误删整钱包共享设备子钥。
+- CID 数据根接管只认 finalized 当前绑定。当前新账户必须签一次性挑战，挑战绑定创世
+  哈希、CID、`binding_revision`、当前 `account_id` 和过期时间；Worker 在验签前后
+  两次核验链上绑定。挑战不得重放，旧版本不得降级。接管函数禁止接收此前账户私钥、
+  公钥、签名或设备；新包装读回摘要验证并激活后，低版本包装才可作为删除目标。
 - 广场 R2 删除和读取只能使用经 `account_id + post_id` 重新生成并与
   `square_uploads.object_keys_json` 逐项完全一致的规范对象清单。非法 JSON、空清单、
   多余键、错误账户路径、错误帖子路径或已发布帖子缺上传索引时必须在任何 provider、

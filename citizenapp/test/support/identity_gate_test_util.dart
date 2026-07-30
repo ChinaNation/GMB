@@ -16,6 +16,7 @@ class _RegisteredResolver extends IdentityAccountResolver {
         snapshot: CitizenIdentityChainSnapshot(
           cidNumber: 'GD-CTZN1-8F3A2B',
           accountId: Uint8List(32),
+          bindingRevision: 1,
           votingIdentity: null,
           candidateIdentity: null,
         ),

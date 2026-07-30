@@ -20,12 +20,13 @@ export async function indexIdentitySession(
   const sessionTokenHash = await sha256Hex(sessionToken);
   await env.DB.prepare(
     `INSERT INTO square_sessions
-      (session_token_hash, cid_number, account_id, created_at, expires_at)
-      VALUES (?, ?, ?, ?, ?)`
+      (session_token_hash, cid_number, binding_revision, account_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)`
   )
     .bind(
       sessionTokenHash,
       session.cid_number,
+      session.binding_revision,
       session.account_id,
       session.created_at,
       session.expires_at
@@ -85,6 +86,36 @@ export async function clearIdentityAccountSessions(
     `DELETE FROM square_sessions WHERE cid_number = ? AND account_id = ?`
   )
     .bind(cidNumber, accountId)
+    .run();
+}
+
+/// CID 换绑后只保留 finalized 当前三元组签发的会话。
+///
+/// 明文 token 不落 D1，因此先用强一致哈希索引删除对应 KV，再删除索引行；任一步失败
+/// 都允许接管流程按同一 finalized 真值幂等重试。
+export async function clearStaleIdentitySessions(
+  env: Env,
+  cidNumber: string,
+  bindingRevision: number,
+  accountId: string,
+): Promise<void> {
+  const rows = await env.DB.prepare(
+    `SELECT session_token_hash
+      FROM square_sessions
+      WHERE cid_number = ?
+        AND (binding_revision <> ? OR account_id <> ?)`,
+  )
+    .bind(cidNumber, bindingRevision, accountId)
+    .all<SessionIndexRow>();
+  for (const row of rows.results ?? []) {
+    await env.SQUARE_CACHE.delete(`square_session:${row.session_token_hash}`);
+  }
+  await env.DB.prepare(
+    `DELETE FROM square_sessions
+      WHERE cid_number = ?
+        AND (binding_revision <> ? OR account_id <> ?)`,
+  )
+    .bind(cidNumber, bindingRevision, accountId)
     .run();
 }
 

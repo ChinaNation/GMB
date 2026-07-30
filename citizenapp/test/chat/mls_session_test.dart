@@ -42,7 +42,11 @@ void main() {
         await dir.delete(recursive: true);
       }
     });
-    final store = MlsStateStore(dir, stateKey: _testStateKey);
+    final store = MlsStateStore(
+      dir,
+      ownerCidNumber: 'CN220-CTZN2-100000001-2026',
+      stateKey: _testStateKey,
+    );
 
     const pending = MlsWireMessage(
       wireBytes: [0xaa, 0xbb],
@@ -57,6 +61,16 @@ void main() {
     expect(restored, hasLength(1));
     expect(restored.single.conversationId, 'conv-pending');
     expect(restored.single.wireBytes, [0xaa, 0xbb]);
+
+    final otherCidStore = MlsStateStore(
+      dir,
+      ownerCidNumber: 'CN220-CTZN2-999999999-2026',
+      stateKey: _testStateKey,
+    );
+    await expectLater(
+      otherCidStore.readPendingInbound(),
+      throwsA(anything),
+    );
 
     await store.clearPendingInbound();
     expect(await store.readPendingInbound(), isEmpty);

@@ -31,9 +31,9 @@ typedef DeviceSubkeyBinder = Future<void> Function();
 ///
 /// 判据单源 = [ResolvedIdentity.isRegistered](占任意 CID 即放行,匿名占号亦放行——是
 /// CID 门非投票身份门),走 [IdentityAccountResolver.resolve] **严格链读路径**:链读失败
-/// 按 [_GateStatus.queryFailed] 提示重试(fail-closed,绝不放行也绝不误判未注册),**不用**
-/// `IdentityAccountCache`(其链读失败乐观回退账户0 会把"未知"误当"未注册")。注册 / 换绑经
-/// [WalletManager.walletsRevision] 广播即自动重判并放行。
+/// 按 [_GateStatus.queryFailed] 提示重试(fail-closed,绝不放行也绝不误判未注册)。
+/// 本门使用严格解析器，避免高频缓存入口在禁止链读且未命中时返回空所造成的歧义。
+/// 注册 / 换绑经 [WalletManager.walletsRevision] 广播即自动重判并放行。
 class IdentityRegistrationGate extends StatefulWidget {
   const IdentityRegistrationGate({
     super.key,

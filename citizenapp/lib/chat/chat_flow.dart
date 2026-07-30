@@ -11,20 +11,12 @@ import 'proto/chat_envelope.pb.dart';
 import 'storage/chat_store.dart';
 import 'transport/chat_transport.dart';
 
-/// 投递一个密文 Envelope。[recipientCidNumber] 是收件人身份主键 CID 号（路由键）；
-/// envelope 内嵌 `recipient_account_id` 仍供 MLS/归属，二者语义分离。
+/// 投递一个密文 Envelope。[recipientCidNumber] 是收件人唯一身份主键和路由键。
 typedef ChatEnvelopeDeliverer = Future<ChatDeliveryResult> Function(
   ChatEnvelope envelope,
   List<int> envelopeBytes,
   String recipientCidNumber,
 );
-
-/// 把收件人钱包账户 account_id 解析成其身份主键 CID 号（路由用）。
-///
-/// 前端联系人/群名册只有 account_id；进传输层前必须解析成 cid_number。解析失败
-/// （对方未绑定 CID）应显式抛错，绝不静默错投。见 memory
-/// `citizenapp-cid-identity-master-key`。
-typedef ChatCidResolver = Future<String> Function(String accountId);
 
 /// 把本机源文件字节经 WebRTC 流式发给对端设备。传路径而非整块字节:大文件
 /// (最大 5GB)绝不整块进内存,由发送端 openRead 分片 + 背压推送。
@@ -177,20 +169,25 @@ class ChatFlow {
     required MlsCrypto crypto,
     required ChatStore store,
     required ChatEnvelopeDeliverer deliverer,
+    required String ownerCidNumber,
+    required String currentAccountId,
     this.defaultTtlMillis = 30 * 24 * 60 * 60 * 1000,
   })  : _crypto = crypto,
         _store = store,
-        _deliverer = deliverer;
+        _deliverer = deliverer,
+        _ownerCidNumber = ownerCidNumber,
+        _currentAccountId = currentAccountId;
 
   final MlsCrypto _crypto;
   final ChatStore _store;
   final ChatEnvelopeDeliverer _deliverer;
+  final String _ownerCidNumber;
+  final String _currentAccountId;
   final int defaultTtlMillis;
 
   Future<List<ChatDeliveryResult>> sendText({
     required String conversationId,
-    required String senderAccountId,
-    required String recipientAccountId,
+    required String senderCidNumber,
     required String recipientCidNumber,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
@@ -200,15 +197,14 @@ class ChatFlow {
     final payload = ChatPayloadCodec.encode(ChatContent.text(text));
     final outbound = await _crypto.encrypt(
       conversationId: conversationId,
-      recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
       recipientKeyPackage: recipientKeyPackage,
       plaintext: utf8.encode(payload),
     );
     return _deliverOutbound(
       outbound: outbound,
       conversationId: conversationId,
-      senderAccountId: senderAccountId,
-      recipientAccountId: recipientAccountId,
+      senderCidNumber: senderCidNumber,
       recipientCidNumber: recipientCidNumber,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
@@ -220,8 +216,7 @@ class ChatFlow {
   /// 发送内置贴纸：只走控制信封(几十字节)，不经 WebRTC、不落缓存。
   Future<List<ChatDeliveryResult>> sendSticker({
     required String conversationId,
-    required String senderAccountId,
-    required String recipientAccountId,
+    required String senderCidNumber,
     required String recipientCidNumber,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
@@ -234,15 +229,14 @@ class ChatFlow {
     );
     final outbound = await _crypto.encrypt(
       conversationId: conversationId,
-      recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
       recipientKeyPackage: recipientKeyPackage,
       plaintext: utf8.encode(payload),
     );
     return _deliverOutbound(
       outbound: outbound,
       conversationId: conversationId,
-      senderAccountId: senderAccountId,
-      recipientAccountId: recipientAccountId,
+      senderCidNumber: senderCidNumber,
       recipientCidNumber: recipientCidNumber,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
@@ -259,8 +253,7 @@ class ChatFlow {
   /// 抛错**,留 pending 由对方上线时补发。加密仍在发字节之前,保持零泄漏顺序。
   Future<List<ChatDeliveryResult>> sendMedia({
     required String conversationId,
-    required String senderAccountId,
-    required String recipientAccountId,
+    required String senderCidNumber,
     required String recipientCidNumber,
     required String senderDeviceId,
     MlsKeyPackage? recipientKeyPackage,
@@ -316,7 +309,7 @@ class ChatFlow {
     );
     final outbound = await _crypto.encrypt(
       conversationId: conversationId,
-      recipientAccountId: recipientAccountId,
+      recipientCidNumber: recipientCidNumber,
       recipientKeyPackage: recipientKeyPackage,
       plaintext: utf8.encode(payload),
     );
@@ -324,8 +317,7 @@ class ChatFlow {
     final results = await _deliverOutbound(
       outbound: outbound,
       conversationId: conversationId,
-      senderAccountId: senderAccountId,
-      recipientAccountId: recipientAccountId,
+      senderCidNumber: senderCidNumber,
       recipientCidNumber: recipientCidNumber,
       senderDeviceId: senderDeviceId,
       nowMillis: now,
@@ -370,8 +362,7 @@ class ChatFlow {
   Future<List<ChatDeliveryResult>> _deliverOutbound({
     required MlsOutboundMessage outbound,
     required String conversationId,
-    required String senderAccountId,
-    required String recipientAccountId,
+    required String senderCidNumber,
     required String recipientCidNumber,
     required String senderDeviceId,
     required int nowMillis,
@@ -383,8 +374,8 @@ class ChatFlow {
     for (final wireMessage in outbound.wireMessages) {
       final envelope = wireMessage.toEnvelope(
         envelopeId: _newEnvelopeId(conversationId, nowMillis, index),
-        senderAccountId: senderAccountId,
-        recipientAccountId: recipientAccountId,
+        senderCidNumber: senderCidNumber,
+        recipientCidNumber: recipientCidNumber,
         senderDeviceId: senderDeviceId,
         createdAtMillis: nowMillis + index,
         ttlMillis: defaultTtlMillis,
@@ -394,6 +385,8 @@ class ChatFlow {
           wireMessage.messageKind == MlsMessageKind.application;
       if (isApplication) {
         await _store.saveOutgoingEnvelope(
+          ownerCidNumber: _ownerCidNumber,
+          currentAccountId: _currentAccountId,
           envelope: envelope,
           envelopeBytes: envelopeBytes,
           recipientCidNumber: recipientCidNumber,
@@ -403,6 +396,7 @@ class ChatFlow {
         );
       } else {
         await _store.queueOutgoingEnvelope(
+          ownerCidNumber: _ownerCidNumber,
           envelope: envelope,
           envelopeBytes: envelopeBytes,
           recipientCidNumber: recipientCidNumber,
@@ -410,8 +404,10 @@ class ChatFlow {
         );
       }
 
-      final result = await _deliverer(envelope, envelopeBytes, recipientCidNumber);
+      final result =
+          await _deliverer(envelope, envelopeBytes, recipientCidNumber);
       await _store.markOutgoingDelivery(
+        ownerCidNumber: _ownerCidNumber,
         envelopeId: envelope.envelopeId,
         state: result.state,
         errorMessage: result.errorMessage,
@@ -430,8 +426,10 @@ class ChatFlow {
     try {
       final inbound = await _crypto.processIncoming(wireMessage);
       if (inbound.messageKind == MlsMessageKind.welcome) {
-        final pending =
-            await _store.takePendingInbound(envelope.conversationId);
+        final pending = await _store.takePendingInbound(
+          _ownerCidNumber,
+          envelope.conversationId,
+        );
         for (final item in pending) {
           await processIncomingEnvelopeBytes(item.writeToBuffer());
         }
@@ -444,6 +442,8 @@ class ChatFlow {
 
       final plaintext = utf8.decode(inbound.plaintext ?? const []);
       await _store.saveIncomingEnvelope(
+        ownerCidNumber: _ownerCidNumber,
+        currentAccountId: _currentAccountId,
         envelope: envelope,
         envelopeBytes: envelopeBytes,
         messageKind: ChatPayloadCodec.decode(plaintext).kind,
@@ -458,6 +458,7 @@ class ChatFlow {
     } catch (error) {
       if (wireMessage.messageKind == MlsMessageKind.application) {
         await _store.savePendingInbound(
+          ownerCidNumber: _ownerCidNumber,
           envelope: envelope,
           envelopeBytes: envelopeBytes,
           reason: error.toString(),

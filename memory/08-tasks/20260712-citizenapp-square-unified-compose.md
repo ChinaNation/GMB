@@ -80,7 +80,7 @@ lib/8964/compose/
 
 **草稿箱（阶段5，已完成并验证）：**
 - 落地 `lib/8964/compose/drafts/`：`compose_draft.dart`（模型+JSON，往返测试过）、`compose_draft_media.dart`
-  （选中即复制到 `{appDocs}/square_drafts/{draftId}/`、删草稿删目录）、`compose_draft_store.dart`
+  （选中即复制到 `{appDocs}/square_drafts/{cid_number}/{draftId}/`、删草稿删目录）、`compose_draft_store.dart`
   （AppKvEntity 前缀多条、新→旧、上限100淘汰最旧；**根因排查**：findAll/build 是 isar 包扩展，需本文件
   `import 'package:isar_community/isar.dart'` 才可用）、`drafts_page.dart`（缩略卡+右滑删除+点击恢复）。
 - 壳集成：`_draftId` 开页即建；`persistMedia`/`onChanged` 注入两 body；**持续防抖自动保存**（800ms + 退出/取消

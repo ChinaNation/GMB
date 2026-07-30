@@ -16,10 +16,13 @@ import '../support/isar_test_env.dart';
 final List<int> _testAttachmentKey =
     List<int>.generate(32, (i) => (i * 5) % 256);
 
-/// 钱包账户 account_id（MLS 名册/归属）与身份主键 cid_number（投递路由键）语义分离。
+/// CID 是信封、MLS 名册与投递的唯一身份键；当前账户只负责本地解锁和鉴权。
 const _bobAccountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
 const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
+const _ownerCidNumber = 'CN220-CTZN2-100000001-2026';
+const _aliceAccountId =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
 
 void main() {
   useIsolatedIsar();
@@ -36,10 +39,8 @@ void main() {
     final restored = imMlsWireMessageFromEnvelope(
       wire.toEnvelope(
         envelopeId: 'env-formal',
-        senderAccountId:
-            '0x1111111111111111111111111111111111111111111111111111111111111111',
-        recipientAccountId:
-            '0x2222222222222222222222222222222222222222222222222222222222222222',
+        senderCidNumber: _ownerCidNumber,
+        recipientCidNumber: _bobCidNumber,
         senderDeviceId: 'alice-phone',
         createdAtMillis: 1,
         ttlMillis: 60000,
@@ -54,6 +55,8 @@ void main() {
   test('接收设备离线时密文只留发送设备本机队列', () async {
     final store = ChatStore();
     final flow = ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       crypto: _FakeMlsCrypto(),
       store: store,
       deliverer: (envelope, _, __) async => ChatDeliveryResult(
@@ -65,33 +68,32 @@ void main() {
 
     await flow.sendText(
       conversationId: 'conv-alice-bob',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      senderCidNumber: _ownerCidNumber,
       recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
       text: 'hello bob',
     );
 
-    final queued = await store.readQueuedEnvelopes();
+    final queued =
+        await store.readQueuedEnvelopes(ownerCidNumber: _ownerCidNumber);
     expect(queued, hasLength(2));
-    expect(
-        queued.every((item) =>
-            item.recipientCidNumber == _bobCidNumber),
+    expect(queued.every((item) => item.recipientCidNumber == _bobCidNumber),
         isTrue);
     for (final item in queued) {
       await store.markOutgoingDelivery(
+        ownerCidNumber: _ownerCidNumber,
         envelopeId: item.envelopeId,
         state: ChatMessageDeliveryState.sent,
       );
     }
-    expect(await store.outboundQueueCount(), 0);
+    expect(await store.outboundQueueCount(_ownerCidNumber), 0);
   });
 
   test('在线设备收到密文后立即解密并写入本机', () async {
     final flow = ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _bobAccountId,
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
       deliverer: (_, __, ___) => throw StateError('接收端不得重新投递'),
@@ -104,10 +106,8 @@ void main() {
       ratchetTreeBytes: [0x02],
     ).toEnvelope(
       envelopeId: 'env-welcome',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      senderCidNumber: _ownerCidNumber,
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 1,
       ttlMillis: 60000,
@@ -119,10 +119,8 @@ void main() {
       messageKind: MlsMessageKind.application,
     ).toEnvelope(
       envelopeId: 'env-app',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      senderCidNumber: _ownerCidNumber,
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       createdAtMillis: 2,
       ttlMillis: 60000,
@@ -133,7 +131,11 @@ void main() {
         await flow.processIncomingEnvelopeBytes(application.writeToBuffer());
 
     expect(result.plaintext, '设备直收');
-    final messages = await ChatStore().readMessages('conv-incoming');
+    final messages = await ChatStore().readMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _bobAccountId,
+      conversationId: 'conv-incoming',
+    );
     expect(messages.single.plaintext, '设备直收');
     expect(messages.single.direction, 'incoming');
   });
@@ -152,6 +154,8 @@ void main() {
     String? savedAttachmentId;
     int? savedByteSize;
     final flow = ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
       deliverer: (envelope, _, __) async => ChatDeliveryResult(
@@ -163,10 +167,7 @@ void main() {
 
     await flow.sendMedia(
       conversationId: 'conv-attachment',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      senderCidNumber: _ownerCidNumber,
       recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
@@ -207,8 +208,13 @@ void main() {
 
     expect(sentSourcePath, source.path);
     expect(sentByteSize, 4);
-    final message =
-        (await ChatStore().readMessages('conv-attachment')).single.plaintext!;
+    final message = (await ChatStore().readMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+      conversationId: 'conv-attachment',
+    ))
+        .single
+        .plaintext!;
     // 控制载荷是端到端明文,只带元数据,绝无任何云端对象引用。
     expect(message, contains('gmb.chat.msg'));
     expect(message, contains('"kind":"image"'));
@@ -230,6 +236,8 @@ void main() {
   test('门①:sendMedia 超限文件抛 ChatMediaTooLargeException 且不发字节', () async {
     var deviceSendCalls = 0;
     final flow = ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
       deliverer: (envelope, _, __) async => ChatDeliveryResult(
@@ -242,10 +250,7 @@ void main() {
     await expectLater(
       flow.sendMedia(
         conversationId: 'conv-oversize',
-        senderAccountId:
-            '0x1111111111111111111111111111111111111111111111111111111111111111',
-        recipientAccountId:
-            '0x2222222222222222222222222222222222222222222222222222222222222222',
+        senderCidNumber: _ownerCidNumber,
         recipientCidNumber: _bobCidNumber,
         senderDeviceId: 'alice-phone',
         recipientKeyPackage: _dummyKeyPackage(),
@@ -281,6 +286,8 @@ void main() {
     await source.writeAsBytes(const [9, 9, 9], flush: true);
     var deviceSendCalls = 0;
     final flow = ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
       deliverer: (envelope, _, __) async => ChatDeliveryResult(
@@ -295,10 +302,7 @@ void main() {
     await expectLater(
       flow.sendMedia(
         conversationId: 'conv-no-keypackage',
-        senderAccountId:
-            '0x1111111111111111111111111111111111111111111111111111111111111111',
-        recipientAccountId:
-            '0x2222222222222222222222222222222222222222222222222222222222222222',
+        senderCidNumber: _ownerCidNumber,
         recipientCidNumber: _bobCidNumber,
         senderDeviceId: 'alice-phone',
         media: ChatMediaDraft(
@@ -333,6 +337,8 @@ void main() {
     final recorded = <String>[];
     final delivered = <String>[];
     final flow = ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
       deliverer: (envelope, _, __) async => ChatDeliveryResult(
@@ -344,10 +350,7 @@ void main() {
 
     await flow.sendMedia(
       conversationId: 'conv-online',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      senderCidNumber: _ownerCidNumber,
       recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
@@ -386,6 +389,8 @@ void main() {
     final recorded = <String>[];
     final delivered = <String>[];
     final flow = ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
       crypto: _FakeMlsCrypto(),
       store: ChatStore(),
       deliverer: (envelope, _, __) async => ChatDeliveryResult(
@@ -399,10 +404,7 @@ void main() {
     // 该异常:控制消息已成立,字节留待上线补发。
     final results = await flow.sendMedia(
       conversationId: 'conv-offline',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      senderCidNumber: _ownerCidNumber,
       recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: _dummyKeyPackage(),
@@ -430,7 +432,12 @@ void main() {
 
     // 控制消息仍落库成立,sendMedia 未抛错。
     expect(results, isNotEmpty);
-    final message = (await ChatStore().readMessages('conv-offline')).single;
+    final message = (await ChatStore().readMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+      conversationId: 'conv-offline',
+    ))
+        .single;
     expect(message.messageKind, ChatMessageKind.image);
     // 登记了待投递,但未标记已送达(离线,字节没发出去)。
     expect(recorded, hasLength(1));
@@ -451,8 +458,8 @@ void main() {
           conversationId: 'c',
           controlPlaintext: control,
           cacheDirectory: root,
-      attachmentKey: _testAttachmentKey,
-      plainDirectory: Directory('${root.path}/.plain'),
+          attachmentKey: _testAttachmentKey,
+          plainDirectory: Directory('${root.path}/.plain'),
         ),
         throwsA(isA<FormatException>()),
       );
@@ -478,8 +485,8 @@ void main() {
         conversationId: 'conv-x',
         controlPlaintext: control,
         cacheDirectory: root,
-      attachmentKey: _testAttachmentKey,
-      plainDirectory: Directory('${root.path}/.plain'),
+        attachmentKey: _testAttachmentKey,
+        plainDirectory: Directory('${root.path}/.plain'),
       ),
       throwsA(isA<StateError>()),
     );
@@ -504,8 +511,8 @@ void main() {
         conversationId: 'conv-x',
         controlPlaintext: control,
         cacheDirectory: root,
-      attachmentKey: _testAttachmentKey,
-      plainDirectory: Directory('${root.path}/.plain'),
+        attachmentKey: _testAttachmentKey,
+        plainDirectory: Directory('${root.path}/.plain'),
       ),
       throwsA(isA<StateError>()),
     );
@@ -624,7 +631,7 @@ class _FakeMlsCrypto implements MlsCrypto {
   @override
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccountId,
+    required String recipientCidNumber,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   }) async {
@@ -685,7 +692,6 @@ class _FakeMlsCrypto implements MlsCrypto {
 }
 
 MlsKeyPackage _dummyKeyPackage() => const MlsKeyPackage(
-      accountId: _bobAccountId,
       cidNumber: _bobCidNumber,
       deviceId: 'bob-phone',
       devicePublicKey: 'aabb',

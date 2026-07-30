@@ -7,24 +7,8 @@ import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-const _account0 =
-    '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _account5 =
     '0x5555555555555555555555555555555555555555555555555555555555555555';
-
-const _wallet0 = WalletProfile(
-  walletIndex: 1,
-  walletName: '钱包1',
-  walletIcon: 'wallet',
-  balance: 0,
-  ss58Address: 'ss58-0',
-  accountId: _account0,
-  alg: 'sr25519',
-  ss58: 2027,
-  createdAtMillis: 0,
-  source: 'test',
-  signMode: 'local',
-);
 
 ResolvedIdentity _identity(String accountId, {int index = 5}) =>
     ResolvedIdentity(
@@ -34,6 +18,7 @@ ResolvedIdentity _identity(String accountId, {int index = 5}) =>
       snapshot: CitizenIdentityChainSnapshot(
         cidNumber: 'CID-TEST',
         accountId: Uint8List(32),
+        bindingRevision: 1,
         votingIdentity: null,
         candidateIdentity: null,
       ),
@@ -43,12 +28,10 @@ void main() {
   IdentityAccountCache cache({
     ResolvedIdentity? result,
     bool throwIt = false,
-    WalletProfile? wallet = _wallet0,
     void Function(int)? onResolve,
   }) {
     return IdentityAccountCache(
       resolver: _FakeResolver(result, throwIt: throwIt, onResolve: onResolve),
-      walletManager: _FakeWalletManager(wallet),
     );
   }
 
@@ -71,21 +54,11 @@ void main() {
     expect(calls, 2, reason: '身份绑定变化后应重新链读');
   });
 
-  test('链读失败乐观回退账户0(未注册),且不缓存失败结果', () async {
+  test('链读失败直接上抛，绝不虚构账户0授权', () async {
     var calls = 0;
     final c = cache(throwIt: true, onResolve: (n) => calls = n);
-    final r = await c.resolve();
-    expect(r!.accountId, _account0);
-    expect(r.accountIndex, 0);
-    expect(r.isRegistered, isFalse);
-    // 乐观回退不缓存 → 再取一次会再链读一次。
-    await c.resolve();
-    expect(calls, 2);
-  });
-
-  test('无热钱包 + 链读失败 → null', () async {
-    final c = cache(throwIt: true, wallet: null);
-    expect(await c.resolve(), isNull);
+    await expectLater(c.resolve(), throwsA(isA<StateError>()));
+    expect(calls, 1);
   });
 
   test('并发请求合并成一次链读', () async {
@@ -101,11 +74,11 @@ void main() {
     expect(await c.accountId(), _account5);
   });
 
-  test('allowChainRead=false 且无缓存:绝不链读,乐观回退账户0', () async {
+  test('allowChainRead=false 且无缓存：绝不链读并返回 null', () async {
     var calls = 0;
     final c = cache(result: _identity(_account5), onResolve: (n) => calls = n);
     final r = await c.resolve(allowChainRead: false);
-    expect(r!.accountId, _account0);
+    expect(r, isNull);
     expect(calls, 0, reason: '广场浏览路径绝不启动 smoldot');
   });
 
@@ -130,11 +103,4 @@ class _FakeResolver extends IdentityAccountResolver {
     if (throwIt) throw StateError('chain down');
     return _result;
   }
-}
-
-class _FakeWalletManager extends WalletManager {
-  _FakeWalletManager(this._wallet);
-  final WalletProfile? _wallet;
-  @override
-  Future<WalletProfile?> getDefaultWallet() async => _wallet;
 }

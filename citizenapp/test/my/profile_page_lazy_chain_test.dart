@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/my/user/user.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
@@ -13,13 +16,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../8964/profile/fake_profile.dart';
 
-/// 身份账户缓存 fake：resolve/accountId 返回 null，让调用方回退 wallet.accountId
-/// （身份=账户0 常态），行为与迁移前一致；避免 instance 触发真链读/真 Isar。
-class _NullIdentityCache extends IdentityAccountCache {
+const _cidNumber = 'GD-CTZN1-000000001-2026';
+
+/// 身份账户缓存 fake：直接返回已缓存 CID 快照，验证离线读取不会启动轻节点。
+class _CachedIdentityCache extends IdentityAccountCache {
   @override
-  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async => null;
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      ResolvedIdentity(
+        accountId:
+            '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ss58Address: 'wallet_profile_test',
+        accountIndex: 0,
+        snapshot: CitizenIdentityChainSnapshot(
+          cidNumber: _cidNumber,
+          accountId: Uint8List(32),
+          bindingRevision: 1,
+          votingIdentity: null,
+        ),
+      );
   @override
-  Future<String?> accountId({bool allowChainRead = true}) async => null;
+  Future<String?> accountId({bool allowChainRead = true}) async =>
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 }
 
 class _FakeWalletManager extends WalletManager {
@@ -56,7 +73,7 @@ class _FakeSquareApi extends SquareApiClient {
 
 void main() {
   setUp(() {
-    IdentityAccountCache.debugInstance = _NullIdentityCache();
+    IdentityAccountCache.debugInstance = _CachedIdentityCache();
   });
 
   tearDown(IdentityAccountCache.resetDebugInstance);
@@ -82,7 +99,7 @@ void main() {
       signMode: 'local',
     );
     await snapshotStore.write(
-      accountId: wallet.accountId,
+      cidNumber: _cidNumber,
       identityLevel: 'candidate',
     );
 

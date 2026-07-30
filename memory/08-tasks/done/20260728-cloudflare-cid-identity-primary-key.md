@@ -98,8 +98,8 @@ worker `vitest` 全绿 + `tsc` 0;换绑后同一 cid_number 社交数据不丢(�
 ## R5 落地记录(2026-07-28)
 - **schema**(`migrations/0001`):chat_devices PK (cid_number, device_id)+account_id 保留(设备所有者)+索引 cid_number;chat_keypackages +cid_number(JOIN/索引 cid)+account_id 保留;chat_device_binding_nonces PK (cid_number, nonce_hash)(**去 account_id 列**)。
 - **收件寻址(A 定案)**:会话层全按身份主键 cid_number 寻址——`requireActiveDevice(cid, device)`、KeyPackage 发布/拉取/领取按 cid、`submitChatEnvelope/Signal` 收件人 `recipient_cid_number`、DO 命名空间 `getByName(cid_number)`(每身份一信箱,换绑后同一 cid)、relay/wake 按收发件人 cid。
-- **codec/binding**:新增 `assertChatCidNumber`(严格全称,复用 assertCidNumber);设备绑定 `ChatDeviceBindingInput.account_id` **保留不动**(设备属账户,由账户 P-256 子钥签,跨端 SCALE golden);注册仍用 `square_device_subkeys WHERE account_id`(账户子钥)验签。
-- **realtime**:`ChatRelayPayload` sender_cid_number/recipient_cid_number;WS attachment `{cid_number, device_id}`,连接头 `x-chat-cid-number`;`closeChatRealtime(env, cidNumber)`。
+- **codec/binding**:新增 `assertChatCidNumber`(严格全称,复用 assertCidNumber)；设备注册由当前绑定账户的 P-256 子钥签名授权，并将 CID、绑定版本、当前账户组成精确授权元组；换绑后旧元组立即失效。
+- **realtime**:`ChatRelayPayload` 只用 sender_cid_number/recipient_cid_number 表达聊天身份；WS attachment 同时保存 CID、绑定版本、当前授权账户和设备，投递前以同一 finalized 元组复核；`closeChatRealtime(env, cidNumber)` 仅用于整身份注销。
 - **push**:`sendChatWake(env, recipientCidNumber, senderCidNumber)` 按 cid 查 chat_devices;WakePayload `{kind:'chat_wake', sender_cid_number}`。
 - **notify_fanout 简化**:删 R2 的 `square_device_subkeys` 桥接,直接 `chat_devices WHERE cid_number IN (...)` 取粉丝设备(回收 R2 临时 workaround)。
 - **purge**:chat DO 按 cid 关闭(先 resolve cid,cid 存在才 close);chat_devices/chat_keypackages 按 account_id 删(设备/密钥属账户,注销/换绑吊销就该断旧设备);chat_device_binding_nonces 按 cid_number 删(表已无 account_id 列)。
@@ -129,10 +129,10 @@ Worker 全库用户数据身份主键 account_id→cid_number 彻底重构完成
 
 - **F1 worker cid 寻址收敛**:`chain/identity.ts` 抽出 `readChainIdentityByCid` 共享读并新增 `fetchChainIdentityStateByCidCached`(按 cid 读 WalletAccountByCid→当前绑定 account_id + CidRegistry active + 投票/竞选公开字段,KV 缓存键 `square_identity_cid:`);`fetchChainIdentityState`(按 account)复用它并保留双向绑定校验。`/v1/square/users/:cid[/posts|/follows]` 路由参数改 cid(`parseCidNumber`),posts 响应 `account_id`→`cid_number`,profile 响应 `account_id` 语义改为"该 cid 当前绑定账户"。`feeds/follows.ts` 关注/取关/通知入参与响应 `followed_account_id`→`followed_cid_number`(去 resolveFollowedCid)。门禁 tsc 0 + vitest 181 全绿。
 - **F2 Flutter 广场/社交**:`square_api_client` 三接口 URL 传目标 cid、`fetchFollows` 响应键 `accounts`→`entries`、关注/取关/通知按 cid;`SquareFollowEntry.accountId`→`cidNumber`;`UserProfilePage` 主键 `accountId`→`cidNumber`(feed 作者点击/关注列表/通讯录入口全传 cid);创作者订阅/DM/QR 等**链上交易入参**从 profile 响应的 `account_id` 取(链验签仍按 account);资料缓存前缀 v2→v3 且缓存键改 cid。
-- **F3 Flutter chat**:传输层 `recipient_cid_number`/`cid_number`/`targetCidNumber`(领取删 requester);新增 `lib/chat/identity/peer_cid_resolver.dart`(进程缓存→链读 `CitizenIdentityChainReader.readByAccountId`→回写 `UserContact.cidNumber`;未绑定 CID **显式抛错 fail-closed**);`UserContact` 加 `cidNumber` 字段;群扇出 `_resolveRecipientCids` 建 per-member 映射;Isar `ChatOutboundQueueEntity`/`ChatOutgoingMediaEntity` 加 `recipientCidNumber`(build_runner 重生成);推送唤醒读 `sender_cid_number`;WS 身份由 session 表达(前端无改)。**MLS 身份分离铁律**:`MlsKeyPackage` 同时存 `accountId`(MLS 成员名册对齐,绝不被 cid 覆盖)与 `cidNumber`(路由);proto `ChatEnvelope` 内嵌 `recipient_account_id` 保留供 MLS/归属。
+- **F3 Flutter Chat（2026-07-29 终态订正）**:传输、MLS BasicCredential、KeyPackage、群成员名册、信封、队列、媒体索引、推送唤醒和 UI 本人判断全部只用 CID 表达身份；不再保留账户成员名册、账户收件字段或账户到 CID 的聊天兼容解析。当前绑定账户只负责建立精确的 CID + binding revision + account 授权元组。
 - **F4 creator + 会话主键**:`CreatorPlan.creatorAccountId`→`creatorCidNumber`(唯一 cid 真源=worker plan 响应);**`SquareSession` 新增必填 `cidNumber`**(worker 登录响应本已下发 `cid_number`,本端 cid 不再需链读)——`nickname_publisher` 等"读本人云端资料"改用 `session.cidNumber`;通讯录页资料改按 cid 索引并解析。
 - **门禁**:worker `tsc` EXIT=0 + `vitest` 全绿;Flutter `dart analyze lib/ test/` **No issues found** + `flutter test` 全绿。
-- **命名审计**:前端残留的 `recipient_account_id`(proto 内嵌/注释)、`creator_account_id`(订阅确认入参)、QR 收款方字段均为**设计保留**;裸 `account` 仅剩 `_ChatAccountContext.account`(账户上下文对象,非 ID 字符串),`group_flow` 循环变量已改 `accountId`。严格 Substrate 命名达成。
+- **命名审计（2026-07-29 终态订正）**:Chat 身份协议中的账户字段已经全部删除；订阅付款/收款、QR 转账、不可变交易审计和当前绑定签名授权中的角色账户字段仍按 ADR-040 保留，它们不构成身份主键。
 
 ## 全面审计 + 修复(2026-07-28,四路并行独立审计后)
 四个独立 agent(契约一致性 / 安全 / 代码质量命名 / 门禁文档)交叉审计,**发现并已修复 6 项实缺陷**(每条均已回原文核验为真,非 grep 误判):

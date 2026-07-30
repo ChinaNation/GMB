@@ -189,7 +189,7 @@ void main() {
       cidNumber: _cid,
       repository: InstitutionRepository(directory: repo),
       chainState: chain,
-      accountIdProvider: () async => 'aa',
+      subscriberCidNumberProvider: () async => 'CID-USER',
     )));
     await tester.pumpAndSettle();
 
@@ -237,7 +237,7 @@ void main() {
       cidNumber: _cid,
       repository: InstitutionRepository(directory: repo),
       chainState: _FakeChainState(adminList: const [_adminAccountId]),
-      accountIdProvider: () async => 'aa',
+      subscriberCidNumberProvider: () async => 'CID-USER',
     )));
     await tester.pumpAndSettle();
 
@@ -268,17 +268,17 @@ void main() {
       cidNumber: _cid,
       repository: InstitutionRepository(directory: repo),
       chainState: _FakeChainState(),
-      accountIdProvider: () async => 'aa',
+      subscriberCidNumberProvider: () async => 'CID-USER',
     )));
     await tester.pumpAndSettle();
 
-    expect(await repo.isSubscribed('aa', _cid), isFalse);
+    expect(await repo.isSubscribed('CID-USER', _cid), isFalse);
     await tester.tap(find.byIcon(Icons.bookmark_border));
     await tester.pumpAndSettle();
-    expect(await repo.isSubscribed('aa', _cid), isTrue);
+    expect(await repo.isSubscribed('CID-USER', _cid), isTrue);
 
     await tester.tap(find.byIcon(Icons.bookmark));
     await tester.pumpAndSettle();
-    expect(await repo.isSubscribed('aa', _cid), isFalse);
+    expect(await repo.isSubscribed('CID-USER', _cid), isFalse);
   });
 }

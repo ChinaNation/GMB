@@ -10,6 +10,7 @@ vi.mock('../src/security/turnstile', () => ({
 const TEST_CID = 'CN220-CTZN2-198805200-2026';
 const identityStateOf = (accountId: string) => ({
   account_id: accountId,
+  binding_revision: 1,
   identity_level: 'visitor',
   has_voting_identity: false,
   has_candidate_identity: false,
@@ -17,12 +18,8 @@ const identityStateOf = (accountId: string) => ({
   checked_at: 0
 });
 vi.mock('../src/chain/identity', () => ({
-  fetchChainIdentityStateCached: vi.fn(async (_env: unknown, accountId: string) =>
+  fetchChainIdentityState: vi.fn(async (_env: unknown, accountId: string) =>
     identityStateOf(accountId)
-  ),
-  // 子钥注册走「缓存读到无 CID 就旁路回源」的入口(懒绑定下占号与注册相距仅数秒)。
-  fetchChainIdentityStateFreshIfUnbound: vi.fn(
-    async (_env: unknown, accountId: string) => identityStateOf(accountId)
   )
 }));
 
@@ -54,17 +51,20 @@ function toHex(buf: ArrayBuffer): string {
 // 设备绑定是唯一「客户端 + Worker 双侧各自 SCALE 编码」的流，须逐字节对齐。
 // 该 golden hex 必须与 App 端 test/signer/device_binding_golden_test.dart 完全一致。
 const DEVICE_BIND_INPUT = {
+  cid_number: TEST_CID,
+  binding_revision: 1,
   account_id: '0x1111111111111111111111111111111111111111111111111111111111111111',
   p256_public_key: '04' + 'ab'.repeat(64),
   issued_at: 1_700_000_000_000
 };
 const DEVICE_BIND_GOLDEN_HEX =
-  '0089e293c8ef5c4d7bb5820e18dcb0bdac4eb374eaf6675c1bc2e53e50c3b960';
+  'a12230133532467b7757ae9597b36255ba0228aaa2fe595b8975283d5efe148e';
 const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
 
 interface StoredSubkey {
   cid_number: string;
   device_id: string;
+  binding_revision: number;
   account_id: string;
   p256_public_key: string;
   issued_at: number;
@@ -73,7 +73,8 @@ interface StoredSubkey {
 }
 
 // 主键 (cid_number, device_id);绑定序对齐 service.ts 的 upsert:
-// (cid_number, device_id, account_id, p256_public_key, issued_at, created_at, updated_at)。
+// (cid_number, device_id, binding_revision, account_id, p256_public_key, issued_at,
+// created_at, updated_at)。
 class DeviceStmt {
   private binds: unknown[] = [];
   constructor(private readonly rows: Map<string, StoredSubkey>) {}
@@ -85,19 +86,25 @@ class DeviceStmt {
     const cidNumber = this.binds[0] as string;
     const deviceId = this.binds[1] as string;
     const key = `${cidNumber}:${deviceId}`;
-    const issuedAt = this.binds[4] as number;
+    const bindingRevision = this.binds[2] as number;
+    const issuedAt = this.binds[5] as number;
     const current = this.rows.get(key);
-    if (current && issuedAt <= current.issued_at) {
+    if (
+      current
+      && bindingRevision <= current.binding_revision
+      && issuedAt <= current.issued_at
+    ) {
       return { meta: { changes: 0 } };
     }
     this.rows.set(key, {
       cid_number: cidNumber,
       device_id: deviceId,
-      account_id: this.binds[2] as string,
-      p256_public_key: this.binds[3] as string,
+      binding_revision: bindingRevision,
+      account_id: this.binds[3] as string,
+      p256_public_key: this.binds[4] as string,
       issued_at: issuedAt,
-      created_at: current?.created_at ?? (this.binds[5] as number),
-      updated_at: this.binds[6] as number
+      created_at: current?.created_at ?? (this.binds[6] as number),
+      updated_at: this.binds[7] as number
     });
     return { meta: { changes: 1 } };
   }
@@ -123,13 +130,15 @@ function registerRequest(issuedAt: number, publicKey = `0x04${'a'.repeat(128)}`)
 }
 
 describe('buildDeviceBindingSigningMessage', () => {
-  it('is signing_message(OP_SIGN_SQUARE_DEVICE_BIND, accountId ‖ pubkey ‖ issued_at)', () => {
+  it('is signing_message(OP_SIGN_SQUARE_DEVICE_BIND, CID ‖ revision ‖ account ‖ pubkey ‖ issued_at)', () => {
     const message = buildDeviceBindingSigningMessage(DEVICE_BIND_INPUT);
     expect(message.length).toBe(32);
-    // 字段顺序锁：accountId → p256_public_key → issued_at。
+    // 字段顺序锁：cid_number → binding_revision → account_id → p256_public_key → issued_at。
     const expected = signingMessage(
       OP_SIGN_SQUARE_DEVICE_BIND,
       concatBytes(
+        scaleString(DEVICE_BIND_INPUT.cid_number),
+        u64Le(DEVICE_BIND_INPUT.binding_revision),
         scaleString(DEVICE_BIND_INPUT.account_id),
         scaleString(DEVICE_BIND_INPUT.p256_public_key),
         u64Le(DEVICE_BIND_INPUT.issued_at)

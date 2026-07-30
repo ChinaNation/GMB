@@ -1,6 +1,6 @@
 import type { Env, SessionState } from '../types';
 import { normalizeP256SignatureHex, verifyP256Signature } from '../auth/device_subkey';
-import { fetchChainIdentityStateCached } from '../chain/identity';
+import { fetchChainIdentityStateByCid } from '../chain/identity';
 import { HttpError, requireSession } from '../shared/http';
 import { sha256Hex } from '../shared/hash';
 import {
@@ -113,6 +113,12 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
     await enforceRateLimit(env, `topup:${ipKey}`, 60, 60);
     return;
   }
+  // CID 接管发生在新设备建立会话之前，不能要求旧会话或旧设备。handler 会用新账户
+  // 钱包签名 + finalized 精确绑定版本完成授权；这里只做 IP 维度限流。
+  if (path.startsWith('/v1/square/identity/takeover')) {
+    await enforceRateLimit(env, `cid_takeover:${ipKey}`, 20, 60);
+    return;
+  }
   // 注销(account/delete 挑战+确认)现走默认拒:客户端已携带广场会话 Bearer(移动端同轮改)。
   // 强制会话后,只能对"自己已登录的账户"发起注销挑战,从源头杜绝对任意账户的匿名挑战枚举;
   // 确认阶段仍由钱包签名(op_tag 0x1D)自证,会话与签名双门。device proof 仍豁免(见 requiresDeviceProof)。
@@ -123,8 +129,12 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   const session = await requireSession(request, env);
   // 链上绑定复查:会话的 account_id 必须仍是其 cid_number 当前绑定账户。换绑走了的旧账户
   // 会话一律拒(靠链上实时绑定为准,不靠删会话)——身份是 cid_number,凭证是当前绑定钱包。
-  const identity = await fetchChainIdentityStateCached(env, session.account_id);
-  if (identity.cid_number !== session.cid_number) {
+  const identity = await fetchChainIdentityStateByCid(env, session.cid_number);
+  if (
+    identity.cid_number !== session.cid_number
+    || identity.binding_revision !== session.binding_revision
+    || identity.account_id !== session.account_id
+  ) {
     throw new HttpError(401, 'cid_binding_changed', '钱包账户绑定已变更,请重新登录');
   }
   const rate = routeRate(path, request.method);
@@ -192,13 +202,22 @@ async function requireDeviceProof(
 
   // 子钥按 (cid_number, device_id) 精确定位;device_id == 会话记录的 device_key_hash(均 = sha256(p256))。
   const subkey = await env.DB.prepare(
-    'SELECT p256_public_key, account_id FROM square_device_subkeys WHERE cid_number = ? AND device_id = ?'
+    `SELECT p256_public_key, binding_revision, account_id
+      FROM square_device_subkeys
+      WHERE cid_number = ? AND device_id = ?`
   )
     .bind(session.cid_number, session.device_key_hash)
-    .first<{ p256_public_key: string; account_id: string }>();
+    .first<{
+      p256_public_key: string;
+      binding_revision: number;
+      account_id: string;
+    }>();
   if (!subkey) throw new HttpError(401, 'device_not_registered', '设备子钥未注册');
   // 该设备子钥的所属账户须与会话一致(换绑等把它改到别的账户即视为失效)。
-  if (subkey.account_id !== session.account_id) {
+  if (
+    subkey.binding_revision !== session.binding_revision
+    || subkey.account_id !== session.account_id
+  ) {
     throw new HttpError(401, 'device_key_changed', '设备密钥已更换，请重新登录');
   }
 

@@ -83,7 +83,9 @@
   - **客户端读常量**：`chain_rpc.dart` 加 `fetchPalletConstant` / `fetchPalletConstantU128` / `fetchMinSelfPayBalanceFen`（`= OnchainMinFee + Balances.ExistentialDeposit`）。走已有 `metadata.chainInfo.constants`，零新依赖、零新网络往返（metadata 已缓存）。常量缺失抛 `StateError` 由调用方 fail-closed，不兜默认值。
   - **删掉 Dart 侧费率副本**：`square_publish_service.dart` 的 `publishFeeFen = 10` / `accountExistentialDepositFen = 111` / `minimumPublishBalanceFen` 三个常量**全删**，改为 `SquarePublishBalanceReader.fetchMinSelfPayBalanceFen()` 读链。全仓 grep 三个符号已零命中。
   - **子钥懒绑定**：删 `WalletManager._registerDeviceSubkey` 及 `createWallet`/`importWallet` 两处调用（建钱包回到纯本地、不依赖 Worker）；`rebindDeviceSubkeyToAccountId` → `bindDeviceSubkeyToAccountId`（首次绑定与换绑共用）；`MyIdService.ensureDeviceSubkeyBound()` 带 in-flight 去重，未注册 CID 直接拒（后端不收）；`IdentityRegistrationGate` 新增 `_GateStatus.bindFailed` + `subkeyBinder` 注入点 + `debugSubkeyBinder` 测试钩子，放行前按需绑定、失败不放行且不自愈（要弹生物识别，只能用户点重试）。
-  - **修掉一个被时机变更打破的旧假设**：`_reconcileIdentityRebuild` 的 `synced == null` 分支原会写基线（注释称「账户0 凭证在钱包创建时已就绪」）。懒绑定后该前提不成立，写基线等于谎称已绑、会让 `ensureDeviceSubkeyBound` 永久短路。已改为该分支**不写基线**，标记只由真正完成绑定的路径推进。
+  - **修掉一个被时机变更打破的旧假设**：完成标记不能在钱包创建时写基线，否则会
+    谎称设备已绑定。最终实现已升级为 `reconcileFinalizedBindingTakeover` 对账完整
+    `(cid_number, binding_revision, account_id, data_root_hash)`，只由真实接管完成路径推进。
   - **Worker**：`chain/identity.ts` 新增 `fetchChainIdentityStateFreshIfUnbound`（缓存无 CID 才回源，有 CID 直接采信不多打链）；`auth/service.ts` 的 `registerDeviceSubkey` 改用它。
   - **币轨图标**：新增 `assets/icons/usdc.svg`（`#2775CA`）、`usdt.svg`（`#26A17B`），手写 SVG、无外部依赖；`_RailCard` 按 `rail.token` 渲染，未登记币种回退 USDC 底图不崩页；`pubspec.yaml` 已注册。
   - **测试**：Worker `typecheck` 干净 + `vitest run` **205/205**（新增身份缓存旁路两例：无 CID 回源、有 CID 不回源）。Flutter `dart analyze lib test` **零问题**；`test/my/myid/` **65/65**（新增懒绑定三例 + 余额闸两例 + 门禁绑定两例）、`test/myid_page_test.dart` **20/20**（新增余额闸三分支）、`test/wallet/` **145/145**（原「门禁0 子钥强绑定」三例按新契约重写为「建钱包不注册子钥 + 唯一绑定入口」）、`test/8964/square_publish_service_test.dart` **8/8**。
@@ -95,7 +97,10 @@
 
 - **2026-07-29 · 收尾复检(遗漏/残留/安全/改进)**
   - **补清残桩注释(违反无残桩,上一版遗漏)**：子钥改懒绑定后,全仓仍有 9 处旧注释把「子钥注册」说成钱包创建/导入时发生——现已全部改正：`create_wallet_onboarding_page.dart`(类头 + 失败文案 + `_openImport`)、`import_wallet_page.dart`(类头 + 失败文案)、`wallet_manager.dart`(`WalletSubkeyRegistrar` typedef 文档 + `_subkeyRegistrar` 字段文档 + `_Account0` 派生用途)、`main.dart`(钩子注入注释)、`chat_runtime.dart`(后台握手注释)、`square_session_provider.dart`(类头)。均为纯注释,零逻辑改动。上一版任务卡只 claim 了 onboarding 一处且实际没做,本轮全部落实。
-  - **核实无问题的点**：① pallet 名 `Balances`/`OnchainTransaction` 与 `construct_runtime` 一致(`runtime/src/lib.rs:270,280`),余额闸不会因名字对不上 fail-closed；② `request_guard.ts` 中 `settlement/`(107 行)在 `topup/` 免会话前缀(112 行)之前返回,结算接口仍走 `TOPUP_SETTLE_TOKEN` 鉴权、未被误开；③ `square_api_client._establishSessionWithRetry` 的懒注册是参数化路径(`onDeviceNotRegistered==null` 即 rethrow),后台 `ensureSession` 传 null,死契约不破,非本次引入；④ `_reconcileIdentityRebuild` 的 `synced==null` 不写基线这一改**不仅安全且必要**——换机导入已有 CID 的账户,新设备必须在进需 CID 页面时真绑一次子钥,旧的"首次即写基线"会让 `ensureDeviceSubkeyBound` 永久短路、子钥永不绑、会话永远失败；⑤ topup dart/worker 无残留 session 语义,changeset 无 TODO/占位。
+  - **核实无问题的点**：① pallet 名 `Balances`/`OnchainTransaction` 与
+    `construct_runtime` 一致；②结算接口仍走 `TOPUP_SETTLE_TOKEN` 鉴权；③后台
+    `ensureSession` 不懒注册设备；④ finalized 接管标记只在数据根与设备真实接管完成
+    后写入，换机导入不会被虚假基线短路；⑤ topup Dart/Worker 无残留 session 语义。
   - **仍存的真实缺口/风险(如实记录,未处理)**：
     1. **`fetchPalletConstant` 真实解码路径无单测**——单测用 fake 把 `fetchMinSelfPayBalanceFen` 整个跳过,`constant.type.decode(ByteInput(bytes))` 的 u128→BigInt 实解只在真机/真链能证。编译通过、用的是 polkadart 标准 API,但属未验路径。建议:补一个用真 metadata fixture 的解码测试,或真机确认。
     2. **充值 confirm 的 DoS 面变宽**——去 session 后任何人(不止已注册用户)都能触发 confirm→打外部 EVM RPC。现由 guard IP 限流 60/60s + handler 账户级 10/60s 兜底,但比原来(会话门)宽。建议:若真出现滥用,给命中 EVM RPC 的路径再加一层全局/IP 硬顶。

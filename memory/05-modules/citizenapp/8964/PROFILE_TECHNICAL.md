@@ -102,8 +102,8 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
     `square_article_detail_page` 按块渲染（内联图恒横屏），旧文章无块降级纯文本+扁平配图。
   - **草稿箱** `compose/drafts/`：全类型（图/视频/文章及竞选）本地持久化。`compose_draft.dart`（模型+JSON，
     含文章 content_blocks + 持久媒体路径）、`compose_draft_media.dart`（picker 临时文件选中即复制到
-    `{appDocs}/square_drafts/{draftId}/`）、`compose_draft_store.dart`（AppKvEntity 前缀
-    `square.compose.draft.{account_id_hex}.{draftId}`、按 updated_at 新→旧、
+    `{appDocs}/square_drafts/{cid_number}/{draftId}/`）、`compose_draft_store.dart`
+    （AppKvEntity 前缀 `square.compose.draft.by_cid.{cid_number}.{draftId}`、按 updated_at 新→旧、
     **上限 100 淘汰最旧**）、`drafts_page.dart`
     （缩略卡、右滑删除、点击恢复）。行为：**持续防抖自动保存**（编辑中 800ms + 退出/取消 flush，空内容不存/删）、
     发布成功删草稿、发布失败保留可重发。壳持 `_draftId`、向 body 注入 `persistMedia`/`onChanged`，body 加
@@ -130,8 +130,13 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - 关注/取关：单击 + 乐观更新（粉丝数±1，失败回滚），**不逐次签名**；session 由默认热钱包静默登录一次（`signWithWalletNoAuth`）复用。session 存在的意义是防伪造他人关注（写入完整性），非内容加密。
 - 认证勾以链上已确认发布携带的 `cid_number` 为真源（confirm 时写入），不信任 App/Worker 自报。
 - 主页资料媒体经 `mediaUrl(object_key)` → `GET /media/<key>` 渲染 `Image.network`，并携带钱包 session header；缺失或失败回落 `assets/profile_defaults/` 的稳定照片。广场主媒体使用 Images / Stream 短期地址。
-- 广场首页浏览只从 `IdentityBadgeSnapshotStore` 读取当前默认钱包的身份徽章展示信号，不启动 smoldot；用户进入动态/文章发布页时才通过 `SquareIdentityService.loadCurrent(readLiveChain: true)` 读取 finalized 身份，快照不得用于发布资格判断。
-- 若轻节点已被交易、治理或发布等其他主动流程启动并进入 operational，广场首页通过可取消状态监听为当前钱包刷新一次徽章快照；切换默认钱包后按新账户隔离读取，不轮询。
+- 广场首页浏览只从 `IdentityBadgeSnapshotStore` 读取当前永久 CID 的身份徽章展示信号；
+  用户进入动态/文章发布页时通过
+  `SquareIdentityService.loadCurrent(readLiveChain: true)` 读取 finalized 身份，
+  快照不得用于发布资格判断。
+- 若轻节点已被交易、治理或发布等其他主动流程启动并进入 operational，广场首页
+  通过可取消状态监听为当前永久 CID 刷新一次徽章快照；钱包换绑后继续按同一 CID
+  读取，不轮询。
 - 广场首页的信息流 Future 在创建时立即挂只读错误观察器，随后仍由 `FutureBuilder`
   接收同一个原始 Future 并展示失败态；这消除了 Worker 快速失败发生在首帧监听前的
   未处理时间窗，不会把前台错误转换成成功或空列表。

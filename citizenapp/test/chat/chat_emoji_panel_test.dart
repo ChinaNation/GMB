@@ -9,13 +9,18 @@ import 'package:citizenapp/chat/storage/chat_store.dart';
 
 class _EmptyStore extends ChatStore {
   @override
-  Future<List<ChatStoredMessage>> readMessages(String conversationId) async =>
+  Future<List<ChatStoredMessage>> readMessages({
+    required String ownerCidNumber,
+    required String currentAccountId,
+    required String conversationId,
+  }) async =>
       const [];
 }
 
 Widget _host({ChatSendTextCallback? onSendText}) => MaterialApp(
       home: ChatPage(
         conversationId: 'conv-emoji',
+        ownerCidNumber: 'CN220-CTZN2-100000001-2026',
         accountId:
             '0x1111111111111111111111111111111111111111111111111111111111111111',
         peerUserId:

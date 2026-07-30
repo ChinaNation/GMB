@@ -17092,9 +17092,9 @@ const PublicInstitutionSubscriptionEntitySchema = CollectionSchema(
   name: r'PublicInstitutionSubscriptionEntity',
   id: -8652922314920949356,
   properties: {
-    r'cidNumber': PropertySchema(
+    r'institutionCidNumber': PropertySchema(
       id: 0,
-      name: r'cidNumber',
+      name: r'institutionCidNumber',
       type: IsarType.string,
     ),
     r'subscribedAtMillis': PropertySchema(
@@ -17102,9 +17102,9 @@ const PublicInstitutionSubscriptionEntitySchema = CollectionSchema(
       name: r'subscribedAtMillis',
       type: IsarType.long,
     ),
-    r'subscriberAccountId': PropertySchema(
+    r'subscriberCidNumber': PropertySchema(
       id: 2,
-      name: r'subscriberAccountId',
+      name: r'subscriberCidNumber',
       type: IsarType.string,
     ),
     r'subscriptionKey': PropertySchema(
@@ -17132,14 +17132,14 @@ const PublicInstitutionSubscriptionEntitySchema = CollectionSchema(
         )
       ],
     ),
-    r'subscriberAccountId': IndexSchema(
-      id: 2715483348583507050,
-      name: r'subscriberAccountId',
+    r'subscriberCidNumber': IndexSchema(
+      id: -7606147423943542076,
+      name: r'subscriberCidNumber',
       unique: false,
       replace: false,
       properties: [
         IndexPropertySchema(
-          name: r'subscriberAccountId',
+          name: r'subscriberCidNumber',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -17160,8 +17160,8 @@ int _publicInstitutionSubscriptionEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.cidNumber.length * 3;
-  bytesCount += 3 + object.subscriberAccountId.length * 3;
+  bytesCount += 3 + object.institutionCidNumber.length * 3;
+  bytesCount += 3 + object.subscriberCidNumber.length * 3;
   bytesCount += 3 + object.subscriptionKey.length * 3;
   return bytesCount;
 }
@@ -17172,9 +17172,9 @@ void _publicInstitutionSubscriptionEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.cidNumber);
+  writer.writeString(offsets[0], object.institutionCidNumber);
   writer.writeLong(offsets[1], object.subscribedAtMillis);
-  writer.writeString(offsets[2], object.subscriberAccountId);
+  writer.writeString(offsets[2], object.subscriberCidNumber);
   writer.writeString(offsets[3], object.subscriptionKey);
 }
 
@@ -17186,10 +17186,10 @@ PublicInstitutionSubscriptionEntity
   Map<Type, List<int>> allOffsets,
 ) {
   final object = PublicInstitutionSubscriptionEntity();
-  object.cidNumber = reader.readString(offsets[0]);
   object.id = id;
+  object.institutionCidNumber = reader.readString(offsets[0]);
   object.subscribedAtMillis = reader.readLong(offsets[1]);
-  object.subscriberAccountId = reader.readString(offsets[2]);
+  object.subscriberCidNumber = reader.readString(offsets[2]);
   object.subscriptionKey = reader.readString(offsets[3]);
   return object;
 }
@@ -17433,45 +17433,45 @@ extension PublicInstitutionSubscriptionEntityQueryWhere on QueryBuilder<
 
   QueryBuilder<PublicInstitutionSubscriptionEntity,
           PublicInstitutionSubscriptionEntity, QAfterWhereClause>
-      subscriberAccountIdEqualTo(String subscriberAccountId) {
+      subscriberCidNumberEqualTo(String subscriberCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'subscriberAccountId',
-        value: [subscriberAccountId],
+        indexName: r'subscriberCidNumber',
+        value: [subscriberCidNumber],
       ));
     });
   }
 
   QueryBuilder<PublicInstitutionSubscriptionEntity,
           PublicInstitutionSubscriptionEntity, QAfterWhereClause>
-      subscriberAccountIdNotEqualTo(String subscriberAccountId) {
+      subscriberCidNumberNotEqualTo(String subscriberCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'subscriberAccountId',
+              indexName: r'subscriberCidNumber',
               lower: [],
-              upper: [subscriberAccountId],
+              upper: [subscriberCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'subscriberAccountId',
-              lower: [subscriberAccountId],
+              indexName: r'subscriberCidNumber',
+              lower: [subscriberCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'subscriberAccountId',
-              lower: [subscriberAccountId],
+              indexName: r'subscriberCidNumber',
+              lower: [subscriberCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'subscriberAccountId',
+              indexName: r'subscriberCidNumber',
               lower: [],
-              upper: [subscriberAccountId],
+              upper: [subscriberCidNumber],
               includeUpper: false,
             ));
       }
@@ -17483,160 +17483,6 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
     PublicInstitutionSubscriptionEntity,
     PublicInstitutionSubscriptionEntity,
     QFilterCondition> {
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'cidNumber',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'cidNumber',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'cidNumber',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'cidNumber',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'cidNumber',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'cidNumber',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionSubscriptionEntity,
-          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
-      cidNumberContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'cidNumber',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<PublicInstitutionSubscriptionEntity,
-          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
-      cidNumberMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'cidNumber',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'cidNumber',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<
-      PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> cidNumberIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'cidNumber',
-        value: '',
-      ));
-    });
-  }
-
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
@@ -17691,6 +17537,160 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'institutionCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'institutionCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'institutionCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'institutionCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'institutionCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'institutionCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      institutionCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'institutionCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PublicInstitutionSubscriptionEntity,
+          PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
+      institutionCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'institutionCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'institutionCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterFilterCondition> institutionCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'institutionCidNumber',
+        value: '',
       ));
     });
   }
@@ -17762,13 +17762,13 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdEqualTo(
+      QAfterFilterCondition> subscriberCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17778,7 +17778,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdGreaterThan(
+      QAfterFilterCondition> subscriberCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -17786,7 +17786,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17796,7 +17796,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdLessThan(
+      QAfterFilterCondition> subscriberCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -17804,7 +17804,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17814,7 +17814,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdBetween(
+      QAfterFilterCondition> subscriberCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -17823,7 +17823,7 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -17836,13 +17836,13 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdStartsWith(
+      QAfterFilterCondition> subscriberCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17852,13 +17852,13 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdEndsWith(
+      QAfterFilterCondition> subscriberCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17867,10 +17867,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionSubscriptionEntity,
           PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
-      subscriberAccountIdContains(String value, {bool caseSensitive = true}) {
+      subscriberCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -17879,10 +17879,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<PublicInstitutionSubscriptionEntity,
           PublicInstitutionSubscriptionEntity, QAfterFilterCondition>
-      subscriberAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      subscriberCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -17892,10 +17892,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdIsEmpty() {
+      QAfterFilterCondition> subscriberCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: '',
       ));
     });
@@ -17904,10 +17904,10 @@ extension PublicInstitutionSubscriptionEntityQueryFilter on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterFilterCondition> subscriberAccountIdIsNotEmpty() {
+      QAfterFilterCondition> subscriberCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'subscriberAccountId',
+        property: r'subscriberCidNumber',
         value: '',
       ));
     });
@@ -18082,17 +18082,21 @@ extension PublicInstitutionSubscriptionEntityQuerySortBy on QueryBuilder<
     PublicInstitutionSubscriptionEntity,
     PublicInstitutionSubscriptionEntity,
     QSortBy> {
-  QueryBuilder<PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity, QAfterSortBy> sortByCidNumber() {
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortByInstitutionCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cidNumber', Sort.asc);
+      return query.addSortBy(r'institutionCidNumber', Sort.asc);
     });
   }
 
-  QueryBuilder<PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity, QAfterSortBy> sortByCidNumberDesc() {
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> sortByInstitutionCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cidNumber', Sort.desc);
+      return query.addSortBy(r'institutionCidNumber', Sort.desc);
     });
   }
 
@@ -18117,18 +18121,18 @@ extension PublicInstitutionSubscriptionEntityQuerySortBy on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterSortBy> sortBySubscriberAccountId() {
+      QAfterSortBy> sortBySubscriberCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'subscriberAccountId', Sort.asc);
+      return query.addSortBy(r'subscriberCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterSortBy> sortBySubscriberAccountIdDesc() {
+      QAfterSortBy> sortBySubscriberCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'subscriberAccountId', Sort.desc);
+      return query.addSortBy(r'subscriberCidNumber', Sort.desc);
     });
   }
 
@@ -18156,20 +18160,6 @@ extension PublicInstitutionSubscriptionEntityQuerySortThenBy on QueryBuilder<
     PublicInstitutionSubscriptionEntity,
     QSortThenBy> {
   QueryBuilder<PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity, QAfterSortBy> thenByCidNumber() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cidNumber', Sort.asc);
-    });
-  }
-
-  QueryBuilder<PublicInstitutionSubscriptionEntity,
-      PublicInstitutionSubscriptionEntity, QAfterSortBy> thenByCidNumberDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cidNumber', Sort.desc);
-    });
-  }
-
-  QueryBuilder<PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -18180,6 +18170,24 @@ extension PublicInstitutionSubscriptionEntityQuerySortThenBy on QueryBuilder<
       PublicInstitutionSubscriptionEntity, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenByInstitutionCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<
+      PublicInstitutionSubscriptionEntity,
+      PublicInstitutionSubscriptionEntity,
+      QAfterSortBy> thenByInstitutionCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'institutionCidNumber', Sort.desc);
     });
   }
 
@@ -18204,18 +18212,18 @@ extension PublicInstitutionSubscriptionEntityQuerySortThenBy on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterSortBy> thenBySubscriberAccountId() {
+      QAfterSortBy> thenBySubscriberCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'subscriberAccountId', Sort.asc);
+      return query.addSortBy(r'subscriberCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QAfterSortBy> thenBySubscriberAccountIdDesc() {
+      QAfterSortBy> thenBySubscriberCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'subscriberAccountId', Sort.desc);
+      return query.addSortBy(r'subscriberCidNumber', Sort.desc);
     });
   }
 
@@ -18245,9 +18253,10 @@ extension PublicInstitutionSubscriptionEntityQueryWhereDistinct on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QDistinct> distinctByCidNumber({bool caseSensitive = true}) {
+      QDistinct> distinctByInstitutionCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'cidNumber', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'institutionCidNumber',
+          caseSensitive: caseSensitive);
     });
   }
 
@@ -18263,9 +18272,9 @@ extension PublicInstitutionSubscriptionEntityQueryWhereDistinct on QueryBuilder<
   QueryBuilder<
       PublicInstitutionSubscriptionEntity,
       PublicInstitutionSubscriptionEntity,
-      QDistinct> distinctBySubscriberAccountId({bool caseSensitive = true}) {
+      QDistinct> distinctBySubscriberCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'subscriberAccountId',
+      return query.addDistinctBy(r'subscriberCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -18293,9 +18302,9 @@ extension PublicInstitutionSubscriptionEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionSubscriptionEntity, String, QQueryOperations>
-      cidNumberProperty() {
+      institutionCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'cidNumber');
+      return query.addPropertyName(r'institutionCidNumber');
     });
   }
 
@@ -18307,9 +18316,9 @@ extension PublicInstitutionSubscriptionEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<PublicInstitutionSubscriptionEntity, String, QQueryOperations>
-      subscriberAccountIdProperty() {
+      subscriberCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'subscriberAccountId');
+      return query.addPropertyName(r'subscriberCidNumber');
     });
   }
 
@@ -20804,39 +20813,39 @@ const ChatConversationEntitySchema = CollectionSchema(
   name: r'ChatConversationEntity',
   id: 6241151859022060416,
   properties: {
-    r'accountId': PropertySchema(
-      id: 0,
-      name: r'accountId',
-      type: IsarType.string,
-    ),
     r'conversationId': PropertySchema(
-      id: 1,
+      id: 0,
       name: r'conversationId',
       type: IsarType.string,
     ),
     r'conversationKind': PropertySchema(
-      id: 2,
+      id: 1,
       name: r'conversationKind',
       type: IsarType.string,
     ),
     r'lastDeliveryState': PropertySchema(
-      id: 3,
+      id: 2,
       name: r'lastDeliveryState',
       type: IsarType.string,
     ),
     r'lastMessageCipher': PropertySchema(
-      id: 4,
+      id: 3,
       name: r'lastMessageCipher',
       type: IsarType.string,
     ),
     r'lastUpdatedAtMillis': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'lastUpdatedAtMillis',
       type: IsarType.long,
     ),
-    r'peerAccountId': PropertySchema(
+    r'ownerCidNumber': PropertySchema(
+      id: 5,
+      name: r'ownerCidNumber',
+      type: IsarType.string,
+    ),
+    r'peerCidNumber': PropertySchema(
       id: 6,
-      name: r'peerAccountId',
+      name: r'peerCidNumber',
       type: IsarType.string,
     ),
     r'title': PropertySchema(
@@ -20856,12 +20865,17 @@ const ChatConversationEntitySchema = CollectionSchema(
   deserializeProp: _chatConversationEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'conversationId': IndexSchema(
-      id: 2945908346256754300,
-      name: r'conversationId',
+    r'ownerCidNumber_conversationId': IndexSchema(
+      id: -7424835351205823844,
+      name: r'ownerCidNumber_conversationId',
       unique: true,
       replace: true,
       properties: [
+        IndexPropertySchema(
+          name: r'ownerCidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
         IndexPropertySchema(
           name: r'conversationId',
           type: IndexType.hash,
@@ -20869,27 +20883,14 @@ const ChatConversationEntitySchema = CollectionSchema(
         )
       ],
     ),
-    r'accountId': IndexSchema(
-      id: -1591555361937770434,
-      name: r'accountId',
+    r'peerCidNumber': IndexSchema(
+      id: 8594361946077179915,
+      name: r'peerCidNumber',
       unique: false,
       replace: false,
       properties: [
         IndexPropertySchema(
-          name: r'accountId',
-          type: IndexType.hash,
-          caseSensitive: true,
-        )
-      ],
-    ),
-    r'peerAccountId': IndexSchema(
-      id: 9089452155213224228,
-      name: r'peerAccountId',
-      unique: false,
-      replace: false,
-      properties: [
-        IndexPropertySchema(
-          name: r'peerAccountId',
+          name: r'peerCidNumber',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -20923,7 +20924,6 @@ int _chatConversationEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.accountId.length * 3;
   bytesCount += 3 + object.conversationId.length * 3;
   {
     final value = object.conversationKind;
@@ -20933,7 +20933,8 @@ int _chatConversationEntityEstimateSize(
   }
   bytesCount += 3 + object.lastDeliveryState.length * 3;
   bytesCount += 3 + object.lastMessageCipher.length * 3;
-  bytesCount += 3 + object.peerAccountId.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
+  bytesCount += 3 + object.peerCidNumber.length * 3;
   bytesCount += 3 + object.title.length * 3;
   return bytesCount;
 }
@@ -20944,13 +20945,13 @@ void _chatConversationEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.accountId);
-  writer.writeString(offsets[1], object.conversationId);
-  writer.writeString(offsets[2], object.conversationKind);
-  writer.writeString(offsets[3], object.lastDeliveryState);
-  writer.writeString(offsets[4], object.lastMessageCipher);
-  writer.writeLong(offsets[5], object.lastUpdatedAtMillis);
-  writer.writeString(offsets[6], object.peerAccountId);
+  writer.writeString(offsets[0], object.conversationId);
+  writer.writeString(offsets[1], object.conversationKind);
+  writer.writeString(offsets[2], object.lastDeliveryState);
+  writer.writeString(offsets[3], object.lastMessageCipher);
+  writer.writeLong(offsets[4], object.lastUpdatedAtMillis);
+  writer.writeString(offsets[5], object.ownerCidNumber);
+  writer.writeString(offsets[6], object.peerCidNumber);
   writer.writeString(offsets[7], object.title);
   writer.writeLong(offsets[8], object.unreadCount);
 }
@@ -20962,14 +20963,14 @@ ChatConversationEntity _chatConversationEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ChatConversationEntity();
-  object.accountId = reader.readString(offsets[0]);
-  object.conversationId = reader.readString(offsets[1]);
-  object.conversationKind = reader.readStringOrNull(offsets[2]);
+  object.conversationId = reader.readString(offsets[0]);
+  object.conversationKind = reader.readStringOrNull(offsets[1]);
   object.id = id;
-  object.lastDeliveryState = reader.readString(offsets[3]);
-  object.lastMessageCipher = reader.readString(offsets[4]);
-  object.lastUpdatedAtMillis = reader.readLong(offsets[5]);
-  object.peerAccountId = reader.readString(offsets[6]);
+  object.lastDeliveryState = reader.readString(offsets[2]);
+  object.lastMessageCipher = reader.readString(offsets[3]);
+  object.lastUpdatedAtMillis = reader.readLong(offsets[4]);
+  object.ownerCidNumber = reader.readString(offsets[5]);
+  object.peerCidNumber = reader.readString(offsets[6]);
   object.title = reader.readString(offsets[7]);
   object.unreadCount = reader.readLong(offsets[8]);
   return object;
@@ -20985,15 +20986,15 @@ P _chatConversationEntityDeserializeProp<P>(
     case 0:
       return (reader.readString(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
-    case 2:
       return (reader.readStringOrNull(offset)) as P;
+    case 2:
+      return (reader.readString(offset)) as P;
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
-    case 5:
       return (reader.readLong(offset)) as P;
+    case 5:
+      return (reader.readString(offset)) as P;
     case 6:
       return (reader.readString(offset)) as P;
     case 7:
@@ -21021,61 +21022,102 @@ void _chatConversationEntityAttach(
 
 extension ChatConversationEntityByIndex
     on IsarCollection<ChatConversationEntity> {
-  Future<ChatConversationEntity?> getByConversationId(String conversationId) {
-    return getByIndex(r'conversationId', [conversationId]);
+  Future<ChatConversationEntity?> getByOwnerCidNumberConversationId(
+      String ownerCidNumber, String conversationId) {
+    return getByIndex(
+        r'ownerCidNumber_conversationId', [ownerCidNumber, conversationId]);
   }
 
-  ChatConversationEntity? getByConversationIdSync(String conversationId) {
-    return getByIndexSync(r'conversationId', [conversationId]);
+  ChatConversationEntity? getByOwnerCidNumberConversationIdSync(
+      String ownerCidNumber, String conversationId) {
+    return getByIndexSync(
+        r'ownerCidNumber_conversationId', [ownerCidNumber, conversationId]);
   }
 
-  Future<bool> deleteByConversationId(String conversationId) {
-    return deleteByIndex(r'conversationId', [conversationId]);
+  Future<bool> deleteByOwnerCidNumberConversationId(
+      String ownerCidNumber, String conversationId) {
+    return deleteByIndex(
+        r'ownerCidNumber_conversationId', [ownerCidNumber, conversationId]);
   }
 
-  bool deleteByConversationIdSync(String conversationId) {
-    return deleteByIndexSync(r'conversationId', [conversationId]);
+  bool deleteByOwnerCidNumberConversationIdSync(
+      String ownerCidNumber, String conversationId) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_conversationId', [ownerCidNumber, conversationId]);
   }
 
-  Future<List<ChatConversationEntity?>> getAllByConversationId(
-      List<String> conversationIdValues) {
-    final values = conversationIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'conversationId', values);
+  Future<List<ChatConversationEntity?>> getAllByOwnerCidNumberConversationId(
+      List<String> ownerCidNumberValues, List<String> conversationIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(conversationIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], conversationIdValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_conversationId', values);
   }
 
-  List<ChatConversationEntity?> getAllByConversationIdSync(
-      List<String> conversationIdValues) {
-    final values = conversationIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'conversationId', values);
+  List<ChatConversationEntity?> getAllByOwnerCidNumberConversationIdSync(
+      List<String> ownerCidNumberValues, List<String> conversationIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(conversationIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], conversationIdValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_conversationId', values);
   }
 
-  Future<int> deleteAllByConversationId(List<String> conversationIdValues) {
-    final values = conversationIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'conversationId', values);
+  Future<int> deleteAllByOwnerCidNumberConversationId(
+      List<String> ownerCidNumberValues, List<String> conversationIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(conversationIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], conversationIdValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_conversationId', values);
   }
 
-  int deleteAllByConversationIdSync(List<String> conversationIdValues) {
-    final values = conversationIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'conversationId', values);
+  int deleteAllByOwnerCidNumberConversationIdSync(
+      List<String> ownerCidNumberValues, List<String> conversationIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(conversationIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], conversationIdValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_conversationId', values);
   }
 
-  Future<Id> putByConversationId(ChatConversationEntity object) {
-    return putByIndex(r'conversationId', object);
+  Future<Id> putByOwnerCidNumberConversationId(ChatConversationEntity object) {
+    return putByIndex(r'ownerCidNumber_conversationId', object);
   }
 
-  Id putByConversationIdSync(ChatConversationEntity object,
+  Id putByOwnerCidNumberConversationIdSync(ChatConversationEntity object,
       {bool saveLinks = true}) {
-    return putByIndexSync(r'conversationId', object, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_conversationId', object,
+        saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByConversationId(
+  Future<List<Id>> putAllByOwnerCidNumberConversationId(
       List<ChatConversationEntity> objects) {
-    return putAllByIndex(r'conversationId', objects);
+    return putAllByIndex(r'ownerCidNumber_conversationId', objects);
   }
 
-  List<Id> putAllByConversationIdSync(List<ChatConversationEntity> objects,
+  List<Id> putAllByOwnerCidNumberConversationIdSync(
+      List<ChatConversationEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'conversationId', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'ownerCidNumber_conversationId', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -21169,44 +21211,46 @@ extension ChatConversationEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterWhereClause> conversationIdEqualTo(String conversationId) {
+          QAfterWhereClause>
+      ownerCidNumberEqualToAnyConversationId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'conversationId',
-        value: [conversationId],
+        indexName: r'ownerCidNumber_conversationId',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterWhereClause> conversationIdNotEqualTo(String conversationId) {
+          QAfterWhereClause>
+      ownerCidNumberNotEqualToAnyConversationId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'conversationId',
+              indexName: r'ownerCidNumber_conversationId',
               lower: [],
-              upper: [conversationId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'conversationId',
-              lower: [conversationId],
+              indexName: r'ownerCidNumber_conversationId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'conversationId',
-              lower: [conversationId],
+              indexName: r'ownerCidNumber_conversationId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'conversationId',
+              indexName: r'ownerCidNumber_conversationId',
               lower: [],
-              upper: [conversationId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ));
       }
@@ -21214,44 +21258,48 @@ extension ChatConversationEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterWhereClause> accountIdEqualTo(String accountId) {
+          QAfterWhereClause>
+      ownerCidNumberConversationIdEqualTo(
+          String ownerCidNumber, String conversationId) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'accountId',
-        value: [accountId],
+        indexName: r'ownerCidNumber_conversationId',
+        value: [ownerCidNumber, conversationId],
       ));
     });
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterWhereClause> accountIdNotEqualTo(String accountId) {
+          QAfterWhereClause>
+      ownerCidNumberEqualToConversationIdNotEqualTo(
+          String ownerCidNumber, String conversationId) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [],
-              upper: [accountId],
+              indexName: r'ownerCidNumber_conversationId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, conversationId],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [accountId],
+              indexName: r'ownerCidNumber_conversationId',
+              lower: [ownerCidNumber, conversationId],
               includeLower: false,
-              upper: [],
+              upper: [ownerCidNumber],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [accountId],
+              indexName: r'ownerCidNumber_conversationId',
+              lower: [ownerCidNumber, conversationId],
               includeLower: false,
-              upper: [],
+              upper: [ownerCidNumber],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [],
-              upper: [accountId],
+              indexName: r'ownerCidNumber_conversationId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, conversationId],
               includeUpper: false,
             ));
       }
@@ -21259,44 +21307,44 @@ extension ChatConversationEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterWhereClause> peerAccountIdEqualTo(String peerAccountId) {
+      QAfterWhereClause> peerCidNumberEqualTo(String peerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'peerAccountId',
-        value: [peerAccountId],
+        indexName: r'peerCidNumber',
+        value: [peerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterWhereClause> peerAccountIdNotEqualTo(String peerAccountId) {
+      QAfterWhereClause> peerCidNumberNotEqualTo(String peerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
+              indexName: r'peerCidNumber',
               lower: [],
-              upper: [peerAccountId],
+              upper: [peerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
-              lower: [peerAccountId],
+              indexName: r'peerCidNumber',
+              lower: [peerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
-              lower: [peerAccountId],
+              indexName: r'peerCidNumber',
+              lower: [peerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
+              indexName: r'peerCidNumber',
               lower: [],
-              upper: [peerAccountId],
+              upper: [peerCidNumber],
               includeUpper: false,
             ));
       }
@@ -21400,144 +21448,6 @@ extension ChatConversationEntityQueryWhere on QueryBuilder<
 
 extension ChatConversationEntityQueryFilter on QueryBuilder<
     ChatConversationEntity, ChatConversationEntity, QFilterCondition> {
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'accountId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-          QAfterFilterCondition>
-      accountIdContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-          QAfterFilterCondition>
-      accountIdMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'accountId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'accountId',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> accountIdIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'accountId',
-        value: '',
-      ));
-    });
-  }
-
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
       QAfterFilterCondition> conversationIdEqualTo(
     String value, {
@@ -22221,13 +22131,13 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdEqualTo(
+      QAfterFilterCondition> ownerCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -22235,7 +22145,7 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdGreaterThan(
+      QAfterFilterCondition> ownerCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -22243,7 +22153,7 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -22251,7 +22161,7 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdLessThan(
+      QAfterFilterCondition> ownerCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -22259,7 +22169,7 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -22267,7 +22177,7 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdBetween(
+      QAfterFilterCondition> ownerCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -22276,7 +22186,7 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -22287,13 +22197,13 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdStartsWith(
+      QAfterFilterCondition> ownerCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -22301,13 +22211,13 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdEndsWith(
+      QAfterFilterCondition> ownerCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -22316,10 +22226,10 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
           QAfterFilterCondition>
-      peerAccountIdContains(String value, {bool caseSensitive = true}) {
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -22328,10 +22238,10 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
           QAfterFilterCondition>
-      peerAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -22339,20 +22249,158 @@ extension ChatConversationEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdIsEmpty() {
+      QAfterFilterCondition> ownerCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
-      QAfterFilterCondition> peerAccountIdIsNotEmpty() {
+      QAfterFilterCondition> ownerCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'peerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+          QAfterFilterCondition>
+      peerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+          QAfterFilterCondition>
+      peerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'peerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'peerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> peerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'peerCidNumber',
         value: '',
       ));
     });
@@ -22562,20 +22610,6 @@ extension ChatConversationEntityQueryLinks on QueryBuilder<
 extension ChatConversationEntityQuerySortBy
     on QueryBuilder<ChatConversationEntity, ChatConversationEntity, QSortBy> {
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      sortByAccountId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      sortByAccountIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
       sortByConversationId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'conversationId', Sort.asc);
@@ -22646,16 +22680,30 @@ extension ChatConversationEntityQuerySortBy
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      sortByPeerAccountId() {
+      sortByOwnerCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.asc);
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      sortByPeerAccountIdDesc() {
+      sortByOwnerCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.desc);
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      sortByPeerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      sortByPeerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.desc);
     });
   }
 
@@ -22690,20 +22738,6 @@ extension ChatConversationEntityQuerySortBy
 
 extension ChatConversationEntityQuerySortThenBy on QueryBuilder<
     ChatConversationEntity, ChatConversationEntity, QSortThenBy> {
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      thenByAccountId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      thenByAccountIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.desc);
-    });
-  }
-
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
       thenByConversationId() {
     return QueryBuilder.apply(this, (query) {
@@ -22789,16 +22823,30 @@ extension ChatConversationEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      thenByPeerAccountId() {
+      thenByOwnerCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.asc);
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
-      thenByPeerAccountIdDesc() {
+      thenByOwnerCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.desc);
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      thenByPeerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      thenByPeerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.desc);
     });
   }
 
@@ -22833,13 +22881,6 @@ extension ChatConversationEntityQuerySortThenBy on QueryBuilder<
 
 extension ChatConversationEntityQueryWhereDistinct
     on QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct> {
-  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct>
-      distinctByAccountId({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'accountId', caseSensitive: caseSensitive);
-    });
-  }
-
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct>
       distinctByConversationId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -22880,9 +22921,17 @@ extension ChatConversationEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct>
-      distinctByPeerAccountId({bool caseSensitive = true}) {
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'peerAccountId',
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct>
+      distinctByPeerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'peerCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -22907,13 +22956,6 @@ extension ChatConversationEntityQueryProperty on QueryBuilder<
   QueryBuilder<ChatConversationEntity, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
-    });
-  }
-
-  QueryBuilder<ChatConversationEntity, String, QQueryOperations>
-      accountIdProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'accountId');
     });
   }
 
@@ -22953,9 +22995,16 @@ extension ChatConversationEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, String, QQueryOperations>
-      peerAccountIdProperty() {
+      ownerCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'peerAccountId');
+      return query.addPropertyName(r'ownerCidNumber');
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, String, QQueryOperations>
+      peerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'peerCidNumber');
     });
   }
 
@@ -22985,49 +23034,49 @@ const ChatMessageEntitySchema = CollectionSchema(
   name: r'ChatMessageEntity',
   id: 8398983736130033389,
   properties: {
-    r'accountId': PropertySchema(
-      id: 0,
-      name: r'accountId',
-      type: IsarType.string,
-    ),
     r'conversationId': PropertySchema(
-      id: 1,
+      id: 0,
       name: r'conversationId',
       type: IsarType.string,
     ),
     r'createdAtMillis': PropertySchema(
-      id: 2,
+      id: 1,
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
     r'deliveryState': PropertySchema(
-      id: 3,
+      id: 2,
       name: r'deliveryState',
       type: IsarType.string,
     ),
     r'direction': PropertySchema(
-      id: 4,
+      id: 3,
       name: r'direction',
       type: IsarType.string,
     ),
     r'envelopeBytesHex': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'envelopeBytesHex',
       type: IsarType.string,
     ),
     r'envelopeId': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'envelopeId',
       type: IsarType.string,
     ),
     r'messageKind': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'messageKind',
       type: IsarType.string,
     ),
     r'mlsMessageKind': PropertySchema(
-      id: 8,
+      id: 7,
       name: r'mlsMessageKind',
+      type: IsarType.string,
+    ),
+    r'ownerCidNumber': PropertySchema(
+      id: 8,
+      name: r'ownerCidNumber',
       type: IsarType.string,
     ),
     r'plaintextCipher': PropertySchema(
@@ -23035,9 +23084,9 @@ const ChatMessageEntitySchema = CollectionSchema(
       name: r'plaintextCipher',
       type: IsarType.string,
     ),
-    r'recipientAccountId': PropertySchema(
+    r'recipientCidNumber': PropertySchema(
       id: 10,
-      name: r'recipientAccountId',
+      name: r'recipientCidNumber',
       type: IsarType.string,
     ),
     r'searchTokens': PropertySchema(
@@ -23045,9 +23094,9 @@ const ChatMessageEntitySchema = CollectionSchema(
       name: r'searchTokens',
       type: IsarType.stringList,
     ),
-    r'senderAccountId': PropertySchema(
+    r'senderCidNumber': PropertySchema(
       id: 12,
-      name: r'senderAccountId',
+      name: r'senderCidNumber',
       type: IsarType.string,
     ),
     r'senderDeviceId': PropertySchema(
@@ -23062,12 +23111,17 @@ const ChatMessageEntitySchema = CollectionSchema(
   deserializeProp: _chatMessageEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'envelopeId': IndexSchema(
-      id: 6181136152466893989,
-      name: r'envelopeId',
+    r'ownerCidNumber_envelopeId': IndexSchema(
+      id: 3891964785492803984,
+      name: r'ownerCidNumber_envelopeId',
       unique: true,
       replace: true,
       properties: [
+        IndexPropertySchema(
+          name: r'ownerCidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
         IndexPropertySchema(
           name: r'envelopeId',
           type: IndexType.hash,
@@ -23083,19 +23137,6 @@ const ChatMessageEntitySchema = CollectionSchema(
       properties: [
         IndexPropertySchema(
           name: r'conversationId',
-          type: IndexType.hash,
-          caseSensitive: true,
-        )
-      ],
-    ),
-    r'accountId': IndexSchema(
-      id: -1591555361937770434,
-      name: r'accountId',
-      unique: false,
-      replace: false,
-      properties: [
-        IndexPropertySchema(
-          name: r'accountId',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -23142,7 +23183,6 @@ int _chatMessageEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.accountId.length * 3;
   bytesCount += 3 + object.conversationId.length * 3;
   bytesCount += 3 + object.deliveryState.length * 3;
   bytesCount += 3 + object.direction.length * 3;
@@ -23150,13 +23190,14 @@ int _chatMessageEntityEstimateSize(
   bytesCount += 3 + object.envelopeId.length * 3;
   bytesCount += 3 + object.messageKind.length * 3;
   bytesCount += 3 + object.mlsMessageKind.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
   {
     final value = object.plaintextCipher;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
   }
-  bytesCount += 3 + object.recipientAccountId.length * 3;
+  bytesCount += 3 + object.recipientCidNumber.length * 3;
   bytesCount += 3 + object.searchTokens.length * 3;
   {
     for (var i = 0; i < object.searchTokens.length; i++) {
@@ -23164,7 +23205,7 @@ int _chatMessageEntityEstimateSize(
       bytesCount += value.length * 3;
     }
   }
-  bytesCount += 3 + object.senderAccountId.length * 3;
+  bytesCount += 3 + object.senderCidNumber.length * 3;
   bytesCount += 3 + object.senderDeviceId.length * 3;
   return bytesCount;
 }
@@ -23175,19 +23216,19 @@ void _chatMessageEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.accountId);
-  writer.writeString(offsets[1], object.conversationId);
-  writer.writeLong(offsets[2], object.createdAtMillis);
-  writer.writeString(offsets[3], object.deliveryState);
-  writer.writeString(offsets[4], object.direction);
-  writer.writeString(offsets[5], object.envelopeBytesHex);
-  writer.writeString(offsets[6], object.envelopeId);
-  writer.writeString(offsets[7], object.messageKind);
-  writer.writeString(offsets[8], object.mlsMessageKind);
+  writer.writeString(offsets[0], object.conversationId);
+  writer.writeLong(offsets[1], object.createdAtMillis);
+  writer.writeString(offsets[2], object.deliveryState);
+  writer.writeString(offsets[3], object.direction);
+  writer.writeString(offsets[4], object.envelopeBytesHex);
+  writer.writeString(offsets[5], object.envelopeId);
+  writer.writeString(offsets[6], object.messageKind);
+  writer.writeString(offsets[7], object.mlsMessageKind);
+  writer.writeString(offsets[8], object.ownerCidNumber);
   writer.writeString(offsets[9], object.plaintextCipher);
-  writer.writeString(offsets[10], object.recipientAccountId);
+  writer.writeString(offsets[10], object.recipientCidNumber);
   writer.writeStringList(offsets[11], object.searchTokens);
-  writer.writeString(offsets[12], object.senderAccountId);
+  writer.writeString(offsets[12], object.senderCidNumber);
   writer.writeString(offsets[13], object.senderDeviceId);
 }
 
@@ -23198,20 +23239,20 @@ ChatMessageEntity _chatMessageEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ChatMessageEntity();
-  object.accountId = reader.readString(offsets[0]);
-  object.conversationId = reader.readString(offsets[1]);
-  object.createdAtMillis = reader.readLong(offsets[2]);
-  object.deliveryState = reader.readString(offsets[3]);
-  object.direction = reader.readString(offsets[4]);
-  object.envelopeBytesHex = reader.readString(offsets[5]);
-  object.envelopeId = reader.readString(offsets[6]);
+  object.conversationId = reader.readString(offsets[0]);
+  object.createdAtMillis = reader.readLong(offsets[1]);
+  object.deliveryState = reader.readString(offsets[2]);
+  object.direction = reader.readString(offsets[3]);
+  object.envelopeBytesHex = reader.readString(offsets[4]);
+  object.envelopeId = reader.readString(offsets[5]);
   object.id = id;
-  object.messageKind = reader.readString(offsets[7]);
-  object.mlsMessageKind = reader.readString(offsets[8]);
+  object.messageKind = reader.readString(offsets[6]);
+  object.mlsMessageKind = reader.readString(offsets[7]);
+  object.ownerCidNumber = reader.readString(offsets[8]);
   object.plaintextCipher = reader.readStringOrNull(offsets[9]);
-  object.recipientAccountId = reader.readString(offsets[10]);
+  object.recipientCidNumber = reader.readString(offsets[10]);
   object.searchTokens = reader.readStringList(offsets[11]) ?? [];
-  object.senderAccountId = reader.readString(offsets[12]);
+  object.senderCidNumber = reader.readString(offsets[12]);
   object.senderDeviceId = reader.readString(offsets[13]);
   return object;
 }
@@ -23226,9 +23267,9 @@ P _chatMessageEntityDeserializeProp<P>(
     case 0:
       return (reader.readString(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
-    case 2:
       return (reader.readLong(offset)) as P;
+    case 2:
+      return (reader.readString(offset)) as P;
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
@@ -23271,59 +23312,101 @@ void _chatMessageEntityAttach(
 }
 
 extension ChatMessageEntityByIndex on IsarCollection<ChatMessageEntity> {
-  Future<ChatMessageEntity?> getByEnvelopeId(String envelopeId) {
-    return getByIndex(r'envelopeId', [envelopeId]);
+  Future<ChatMessageEntity?> getByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  ChatMessageEntity? getByEnvelopeIdSync(String envelopeId) {
-    return getByIndexSync(r'envelopeId', [envelopeId]);
+  ChatMessageEntity? getByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<bool> deleteByEnvelopeId(String envelopeId) {
-    return deleteByIndex(r'envelopeId', [envelopeId]);
+  Future<bool> deleteByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  bool deleteByEnvelopeIdSync(String envelopeId) {
-    return deleteByIndexSync(r'envelopeId', [envelopeId]);
+  bool deleteByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<List<ChatMessageEntity?>> getAllByEnvelopeId(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'envelopeId', values);
+  Future<List<ChatMessageEntity?>> getAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  List<ChatMessageEntity?> getAllByEnvelopeIdSync(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'envelopeId', values);
+  List<ChatMessageEntity?> getAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<int> deleteAllByEnvelopeId(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'envelopeId', values);
+  Future<int> deleteAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  int deleteAllByEnvelopeIdSync(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'envelopeId', values);
+  int deleteAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<Id> putByEnvelopeId(ChatMessageEntity object) {
-    return putByIndex(r'envelopeId', object);
+  Future<Id> putByOwnerCidNumberEnvelopeId(ChatMessageEntity object) {
+    return putByIndex(r'ownerCidNumber_envelopeId', object);
   }
 
-  Id putByEnvelopeIdSync(ChatMessageEntity object, {bool saveLinks = true}) {
-    return putByIndexSync(r'envelopeId', object, saveLinks: saveLinks);
-  }
-
-  Future<List<Id>> putAllByEnvelopeId(List<ChatMessageEntity> objects) {
-    return putAllByIndex(r'envelopeId', objects);
-  }
-
-  List<Id> putAllByEnvelopeIdSync(List<ChatMessageEntity> objects,
+  Id putByOwnerCidNumberEnvelopeIdSync(ChatMessageEntity object,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'envelopeId', objects, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_envelopeId', object,
+        saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByOwnerCidNumberEnvelopeId(
+      List<ChatMessageEntity> objects) {
+    return putAllByIndex(r'ownerCidNumber_envelopeId', objects);
+  }
+
+  List<Id> putAllByOwnerCidNumberEnvelopeIdSync(List<ChatMessageEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'ownerCidNumber_envelopeId', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -23425,44 +23508,91 @@ extension ChatMessageEntityQueryWhere
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterWhereClause>
-      envelopeIdEqualTo(String envelopeId) {
+      ownerCidNumberEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'envelopeId',
-        value: [envelopeId],
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterWhereClause>
-      envelopeIdNotEqualTo(String envelopeId) {
+      ownerCidNumberNotEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterWhereClause>
+      ownerCidNumberEnvelopeIdEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber, envelopeId],
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterWhereClause>
+      ownerCidNumberEqualToEnvelopeIdNotEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
               includeUpper: false,
             ));
       }
@@ -23508,51 +23638,6 @@ extension ChatMessageEntityQueryWhere
               indexName: r'conversationId',
               lower: [],
               upper: [conversationId],
-              includeUpper: false,
-            ));
-      }
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterWhereClause>
-      accountIdEqualTo(String accountId) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'accountId',
-        value: [accountId],
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterWhereClause>
-      accountIdNotEqualTo(String accountId) {
-    return QueryBuilder.apply(this, (query) {
-      if (query.whereSort == Sort.asc) {
-        return query
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [],
-              upper: [accountId],
-              includeUpper: false,
-            ))
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [accountId],
-              includeLower: false,
-              upper: [],
-            ));
-      } else {
-        return query
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [accountId],
-              includeLower: false,
-              upper: [],
-            ))
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [],
-              upper: [accountId],
               includeUpper: false,
             ));
       }
@@ -23796,142 +23881,6 @@ extension ChatMessageEntityQueryWhere
 
 extension ChatMessageEntityQueryFilter
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QFilterCondition> {
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'accountId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'accountId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'accountId',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      accountIdIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'accountId',
-        value: '',
-      ));
-    });
-  }
-
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
       conversationIdEqualTo(
     String value, {
@@ -24997,6 +24946,142 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ownerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ownerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      ownerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
       plaintextCipherIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -25151,13 +25236,13 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdEqualTo(
+      recipientCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25165,7 +25250,7 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdGreaterThan(
+      recipientCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -25173,7 +25258,7 @@ extension ChatMessageEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25181,7 +25266,7 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdLessThan(
+      recipientCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -25189,7 +25274,7 @@ extension ChatMessageEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25197,7 +25282,7 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdBetween(
+      recipientCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -25206,7 +25291,7 @@ extension ChatMessageEntityQueryFilter
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -25217,13 +25302,13 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdStartsWith(
+      recipientCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25231,13 +25316,13 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdEndsWith(
+      recipientCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25245,10 +25330,10 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdContains(String value, {bool caseSensitive = true}) {
+      recipientCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25256,10 +25341,10 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      recipientCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -25267,20 +25352,20 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdIsEmpty() {
+      recipientCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      recipientAccountIdIsNotEmpty() {
+      recipientCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'recipientAccountId',
+        property: r'recipientCidNumber',
         value: '',
       ));
     });
@@ -25512,13 +25597,13 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdEqualTo(
+      senderCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25526,7 +25611,7 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdGreaterThan(
+      senderCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -25534,7 +25619,7 @@ extension ChatMessageEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25542,7 +25627,7 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdLessThan(
+      senderCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -25550,7 +25635,7 @@ extension ChatMessageEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25558,7 +25643,7 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdBetween(
+      senderCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -25567,7 +25652,7 @@ extension ChatMessageEntityQueryFilter
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -25578,13 +25663,13 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdStartsWith(
+      senderCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25592,13 +25677,13 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdEndsWith(
+      senderCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25606,10 +25691,10 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdContains(String value, {bool caseSensitive = true}) {
+      senderCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -25617,10 +25702,10 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      senderCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -25628,20 +25713,20 @@ extension ChatMessageEntityQueryFilter
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdIsEmpty() {
+      senderCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
-      senderAccountIdIsNotEmpty() {
+      senderCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'senderAccountId',
+        property: r'senderCidNumber',
         value: '',
       ));
     });
@@ -25793,20 +25878,6 @@ extension ChatMessageEntityQueryLinks
 extension ChatMessageEntityQuerySortBy
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QSortBy> {
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      sortByAccountId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      sortByAccountIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
       sortByConversationId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'conversationId', Sort.asc);
@@ -25919,6 +25990,20 @@ extension ChatMessageEntityQuerySortBy
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
       sortByPlaintextCipher() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'plaintextCipher', Sort.asc);
@@ -25933,30 +26018,30 @@ extension ChatMessageEntityQuerySortBy
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      sortByRecipientAccountId() {
+      sortByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.asc);
+      return query.addSortBy(r'recipientCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      sortByRecipientAccountIdDesc() {
+      sortByRecipientCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.desc);
+      return query.addSortBy(r'recipientCidNumber', Sort.desc);
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      sortBySenderAccountId() {
+      sortBySenderCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'senderAccountId', Sort.asc);
+      return query.addSortBy(r'senderCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      sortBySenderAccountIdDesc() {
+      sortBySenderCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'senderAccountId', Sort.desc);
+      return query.addSortBy(r'senderCidNumber', Sort.desc);
     });
   }
 
@@ -25977,20 +26062,6 @@ extension ChatMessageEntityQuerySortBy
 
 extension ChatMessageEntityQuerySortThenBy
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QSortThenBy> {
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      thenByAccountId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      thenByAccountIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.desc);
-    });
-  }
-
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
       thenByConversationId() {
     return QueryBuilder.apply(this, (query) {
@@ -26117,6 +26188,20 @@ extension ChatMessageEntityQuerySortThenBy
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
       thenByPlaintextCipher() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'plaintextCipher', Sort.asc);
@@ -26131,30 +26216,30 @@ extension ChatMessageEntityQuerySortThenBy
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      thenByRecipientAccountId() {
+      thenByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.asc);
+      return query.addSortBy(r'recipientCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      thenByRecipientAccountIdDesc() {
+      thenByRecipientCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'recipientAccountId', Sort.desc);
+      return query.addSortBy(r'recipientCidNumber', Sort.desc);
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      thenBySenderAccountId() {
+      thenBySenderCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'senderAccountId', Sort.asc);
+      return query.addSortBy(r'senderCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
-      thenBySenderAccountIdDesc() {
+      thenBySenderCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'senderAccountId', Sort.desc);
+      return query.addSortBy(r'senderCidNumber', Sort.desc);
     });
   }
 
@@ -26175,13 +26260,6 @@ extension ChatMessageEntityQuerySortThenBy
 
 extension ChatMessageEntityQueryWhereDistinct
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct> {
-  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
-      distinctByAccountId({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'accountId', caseSensitive: caseSensitive);
-    });
-  }
-
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
       distinctByConversationId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -26243,6 +26321,14 @@ extension ChatMessageEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
       distinctByPlaintextCipher({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'plaintextCipher',
@@ -26251,9 +26337,9 @@ extension ChatMessageEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
-      distinctByRecipientAccountId({bool caseSensitive = true}) {
+      distinctByRecipientCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'recipientAccountId',
+      return query.addDistinctBy(r'recipientCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -26266,9 +26352,9 @@ extension ChatMessageEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
-      distinctBySenderAccountId({bool caseSensitive = true}) {
+      distinctBySenderCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'senderAccountId',
+      return query.addDistinctBy(r'senderCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -26287,13 +26373,6 @@ extension ChatMessageEntityQueryProperty
   QueryBuilder<ChatMessageEntity, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
-    });
-  }
-
-  QueryBuilder<ChatMessageEntity, String, QQueryOperations>
-      accountIdProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'accountId');
     });
   }
 
@@ -26353,6 +26432,13 @@ extension ChatMessageEntityQueryProperty
     });
   }
 
+  QueryBuilder<ChatMessageEntity, String, QQueryOperations>
+      ownerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ownerCidNumber');
+    });
+  }
+
   QueryBuilder<ChatMessageEntity, String?, QQueryOperations>
       plaintextCipherProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -26361,9 +26447,9 @@ extension ChatMessageEntityQueryProperty
   }
 
   QueryBuilder<ChatMessageEntity, String, QQueryOperations>
-      recipientAccountIdProperty() {
+      recipientCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'recipientAccountId');
+      return query.addPropertyName(r'recipientCidNumber');
     });
   }
 
@@ -26375,9 +26461,9 @@ extension ChatMessageEntityQueryProperty
   }
 
   QueryBuilder<ChatMessageEntity, String, QQueryOperations>
-      senderAccountIdProperty() {
+      senderCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'senderAccountId');
+      return query.addPropertyName(r'senderCidNumber');
     });
   }
 
@@ -26431,13 +26517,18 @@ const ChatOutboundQueueEntitySchema = CollectionSchema(
       name: r'lastError',
       type: IsarType.string,
     ),
-    r'recipientCidNumber': PropertySchema(
+    r'ownerCidNumber': PropertySchema(
       id: 6,
+      name: r'ownerCidNumber',
+      type: IsarType.string,
+    ),
+    r'recipientCidNumber': PropertySchema(
+      id: 7,
       name: r'recipientCidNumber',
       type: IsarType.string,
     ),
     r'updatedAtMillis': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'updatedAtMillis',
       type: IsarType.long,
     )
@@ -26448,12 +26539,17 @@ const ChatOutboundQueueEntitySchema = CollectionSchema(
   deserializeProp: _chatOutboundQueueEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'envelopeId': IndexSchema(
-      id: 6181136152466893989,
-      name: r'envelopeId',
+    r'ownerCidNumber_envelopeId': IndexSchema(
+      id: 3891964785492803984,
+      name: r'ownerCidNumber_envelopeId',
       unique: true,
       replace: true,
       properties: [
+        IndexPropertySchema(
+          name: r'ownerCidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
         IndexPropertySchema(
           name: r'envelopeId',
           type: IndexType.hash,
@@ -26512,6 +26608,7 @@ int _chatOutboundQueueEntityEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
   bytesCount += 3 + object.recipientCidNumber.length * 3;
   return bytesCount;
 }
@@ -26528,8 +26625,9 @@ void _chatOutboundQueueEntitySerialize(
   writer.writeString(offsets[3], object.envelopeBytesHex);
   writer.writeString(offsets[4], object.envelopeId);
   writer.writeString(offsets[5], object.lastError);
-  writer.writeString(offsets[6], object.recipientCidNumber);
-  writer.writeLong(offsets[7], object.updatedAtMillis);
+  writer.writeString(offsets[6], object.ownerCidNumber);
+  writer.writeString(offsets[7], object.recipientCidNumber);
+  writer.writeLong(offsets[8], object.updatedAtMillis);
 }
 
 ChatOutboundQueueEntity _chatOutboundQueueEntityDeserialize(
@@ -26546,8 +26644,9 @@ ChatOutboundQueueEntity _chatOutboundQueueEntityDeserialize(
   object.envelopeId = reader.readString(offsets[4]);
   object.id = id;
   object.lastError = reader.readStringOrNull(offsets[5]);
-  object.recipientCidNumber = reader.readString(offsets[6]);
-  object.updatedAtMillis = reader.readLong(offsets[7]);
+  object.ownerCidNumber = reader.readString(offsets[6]);
+  object.recipientCidNumber = reader.readString(offsets[7]);
+  object.updatedAtMillis = reader.readLong(offsets[8]);
   return object;
 }
 
@@ -26573,6 +26672,8 @@ P _chatOutboundQueueEntityDeserializeProp<P>(
     case 6:
       return (reader.readString(offset)) as P;
     case 7:
+      return (reader.readString(offset)) as P;
+    case 8:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -26595,60 +26696,102 @@ void _chatOutboundQueueEntityAttach(
 
 extension ChatOutboundQueueEntityByIndex
     on IsarCollection<ChatOutboundQueueEntity> {
-  Future<ChatOutboundQueueEntity?> getByEnvelopeId(String envelopeId) {
-    return getByIndex(r'envelopeId', [envelopeId]);
+  Future<ChatOutboundQueueEntity?> getByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  ChatOutboundQueueEntity? getByEnvelopeIdSync(String envelopeId) {
-    return getByIndexSync(r'envelopeId', [envelopeId]);
+  ChatOutboundQueueEntity? getByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<bool> deleteByEnvelopeId(String envelopeId) {
-    return deleteByIndex(r'envelopeId', [envelopeId]);
+  Future<bool> deleteByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  bool deleteByEnvelopeIdSync(String envelopeId) {
-    return deleteByIndexSync(r'envelopeId', [envelopeId]);
+  bool deleteByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<List<ChatOutboundQueueEntity?>> getAllByEnvelopeId(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'envelopeId', values);
+  Future<List<ChatOutboundQueueEntity?>> getAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  List<ChatOutboundQueueEntity?> getAllByEnvelopeIdSync(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'envelopeId', values);
+  List<ChatOutboundQueueEntity?> getAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<int> deleteAllByEnvelopeId(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'envelopeId', values);
+  Future<int> deleteAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  int deleteAllByEnvelopeIdSync(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'envelopeId', values);
+  int deleteAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<Id> putByEnvelopeId(ChatOutboundQueueEntity object) {
-    return putByIndex(r'envelopeId', object);
+  Future<Id> putByOwnerCidNumberEnvelopeId(ChatOutboundQueueEntity object) {
+    return putByIndex(r'ownerCidNumber_envelopeId', object);
   }
 
-  Id putByEnvelopeIdSync(ChatOutboundQueueEntity object,
+  Id putByOwnerCidNumberEnvelopeIdSync(ChatOutboundQueueEntity object,
       {bool saveLinks = true}) {
-    return putByIndexSync(r'envelopeId', object, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_envelopeId', object,
+        saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByEnvelopeId(List<ChatOutboundQueueEntity> objects) {
-    return putAllByIndex(r'envelopeId', objects);
+  Future<List<Id>> putAllByOwnerCidNumberEnvelopeId(
+      List<ChatOutboundQueueEntity> objects) {
+    return putAllByIndex(r'ownerCidNumber_envelopeId', objects);
   }
 
-  List<Id> putAllByEnvelopeIdSync(List<ChatOutboundQueueEntity> objects,
+  List<Id> putAllByOwnerCidNumberEnvelopeIdSync(
+      List<ChatOutboundQueueEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'envelopeId', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'ownerCidNumber_envelopeId', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -26742,44 +26885,95 @@ extension ChatOutboundQueueEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterWhereClause> envelopeIdEqualTo(String envelopeId) {
+          QAfterWhereClause>
+      ownerCidNumberEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'envelopeId',
-        value: [envelopeId],
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
-      QAfterWhereClause> envelopeIdNotEqualTo(String envelopeId) {
+          QAfterWhereClause>
+      ownerCidNumberNotEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+          QAfterWhereClause>
+      ownerCidNumberEnvelopeIdEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber, envelopeId],
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+          QAfterWhereClause>
+      ownerCidNumberEqualToEnvelopeIdNotEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
               includeUpper: false,
             ));
       }
@@ -27748,6 +27942,144 @@ extension ChatOutboundQueueEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ownerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+          QAfterFilterCondition>
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+          QAfterFilterCondition>
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ownerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
+      QAfterFilterCondition> ownerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity,
       QAfterFilterCondition> recipientCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -28035,6 +28367,20 @@ extension ChatOutboundQueueEntityQuerySortBy
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
+      sortByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
+      sortByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
       sortByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'recipientCidNumber', Sort.asc);
@@ -28164,6 +28510,20 @@ extension ChatOutboundQueueEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
+      thenByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
+      thenByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QAfterSortBy>
       thenByRecipientCidNumber() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'recipientCidNumber', Sort.asc);
@@ -28240,6 +28600,14 @@ extension ChatOutboundQueueEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QDistinct>
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, ChatOutboundQueueEntity, QDistinct>
       distinctByRecipientCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'recipientCidNumber',
@@ -28306,6 +28674,13 @@ extension ChatOutboundQueueEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatOutboundQueueEntity, String, QQueryOperations>
+      ownerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ownerCidNumber');
+    });
+  }
+
+  QueryBuilder<ChatOutboundQueueEntity, String, QQueryOperations>
       recipientCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'recipientCidNumber');
@@ -28362,13 +28737,18 @@ const ChatOutgoingMediaEntitySchema = CollectionSchema(
       name: r'fileName',
       type: IsarType.string,
     ),
-    r'pendingKey': PropertySchema(
+    r'ownerCidNumber': PropertySchema(
       id: 6,
+      name: r'ownerCidNumber',
+      type: IsarType.string,
+    ),
+    r'pendingKey': PropertySchema(
+      id: 7,
       name: r'pendingKey',
       type: IsarType.string,
     ),
     r'recipientCidNumber': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'recipientCidNumber',
       type: IsarType.string,
     )
@@ -28379,12 +28759,17 @@ const ChatOutgoingMediaEntitySchema = CollectionSchema(
   deserializeProp: _chatOutgoingMediaEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'pendingKey': IndexSchema(
-      id: -7809997197256942029,
-      name: r'pendingKey',
+    r'ownerCidNumber_pendingKey': IndexSchema(
+      id: 1991019881256958296,
+      name: r'ownerCidNumber_pendingKey',
       unique: true,
       replace: true,
       properties: [
+        IndexPropertySchema(
+          name: r'ownerCidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
         IndexPropertySchema(
           name: r'pendingKey',
           type: IndexType.hash,
@@ -28437,6 +28822,7 @@ int _chatOutgoingMediaEntityEstimateSize(
   bytesCount += 3 + object.contentType.length * 3;
   bytesCount += 3 + object.conversationId.length * 3;
   bytesCount += 3 + object.fileName.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
   bytesCount += 3 + object.pendingKey.length * 3;
   bytesCount += 3 + object.recipientCidNumber.length * 3;
   return bytesCount;
@@ -28454,8 +28840,9 @@ void _chatOutgoingMediaEntitySerialize(
   writer.writeString(offsets[3], object.conversationId);
   writer.writeLong(offsets[4], object.createdAtMillis);
   writer.writeString(offsets[5], object.fileName);
-  writer.writeString(offsets[6], object.pendingKey);
-  writer.writeString(offsets[7], object.recipientCidNumber);
+  writer.writeString(offsets[6], object.ownerCidNumber);
+  writer.writeString(offsets[7], object.pendingKey);
+  writer.writeString(offsets[8], object.recipientCidNumber);
 }
 
 ChatOutgoingMediaEntity _chatOutgoingMediaEntityDeserialize(
@@ -28472,8 +28859,9 @@ ChatOutgoingMediaEntity _chatOutgoingMediaEntityDeserialize(
   object.createdAtMillis = reader.readLong(offsets[4]);
   object.fileName = reader.readString(offsets[5]);
   object.id = id;
-  object.pendingKey = reader.readString(offsets[6]);
-  object.recipientCidNumber = reader.readString(offsets[7]);
+  object.ownerCidNumber = reader.readString(offsets[6]);
+  object.pendingKey = reader.readString(offsets[7]);
+  object.recipientCidNumber = reader.readString(offsets[8]);
   return object;
 }
 
@@ -28500,6 +28888,8 @@ P _chatOutgoingMediaEntityDeserializeProp<P>(
       return (reader.readString(offset)) as P;
     case 7:
       return (reader.readString(offset)) as P;
+    case 8:
+      return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -28521,60 +28911,102 @@ void _chatOutgoingMediaEntityAttach(
 
 extension ChatOutgoingMediaEntityByIndex
     on IsarCollection<ChatOutgoingMediaEntity> {
-  Future<ChatOutgoingMediaEntity?> getByPendingKey(String pendingKey) {
-    return getByIndex(r'pendingKey', [pendingKey]);
+  Future<ChatOutgoingMediaEntity?> getByOwnerCidNumberPendingKey(
+      String ownerCidNumber, String pendingKey) {
+    return getByIndex(
+        r'ownerCidNumber_pendingKey', [ownerCidNumber, pendingKey]);
   }
 
-  ChatOutgoingMediaEntity? getByPendingKeySync(String pendingKey) {
-    return getByIndexSync(r'pendingKey', [pendingKey]);
+  ChatOutgoingMediaEntity? getByOwnerCidNumberPendingKeySync(
+      String ownerCidNumber, String pendingKey) {
+    return getByIndexSync(
+        r'ownerCidNumber_pendingKey', [ownerCidNumber, pendingKey]);
   }
 
-  Future<bool> deleteByPendingKey(String pendingKey) {
-    return deleteByIndex(r'pendingKey', [pendingKey]);
+  Future<bool> deleteByOwnerCidNumberPendingKey(
+      String ownerCidNumber, String pendingKey) {
+    return deleteByIndex(
+        r'ownerCidNumber_pendingKey', [ownerCidNumber, pendingKey]);
   }
 
-  bool deleteByPendingKeySync(String pendingKey) {
-    return deleteByIndexSync(r'pendingKey', [pendingKey]);
+  bool deleteByOwnerCidNumberPendingKeySync(
+      String ownerCidNumber, String pendingKey) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_pendingKey', [ownerCidNumber, pendingKey]);
   }
 
-  Future<List<ChatOutgoingMediaEntity?>> getAllByPendingKey(
-      List<String> pendingKeyValues) {
-    final values = pendingKeyValues.map((e) => [e]).toList();
-    return getAllByIndex(r'pendingKey', values);
+  Future<List<ChatOutgoingMediaEntity?>> getAllByOwnerCidNumberPendingKey(
+      List<String> ownerCidNumberValues, List<String> pendingKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(pendingKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], pendingKeyValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_pendingKey', values);
   }
 
-  List<ChatOutgoingMediaEntity?> getAllByPendingKeySync(
-      List<String> pendingKeyValues) {
-    final values = pendingKeyValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'pendingKey', values);
+  List<ChatOutgoingMediaEntity?> getAllByOwnerCidNumberPendingKeySync(
+      List<String> ownerCidNumberValues, List<String> pendingKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(pendingKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], pendingKeyValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_pendingKey', values);
   }
 
-  Future<int> deleteAllByPendingKey(List<String> pendingKeyValues) {
-    final values = pendingKeyValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'pendingKey', values);
+  Future<int> deleteAllByOwnerCidNumberPendingKey(
+      List<String> ownerCidNumberValues, List<String> pendingKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(pendingKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], pendingKeyValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_pendingKey', values);
   }
 
-  int deleteAllByPendingKeySync(List<String> pendingKeyValues) {
-    final values = pendingKeyValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'pendingKey', values);
+  int deleteAllByOwnerCidNumberPendingKeySync(
+      List<String> ownerCidNumberValues, List<String> pendingKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(pendingKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], pendingKeyValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_pendingKey', values);
   }
 
-  Future<Id> putByPendingKey(ChatOutgoingMediaEntity object) {
-    return putByIndex(r'pendingKey', object);
+  Future<Id> putByOwnerCidNumberPendingKey(ChatOutgoingMediaEntity object) {
+    return putByIndex(r'ownerCidNumber_pendingKey', object);
   }
 
-  Id putByPendingKeySync(ChatOutgoingMediaEntity object,
+  Id putByOwnerCidNumberPendingKeySync(ChatOutgoingMediaEntity object,
       {bool saveLinks = true}) {
-    return putByIndexSync(r'pendingKey', object, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_pendingKey', object,
+        saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByPendingKey(List<ChatOutgoingMediaEntity> objects) {
-    return putAllByIndex(r'pendingKey', objects);
+  Future<List<Id>> putAllByOwnerCidNumberPendingKey(
+      List<ChatOutgoingMediaEntity> objects) {
+    return putAllByIndex(r'ownerCidNumber_pendingKey', objects);
   }
 
-  List<Id> putAllByPendingKeySync(List<ChatOutgoingMediaEntity> objects,
+  List<Id> putAllByOwnerCidNumberPendingKeySync(
+      List<ChatOutgoingMediaEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'pendingKey', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'ownerCidNumber_pendingKey', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -28659,44 +29091,95 @@ extension ChatOutgoingMediaEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterWhereClause> pendingKeyEqualTo(String pendingKey) {
+          QAfterWhereClause>
+      ownerCidNumberEqualToAnyPendingKey(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'pendingKey',
-        value: [pendingKey],
+        indexName: r'ownerCidNumber_pendingKey',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
-      QAfterWhereClause> pendingKeyNotEqualTo(String pendingKey) {
+          QAfterWhereClause>
+      ownerCidNumberNotEqualToAnyPendingKey(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pendingKey',
+              indexName: r'ownerCidNumber_pendingKey',
               lower: [],
-              upper: [pendingKey],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pendingKey',
-              lower: [pendingKey],
+              indexName: r'ownerCidNumber_pendingKey',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pendingKey',
-              lower: [pendingKey],
+              indexName: r'ownerCidNumber_pendingKey',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'pendingKey',
+              indexName: r'ownerCidNumber_pendingKey',
               lower: [],
-              upper: [pendingKey],
+              upper: [ownerCidNumber],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+          QAfterWhereClause>
+      ownerCidNumberPendingKeyEqualTo(
+          String ownerCidNumber, String pendingKey) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'ownerCidNumber_pendingKey',
+        value: [ownerCidNumber, pendingKey],
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+          QAfterWhereClause>
+      ownerCidNumberEqualToPendingKeyNotEqualTo(
+          String ownerCidNumber, String pendingKey) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_pendingKey',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, pendingKey],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_pendingKey',
+              lower: [ownerCidNumber, pendingKey],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_pendingKey',
+              lower: [ownerCidNumber, pendingKey],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_pendingKey',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, pendingKey],
               includeUpper: false,
             ));
       }
@@ -29518,6 +30001,144 @@ extension ChatOutgoingMediaEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ownerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+          QAfterFilterCondition>
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+          QAfterFilterCondition>
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ownerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
+      QAfterFilterCondition> ownerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity,
       QAfterFilterCondition> pendingKeyEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -29887,6 +30508,20 @@ extension ChatOutgoingMediaEntityQuerySortBy
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
+      sortByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
+      sortByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
       sortByPendingKey() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pendingKey', Sort.asc);
@@ -30016,6 +30651,20 @@ extension ChatOutgoingMediaEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
+      thenByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
+      thenByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QAfterSortBy>
       thenByPendingKey() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pendingKey', Sort.asc);
@@ -30090,6 +30739,14 @@ extension ChatOutgoingMediaEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QDistinct>
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, ChatOutgoingMediaEntity, QDistinct>
       distinctByPendingKey({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'pendingKey', caseSensitive: caseSensitive);
@@ -30156,6 +30813,13 @@ extension ChatOutgoingMediaEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatOutgoingMediaEntity, String, QQueryOperations>
+      ownerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ownerCidNumber');
+    });
+  }
+
+  QueryBuilder<ChatOutgoingMediaEntity, String, QQueryOperations>
       pendingKeyProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'pendingKey');
@@ -30202,8 +30866,13 @@ const ChatPendingInboundEntitySchema = CollectionSchema(
       name: r'envelopeId',
       type: IsarType.string,
     ),
-    r'reason': PropertySchema(
+    r'ownerCidNumber': PropertySchema(
       id: 4,
+      name: r'ownerCidNumber',
+      type: IsarType.string,
+    ),
+    r'reason': PropertySchema(
+      id: 5,
       name: r'reason',
       type: IsarType.string,
     )
@@ -30214,12 +30883,17 @@ const ChatPendingInboundEntitySchema = CollectionSchema(
   deserializeProp: _chatPendingInboundEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'envelopeId': IndexSchema(
-      id: 6181136152466893989,
-      name: r'envelopeId',
+    r'ownerCidNumber_envelopeId': IndexSchema(
+      id: 3891964785492803984,
+      name: r'ownerCidNumber_envelopeId',
       unique: true,
       replace: true,
       properties: [
+        IndexPropertySchema(
+          name: r'ownerCidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
         IndexPropertySchema(
           name: r'envelopeId',
           type: IndexType.hash,
@@ -30271,6 +30945,7 @@ int _chatPendingInboundEntityEstimateSize(
   bytesCount += 3 + object.conversationId.length * 3;
   bytesCount += 3 + object.envelopeBytesHex.length * 3;
   bytesCount += 3 + object.envelopeId.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
   bytesCount += 3 + object.reason.length * 3;
   return bytesCount;
 }
@@ -30285,7 +30960,8 @@ void _chatPendingInboundEntitySerialize(
   writer.writeLong(offsets[1], object.createdAtMillis);
   writer.writeString(offsets[2], object.envelopeBytesHex);
   writer.writeString(offsets[3], object.envelopeId);
-  writer.writeString(offsets[4], object.reason);
+  writer.writeString(offsets[4], object.ownerCidNumber);
+  writer.writeString(offsets[5], object.reason);
 }
 
 ChatPendingInboundEntity _chatPendingInboundEntityDeserialize(
@@ -30300,7 +30976,8 @@ ChatPendingInboundEntity _chatPendingInboundEntityDeserialize(
   object.envelopeBytesHex = reader.readString(offsets[2]);
   object.envelopeId = reader.readString(offsets[3]);
   object.id = id;
-  object.reason = reader.readString(offsets[4]);
+  object.ownerCidNumber = reader.readString(offsets[4]);
+  object.reason = reader.readString(offsets[5]);
   return object;
 }
 
@@ -30320,6 +30997,8 @@ P _chatPendingInboundEntityDeserializeProp<P>(
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -30342,60 +31021,102 @@ void _chatPendingInboundEntityAttach(
 
 extension ChatPendingInboundEntityByIndex
     on IsarCollection<ChatPendingInboundEntity> {
-  Future<ChatPendingInboundEntity?> getByEnvelopeId(String envelopeId) {
-    return getByIndex(r'envelopeId', [envelopeId]);
+  Future<ChatPendingInboundEntity?> getByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  ChatPendingInboundEntity? getByEnvelopeIdSync(String envelopeId) {
-    return getByIndexSync(r'envelopeId', [envelopeId]);
+  ChatPendingInboundEntity? getByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<bool> deleteByEnvelopeId(String envelopeId) {
-    return deleteByIndex(r'envelopeId', [envelopeId]);
+  Future<bool> deleteByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  bool deleteByEnvelopeIdSync(String envelopeId) {
-    return deleteByIndexSync(r'envelopeId', [envelopeId]);
+  bool deleteByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<List<ChatPendingInboundEntity?>> getAllByEnvelopeId(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'envelopeId', values);
+  Future<List<ChatPendingInboundEntity?>> getAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  List<ChatPendingInboundEntity?> getAllByEnvelopeIdSync(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'envelopeId', values);
+  List<ChatPendingInboundEntity?> getAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<int> deleteAllByEnvelopeId(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'envelopeId', values);
+  Future<int> deleteAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  int deleteAllByEnvelopeIdSync(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'envelopeId', values);
+  int deleteAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<Id> putByEnvelopeId(ChatPendingInboundEntity object) {
-    return putByIndex(r'envelopeId', object);
+  Future<Id> putByOwnerCidNumberEnvelopeId(ChatPendingInboundEntity object) {
+    return putByIndex(r'ownerCidNumber_envelopeId', object);
   }
 
-  Id putByEnvelopeIdSync(ChatPendingInboundEntity object,
+  Id putByOwnerCidNumberEnvelopeIdSync(ChatPendingInboundEntity object,
       {bool saveLinks = true}) {
-    return putByIndexSync(r'envelopeId', object, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_envelopeId', object,
+        saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByEnvelopeId(List<ChatPendingInboundEntity> objects) {
-    return putAllByIndex(r'envelopeId', objects);
+  Future<List<Id>> putAllByOwnerCidNumberEnvelopeId(
+      List<ChatPendingInboundEntity> objects) {
+    return putAllByIndex(r'ownerCidNumber_envelopeId', objects);
   }
 
-  List<Id> putAllByEnvelopeIdSync(List<ChatPendingInboundEntity> objects,
+  List<Id> putAllByOwnerCidNumberEnvelopeIdSync(
+      List<ChatPendingInboundEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'envelopeId', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'ownerCidNumber_envelopeId', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -30489,44 +31210,95 @@ extension ChatPendingInboundEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
-      QAfterWhereClause> envelopeIdEqualTo(String envelopeId) {
+          QAfterWhereClause>
+      ownerCidNumberEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'envelopeId',
-        value: [envelopeId],
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
-      QAfterWhereClause> envelopeIdNotEqualTo(String envelopeId) {
+          QAfterWhereClause>
+      ownerCidNumberNotEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+          QAfterWhereClause>
+      ownerCidNumberEnvelopeIdEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber, envelopeId],
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+          QAfterWhereClause>
+      ownerCidNumberEqualToEnvelopeIdNotEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
               includeUpper: false,
             ));
       }
@@ -31201,6 +31973,144 @@ extension ChatPendingInboundEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ownerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+          QAfterFilterCondition>
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+          QAfterFilterCondition>
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ownerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
+      QAfterFilterCondition> ownerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity,
       QAfterFilterCondition> reasonEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -31404,6 +32314,20 @@ extension ChatPendingInboundEntityQuerySortBy on QueryBuilder<
   }
 
   QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity, QAfterSortBy>
+      sortByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity, QAfterSortBy>
+      sortByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity, QAfterSortBy>
       sortByReason() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'reason', Sort.asc);
@@ -31491,6 +32415,20 @@ extension ChatPendingInboundEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity, QAfterSortBy>
+      thenByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity, QAfterSortBy>
+      thenByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity, QAfterSortBy>
       thenByReason() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'reason', Sort.asc);
@@ -31534,6 +32472,14 @@ extension ChatPendingInboundEntityQueryWhereDistinct on QueryBuilder<
       distinctByEnvelopeId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'envelopeId', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, ChatPendingInboundEntity, QDistinct>
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
     });
   }
 
@@ -31582,6 +32528,13 @@ extension ChatPendingInboundEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatPendingInboundEntity, String, QQueryOperations>
+      ownerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ownerCidNumber');
+    });
+  }
+
+  QueryBuilder<ChatPendingInboundEntity, String, QQueryOperations>
       reasonProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'reason');
@@ -31626,19 +32579,19 @@ const ChatRouteCacheEntitySchema = CollectionSchema(
       name: r'note',
       type: IsarType.string,
     ),
-    r'peerAccountId': PropertySchema(
+    r'ownerCidNumber': PropertySchema(
       id: 5,
-      name: r'peerAccountId',
+      name: r'ownerCidNumber',
+      type: IsarType.string,
+    ),
+    r'peerCidNumber': PropertySchema(
+      id: 6,
+      name: r'peerCidNumber',
       type: IsarType.string,
     ),
     r'routeDisplayName': PropertySchema(
-      id: 6,
-      name: r'routeDisplayName',
-      type: IsarType.string,
-    ),
-    r'routeId': PropertySchema(
       id: 7,
-      name: r'routeId',
+      name: r'routeDisplayName',
       type: IsarType.string,
     ),
     r'safetyNumber': PropertySchema(
@@ -31658,27 +32611,19 @@ const ChatRouteCacheEntitySchema = CollectionSchema(
   deserializeProp: _chatRouteCacheEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'routeId': IndexSchema(
-      id: 3544562048266535092,
-      name: r'routeId',
+    r'ownerCidNumber_peerCidNumber': IndexSchema(
+      id: -3106889458447634706,
+      name: r'ownerCidNumber_peerCidNumber',
       unique: true,
       replace: true,
       properties: [
         IndexPropertySchema(
-          name: r'routeId',
+          name: r'ownerCidNumber',
           type: IndexType.hash,
           caseSensitive: true,
-        )
-      ],
-    ),
-    r'peerAccountId': IndexSchema(
-      id: 9089452155213224228,
-      name: r'peerAccountId',
-      unique: true,
-      replace: true,
-      properties: [
+        ),
         IndexPropertySchema(
-          name: r'peerAccountId',
+          name: r'peerCidNumber',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -31713,9 +32658,9 @@ int _chatRouteCacheEntityEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
-  bytesCount += 3 + object.peerAccountId.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
+  bytesCount += 3 + object.peerCidNumber.length * 3;
   bytesCount += 3 + object.routeDisplayName.length * 3;
-  bytesCount += 3 + object.routeId.length * 3;
   bytesCount += 3 + object.safetyNumber.length * 3;
   return bytesCount;
 }
@@ -31731,9 +32676,9 @@ void _chatRouteCacheEntitySerialize(
   writer.writeString(offsets[2], object.devicePublicKey);
   writer.writeString(offsets[3], object.nearbyPeerHint);
   writer.writeString(offsets[4], object.note);
-  writer.writeString(offsets[5], object.peerAccountId);
-  writer.writeString(offsets[6], object.routeDisplayName);
-  writer.writeString(offsets[7], object.routeId);
+  writer.writeString(offsets[5], object.ownerCidNumber);
+  writer.writeString(offsets[6], object.peerCidNumber);
+  writer.writeString(offsets[7], object.routeDisplayName);
   writer.writeString(offsets[8], object.safetyNumber);
   writer.writeLong(offsets[9], object.updatedAtMillis);
 }
@@ -31751,9 +32696,9 @@ ChatRouteCacheEntity _chatRouteCacheEntityDeserialize(
   object.id = id;
   object.nearbyPeerHint = reader.readStringOrNull(offsets[3]);
   object.note = reader.readStringOrNull(offsets[4]);
-  object.peerAccountId = reader.readString(offsets[5]);
-  object.routeDisplayName = reader.readString(offsets[6]);
-  object.routeId = reader.readString(offsets[7]);
+  object.ownerCidNumber = reader.readString(offsets[5]);
+  object.peerCidNumber = reader.readString(offsets[6]);
+  object.routeDisplayName = reader.readString(offsets[7]);
   object.safetyNumber = reader.readString(offsets[8]);
   object.updatedAtMillis = reader.readLong(offsets[9]);
   return object;
@@ -31806,114 +32751,102 @@ void _chatRouteCacheEntityAttach(
 }
 
 extension ChatRouteCacheEntityByIndex on IsarCollection<ChatRouteCacheEntity> {
-  Future<ChatRouteCacheEntity?> getByRouteId(String routeId) {
-    return getByIndex(r'routeId', [routeId]);
+  Future<ChatRouteCacheEntity?> getByOwnerCidNumberPeerCidNumber(
+      String ownerCidNumber, String peerCidNumber) {
+    return getByIndex(
+        r'ownerCidNumber_peerCidNumber', [ownerCidNumber, peerCidNumber]);
   }
 
-  ChatRouteCacheEntity? getByRouteIdSync(String routeId) {
-    return getByIndexSync(r'routeId', [routeId]);
+  ChatRouteCacheEntity? getByOwnerCidNumberPeerCidNumberSync(
+      String ownerCidNumber, String peerCidNumber) {
+    return getByIndexSync(
+        r'ownerCidNumber_peerCidNumber', [ownerCidNumber, peerCidNumber]);
   }
 
-  Future<bool> deleteByRouteId(String routeId) {
-    return deleteByIndex(r'routeId', [routeId]);
+  Future<bool> deleteByOwnerCidNumberPeerCidNumber(
+      String ownerCidNumber, String peerCidNumber) {
+    return deleteByIndex(
+        r'ownerCidNumber_peerCidNumber', [ownerCidNumber, peerCidNumber]);
   }
 
-  bool deleteByRouteIdSync(String routeId) {
-    return deleteByIndexSync(r'routeId', [routeId]);
+  bool deleteByOwnerCidNumberPeerCidNumberSync(
+      String ownerCidNumber, String peerCidNumber) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_peerCidNumber', [ownerCidNumber, peerCidNumber]);
   }
 
-  Future<List<ChatRouteCacheEntity?>> getAllByRouteId(
-      List<String> routeIdValues) {
-    final values = routeIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'routeId', values);
+  Future<List<ChatRouteCacheEntity?>> getAllByOwnerCidNumberPeerCidNumber(
+      List<String> ownerCidNumberValues, List<String> peerCidNumberValues) {
+    final len = ownerCidNumberValues.length;
+    assert(peerCidNumberValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], peerCidNumberValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_peerCidNumber', values);
   }
 
-  List<ChatRouteCacheEntity?> getAllByRouteIdSync(List<String> routeIdValues) {
-    final values = routeIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'routeId', values);
+  List<ChatRouteCacheEntity?> getAllByOwnerCidNumberPeerCidNumberSync(
+      List<String> ownerCidNumberValues, List<String> peerCidNumberValues) {
+    final len = ownerCidNumberValues.length;
+    assert(peerCidNumberValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], peerCidNumberValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_peerCidNumber', values);
   }
 
-  Future<int> deleteAllByRouteId(List<String> routeIdValues) {
-    final values = routeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'routeId', values);
+  Future<int> deleteAllByOwnerCidNumberPeerCidNumber(
+      List<String> ownerCidNumberValues, List<String> peerCidNumberValues) {
+    final len = ownerCidNumberValues.length;
+    assert(peerCidNumberValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], peerCidNumberValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_peerCidNumber', values);
   }
 
-  int deleteAllByRouteIdSync(List<String> routeIdValues) {
-    final values = routeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'routeId', values);
+  int deleteAllByOwnerCidNumberPeerCidNumberSync(
+      List<String> ownerCidNumberValues, List<String> peerCidNumberValues) {
+    final len = ownerCidNumberValues.length;
+    assert(peerCidNumberValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], peerCidNumberValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_peerCidNumber', values);
   }
 
-  Future<Id> putByRouteId(ChatRouteCacheEntity object) {
-    return putByIndex(r'routeId', object);
+  Future<Id> putByOwnerCidNumberPeerCidNumber(ChatRouteCacheEntity object) {
+    return putByIndex(r'ownerCidNumber_peerCidNumber', object);
   }
 
-  Id putByRouteIdSync(ChatRouteCacheEntity object, {bool saveLinks = true}) {
-    return putByIndexSync(r'routeId', object, saveLinks: saveLinks);
-  }
-
-  Future<List<Id>> putAllByRouteId(List<ChatRouteCacheEntity> objects) {
-    return putAllByIndex(r'routeId', objects);
-  }
-
-  List<Id> putAllByRouteIdSync(List<ChatRouteCacheEntity> objects,
+  Id putByOwnerCidNumberPeerCidNumberSync(ChatRouteCacheEntity object,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'routeId', objects, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_peerCidNumber', object,
+        saveLinks: saveLinks);
   }
 
-  Future<ChatRouteCacheEntity?> getByPeerAccountId(String peerAccountId) {
-    return getByIndex(r'peerAccountId', [peerAccountId]);
+  Future<List<Id>> putAllByOwnerCidNumberPeerCidNumber(
+      List<ChatRouteCacheEntity> objects) {
+    return putAllByIndex(r'ownerCidNumber_peerCidNumber', objects);
   }
 
-  ChatRouteCacheEntity? getByPeerAccountIdSync(String peerAccountId) {
-    return getByIndexSync(r'peerAccountId', [peerAccountId]);
-  }
-
-  Future<bool> deleteByPeerAccountId(String peerAccountId) {
-    return deleteByIndex(r'peerAccountId', [peerAccountId]);
-  }
-
-  bool deleteByPeerAccountIdSync(String peerAccountId) {
-    return deleteByIndexSync(r'peerAccountId', [peerAccountId]);
-  }
-
-  Future<List<ChatRouteCacheEntity?>> getAllByPeerAccountId(
-      List<String> peerAccountIdValues) {
-    final values = peerAccountIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'peerAccountId', values);
-  }
-
-  List<ChatRouteCacheEntity?> getAllByPeerAccountIdSync(
-      List<String> peerAccountIdValues) {
-    final values = peerAccountIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'peerAccountId', values);
-  }
-
-  Future<int> deleteAllByPeerAccountId(List<String> peerAccountIdValues) {
-    final values = peerAccountIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'peerAccountId', values);
-  }
-
-  int deleteAllByPeerAccountIdSync(List<String> peerAccountIdValues) {
-    final values = peerAccountIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'peerAccountId', values);
-  }
-
-  Future<Id> putByPeerAccountId(ChatRouteCacheEntity object) {
-    return putByIndex(r'peerAccountId', object);
-  }
-
-  Id putByPeerAccountIdSync(ChatRouteCacheEntity object,
+  List<Id> putAllByOwnerCidNumberPeerCidNumberSync(
+      List<ChatRouteCacheEntity> objects,
       {bool saveLinks = true}) {
-    return putByIndexSync(r'peerAccountId', object, saveLinks: saveLinks);
-  }
-
-  Future<List<Id>> putAllByPeerAccountId(List<ChatRouteCacheEntity> objects) {
-    return putAllByIndex(r'peerAccountId', objects);
-  }
-
-  List<Id> putAllByPeerAccountIdSync(List<ChatRouteCacheEntity> objects,
-      {bool saveLinks = true}) {
-    return putAllByIndexSync(r'peerAccountId', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'ownerCidNumber_peerCidNumber', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -31998,44 +32931,44 @@ extension ChatRouteCacheEntityQueryWhere
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterWhereClause>
-      routeIdEqualTo(String routeId) {
+      ownerCidNumberEqualToAnyPeerCidNumber(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'routeId',
-        value: [routeId],
+        indexName: r'ownerCidNumber_peerCidNumber',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterWhereClause>
-      routeIdNotEqualTo(String routeId) {
+      ownerCidNumberNotEqualToAnyPeerCidNumber(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'routeId',
+              indexName: r'ownerCidNumber_peerCidNumber',
               lower: [],
-              upper: [routeId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'routeId',
-              lower: [routeId],
+              indexName: r'ownerCidNumber_peerCidNumber',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'routeId',
-              lower: [routeId],
+              indexName: r'ownerCidNumber_peerCidNumber',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'routeId',
+              indexName: r'ownerCidNumber_peerCidNumber',
               lower: [],
-              upper: [routeId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ));
       }
@@ -32043,44 +32976,46 @@ extension ChatRouteCacheEntityQueryWhere
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterWhereClause>
-      peerAccountIdEqualTo(String peerAccountId) {
+      ownerCidNumberPeerCidNumberEqualTo(
+          String ownerCidNumber, String peerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'peerAccountId',
-        value: [peerAccountId],
+        indexName: r'ownerCidNumber_peerCidNumber',
+        value: [ownerCidNumber, peerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterWhereClause>
-      peerAccountIdNotEqualTo(String peerAccountId) {
+      ownerCidNumberEqualToPeerCidNumberNotEqualTo(
+          String ownerCidNumber, String peerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
-              lower: [],
-              upper: [peerAccountId],
+              indexName: r'ownerCidNumber_peerCidNumber',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, peerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
-              lower: [peerAccountId],
+              indexName: r'ownerCidNumber_peerCidNumber',
+              lower: [ownerCidNumber, peerCidNumber],
               includeLower: false,
-              upper: [],
+              upper: [ownerCidNumber],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
-              lower: [peerAccountId],
+              indexName: r'ownerCidNumber_peerCidNumber',
+              lower: [ownerCidNumber, peerCidNumber],
               includeLower: false,
-              upper: [],
+              upper: [ownerCidNumber],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'peerAccountId',
-              lower: [],
-              upper: [peerAccountId],
+              indexName: r'ownerCidNumber_peerCidNumber',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, peerCidNumber],
               includeUpper: false,
             ));
       }
@@ -32791,13 +33726,13 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdEqualTo(
+      QAfterFilterCondition> ownerCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -32805,7 +33740,7 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdGreaterThan(
+      QAfterFilterCondition> ownerCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -32813,7 +33748,7 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -32821,7 +33756,7 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdLessThan(
+      QAfterFilterCondition> ownerCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -32829,7 +33764,7 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -32837,7 +33772,7 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdBetween(
+      QAfterFilterCondition> ownerCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -32846,7 +33781,7 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -32857,13 +33792,13 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdStartsWith(
+      QAfterFilterCondition> ownerCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -32871,13 +33806,13 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdEndsWith(
+      QAfterFilterCondition> ownerCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -32886,10 +33821,10 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
           QAfterFilterCondition>
-      peerAccountIdContains(String value, {bool caseSensitive = true}) {
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -32898,10 +33833,10 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
           QAfterFilterCondition>
-      peerAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -32909,20 +33844,158 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdIsEmpty() {
+      QAfterFilterCondition> ownerCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> peerAccountIdIsNotEmpty() {
+      QAfterFilterCondition> ownerCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'peerAccountId',
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'peerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+          QAfterFilterCondition>
+      peerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'peerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+          QAfterFilterCondition>
+      peerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'peerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'peerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
+      QAfterFilterCondition> peerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'peerCidNumber',
         value: '',
       ));
     });
@@ -33061,144 +34134,6 @@ extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'routeDisplayName',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'routeId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'routeId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'routeId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'routeId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'routeId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'routeId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-          QAfterFilterCondition>
-      routeIdContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'routeId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-          QAfterFilterCondition>
-      routeIdMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'routeId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'routeId',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> routeIdIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'routeId',
         value: '',
       ));
     });
@@ -33478,16 +34413,30 @@ extension ChatRouteCacheEntityQuerySortBy
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      sortByPeerAccountId() {
+      sortByOwnerCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.asc);
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      sortByPeerAccountIdDesc() {
+      sortByOwnerCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.desc);
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
+      sortByPeerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
+      sortByPeerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.desc);
     });
   }
 
@@ -33502,20 +34451,6 @@ extension ChatRouteCacheEntityQuerySortBy
       sortByRouteDisplayNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'routeDisplayName', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      sortByRouteId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'routeId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      sortByRouteIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'routeId', Sort.desc);
     });
   }
 
@@ -33635,16 +34570,30 @@ extension ChatRouteCacheEntityQuerySortThenBy
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      thenByPeerAccountId() {
+      thenByOwnerCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.asc);
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      thenByPeerAccountIdDesc() {
+      thenByOwnerCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'peerAccountId', Sort.desc);
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
+      thenByPeerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
+      thenByPeerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'peerCidNumber', Sort.desc);
     });
   }
 
@@ -33659,20 +34608,6 @@ extension ChatRouteCacheEntityQuerySortThenBy
       thenByRouteDisplayNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'routeDisplayName', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      thenByRouteId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'routeId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      thenByRouteIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'routeId', Sort.desc);
     });
   }
 
@@ -33745,9 +34680,17 @@ extension ChatRouteCacheEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QDistinct>
-      distinctByPeerAccountId({bool caseSensitive = true}) {
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'peerAccountId',
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QDistinct>
+      distinctByPeerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'peerCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -33757,13 +34700,6 @@ extension ChatRouteCacheEntityQueryWhereDistinct
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'routeDisplayName',
           caseSensitive: caseSensitive);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QDistinct>
-      distinctByRouteId({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'routeId', caseSensitive: caseSensitive);
     });
   }
 
@@ -33825,9 +34761,16 @@ extension ChatRouteCacheEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatRouteCacheEntity, String, QQueryOperations>
-      peerAccountIdProperty() {
+      ownerCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'peerAccountId');
+      return query.addPropertyName(r'ownerCidNumber');
+    });
+  }
+
+  QueryBuilder<ChatRouteCacheEntity, String, QQueryOperations>
+      peerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'peerCidNumber');
     });
   }
 
@@ -33835,13 +34778,6 @@ extension ChatRouteCacheEntityQueryProperty on QueryBuilder<
       routeDisplayNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'routeDisplayName');
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, String, QQueryOperations>
-      routeIdProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'routeId');
     });
   }
 
@@ -33871,45 +34807,45 @@ const ChatGroupEntitySchema = CollectionSchema(
   name: r'ChatGroupEntity',
   id: 6599995462947761436,
   properties: {
-    r'accountId': PropertySchema(
-      id: 0,
-      name: r'accountId',
-      type: IsarType.string,
-    ),
     r'createdAtMillis': PropertySchema(
-      id: 1,
+      id: 0,
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
-    r'creatorAccountId': PropertySchema(
-      id: 2,
-      name: r'creatorAccountId',
+    r'creatorCidNumber': PropertySchema(
+      id: 1,
+      name: r'creatorCidNumber',
       type: IsarType.string,
     ),
     r'epoch': PropertySchema(
-      id: 3,
+      id: 2,
       name: r'epoch',
       type: IsarType.long,
     ),
     r'groupId': PropertySchema(
-      id: 4,
+      id: 3,
       name: r'groupId',
       type: IsarType.string,
     ),
     r'groupName': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'groupName',
       type: IsarType.string,
     ),
     r'leftLocally': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'leftLocally',
       type: IsarType.bool,
     ),
     r'memberCount': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'memberCount',
       type: IsarType.long,
+    ),
+    r'ownerCidNumber': PropertySchema(
+      id: 7,
+      name: r'ownerCidNumber',
+      type: IsarType.string,
     ),
     r'updatedAtMillis': PropertySchema(
       id: 8,
@@ -33923,27 +34859,19 @@ const ChatGroupEntitySchema = CollectionSchema(
   deserializeProp: _chatGroupEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'groupId': IndexSchema(
-      id: -8523216633229774932,
-      name: r'groupId',
+    r'ownerCidNumber_groupId': IndexSchema(
+      id: 2593890677711017874,
+      name: r'ownerCidNumber_groupId',
       unique: true,
       replace: true,
       properties: [
         IndexPropertySchema(
-          name: r'groupId',
+          name: r'ownerCidNumber',
           type: IndexType.hash,
           caseSensitive: true,
-        )
-      ],
-    ),
-    r'accountId': IndexSchema(
-      id: -1591555361937770434,
-      name: r'accountId',
-      unique: false,
-      replace: false,
-      properties: [
+        ),
         IndexPropertySchema(
-          name: r'accountId',
+          name: r'groupId',
           type: IndexType.hash,
           caseSensitive: true,
         )
@@ -33964,10 +34892,10 @@ int _chatGroupEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.accountId.length * 3;
-  bytesCount += 3 + object.creatorAccountId.length * 3;
+  bytesCount += 3 + object.creatorCidNumber.length * 3;
   bytesCount += 3 + object.groupId.length * 3;
   bytesCount += 3 + object.groupName.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
   return bytesCount;
 }
 
@@ -33977,14 +34905,14 @@ void _chatGroupEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.accountId);
-  writer.writeLong(offsets[1], object.createdAtMillis);
-  writer.writeString(offsets[2], object.creatorAccountId);
-  writer.writeLong(offsets[3], object.epoch);
-  writer.writeString(offsets[4], object.groupId);
-  writer.writeString(offsets[5], object.groupName);
-  writer.writeBool(offsets[6], object.leftLocally);
-  writer.writeLong(offsets[7], object.memberCount);
+  writer.writeLong(offsets[0], object.createdAtMillis);
+  writer.writeString(offsets[1], object.creatorCidNumber);
+  writer.writeLong(offsets[2], object.epoch);
+  writer.writeString(offsets[3], object.groupId);
+  writer.writeString(offsets[4], object.groupName);
+  writer.writeBool(offsets[5], object.leftLocally);
+  writer.writeLong(offsets[6], object.memberCount);
+  writer.writeString(offsets[7], object.ownerCidNumber);
   writer.writeLong(offsets[8], object.updatedAtMillis);
 }
 
@@ -33995,15 +34923,15 @@ ChatGroupEntity _chatGroupEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ChatGroupEntity();
-  object.accountId = reader.readString(offsets[0]);
-  object.createdAtMillis = reader.readLong(offsets[1]);
-  object.creatorAccountId = reader.readString(offsets[2]);
-  object.epoch = reader.readLong(offsets[3]);
-  object.groupId = reader.readString(offsets[4]);
-  object.groupName = reader.readString(offsets[5]);
+  object.createdAtMillis = reader.readLong(offsets[0]);
+  object.creatorCidNumber = reader.readString(offsets[1]);
+  object.epoch = reader.readLong(offsets[2]);
+  object.groupId = reader.readString(offsets[3]);
+  object.groupName = reader.readString(offsets[4]);
   object.id = id;
-  object.leftLocally = reader.readBool(offsets[6]);
-  object.memberCount = reader.readLong(offsets[7]);
+  object.leftLocally = reader.readBool(offsets[5]);
+  object.memberCount = reader.readLong(offsets[6]);
+  object.ownerCidNumber = reader.readString(offsets[7]);
   object.updatedAtMillis = reader.readLong(offsets[8]);
   return object;
 }
@@ -34016,21 +34944,21 @@ P _chatGroupEntityDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 1:
-      return (reader.readLong(offset)) as P;
-    case 2:
       return (reader.readString(offset)) as P;
-    case 3:
+    case 2:
       return (reader.readLong(offset)) as P;
+    case 3:
+      return (reader.readString(offset)) as P;
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
-      return (reader.readString(offset)) as P;
-    case 6:
       return (reader.readBool(offset)) as P;
-    case 7:
+    case 6:
       return (reader.readLong(offset)) as P;
+    case 7:
+      return (reader.readString(offset)) as P;
     case 8:
       return (reader.readLong(offset)) as P;
     default:
@@ -34052,57 +34980,98 @@ void _chatGroupEntityAttach(
 }
 
 extension ChatGroupEntityByIndex on IsarCollection<ChatGroupEntity> {
-  Future<ChatGroupEntity?> getByGroupId(String groupId) {
-    return getByIndex(r'groupId', [groupId]);
+  Future<ChatGroupEntity?> getByOwnerCidNumberGroupId(
+      String ownerCidNumber, String groupId) {
+    return getByIndex(r'ownerCidNumber_groupId', [ownerCidNumber, groupId]);
   }
 
-  ChatGroupEntity? getByGroupIdSync(String groupId) {
-    return getByIndexSync(r'groupId', [groupId]);
+  ChatGroupEntity? getByOwnerCidNumberGroupIdSync(
+      String ownerCidNumber, String groupId) {
+    return getByIndexSync(r'ownerCidNumber_groupId', [ownerCidNumber, groupId]);
   }
 
-  Future<bool> deleteByGroupId(String groupId) {
-    return deleteByIndex(r'groupId', [groupId]);
+  Future<bool> deleteByOwnerCidNumberGroupId(
+      String ownerCidNumber, String groupId) {
+    return deleteByIndex(r'ownerCidNumber_groupId', [ownerCidNumber, groupId]);
   }
 
-  bool deleteByGroupIdSync(String groupId) {
-    return deleteByIndexSync(r'groupId', [groupId]);
+  bool deleteByOwnerCidNumberGroupIdSync(
+      String ownerCidNumber, String groupId) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_groupId', [ownerCidNumber, groupId]);
   }
 
-  Future<List<ChatGroupEntity?>> getAllByGroupId(List<String> groupIdValues) {
-    final values = groupIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'groupId', values);
+  Future<List<ChatGroupEntity?>> getAllByOwnerCidNumberGroupId(
+      List<String> ownerCidNumberValues, List<String> groupIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(groupIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], groupIdValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_groupId', values);
   }
 
-  List<ChatGroupEntity?> getAllByGroupIdSync(List<String> groupIdValues) {
-    final values = groupIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'groupId', values);
+  List<ChatGroupEntity?> getAllByOwnerCidNumberGroupIdSync(
+      List<String> ownerCidNumberValues, List<String> groupIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(groupIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], groupIdValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_groupId', values);
   }
 
-  Future<int> deleteAllByGroupId(List<String> groupIdValues) {
-    final values = groupIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'groupId', values);
+  Future<int> deleteAllByOwnerCidNumberGroupId(
+      List<String> ownerCidNumberValues, List<String> groupIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(groupIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], groupIdValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_groupId', values);
   }
 
-  int deleteAllByGroupIdSync(List<String> groupIdValues) {
-    final values = groupIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'groupId', values);
+  int deleteAllByOwnerCidNumberGroupIdSync(
+      List<String> ownerCidNumberValues, List<String> groupIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(groupIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], groupIdValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_groupId', values);
   }
 
-  Future<Id> putByGroupId(ChatGroupEntity object) {
-    return putByIndex(r'groupId', object);
+  Future<Id> putByOwnerCidNumberGroupId(ChatGroupEntity object) {
+    return putByIndex(r'ownerCidNumber_groupId', object);
   }
 
-  Id putByGroupIdSync(ChatGroupEntity object, {bool saveLinks = true}) {
-    return putByIndexSync(r'groupId', object, saveLinks: saveLinks);
-  }
-
-  Future<List<Id>> putAllByGroupId(List<ChatGroupEntity> objects) {
-    return putAllByIndex(r'groupId', objects);
-  }
-
-  List<Id> putAllByGroupIdSync(List<ChatGroupEntity> objects,
+  Id putByOwnerCidNumberGroupIdSync(ChatGroupEntity object,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'groupId', objects, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_groupId', object,
+        saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByOwnerCidNumberGroupId(
+      List<ChatGroupEntity> objects) {
+    return putAllByIndex(r'ownerCidNumber_groupId', objects);
+  }
+
+  List<Id> putAllByOwnerCidNumberGroupIdSync(List<ChatGroupEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'ownerCidNumber_groupId', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -34186,44 +35155,44 @@ extension ChatGroupEntityQueryWhere
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterWhereClause>
-      groupIdEqualTo(String groupId) {
+      ownerCidNumberEqualToAnyGroupId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'groupId',
-        value: [groupId],
+        indexName: r'ownerCidNumber_groupId',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterWhereClause>
-      groupIdNotEqualTo(String groupId) {
+      ownerCidNumberNotEqualToAnyGroupId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'groupId',
+              indexName: r'ownerCidNumber_groupId',
               lower: [],
-              upper: [groupId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'groupId',
-              lower: [groupId],
+              indexName: r'ownerCidNumber_groupId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'groupId',
-              lower: [groupId],
+              indexName: r'ownerCidNumber_groupId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'groupId',
+              indexName: r'ownerCidNumber_groupId',
               lower: [],
-              upper: [groupId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ));
       }
@@ -34231,44 +35200,45 @@ extension ChatGroupEntityQueryWhere
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterWhereClause>
-      accountIdEqualTo(String accountId) {
+      ownerCidNumberGroupIdEqualTo(String ownerCidNumber, String groupId) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'accountId',
-        value: [accountId],
+        indexName: r'ownerCidNumber_groupId',
+        value: [ownerCidNumber, groupId],
       ));
     });
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterWhereClause>
-      accountIdNotEqualTo(String accountId) {
+      ownerCidNumberEqualToGroupIdNotEqualTo(
+          String ownerCidNumber, String groupId) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [],
-              upper: [accountId],
+              indexName: r'ownerCidNumber_groupId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, groupId],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [accountId],
+              indexName: r'ownerCidNumber_groupId',
+              lower: [ownerCidNumber, groupId],
               includeLower: false,
-              upper: [],
+              upper: [ownerCidNumber],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [accountId],
+              indexName: r'ownerCidNumber_groupId',
+              lower: [ownerCidNumber, groupId],
               includeLower: false,
-              upper: [],
+              upper: [ownerCidNumber],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'accountId',
-              lower: [],
-              upper: [accountId],
+              indexName: r'ownerCidNumber_groupId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, groupId],
               includeUpper: false,
             ));
       }
@@ -34278,142 +35248,6 @@ extension ChatGroupEntityQueryWhere
 
 extension ChatGroupEntityQueryFilter
     on QueryBuilder<ChatGroupEntity, ChatGroupEntity, QFilterCondition> {
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'accountId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'accountId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'accountId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'accountId',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      accountIdIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'accountId',
-        value: '',
-      ));
-    });
-  }
-
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
       createdAtMillisEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
@@ -34471,13 +35305,13 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdEqualTo(
+      creatorCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -34485,7 +35319,7 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdGreaterThan(
+      creatorCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -34493,7 +35327,7 @@ extension ChatGroupEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -34501,7 +35335,7 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdLessThan(
+      creatorCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -34509,7 +35343,7 @@ extension ChatGroupEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -34517,7 +35351,7 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdBetween(
+      creatorCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -34526,7 +35360,7 @@ extension ChatGroupEntityQueryFilter
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -34537,13 +35371,13 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdStartsWith(
+      creatorCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -34551,13 +35385,13 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdEndsWith(
+      creatorCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -34565,10 +35399,10 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdContains(String value, {bool caseSensitive = true}) {
+      creatorCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -34576,10 +35410,10 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      creatorCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -34587,20 +35421,20 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdIsEmpty() {
+      creatorCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
-      creatorAccountIdIsNotEmpty() {
+      creatorCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'creatorAccountId',
+        property: r'creatorCidNumber',
         value: '',
       ));
     });
@@ -35057,6 +35891,142 @@ extension ChatGroupEntityQueryFilter
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ownerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ownerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
+      ownerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterFilterCondition>
       updatedAtMillisEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -35122,20 +36092,6 @@ extension ChatGroupEntityQueryLinks
 extension ChatGroupEntityQuerySortBy
     on QueryBuilder<ChatGroupEntity, ChatGroupEntity, QSortBy> {
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      sortByAccountId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      sortByAccountIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
       sortByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAtMillis', Sort.asc);
@@ -35150,16 +36106,16 @@ extension ChatGroupEntityQuerySortBy
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      sortByCreatorAccountId() {
+      sortByCreatorCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'creatorAccountId', Sort.asc);
+      return query.addSortBy(r'creatorCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      sortByCreatorAccountIdDesc() {
+      sortByCreatorCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'creatorAccountId', Sort.desc);
+      return query.addSortBy(r'creatorCidNumber', Sort.desc);
     });
   }
 
@@ -35232,6 +36188,20 @@ extension ChatGroupEntityQuerySortBy
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
+      sortByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
+      sortByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
       sortByUpdatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAtMillis', Sort.asc);
@@ -35249,20 +36219,6 @@ extension ChatGroupEntityQuerySortBy
 extension ChatGroupEntityQuerySortThenBy
     on QueryBuilder<ChatGroupEntity, ChatGroupEntity, QSortThenBy> {
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      thenByAccountId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      thenByAccountIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'accountId', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
       thenByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAtMillis', Sort.asc);
@@ -35277,16 +36233,16 @@ extension ChatGroupEntityQuerySortThenBy
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      thenByCreatorAccountId() {
+      thenByCreatorCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'creatorAccountId', Sort.asc);
+      return query.addSortBy(r'creatorCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
-      thenByCreatorAccountIdDesc() {
+      thenByCreatorCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'creatorAccountId', Sort.desc);
+      return query.addSortBy(r'creatorCidNumber', Sort.desc);
     });
   }
 
@@ -35371,6 +36327,20 @@ extension ChatGroupEntityQuerySortThenBy
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
+      thenByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
+      thenByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QAfterSortBy>
       thenByUpdatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAtMillis', Sort.asc);
@@ -35387,13 +36357,6 @@ extension ChatGroupEntityQuerySortThenBy
 
 extension ChatGroupEntityQueryWhereDistinct
     on QueryBuilder<ChatGroupEntity, ChatGroupEntity, QDistinct> {
-  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QDistinct> distinctByAccountId(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'accountId', caseSensitive: caseSensitive);
-    });
-  }
-
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QDistinct>
       distinctByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
@@ -35402,9 +36365,9 @@ extension ChatGroupEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QDistinct>
-      distinctByCreatorAccountId({bool caseSensitive = true}) {
+      distinctByCreatorCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'creatorAccountId',
+      return query.addDistinctBy(r'creatorCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -35444,6 +36407,14 @@ extension ChatGroupEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatGroupEntity, ChatGroupEntity, QDistinct>
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatGroupEntity, ChatGroupEntity, QDistinct>
       distinctByUpdatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'updatedAtMillis');
@@ -35459,12 +36430,6 @@ extension ChatGroupEntityQueryProperty
     });
   }
 
-  QueryBuilder<ChatGroupEntity, String, QQueryOperations> accountIdProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'accountId');
-    });
-  }
-
   QueryBuilder<ChatGroupEntity, int, QQueryOperations>
       createdAtMillisProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -35473,9 +36438,9 @@ extension ChatGroupEntityQueryProperty
   }
 
   QueryBuilder<ChatGroupEntity, String, QQueryOperations>
-      creatorAccountIdProperty() {
+      creatorCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'creatorAccountId');
+      return query.addPropertyName(r'creatorCidNumber');
     });
   }
 
@@ -35509,6 +36474,13 @@ extension ChatGroupEntityQueryProperty
     });
   }
 
+  QueryBuilder<ChatGroupEntity, String, QQueryOperations>
+      ownerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ownerCidNumber');
+    });
+  }
+
   QueryBuilder<ChatGroupEntity, int, QQueryOperations>
       updatedAtMillisProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -35539,9 +36511,9 @@ const ChatGroupMemberEntitySchema = CollectionSchema(
       name: r'joinedAtMillis',
       type: IsarType.long,
     ),
-    r'memberAccountId': PropertySchema(
+    r'memberCidNumber': PropertySchema(
       id: 2,
-      name: r'memberAccountId',
+      name: r'memberCidNumber',
       type: IsarType.string,
     ),
     r'memberKey': PropertySchema(
@@ -35549,8 +36521,13 @@ const ChatGroupMemberEntitySchema = CollectionSchema(
       name: r'memberKey',
       type: IsarType.string,
     ),
-    r'role': PropertySchema(
+    r'ownerCidNumber': PropertySchema(
       id: 4,
+      name: r'ownerCidNumber',
+      type: IsarType.string,
+    ),
+    r'role': PropertySchema(
+      id: 5,
       name: r'role',
       type: IsarType.string,
     )
@@ -35561,12 +36538,17 @@ const ChatGroupMemberEntitySchema = CollectionSchema(
   deserializeProp: _chatGroupMemberEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'memberKey': IndexSchema(
-      id: 4082400729976624266,
-      name: r'memberKey',
+    r'ownerCidNumber_memberKey': IndexSchema(
+      id: -6851219256754649152,
+      name: r'ownerCidNumber_memberKey',
       unique: true,
       replace: true,
       properties: [
+        IndexPropertySchema(
+          name: r'ownerCidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
         IndexPropertySchema(
           name: r'memberKey',
           type: IndexType.hash,
@@ -35603,8 +36585,9 @@ int _chatGroupMemberEntityEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.groupId.length * 3;
-  bytesCount += 3 + object.memberAccountId.length * 3;
+  bytesCount += 3 + object.memberCidNumber.length * 3;
   bytesCount += 3 + object.memberKey.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
   bytesCount += 3 + object.role.length * 3;
   return bytesCount;
 }
@@ -35617,9 +36600,10 @@ void _chatGroupMemberEntitySerialize(
 ) {
   writer.writeString(offsets[0], object.groupId);
   writer.writeLong(offsets[1], object.joinedAtMillis);
-  writer.writeString(offsets[2], object.memberAccountId);
+  writer.writeString(offsets[2], object.memberCidNumber);
   writer.writeString(offsets[3], object.memberKey);
-  writer.writeString(offsets[4], object.role);
+  writer.writeString(offsets[4], object.ownerCidNumber);
+  writer.writeString(offsets[5], object.role);
 }
 
 ChatGroupMemberEntity _chatGroupMemberEntityDeserialize(
@@ -35632,9 +36616,10 @@ ChatGroupMemberEntity _chatGroupMemberEntityDeserialize(
   object.groupId = reader.readString(offsets[0]);
   object.id = id;
   object.joinedAtMillis = reader.readLong(offsets[1]);
-  object.memberAccountId = reader.readString(offsets[2]);
+  object.memberCidNumber = reader.readString(offsets[2]);
   object.memberKey = reader.readString(offsets[3]);
-  object.role = reader.readString(offsets[4]);
+  object.ownerCidNumber = reader.readString(offsets[4]);
+  object.role = reader.readString(offsets[5]);
   return object;
 }
 
@@ -35654,6 +36639,8 @@ P _chatGroupMemberEntityDeserializeProp<P>(
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -35676,59 +36663,101 @@ void _chatGroupMemberEntityAttach(
 
 extension ChatGroupMemberEntityByIndex
     on IsarCollection<ChatGroupMemberEntity> {
-  Future<ChatGroupMemberEntity?> getByMemberKey(String memberKey) {
-    return getByIndex(r'memberKey', [memberKey]);
+  Future<ChatGroupMemberEntity?> getByOwnerCidNumberMemberKey(
+      String ownerCidNumber, String memberKey) {
+    return getByIndex(r'ownerCidNumber_memberKey', [ownerCidNumber, memberKey]);
   }
 
-  ChatGroupMemberEntity? getByMemberKeySync(String memberKey) {
-    return getByIndexSync(r'memberKey', [memberKey]);
+  ChatGroupMemberEntity? getByOwnerCidNumberMemberKeySync(
+      String ownerCidNumber, String memberKey) {
+    return getByIndexSync(
+        r'ownerCidNumber_memberKey', [ownerCidNumber, memberKey]);
   }
 
-  Future<bool> deleteByMemberKey(String memberKey) {
-    return deleteByIndex(r'memberKey', [memberKey]);
+  Future<bool> deleteByOwnerCidNumberMemberKey(
+      String ownerCidNumber, String memberKey) {
+    return deleteByIndex(
+        r'ownerCidNumber_memberKey', [ownerCidNumber, memberKey]);
   }
 
-  bool deleteByMemberKeySync(String memberKey) {
-    return deleteByIndexSync(r'memberKey', [memberKey]);
+  bool deleteByOwnerCidNumberMemberKeySync(
+      String ownerCidNumber, String memberKey) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_memberKey', [ownerCidNumber, memberKey]);
   }
 
-  Future<List<ChatGroupMemberEntity?>> getAllByMemberKey(
-      List<String> memberKeyValues) {
-    final values = memberKeyValues.map((e) => [e]).toList();
-    return getAllByIndex(r'memberKey', values);
+  Future<List<ChatGroupMemberEntity?>> getAllByOwnerCidNumberMemberKey(
+      List<String> ownerCidNumberValues, List<String> memberKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(memberKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], memberKeyValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_memberKey', values);
   }
 
-  List<ChatGroupMemberEntity?> getAllByMemberKeySync(
-      List<String> memberKeyValues) {
-    final values = memberKeyValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'memberKey', values);
+  List<ChatGroupMemberEntity?> getAllByOwnerCidNumberMemberKeySync(
+      List<String> ownerCidNumberValues, List<String> memberKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(memberKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], memberKeyValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_memberKey', values);
   }
 
-  Future<int> deleteAllByMemberKey(List<String> memberKeyValues) {
-    final values = memberKeyValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'memberKey', values);
+  Future<int> deleteAllByOwnerCidNumberMemberKey(
+      List<String> ownerCidNumberValues, List<String> memberKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(memberKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], memberKeyValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_memberKey', values);
   }
 
-  int deleteAllByMemberKeySync(List<String> memberKeyValues) {
-    final values = memberKeyValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'memberKey', values);
+  int deleteAllByOwnerCidNumberMemberKeySync(
+      List<String> ownerCidNumberValues, List<String> memberKeyValues) {
+    final len = ownerCidNumberValues.length;
+    assert(memberKeyValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], memberKeyValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_memberKey', values);
   }
 
-  Future<Id> putByMemberKey(ChatGroupMemberEntity object) {
-    return putByIndex(r'memberKey', object);
+  Future<Id> putByOwnerCidNumberMemberKey(ChatGroupMemberEntity object) {
+    return putByIndex(r'ownerCidNumber_memberKey', object);
   }
 
-  Id putByMemberKeySync(ChatGroupMemberEntity object, {bool saveLinks = true}) {
-    return putByIndexSync(r'memberKey', object, saveLinks: saveLinks);
-  }
-
-  Future<List<Id>> putAllByMemberKey(List<ChatGroupMemberEntity> objects) {
-    return putAllByIndex(r'memberKey', objects);
-  }
-
-  List<Id> putAllByMemberKeySync(List<ChatGroupMemberEntity> objects,
+  Id putByOwnerCidNumberMemberKeySync(ChatGroupMemberEntity object,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'memberKey', objects, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_memberKey', object,
+        saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByOwnerCidNumberMemberKey(
+      List<ChatGroupMemberEntity> objects) {
+    return putAllByIndex(r'ownerCidNumber_memberKey', objects);
+  }
+
+  List<Id> putAllByOwnerCidNumberMemberKeySync(
+      List<ChatGroupMemberEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'ownerCidNumber_memberKey', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -35813,44 +36842,90 @@ extension ChatGroupMemberEntityQueryWhere on QueryBuilder<ChatGroupMemberEntity,
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterWhereClause>
-      memberKeyEqualTo(String memberKey) {
+      ownerCidNumberEqualToAnyMemberKey(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'memberKey',
-        value: [memberKey],
+        indexName: r'ownerCidNumber_memberKey',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterWhereClause>
-      memberKeyNotEqualTo(String memberKey) {
+      ownerCidNumberNotEqualToAnyMemberKey(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'memberKey',
+              indexName: r'ownerCidNumber_memberKey',
               lower: [],
-              upper: [memberKey],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'memberKey',
-              lower: [memberKey],
+              indexName: r'ownerCidNumber_memberKey',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'memberKey',
-              lower: [memberKey],
+              indexName: r'ownerCidNumber_memberKey',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'memberKey',
+              indexName: r'ownerCidNumber_memberKey',
               lower: [],
-              upper: [memberKey],
+              upper: [ownerCidNumber],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterWhereClause>
+      ownerCidNumberMemberKeyEqualTo(String ownerCidNumber, String memberKey) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'ownerCidNumber_memberKey',
+        value: [ownerCidNumber, memberKey],
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterWhereClause>
+      ownerCidNumberEqualToMemberKeyNotEqualTo(
+          String ownerCidNumber, String memberKey) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_memberKey',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, memberKey],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_memberKey',
+              lower: [ownerCidNumber, memberKey],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_memberKey',
+              lower: [ownerCidNumber, memberKey],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_memberKey',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, memberKey],
               includeUpper: false,
             ));
       }
@@ -36156,13 +37231,13 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdEqualTo(
+      QAfterFilterCondition> memberCidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -36170,7 +37245,7 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdGreaterThan(
+      QAfterFilterCondition> memberCidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -36178,7 +37253,7 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -36186,7 +37261,7 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdLessThan(
+      QAfterFilterCondition> memberCidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -36194,7 +37269,7 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -36202,7 +37277,7 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdBetween(
+      QAfterFilterCondition> memberCidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -36211,7 +37286,7 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -36222,13 +37297,13 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdStartsWith(
+      QAfterFilterCondition> memberCidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -36236,13 +37311,13 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdEndsWith(
+      QAfterFilterCondition> memberCidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -36251,10 +37326,10 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
           QAfterFilterCondition>
-      memberAccountIdContains(String value, {bool caseSensitive = true}) {
+      memberCidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -36263,10 +37338,10 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
           QAfterFilterCondition>
-      memberAccountIdMatches(String pattern, {bool caseSensitive = true}) {
+      memberCidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -36274,20 +37349,20 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdIsEmpty() {
+      QAfterFilterCondition> memberCidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
-      QAfterFilterCondition> memberAccountIdIsNotEmpty() {
+      QAfterFilterCondition> memberCidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'memberAccountId',
+        property: r'memberCidNumber',
         value: '',
       ));
     });
@@ -36426,6 +37501,144 @@ extension ChatGroupMemberEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'memberKey',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ownerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+          QAfterFilterCondition>
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+          QAfterFilterCondition>
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ownerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity,
+      QAfterFilterCondition> ownerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ownerCidNumber',
         value: '',
       ));
     });
@@ -36607,16 +37820,16 @@ extension ChatGroupMemberEntityQuerySortBy
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
-      sortByMemberAccountId() {
+      sortByMemberCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'memberAccountId', Sort.asc);
+      return query.addSortBy(r'memberCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
-      sortByMemberAccountIdDesc() {
+      sortByMemberCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'memberAccountId', Sort.desc);
+      return query.addSortBy(r'memberCidNumber', Sort.desc);
     });
   }
 
@@ -36631,6 +37844,20 @@ extension ChatGroupMemberEntityQuerySortBy
       sortByMemberKeyDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'memberKey', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
+      sortByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
+      sortByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
     });
   }
 
@@ -36694,16 +37921,16 @@ extension ChatGroupMemberEntityQuerySortThenBy
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
-      thenByMemberAccountId() {
+      thenByMemberCidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'memberAccountId', Sort.asc);
+      return query.addSortBy(r'memberCidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
-      thenByMemberAccountIdDesc() {
+      thenByMemberCidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'memberAccountId', Sort.desc);
+      return query.addSortBy(r'memberCidNumber', Sort.desc);
     });
   }
 
@@ -36718,6 +37945,20 @@ extension ChatGroupMemberEntityQuerySortThenBy
       thenByMemberKeyDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'memberKey', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
+      thenByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QAfterSortBy>
+      thenByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
     });
   }
 
@@ -36753,9 +37994,9 @@ extension ChatGroupMemberEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QDistinct>
-      distinctByMemberAccountId({bool caseSensitive = true}) {
+      distinctByMemberCidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'memberAccountId',
+      return query.addDistinctBy(r'memberCidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -36764,6 +38005,14 @@ extension ChatGroupMemberEntityQueryWhereDistinct
       distinctByMemberKey({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'memberKey', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, ChatGroupMemberEntity, QDistinct>
+      distinctByOwnerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
     });
   }
 
@@ -36798,9 +38047,9 @@ extension ChatGroupMemberEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupMemberEntity, String, QQueryOperations>
-      memberAccountIdProperty() {
+      memberCidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'memberAccountId');
+      return query.addPropertyName(r'memberCidNumber');
     });
   }
 
@@ -36808,6 +38057,13 @@ extension ChatGroupMemberEntityQueryProperty on QueryBuilder<
       memberKeyProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'memberKey');
+    });
+  }
+
+  QueryBuilder<ChatGroupMemberEntity, String, QQueryOperations>
+      ownerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ownerCidNumber');
     });
   }
 
@@ -36854,6 +38110,11 @@ const ChatGroupPendingCommitEntitySchema = CollectionSchema(
       id: 4,
       name: r'messageEpoch',
       type: IsarType.long,
+    ),
+    r'ownerCidNumber': PropertySchema(
+      id: 5,
+      name: r'ownerCidNumber',
+      type: IsarType.string,
     )
   },
   estimateSize: _chatGroupPendingCommitEntityEstimateSize,
@@ -36862,12 +38123,17 @@ const ChatGroupPendingCommitEntitySchema = CollectionSchema(
   deserializeProp: _chatGroupPendingCommitEntityDeserializeProp,
   idName: r'id',
   indexes: {
-    r'envelopeId': IndexSchema(
-      id: 6181136152466893989,
-      name: r'envelopeId',
+    r'ownerCidNumber_envelopeId': IndexSchema(
+      id: 3891964785492803984,
+      name: r'ownerCidNumber_envelopeId',
       unique: true,
       replace: true,
       properties: [
+        IndexPropertySchema(
+          name: r'ownerCidNumber',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
         IndexPropertySchema(
           name: r'envelopeId',
           type: IndexType.hash,
@@ -36919,6 +38185,7 @@ int _chatGroupPendingCommitEntityEstimateSize(
   bytesCount += 3 + object.envelopeBytesHex.length * 3;
   bytesCount += 3 + object.envelopeId.length * 3;
   bytesCount += 3 + object.groupId.length * 3;
+  bytesCount += 3 + object.ownerCidNumber.length * 3;
   return bytesCount;
 }
 
@@ -36933,6 +38200,7 @@ void _chatGroupPendingCommitEntitySerialize(
   writer.writeString(offsets[2], object.envelopeId);
   writer.writeString(offsets[3], object.groupId);
   writer.writeLong(offsets[4], object.messageEpoch);
+  writer.writeString(offsets[5], object.ownerCidNumber);
 }
 
 ChatGroupPendingCommitEntity _chatGroupPendingCommitEntityDeserialize(
@@ -36948,6 +38216,7 @@ ChatGroupPendingCommitEntity _chatGroupPendingCommitEntityDeserialize(
   object.groupId = reader.readString(offsets[3]);
   object.id = id;
   object.messageEpoch = reader.readLong(offsets[4]);
+  object.ownerCidNumber = reader.readString(offsets[5]);
   return object;
 }
 
@@ -36968,6 +38237,8 @@ P _chatGroupPendingCommitEntityDeserializeProp<P>(
       return (reader.readString(offset)) as P;
     case 4:
       return (reader.readLong(offset)) as P;
+    case 5:
+      return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -36989,61 +38260,103 @@ void _chatGroupPendingCommitEntityAttach(
 
 extension ChatGroupPendingCommitEntityByIndex
     on IsarCollection<ChatGroupPendingCommitEntity> {
-  Future<ChatGroupPendingCommitEntity?> getByEnvelopeId(String envelopeId) {
-    return getByIndex(r'envelopeId', [envelopeId]);
+  Future<ChatGroupPendingCommitEntity?> getByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  ChatGroupPendingCommitEntity? getByEnvelopeIdSync(String envelopeId) {
-    return getByIndexSync(r'envelopeId', [envelopeId]);
+  ChatGroupPendingCommitEntity? getByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return getByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<bool> deleteByEnvelopeId(String envelopeId) {
-    return deleteByIndex(r'envelopeId', [envelopeId]);
+  Future<bool> deleteByOwnerCidNumberEnvelopeId(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndex(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  bool deleteByEnvelopeIdSync(String envelopeId) {
-    return deleteByIndexSync(r'envelopeId', [envelopeId]);
+  bool deleteByOwnerCidNumberEnvelopeIdSync(
+      String ownerCidNumber, String envelopeId) {
+    return deleteByIndexSync(
+        r'ownerCidNumber_envelopeId', [ownerCidNumber, envelopeId]);
   }
 
-  Future<List<ChatGroupPendingCommitEntity?>> getAllByEnvelopeId(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndex(r'envelopeId', values);
+  Future<List<ChatGroupPendingCommitEntity?>> getAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  List<ChatGroupPendingCommitEntity?> getAllByEnvelopeIdSync(
-      List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return getAllByIndexSync(r'envelopeId', values);
+  List<ChatGroupPendingCommitEntity?> getAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return getAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<int> deleteAllByEnvelopeId(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndex(r'envelopeId', values);
+  Future<int> deleteAllByOwnerCidNumberEnvelopeId(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndex(r'ownerCidNumber_envelopeId', values);
   }
 
-  int deleteAllByEnvelopeIdSync(List<String> envelopeIdValues) {
-    final values = envelopeIdValues.map((e) => [e]).toList();
-    return deleteAllByIndexSync(r'envelopeId', values);
+  int deleteAllByOwnerCidNumberEnvelopeIdSync(
+      List<String> ownerCidNumberValues, List<String> envelopeIdValues) {
+    final len = ownerCidNumberValues.length;
+    assert(envelopeIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([ownerCidNumberValues[i], envelopeIdValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'ownerCidNumber_envelopeId', values);
   }
 
-  Future<Id> putByEnvelopeId(ChatGroupPendingCommitEntity object) {
-    return putByIndex(r'envelopeId', object);
+  Future<Id> putByOwnerCidNumberEnvelopeId(
+      ChatGroupPendingCommitEntity object) {
+    return putByIndex(r'ownerCidNumber_envelopeId', object);
   }
 
-  Id putByEnvelopeIdSync(ChatGroupPendingCommitEntity object,
+  Id putByOwnerCidNumberEnvelopeIdSync(ChatGroupPendingCommitEntity object,
       {bool saveLinks = true}) {
-    return putByIndexSync(r'envelopeId', object, saveLinks: saveLinks);
+    return putByIndexSync(r'ownerCidNumber_envelopeId', object,
+        saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByEnvelopeId(
+  Future<List<Id>> putAllByOwnerCidNumberEnvelopeId(
       List<ChatGroupPendingCommitEntity> objects) {
-    return putAllByIndex(r'envelopeId', objects);
+    return putAllByIndex(r'ownerCidNumber_envelopeId', objects);
   }
 
-  List<Id> putAllByEnvelopeIdSync(List<ChatGroupPendingCommitEntity> objects,
+  List<Id> putAllByOwnerCidNumberEnvelopeIdSync(
+      List<ChatGroupPendingCommitEntity> objects,
       {bool saveLinks = true}) {
-    return putAllByIndexSync(r'envelopeId', objects, saveLinks: saveLinks);
+    return putAllByIndexSync(r'ownerCidNumber_envelopeId', objects,
+        saveLinks: saveLinks);
   }
 }
 
@@ -37137,44 +38450,95 @@ extension ChatGroupPendingCommitEntityQueryWhere on QueryBuilder<
   }
 
   QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
-      QAfterWhereClause> envelopeIdEqualTo(String envelopeId) {
+          QAfterWhereClause>
+      ownerCidNumberEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'envelopeId',
-        value: [envelopeId],
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber],
       ));
     });
   }
 
   QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
-      QAfterWhereClause> envelopeIdNotEqualTo(String envelopeId) {
+          QAfterWhereClause>
+      ownerCidNumberNotEqualToAnyEnvelopeId(String ownerCidNumber) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
               includeUpper: false,
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ));
       } else {
         return query
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
-              lower: [envelopeId],
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
               includeLower: false,
               upper: [],
             ))
             .addWhereClause(IndexWhereClause.between(
-              indexName: r'envelopeId',
+              indexName: r'ownerCidNumber_envelopeId',
               lower: [],
-              upper: [envelopeId],
+              upper: [ownerCidNumber],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+          QAfterWhereClause>
+      ownerCidNumberEnvelopeIdEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'ownerCidNumber_envelopeId',
+        value: [ownerCidNumber, envelopeId],
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+          QAfterWhereClause>
+      ownerCidNumberEqualToEnvelopeIdNotEqualTo(
+          String ownerCidNumber, String envelopeId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber, envelopeId],
+              includeLower: false,
+              upper: [ownerCidNumber],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'ownerCidNumber_envelopeId',
+              lower: [ownerCidNumber],
+              upper: [ownerCidNumber, envelopeId],
               includeUpper: false,
             ));
       }
@@ -37905,6 +39269,144 @@ extension ChatGroupPendingCommitEntityQueryFilter on QueryBuilder<
       ));
     });
   }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'ownerCidNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+          QAfterFilterCondition>
+      ownerCidNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'ownerCidNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+          QAfterFilterCondition>
+      ownerCidNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'ownerCidNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterFilterCondition> ownerCidNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'ownerCidNumber',
+        value: '',
+      ));
+    });
+  }
 }
 
 extension ChatGroupPendingCommitEntityQueryObject on QueryBuilder<
@@ -37986,6 +39488,20 @@ extension ChatGroupPendingCommitEntityQuerySortBy on QueryBuilder<
       QAfterSortBy> sortByMessageEpochDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'messageEpoch', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterSortBy> sortByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterSortBy> sortByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
     });
   }
 }
@@ -38075,6 +39591,20 @@ extension ChatGroupPendingCommitEntityQuerySortThenBy on QueryBuilder<
       return query.addSortBy(r'messageEpoch', Sort.desc);
     });
   }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterSortBy> thenByOwnerCidNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QAfterSortBy> thenByOwnerCidNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'ownerCidNumber', Sort.desc);
+    });
+  }
 }
 
 extension ChatGroupPendingCommitEntityQueryWhereDistinct on QueryBuilder<
@@ -38112,6 +39642,14 @@ extension ChatGroupPendingCommitEntityQueryWhereDistinct on QueryBuilder<
       QDistinct> distinctByMessageEpoch() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'messageEpoch');
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, ChatGroupPendingCommitEntity,
+      QDistinct> distinctByOwnerCidNumber({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'ownerCidNumber',
+          caseSensitive: caseSensitive);
     });
   }
 }
@@ -38159,6 +39697,13 @@ extension ChatGroupPendingCommitEntityQueryProperty on QueryBuilder<
       messageEpochProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'messageEpoch');
+    });
+  }
+
+  QueryBuilder<ChatGroupPendingCommitEntity, String, QQueryOperations>
+      ownerCidNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'ownerCidNumber');
     });
   }
 }

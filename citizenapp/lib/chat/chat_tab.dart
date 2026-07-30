@@ -22,17 +22,17 @@ import 'group/ui/open_group_chat.dart';
 import 'storage/chat_store.dart';
 
 typedef ChatSendTextFactory = ChatSendTextCallback? Function(
-  String peerAccountId,
+  String peerCidNumber,
   String conversationId,
 );
-typedef ChatSyncFactory = ChatSyncCallback? Function(String peerAccountId);
+typedef ChatSyncFactory = ChatSyncCallback? Function(String peerCidNumber);
 typedef ChatSendMediaFactory = ChatSendMediaCallback? Function(
-  String peerAccountId,
+  String peerCidNumber,
   String conversationId,
 );
 typedef ChatDownloadAttachmentFactory = ChatDownloadAttachmentCallback?
     Function(
-  String peerAccountId,
+  String peerCidNumber,
 );
 
 /// 聊天页加号菜单 5 个动作的可注入入口。
@@ -77,6 +77,7 @@ class ChatTab extends StatefulWidget {
     super.key,
     ChatStore? store,
     WalletManager? walletManager,
+    this.cidNumber,
     this.accountId,
     this.sendTextFactory,
     this.sendMediaFactory,
@@ -91,6 +92,7 @@ class ChatTab extends StatefulWidget {
 
   final ChatStore store;
   final WalletManager walletManager;
+  final String? cidNumber;
   final String? accountId;
   final ChatSendTextFactory? sendTextFactory;
   final ChatSendMediaFactory? sendMediaFactory;
@@ -113,6 +115,7 @@ class _ChatTabState extends State<ChatTab> {
   static const _backoffPollInterval = Duration(seconds: 30);
 
   List<ChatConversationPreview> _conversations = const [];
+  String _cidNumber = '';
   String _accountId = '';
   bool _loading = true;
   bool _polling = false;
@@ -200,8 +203,12 @@ class _ChatTabState extends State<ChatTab> {
   Future<void> _onWalletsChanged() async {
     // 先廉价比对(纯 Isar 读):默认聊天身份没变的钱包操作(重命名/导入
     // 未置顶钱包)不触发发送队列重试,避免整页转圈与无谓网络请求。
-    final address = await _readAccountId();
-    if (!mounted || address == _accountId) return;
+    final identity = await _readIdentity();
+    if (!mounted ||
+        (identity.accountId == _accountId &&
+            identity.cidNumber == _cidNumber)) {
+      return;
+    }
     if (_accountId.isNotEmpty) {
       widget.runtime?.invalidateAccount(_accountId);
     }
@@ -223,7 +230,9 @@ class _ChatTabState extends State<ChatTab> {
       _error = null;
     });
     try {
-      final activeWallet = widget.accountId ?? await _readAccountId();
+      final identity = await _readIdentity();
+      final activeWallet = widget.accountId ?? identity.accountId;
+      final ownerCidNumber = widget.cidNumber ?? identity.cidNumber;
       if (!_isActive) {
         return;
       }
@@ -231,13 +240,15 @@ class _ChatTabState extends State<ChatTab> {
         await _retryOutgoingSilently();
       }
       final conversations = await widget.store.readConversationPreviews(
-        accountId: activeWallet.isEmpty ? null : activeWallet,
+        ownerCidNumber: ownerCidNumber,
+        currentAccountId: activeWallet,
       );
       if (!mounted || !_isActive || generation != _reloadGeneration) {
         return;
       }
       setState(() {
         _conversations = conversations;
+        _cidNumber = ownerCidNumber;
         _accountId = activeWallet;
       });
       _configurePolling(activeWallet);
@@ -333,7 +344,8 @@ class _ChatTabState extends State<ChatTab> {
     }
     await _retryOutgoingSilently();
     final conversations = await widget.store.readConversationPreviews(
-      accountId: accountId,
+      ownerCidNumber: _cidNumber,
+      currentAccountId: accountId,
     );
     if (mounted && _accountId == accountId) {
       setState(() {
@@ -384,7 +396,8 @@ class _ChatTabState extends State<ChatTab> {
     try {
       ok = await _retryOutgoingSilently();
       final conversations = await widget.store.readConversationPreviews(
-        accountId: _accountId,
+        ownerCidNumber: _cidNumber,
+        currentAccountId: _accountId,
       );
       if (mounted) {
         setState(() {
@@ -406,13 +419,26 @@ class _ChatTabState extends State<ChatTab> {
     }
   }
 
-  Future<String> _readAccountId() async {
-    final runtimeAddress = await widget.runtime?.readAccountId();
-    if (runtimeAddress != null && runtimeAddress.isNotEmpty) {
-      return runtimeAddress;
+  Future<({String cidNumber, String accountId})> _readIdentity() async {
+    if (widget.cidNumber != null && widget.accountId != null) {
+      return (
+        cidNumber: widget.cidNumber!,
+        accountId: widget.accountId!,
+      );
     }
-    // 兜底：身份账户（CID 绑定账户，单源 IdentityAccountCache；链读失败乐观回退账户0）。
-    return await IdentityAccountCache.instance.accountId() ?? '';
+    final runtimeAddress = await widget.runtime?.readAccountId();
+    final runtimeCidNumber = await widget.runtime?.readCidNumber();
+    if (runtimeAddress != null &&
+        runtimeAddress.isNotEmpty &&
+        runtimeCidNumber != null &&
+        runtimeCidNumber.isNotEmpty) {
+      return (cidNumber: runtimeCidNumber, accountId: runtimeAddress);
+    }
+    final identity = await IdentityAccountCache.instance.resolve();
+    return (
+      cidNumber: identity?.snapshot?.cidNumber ?? '',
+      accountId: identity?.accountId ?? '',
+    );
   }
 
   Future<void> _deleteLocalConversation(String conversationId) {
@@ -420,7 +446,7 @@ class _ChatTabState extends State<ChatTab> {
     if (runtime != null) {
       return runtime.deleteLocalConversation(conversationId);
     }
-    return widget.store.deleteConversation(conversationId);
+    return widget.store.deleteConversation(_cidNumber, conversationId);
   }
 
   Future<void> _confirmAndDeleteConversation(
@@ -581,6 +607,7 @@ class _ChatTabState extends State<ChatTab> {
       MaterialPageRoute<void>(
         builder: (_) => ChatSearchPage(
           store: widget.store,
+          cidNumber: _cidNumber,
           accountId: _accountId,
         ),
       ),
@@ -591,7 +618,10 @@ class _ChatTabState extends State<ChatTab> {
     Navigator.of(context)
         .push(
           MaterialPageRoute<void>(
-            builder: (_) => GroupManagePage(groupId: preview.conversationId),
+            builder: (_) => GroupManagePage(
+              groupId: preview.conversationId,
+              cidNumber: _cidNumber,
+            ),
           ),
         )
         .then((_) => _reload());
@@ -603,36 +633,37 @@ class _ChatTabState extends State<ChatTab> {
           MaterialPageRoute<void>(
             builder: (context) => ChatPage(
               conversationId: preview.conversationId,
+              ownerCidNumber: _cidNumber,
               accountId: _accountId,
-              peerUserId: preview.peerAccountId,
+              peerUserId: preview.peerCidNumber,
               title: preview.title,
               store: widget.store,
               onSendText: widget.sendTextFactory?.call(
-                    preview.peerAccountId,
+                    preview.peerCidNumber,
                     preview.conversationId,
                   ) ??
                   (widget.runtime == null
                       ? null
                       : (text) => widget.runtime!.sendText(
-                            peerAccountId: preview.peerAccountId,
+                            peerCidNumber: preview.peerCidNumber,
                             conversationId: preview.conversationId,
                             text: text,
                           )),
               onSendMedia: widget.sendMediaFactory?.call(
-                    preview.peerAccountId,
+                    preview.peerCidNumber,
                     preview.conversationId,
                   ) ??
                   (widget.runtime == null
                       ? null
                       : (media) => widget.runtime!.sendMedia(
-                            peerAccountId: preview.peerAccountId,
+                            peerCidNumber: preview.peerCidNumber,
                             conversationId: preview.conversationId,
                             media: media,
                           )),
               onSendSticker: widget.runtime == null
                   ? null
                   : (packId, stickerId) => widget.runtime!.sendSticker(
-                        peerAccountId: preview.peerAccountId,
+                        peerCidNumber: preview.peerCidNumber,
                         conversationId: preview.conversationId,
                         packId: packId,
                         stickerId: stickerId,
@@ -654,7 +685,7 @@ class _ChatTabState extends State<ChatTab> {
                         clearByteSize: clearByteSize,
                       ),
               onDownloadAttachment: widget.downloadAttachmentFactory?.call(
-                    preview.peerAccountId,
+                    preview.peerCidNumber,
                   ) ??
                   (widget.runtime == null
                       ? null
@@ -666,7 +697,7 @@ class _ChatTabState extends State<ChatTab> {
                             conversationId: conversationId,
                             controlPlaintext: controlPlaintext,
                           )),
-              onSync: widget.syncFactory?.call(preview.peerAccountId) ??
+              onSync: widget.syncFactory?.call(preview.peerCidNumber) ??
                   (widget.runtime == null
                       ? null
                       : () => widget.runtime!.retryOutgoing()),
@@ -1044,7 +1075,7 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtitle = preview.lastMessage.trim().isEmpty
-        ? preview.peerAccountId
+        ? preview.peerCidNumber
         : preview.lastMessage.trim();
     return Dismissible(
       key: ValueKey('chat-conversation-${preview.conversationId}'),
@@ -1062,7 +1093,7 @@ class _ConversationTile extends StatelessWidget {
         onTap: onTap,
         onLongPress: onManage,
         isGroup: preview.isGroup,
-        peerAccountId: preview.peerAccountId,
+        peerCidNumber: preview.peerCidNumber,
         isFirst: isFirst,
         isLast: isLast,
       ),
@@ -1145,7 +1176,7 @@ class _ListTileShell extends StatelessWidget {
     required this.trailing,
     required this.unreadCount,
     required this.onTap,
-    required this.peerAccountId,
+    required this.peerCidNumber,
     required this.isFirst,
     required this.isLast,
     this.onLongPress,
@@ -1157,7 +1188,7 @@ class _ListTileShell extends StatelessWidget {
   final String trailing;
   final int unreadCount;
   final VoidCallback onTap;
-  final String peerAccountId;
+  final String peerCidNumber;
   final bool isFirst;
   final bool isLast;
   final VoidCallback? onLongPress;
@@ -1202,7 +1233,7 @@ class _ListTileShell extends StatelessWidget {
                     LocalIdentityAvatar(
                       path: null,
                       size: 44,
-                      seed: peerAccountId,
+                      seed: peerCidNumber,
                     ),
                   const SizedBox(width: 12),
                   Expanded(

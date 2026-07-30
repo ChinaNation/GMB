@@ -8,9 +8,9 @@ void main() {
       protocolVersion: 1,
       envelopeId: 'env-1',
       conversationId: 'conv-1',
-      senderAccountId:
+      senderCidNumber:
           '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
+      recipientCidNumber:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
       senderDeviceId: 'alice-phone',
       mlsWireMessage: [0xaa, 0xbb, 0xcc],
@@ -25,15 +25,14 @@ void main() {
     expect(restored.envelopeId, 'env-1');
     expect(restored.mlsWireMessage, [0xaa, 0xbb, 0xcc]);
     expect(restored.ratchetTree, [0x0a, 0x0b]);
-    expect(restored.recipientAccountId,
+    expect(restored.recipientCidNumber,
         '0x2222222222222222222222222222222222222222222222222222222222222222');
   });
 
   test('ChatKeyPackage 不包含消费状态', () {
     final keyPackage = ChatKeyPackage(
       protocolVersion: 1,
-      accountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      cidNumber: 'CN220-CTZN2-100000002-2026',
       deviceId: 'bob-phone',
       devicePublicKey: 'aabbcc',
       keyPackageId: 'kp-1',
@@ -51,7 +50,7 @@ void main() {
   test('ChatRoute 只保存设备和近场路由', () {
     final route = ChatRoute(
       protocolVersion: 1,
-      peerAccountId:
+      peerCidNumber:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
       routeDisplayName: 'Bob',
       deviceId: 'bob-phone',
@@ -63,7 +62,7 @@ void main() {
     );
 
     final restored = ChatRoute.fromBuffer(route.writeToBuffer());
-    expect(restored.peerAccountId,
+    expect(restored.peerCidNumber,
         '0x2222222222222222222222222222222222222222222222222222222222222222');
     expect(restored.nearbyPeerHint, 'bob-nearby');
   });

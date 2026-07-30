@@ -31,6 +31,7 @@ class _FakeResolver extends IdentityAccountResolver {
           ? CitizenIdentityChainSnapshot(
               cidNumber: 'GD-CTZN1-8F3A2B',
               accountId: Uint8List(32),
+              bindingRevision: 1,
               votingIdentity: null,
               candidateIdentity: null,
             )
@@ -94,8 +95,7 @@ void main() {
     expect(find.text('重试'), findsOneWidget);
   });
 
-  testWidgets('冷启动链未就绪读失败 → 停在 loading,不弹读取失败;就绪后自动放行',
-      (tester) async {
+  testWidgets('冷启动链未就绪读失败 → 停在 loading,不弹读取失败;就绪后自动放行', (tester) async {
     final health =
         ValueNotifier<ChainHealthStatus>(ChainHealthStatus.uninitialized);
     // 链未就绪时 resolve 抛;就绪后同一 resolver 返回已注册。

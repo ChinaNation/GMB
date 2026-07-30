@@ -19,21 +19,24 @@ export type SignedAction = 'delete_account';
 
 const ACTION_CHALLENGE_TTL_SECONDS = 300;
 
-/// 动作签名 SCALE payload：`action ‖ account_id ‖ challenge_id ‖ cid_number ‖ expires_at`。
+/// 动作签名 SCALE payload：
+/// `action ‖ cid_number ‖ binding_revision ‖ account_id ‖ challenge_id ‖ expires_at`。
 /// action 编入正文 → 登录/其它动作的签名无法被重放成本动作；cid_number 固定插在
 /// challenge_id 与 expires_at 之间。被签消息 = signing_message(OP_SIGN_SQUARE_ACTION, payload)。
 function buildActionScalePayload(
   action: SignedAction,
+  cidNumber: string,
+  bindingRevision: number,
   accountId: string,
   challengeId: string,
   expiresAt: number,
-  cidNumber: string
 ): Uint8Array {
   return concatBytes(
     scaleString(action),
+    scaleString(cidNumber),
+    u64Le(bindingRevision),
     scaleString(accountId),
     scaleString(challengeId),
-    scaleString(cidNumber),
     u64Le(expiresAt)
   );
 }
@@ -50,21 +53,36 @@ export interface IssuedActionChallenge {
 export async function issueActionChallenge(
   env: Env,
   cidNumber: string,
+  bindingRevision: number,
   accountId: string,
   action: SignedAction
 ): Promise<IssuedActionChallenge> {
   const challengeId = createId('sqa');
   const expiresAt = secondsFromNow(ACTION_CHALLENGE_TTL_SECONDS);
   const signingPayloadHex = bytesToHex(
-    buildActionScalePayload(action, accountId, challengeId, expiresAt, cidNumber)
+    buildActionScalePayload(
+      action,
+      cidNumber,
+      bindingRevision,
+      accountId,
+      challengeId,
+      expiresAt,
+    )
   );
 
   await env.DB.prepare(
     `INSERT INTO square_login_challenges
-      (challenge_id, cid_number, account_id, signing_payload, expires_at, used_at)
-      VALUES (?, ?, ?, ?, ?, NULL)`
+      (challenge_id, cid_number, binding_revision, account_id, signing_payload, expires_at, used_at)
+      VALUES (?, ?, ?, ?, ?, ?, NULL)`
   )
-    .bind(challengeId, cidNumber, accountId, signingPayloadHex, expiresAt)
+    .bind(
+      challengeId,
+      cidNumber,
+      bindingRevision,
+      accountId,
+      signingPayloadHex,
+      expiresAt,
+    )
     .run();
 
   return { challengeId, opTag: OP_SIGN_SQUARE_ACTION, signingPayloadHex, expiresAt };
@@ -72,6 +90,7 @@ export async function issueActionChallenge(
 
 export interface ActionSignatureInput {
   cidNumber: string;
+  bindingRevision: number;
   accountId: string;
   action: SignedAction;
   challengeId: string;
@@ -86,7 +105,7 @@ export async function consumeActionSignature(
   input: ActionSignatureInput
 ): Promise<void> {
   const challenge = await env.DB.prepare(
-    `SELECT challenge_id, cid_number, account_id, signing_payload, expires_at, used_at
+    `SELECT challenge_id, cid_number, binding_revision, account_id, signing_payload, expires_at, used_at
       FROM square_login_challenges
       WHERE challenge_id = ?`
   )
@@ -96,6 +115,7 @@ export async function consumeActionSignature(
   if (
     !challenge ||
     challenge.cid_number !== input.cidNumber ||
+    challenge.binding_revision !== input.bindingRevision ||
     challenge.account_id !== input.accountId
   ) {
     throw new HttpError(401, 'invalid_challenge', '签名挑战不存在');
@@ -111,10 +131,11 @@ export async function consumeActionSignature(
   const expectedPayloadHex = bytesToHex(
     buildActionScalePayload(
       input.action,
+      challenge.cid_number,
+      challenge.binding_revision,
       challenge.account_id,
       challenge.challenge_id,
       challenge.expires_at,
-      challenge.cid_number
     )
   );
   if (expectedPayloadHex !== challenge.signing_payload) {
@@ -136,6 +157,7 @@ export async function consumeActionSignature(
       SET used_at = ?
       WHERE challenge_id = ?
         AND cid_number = ?
+        AND binding_revision = ?
         AND account_id = ?
         AND used_at IS NULL
         AND expires_at > ?`
@@ -144,6 +166,7 @@ export async function consumeActionSignature(
       claimedAt,
       challenge.challenge_id,
       challenge.cid_number,
+      challenge.binding_revision,
       challenge.account_id,
       claimedAt
     )

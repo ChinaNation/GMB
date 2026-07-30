@@ -5,12 +5,12 @@ package gmb.chat.v1;
 // 跨端 Chat 信封真源（proto 包 gmb.chat.v1，版本由 protocol_version 字段表达）。
 //
 // OpenMLS 标准 wire bytes 放在内层；本文件只定义外层瞬时投递、Chat 路由记录、
-// KeyPackage 发布结构。钱包账户只作为聊天账户和转账收款标识，
-// 不代表 Chat 设备身份密钥。
+// KeyPackage 发布结构。Chat 身份只认 CID；当前钱包账户只在外层 Session
+// 完成签名授权，不进入 MLS 名册、会话 ID 或消息归属。
 
 message ChatRoute {
   uint32 protocol_version = 1;
-  string peer_account_id = 2;
+  string peer_cid_number = 2;
   string route_display_name = 3;
   string device_id = 4;
   string device_public_key = 5;
@@ -30,8 +30,8 @@ message ChatEnvelope {
   uint32 protocol_version = 1;
   string envelope_id = 2;
   string conversation_id = 3;
-  string sender_account_id = 4;
-  string recipient_account_id = 5;
+  string sender_cid_number = 4;
+  string recipient_cid_number = 5;
   string sender_device_id = 6;
   bytes mls_wire_message = 7;
   bytes encrypted_metadata = 8;
@@ -43,7 +43,7 @@ message ChatEnvelope {
 
 message ChatKeyPackage {
   uint32 protocol_version = 1;
-  string account_id = 2;
+  string cid_number = 2;
   string device_id = 3;
   string device_public_key = 4;
   string key_package_id = 5;
@@ -54,7 +54,7 @@ message ChatKeyPackage {
 }
 
 message PublishChatKeyPackageRequest {
-  string account_id = 1;
+  string cid_number = 1;
   string device_id = 2;
   string device_public_key = 3;
   string key_package_id = 4;
@@ -65,13 +65,13 @@ message PublishChatKeyPackageRequest {
 }
 
 message FetchChatKeyPackagesRequest {
-  string account_id = 1;
-  string requester_account_id = 2;
+  string cid_number = 1;
+  string requester_cid_number = 2;
   uint32 limit = 3;
 }
 
 message ConsumeChatKeyPackageRequest {
-  string account_id = 1;
+  string cid_number = 1;
   string key_package_id = 2;
-  string requester_account_id = 3;
+  string requester_cid_number = 3;
 }

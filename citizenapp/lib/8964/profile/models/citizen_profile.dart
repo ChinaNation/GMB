@@ -54,7 +54,7 @@ class CitizenProfile {
   /// `display_name` 是公开昵称唯一真源；缺失时按 CID（无 CID 才按账户）
   /// 生成稳定默认昵称，绝不把钱包名、完整账户或截断账户当昵称。
   String get resolvedDisplayName {
-    return ProfilePresentation.forAccountId(cidNumber ?? accountId)
+    return ProfilePresentation.forIdentityKey(cidNumber ?? accountId)
         .resolveDisplayName(
       publicName: displayName,
     );

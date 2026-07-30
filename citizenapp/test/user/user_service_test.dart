@@ -7,9 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/chat/identity/peer_cid_resolver.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/citizen/public/data/isar_public_institution_store.dart';
+import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
@@ -28,11 +32,13 @@ const _ownerCidNumber = 'CN220-CTZN2-198805200-2026';
 const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 
 class _FakeWalletManager extends WalletManager {
-  /// 本地静止态数据密钥:固定值,避免测试触碰硬件金库/平台通道。
+  /// CID 稳定数据根：固定值，避免测试触碰硬件金库/平台通道。
   /// 只换密钥来源,**不绕过加密**——通讯录本地 KV 仍走真实 AES-256-GCM。
   @override
-  Future<LocalDataKey> ensureLocalDataKeyForAccountId(String accountId) async =>
-      LocalDataKey(Uint8List.fromList(List<int>.generate(32, (i) => i + 1)));
+  Future<CidDataRoot> ensureCidDataRootForCurrentBinding(
+    String accountId,
+  ) async =>
+      CidDataRoot(Uint8List.fromList(List<int>.generate(32, (i) => i + 1)));
 
   @override
   Future<WalletProfile?> getDefaultWallet() async => WalletProfile(
@@ -59,8 +65,7 @@ class _FakeWalletManager extends WalletManager {
       );
 }
 
-/// 身份账户缓存 fake:恒返回测试账户(身份=账户0 常态),供 contact_service 的
-/// `_requireIdentityAccountId` 与 `session.accountId` 校验一致。
+/// 身份缓存 fake：恒返回已注册 CID 及其当前绑定账户。
 class _FakeIdentityCache extends IdentityAccountCache {
   @override
   Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
@@ -68,10 +73,35 @@ class _FakeIdentityCache extends IdentityAccountCache {
         accountId: _accountId,
         ss58Address: _owner,
         accountIndex: 0,
-        snapshot: null,
+        snapshot: CitizenIdentityChainSnapshot(
+          cidNumber: _ownerCidNumber,
+          accountId: Uint8List(32),
+          bindingRevision: 1,
+          votingIdentity: null,
+        ),
       );
   @override
   Future<String?> accountId({bool allowChainRead = true}) async => _accountId;
+}
+
+class _FixedIdentityCache extends IdentityAccountCache {
+  _FixedIdentityCache(this.boundAccountId);
+
+  final String boundAccountId;
+
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      ResolvedIdentity(
+        accountId: boundAccountId,
+        ss58Address: _owner,
+        accountIndex: 0,
+        snapshot: CitizenIdentityChainSnapshot(
+          cidNumber: _ownerCidNumber,
+          accountId: Uint8List(32),
+          bindingRevision: 2,
+          votingIdentity: null,
+        ),
+      );
 }
 
 class _FakeSessionProvider extends SquareSessionProvider {
@@ -79,6 +109,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
   Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'token',
         cidNumber: _ownerCidNumber,
+        bindingRevision: 1,
         accountId: _accountId,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
       );
@@ -115,71 +146,6 @@ class _FakeApi extends SquareApiClient {
   }
 }
 
-/// 可配身份账户的假缓存/会话(换绑迁移测试需要 old 与 new 两个身份账户)。
-class _AccountCache extends IdentityAccountCache {
-  _AccountCache(this._id);
-  final String _id;
-  @override
-  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
-      ResolvedIdentity(
-        accountId: _id,
-        ss58Address: _owner,
-        accountIndex: 0,
-        snapshot: null,
-      );
-  @override
-  Future<String?> accountId({bool allowChainRead = true}) async => _id;
-}
-
-class _AccountSession extends SquareSessionProvider {
-  _AccountSession(this._id);
-  final String _id;
-  @override
-  Future<SquareSession?> ensureSession() async => SquareSession(
-        sessionToken: 'token',
-        cidNumber: _ownerCidNumber,
-        accountId: _id,
-        expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
-      );
-}
-
-/// 记录旧账户通讯录密钥删除的假钱包(换绑迁移测试),不触碰 secure storage。
-class _RecordingWallet extends WalletManager {
-  /// 本地静止态数据密钥:固定值,避免测试触碰硬件金库/平台通道。
-  /// 只换密钥来源,**不绕过加密**。
-  @override
-  Future<LocalDataKey> ensureLocalDataKeyForAccountId(String accountId) async =>
-      LocalDataKey(Uint8List.fromList(List<int>.generate(32, (i) => i + 1)));
-
-  final List<String> deletedContactKeys = <String>[];
-  @override
-  Future<WalletProfile?> getDefaultWallet() async => WalletProfile(
-        walletIndex: 1,
-        walletName: '默认钱包',
-        walletIcon: '',
-        balance: 0,
-        ss58Address: _owner,
-        accountId: _accountId,
-        alg: 'sr25519',
-        ss58: 2027,
-        createdAtMillis: 1,
-        source: 'test',
-        signMode: 'local',
-      );
-  @override
-  Future<ContactKeyMaterial> ensureContactKeyMaterialForAccountId(
-    String accountId,
-  ) async =>
-      ContactKeyMaterial(
-        encryptionKey: Uint8List.fromList(List<int>.filled(32, 7)),
-        indexKey: Uint8List.fromList(List<int>.filled(32, 9)),
-      );
-  @override
-  Future<void> deleteContactKeysForAccountId(String accountId) async {
-    deletedContactKeys.add(accountId);
-  }
-}
-
 class _FixedPeerCidResolver extends PeerCidResolver {
   _FixedPeerCidResolver(this.cidNumber);
 
@@ -190,6 +156,33 @@ class _FixedPeerCidResolver extends PeerCidResolver {
   Future<String> resolve(String accountId) async {
     resolvedAccountId = accountId;
     return cidNumber;
+  }
+}
+
+class _FakeBindingReader extends CitizenIdentityChainReader {
+  _FakeBindingReader(this.bindings);
+
+  final Map<String, CitizenBindingChainSnapshot> bindings;
+  int batchReads = 0;
+  int singleReads = 0;
+
+  @override
+  Future<Map<String, CitizenBindingChainSnapshot>> readBindingsByCidNumbers(
+    Iterable<String> cidNumbers,
+  ) async {
+    batchReads++;
+    return <String, CitizenBindingChainSnapshot>{
+      for (final cidNumber in cidNumbers)
+        if (bindings[cidNumber] case final binding?) cidNumber: binding,
+    };
+  }
+
+  @override
+  Future<CitizenBindingChainSnapshot?> readBindingByCidNumber(
+    String cidNumber,
+  ) async {
+    singleReads++;
+    return bindings[cidNumber];
   }
 }
 
@@ -268,6 +261,65 @@ void main() {
         ),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('按 CID 批量刷新联系人最新绑定账户并保留关系与私人备注', () async {
+      const newAccountId =
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final reader = _FakeBindingReader(<String, CitizenBindingChainSnapshot>{
+        _contactCidNumber: CitizenBindingChainSnapshot(
+          cidNumber: _contactCidNumber,
+          accountId: Uint8List.fromList(List<int>.filled(32, 0xaa)),
+          bindingRevision: 2,
+        ),
+      });
+      final service = UserContactService(
+        walletManager: _FakeWalletManager(),
+        sessionProvider: _FakeSessionProvider(),
+        apiClient: _FakeApi(),
+        chainReader: reader,
+        autoSync: false,
+      );
+      await service.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '换绑后保留',
+      );
+
+      final refreshed = await service.refreshContactBindings();
+
+      expect(reader.batchReads, 1);
+      expect(refreshed.single.cidNumber, _contactCidNumber);
+      expect(refreshed.single.accountId, newAccountId);
+      expect(
+        refreshed.single.ss58Address,
+        ss58FromAccountIdText(newAccountId),
+      );
+      expect(refreshed.single.contactRemark, '换绑后保留');
+    });
+
+    test('转账前按 CID 严格读取当前绑定，失效时禁止回退旧地址', () async {
+      final reader = _FakeBindingReader(
+        const <String, CitizenBindingChainSnapshot>{},
+      );
+      final service = UserContactService(
+        walletManager: _FakeWalletManager(),
+        sessionProvider: _FakeSessionProvider(),
+        apiClient: _FakeApi(),
+        chainReader: reader,
+        autoSync: false,
+      );
+      await service.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '',
+      );
+
+      await expectLater(
+        service.resolveCurrentContact(_contactCidNumber),
+        throwsA(isA<StateError>()),
+      );
+      expect(reader.singleReads, 1);
     });
 
     test('AES-GCM 可跨设备解密且篡改 MAC 后失败', () async {
@@ -398,99 +450,6 @@ void main() {
     });
   });
 
-  group('通讯录换绑迁移', () {
-    final newId = '0x${'a1' * 32}';
-
-    test('migrateContactsToNewIdentity 搬本地明文+清旧账户密钥+新账户重加密上云', () async {
-      final wallet = _RecordingWallet();
-      final api = _FakeApi();
-
-      // 1. 旧身份下加一个联系人(autoSync=false,只落本地密文缓存)。
-      IdentityAccountCache.debugInstance = _AccountCache(_accountId);
-      final oldService = UserContactService(
-        walletManager: wallet,
-        sessionProvider: _AccountSession(_accountId),
-        apiClient: api,
-        autoSync: false,
-      );
-      await oldService.addContact(
-        cidNumber: _contactCidNumber,
-        ss58Address: _contactA,
-        contactRemark: '轻节点A',
-      );
-      const legacyContactId =
-          'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
-      api.cloud[legacyContactId] = const SquareEncryptedContact(
-        contactId: legacyContactId,
-        ciphertext: 'b2xk',
-        nonce: 'AAAAAAAAAAAAAAAA',
-        mac: 'AAAAAAAAAAAAAAAAAAAAAA',
-        updatedAt: 1,
-      );
-
-      // 2. 换绑迁移 old→new(新身份 + 新会话)。
-      IdentityAccountCache.debugInstance = _AccountCache(newId);
-      final newService = UserContactService(
-        walletManager: wallet,
-        sessionProvider: _AccountSession(newId),
-        apiClient: api,
-        autoSync: false,
-      );
-      await newService.migrateContactsToNewIdentity(_accountId, newId);
-
-      // 3a. 新身份读到迁来的联系人(本地密文搬迁并可解密)。
-      final migrated = await newService.getContacts();
-      expect(migrated.single.contactRemark, '轻节点A');
-      // 3b. 旧账户通讯录密钥已删(杜绝残留)。
-      expect(wallet.deletedContactKeys, contains(_accountId));
-      // 3c. 用新账户会话重加密上云(云端非空且密文不含明文)。
-      expect(api.cloud, isNotEmpty);
-      expect(api.cloud, isNot(contains(legacyContactId)));
-      final serialized = jsonEncode(
-        api.cloud.values.map((e) => e.ciphertext).toList(),
-      );
-      expect(serialized, isNot(contains('轻节点A')));
-      // 3d. 旧身份本地缓存已清空。
-      IdentityAccountCache.debugInstance = _AccountCache(_accountId);
-      expect(await oldService.getContacts(), isEmpty);
-    });
-
-    test('迁移到相同账户是空操作', () async {
-      final wallet = _RecordingWallet();
-      IdentityAccountCache.debugInstance = _AccountCache(_accountId);
-      final service = UserContactService(
-        walletManager: wallet,
-        sessionProvider: _AccountSession(_accountId),
-        apiClient: _FakeApi(),
-        autoSync: false,
-      );
-      await service.migrateContactsToNewIdentity(_accountId, _accountId);
-      expect(wallet.deletedContactKeys, isEmpty);
-    });
-
-    test('旧账户本地为空时也保留新账户已有 CID 联系人并重建云端', () async {
-      final wallet = _RecordingWallet();
-      final api = _FakeApi();
-      IdentityAccountCache.debugInstance = _AccountCache(newId);
-      final service = UserContactService(
-        walletManager: wallet,
-        sessionProvider: _AccountSession(newId),
-        apiClient: api,
-        autoSync: false,
-      );
-      await service.addContact(
-        cidNumber: _contactCidNumber,
-        ss58Address: _contactA,
-        contactRemark: '新账户本地备注',
-      );
-
-      await service.migrateContactsToNewIdentity(_accountId, newId);
-
-      expect((await service.getContacts()).single.contactRemark, '新账户本地备注');
-      expect(api.cloud, hasLength(1));
-    });
-  });
-
   test('数据库重开时彻底清除旧通讯录缓存、待办与同步态', () async {
     final isar = await WalletIsar.instance.db();
     await isar.writeTxn(() async {
@@ -542,9 +501,8 @@ void main() {
             .idGreaterThan(0, include: true)
             .findAll();
       });
-      final contactRows = rows
-          .where((r) => r.key.startsWith('contact_book_by_account:'))
-          .toList();
+      final contactRows =
+          rows.where((r) => r.key.startsWith('contact_book_by_cid:')).toList();
       expect(contactRows, isNotEmpty);
       for (final row in contactRows) {
         final raw = row.stringValue ?? '';
@@ -569,6 +527,31 @@ void main() {
       expect(contacts.single.contactRemark, '李四');
     });
 
+    test('同一 CID 换绑新账户后直接读取原通讯录，不依赖旧账户', () async {
+      const newAccountId =
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final oldBinding = UserContactService(
+        walletManager: _FakeWalletManager(),
+        identityAccountCache: _FixedIdentityCache(_accountId),
+        autoSync: false,
+      );
+      await oldBinding.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '换绑后仍保留',
+      );
+
+      final newBinding = UserContactService(
+        walletManager: _FakeWalletManager(),
+        identityAccountCache: _FixedIdentityCache(newAccountId),
+        autoSync: false,
+      );
+      final contacts = await newBinding.getContacts();
+
+      expect(contacts.single.cidNumber, _contactCidNumber);
+      expect(contacts.single.contactRemark, '换绑后仍保留');
+    });
+
     test('本地密文被篡改必须抛错,不得静默当成"无本地缓存"', () async {
       final service = createService();
       await service.addContact(
@@ -582,7 +565,7 @@ void main() {
             .idGreaterThan(0, include: true)
             .findAll();
         for (final row in rows) {
-          if (row.key.startsWith('contact_book_by_account:')) {
+          if (row.key.startsWith('contact_book_by_cid:')) {
             row.stringValue = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
             await isar.appKvEntitys.put(row);
           }
@@ -593,5 +576,40 @@ void main() {
         throwsA(isA<LocalCipherException>()),
       );
     });
+  });
+
+  test('公权机构关注按订阅者 CID 持久化，钱包换绑不产生新分区', () async {
+    const institutionCidNumber = 'GD001-CGOV0-000000001-2026';
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      await isar.publicInstitutionEntitys.clear();
+      await isar.publicInstitutionSubscriptionEntitys.clear();
+    });
+    final store = IsarPublicInstitutionStore(isar: isar);
+    await store.upsertInstitutions(
+      [
+        PublicInstitutionDto.fromJson(<String, dynamic>{
+          'cid_number': institutionCidNumber,
+          'cid_full_name': '广东省人民政府',
+          'province_code': 'GD',
+          'city_code': '001',
+          'institution_code': 'CGOV',
+          'account_count': 2,
+        }),
+      ],
+      catalogVersion: 'test',
+    );
+
+    await store.subscribe(_ownerCidNumber, institutionCidNumber);
+
+    expect(
+      (await store.listSubscribed(_ownerCidNumber)).map((row) => row.cidNumber),
+      [institutionCidNumber],
+      reason: '关注归属永久 CID，不接收或存储当前钱包账户作为分区键',
+    );
+    expect(
+      await store.listSubscribed('CN220-CTZN2-OTHER-2026'),
+      isEmpty,
+    );
   });
 }

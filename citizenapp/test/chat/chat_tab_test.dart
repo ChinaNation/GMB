@@ -16,19 +16,27 @@ import 'package:citizenapp/chat/chat_tab.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
 import 'package:citizenapp/chat/transport/chat_transport.dart';
 
+const _ownerCidNumber = 'CN220-CTZN2-100000001-2026';
+const _peerCidNumber = 'CN220-CTZN2-100000002-2026';
+const _carolCidNumber = 'CN220-CTZN2-100000003-2026';
+const _peerAccountId =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
+
 void main() {
   useRegisteredIdentityGate();
-  testWidgets('聊天标题为账户时改用稳定默认昵称', (tester) async {
-    const peer = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
+  testWidgets('聊天标题误传账户时仍按对方 CID 生成稳定默认昵称', (tester) async {
+    const peerCidNumber = 'CN220-CTZN2-100000002-2026';
+    const peerAccount = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
     final store = _FakeChatStore();
     await tester.pumpWidget(
       MaterialApp(
         home: ChatPage(
-          conversationId: 'dm:alice:$peer',
+          conversationId: 'dm:$_ownerCidNumber:$peerCidNumber',
+          ownerCidNumber: _ownerCidNumber,
           accountId:
               '0x1111111111111111111111111111111111111111111111111111111111111111',
-          peerUserId: peer,
-          title: peer,
+          peerUserId: peerCidNumber,
+          title: peerAccount,
           store: store,
           onSync: () async => 0,
         ),
@@ -39,10 +47,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(
-      find.text(ProfilePresentation.forAccountId(peer).fallbackName),
+      find.text(
+        ProfilePresentation.forIdentityKey(peerCidNumber).fallbackName,
+      ),
       findsOneWidget,
     );
-    expect(find.text(peer), findsNothing);
+    expect(find.text(peerAccount), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
@@ -59,6 +69,7 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: _FakeChatStore(),
+            cidNumber: _ownerCidNumber,
             accountId:
                 '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
@@ -91,15 +102,13 @@ void main() {
     selectedTab.dispose();
   });
 
-  testWidgets('聊天 Tab renders conversation list for accountId account',
-      (tester) async {
+  testWidgets('聊天 Tab 按 CID 身份渲染会话列表', (tester) async {
     final store = _FakeChatStore(
       conversations: [
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:bob-wallet',
           title: 'Bob',
-          peerAccountId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerCidNumber: 'CN220-CTZN2-100000002-2026',
           lastMessage: 'hello',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(1),
           unreadCount: 1,
@@ -113,6 +122,7 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
+            cidNumber: _ownerCidNumber,
             accountId:
                 '0x1111111111111111111111111111111111111111111111111111111111111111',
           ),
@@ -123,10 +133,7 @@ void main() {
 
     expect(find.text('聊天'), findsOneWidget);
     expect(find.text('Bob'), findsOneWidget);
-    expect(
-        find.text(
-            '0x2222222222222222222222222222222222222222222222222222222222222222'),
-        findsNothing);
+    expect(find.text(_peerAccountId), findsNothing);
     expect(find.text('hello'), findsOneWidget);
     expect(store.lastAccountFilter,
         '0x1111111111111111111111111111111111111111111111111111111111111111');
@@ -145,8 +152,7 @@ void main() {
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:bob-wallet',
           title: 'Bob',
-          peerAccountId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerCidNumber: _peerCidNumber,
           lastMessage: 'hi',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(2),
           unreadCount: 0,
@@ -160,6 +166,7 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
+            cidNumber: _ownerCidNumber,
             accountId:
                 '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
@@ -184,7 +191,7 @@ void main() {
     expect(
       runtime.sentStickers.single,
       [
-        '0x2222222222222222222222222222222222222222222222222222222222222222',
+        _peerCidNumber,
         'dm:alice-wallet:bob-wallet',
         'fluent3d',
         'grinning_face'
@@ -202,8 +209,7 @@ void main() {
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:bob-wallet',
           title: 'Bob',
-          peerAccountId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerCidNumber: _peerCidNumber,
           lastMessage: 'hello',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(2),
           unreadCount: 0,
@@ -212,7 +218,7 @@ void main() {
         ChatConversationPreview(
           conversationId: 'dm:alice-wallet:carol-wallet',
           title: 'Carol',
-          peerAccountId: 'carol-wallet',
+          peerCidNumber: _carolCidNumber,
           lastMessage: 'keep',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(1),
           unreadCount: 0,
@@ -226,6 +232,7 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
+            cidNumber: _ownerCidNumber,
             accountId:
                 '0x1111111111111111111111111111111111111111111111111111111111111111',
           ),
@@ -248,12 +255,13 @@ void main() {
     expect(find.text('Carol'), findsOneWidget);
   });
 
-  testWidgets('聊天 Tab requires a configured accountId account', (tester) async {
+  testWidgets('聊天 Tab 鉴权仍要求当前绑定钱包账户', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: ChatTab(
             store: _FakeChatStore(),
+            cidNumber: _ownerCidNumber,
             accountId: '',
           ),
         ),
@@ -275,6 +283,7 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
+            cidNumber: _ownerCidNumber,
             accountId:
                 '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
@@ -311,6 +320,7 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: store,
+            cidNumber: _ownerCidNumber,
             accountId:
                 '0x1111111111111111111111111111111111111111111111111111111111111111',
             runtime: runtime,
@@ -348,10 +358,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerCidNumber: _ownerCidNumber,
           accountId:
               '0x1111111111111111111111111111111111111111111111111111111111111111',
-          peerUserId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerUserId: _peerCidNumber,
           title: 'Bob',
           store: store,
           onSync: () async {
@@ -386,10 +396,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerCidNumber: _ownerCidNumber,
           accountId:
               '0x1111111111111111111111111111111111111111111111111111111111111111',
-          peerUserId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerUserId: _peerCidNumber,
           title: 'Bob',
           store: store,
           onSync: () async {
@@ -438,10 +448,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerCidNumber: _ownerCidNumber,
           accountId:
               '0x1111111111111111111111111111111111111111111111111111111111111111',
-          peerUserId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerUserId: _peerCidNumber,
           title: 'Bob',
           store: store,
           pickMedia: () async => const ChatMediaDraft(
@@ -476,10 +486,8 @@ void main() {
           envelopeId: 'env-attachment',
           conversationId: 'dm:alice-wallet:bob-wallet',
           direction: 'incoming',
-          senderAccountId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
-          recipientAccountId:
-              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          senderCidNumber: _peerCidNumber,
+          recipientCidNumber: _ownerCidNumber,
           messageKind: ChatMessageKind.file,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
           createdAtMillis: 3000,
@@ -501,10 +509,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerCidNumber: _ownerCidNumber,
           accountId:
               '0x1111111111111111111111111111111111111111111111111111111111111111',
-          peerUserId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerUserId: _peerCidNumber,
           title: 'Bob',
           store: store,
           onDownloadAttachment: (conversationId, controlPlaintext) async {
@@ -537,10 +545,8 @@ void main() {
           envelopeId: 'env-delete-ui',
           conversationId: 'dm:alice-wallet:bob-wallet',
           direction: 'incoming',
-          senderAccountId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
-          recipientAccountId:
-              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          senderCidNumber: _peerCidNumber,
+          recipientCidNumber: _ownerCidNumber,
           messageKind: ChatMessageKind.text,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
           createdAtMillis: 1000,
@@ -560,13 +566,14 @@ void main() {
                     MaterialPageRoute(
                       builder: (_) => ChatPage(
                         conversationId: 'dm:alice-wallet:bob-wallet',
+                        ownerCidNumber: _ownerCidNumber,
                         accountId:
                             '0x1111111111111111111111111111111111111111111111111111111111111111',
-                        peerUserId:
-                            '0x2222222222222222222222222222222222222222222222222222222222222222',
+                        peerUserId: _peerCidNumber,
                         title: 'Bob',
                         store: store,
                         onDeleteConversation: () => store.deleteConversation(
+                          _ownerCidNumber,
                           'dm:alice-wallet:bob-wallet',
                         ),
                       ),
@@ -612,10 +619,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerCidNumber: _ownerCidNumber,
           accountId:
               '0x1111111111111111111111111111111111111111111111111111111111111111',
-          peerUserId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerUserId: _peerCidNumber,
           title: 'Bob',
           store: store,
         ),
@@ -644,10 +651,10 @@ void main() {
       MaterialApp(
         home: ChatPage(
           conversationId: 'dm:alice-wallet:bob-wallet',
+          ownerCidNumber: _ownerCidNumber,
           accountId:
               '0x1111111111111111111111111111111111111111111111111111111111111111',
-          peerUserId:
-              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          peerUserId: _peerCidNumber,
           title: 'Bob',
           store: store,
         ),
@@ -675,6 +682,7 @@ void main() {
         home: Scaffold(
           body: ChatTab(
             store: _FakeChatStore(),
+            cidNumber: _ownerCidNumber,
             accountId: self,
             runtime: _FakeRuntime(address: self),
             openers: openers,
@@ -798,10 +806,8 @@ ChatStoredMessage _mediaStored({
     envelopeId: 'env-$id',
     conversationId: 'dm:alice-wallet:bob-wallet',
     direction: 'incoming',
-    senderAccountId:
-        '0x2222222222222222222222222222222222222222222222222222222222222222',
-    recipientAccountId:
-        '0x1111111111111111111111111111111111111111111111111111111111111111',
+    senderCidNumber: _peerCidNumber,
+    recipientCidNumber: _ownerCidNumber,
     messageKind: kind,
     deliveryState: ChatMessageDeliveryState.receivedByDevice,
     createdAtMillis: 3000,
@@ -836,15 +842,20 @@ class _FakeChatStore extends ChatStore {
 
   @override
   Future<List<ChatConversationPreview>> readConversationPreviews({
-    String? accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
   }) async {
     readPreviewCount += 1;
-    lastAccountFilter = accountId;
+    lastAccountFilter = currentAccountId;
     return List<ChatConversationPreview>.from(_conversations);
   }
 
   @override
-  Future<List<ChatStoredMessage>> readMessages(String conversationId) async {
+  Future<List<ChatStoredMessage>> readMessages({
+    required String ownerCidNumber,
+    required String currentAccountId,
+    required String conversationId,
+  }) async {
     readMessagesCount += 1;
     return _messages
         .where((message) => message.conversationId == conversationId)
@@ -852,7 +863,10 @@ class _FakeChatStore extends ChatStore {
   }
 
   @override
-  Future<void> deleteConversation(String conversationId) async {
+  Future<void> deleteConversation(
+    String ownerCidNumber,
+    String conversationId,
+  ) async {
     deletedConversationIds.add(conversationId);
     _conversations.removeWhere(
       (conversation) => conversation.conversationId == conversationId,
@@ -862,7 +876,7 @@ class _FakeChatStore extends ChatStore {
   }
 
   @override
-  Future<int> outboundQueueCount() async {
+  Future<int> outboundQueueCount(String ownerCidNumber) async {
     return 0;
   }
 }
@@ -889,13 +903,16 @@ class _FakeRuntime extends ChatRuntime {
   }
 
   @override
+  Future<String?> readCidNumber() async => _ownerCidNumber;
+
+  @override
   Future<List<ChatDeliveryResult>> sendSticker({
-    required String peerAccountId,
+    required String peerCidNumber,
     required String conversationId,
     required String packId,
     required String stickerId,
   }) async {
-    sentStickers.add([peerAccountId, conversationId, packId, stickerId]);
+    sentStickers.add([peerCidNumber, conversationId, packId, stickerId]);
     return const [];
   }
 

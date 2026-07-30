@@ -15,13 +15,14 @@ const _accountId =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
 const _peerAccountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _ownerCidNumber = 'CN220-CTZN2-100000001-2026';
+const _peerCidNumber = 'CN220-CTZN2-100000002-2026';
 const _contactAddress = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
-const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 
 final _dmPreview = ChatConversationPreview(
   conversationId: 'dm:me:peer',
   title: '张三',
-  peerAccountId: _peerAccountId,
+  peerCidNumber: _peerCidNumber,
   lastMessage: '明天见',
   lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(20),
   unreadCount: 0,
@@ -31,7 +32,7 @@ final _dmPreview = ChatConversationPreview(
 final _groupPreview = ChatConversationPreview(
   conversationId: 'grp:me:1',
   title: '张家村议事群',
-  peerAccountId: '',
+  peerCidNumber: '',
   lastMessage: '资料已上传',
   lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(10),
   unreadCount: 0,
@@ -40,7 +41,7 @@ final _groupPreview = ChatConversationPreview(
 );
 
 const _contact = UserContact(
-  cidNumber: _contactCidNumber,
+  cidNumber: _peerCidNumber,
   accountId: _peerAccountId,
   ss58Address: _contactAddress,
   contactRemark: '张三',
@@ -52,8 +53,8 @@ const _message = ChatStoredMessage(
   envelopeId: 'env-1',
   conversationId: 'dm:me:peer',
   direction: 'incoming',
-  senderAccountId: _peerAccountId,
-  recipientAccountId: _accountId,
+  senderCidNumber: _peerCidNumber,
+  recipientCidNumber: _ownerCidNumber,
   messageKind: ChatMessageKind.text,
   deliveryState: ChatMessageDeliveryState.sent,
   createdAtMillis: 30,
@@ -74,13 +75,15 @@ class _FakeChatStore extends ChatStore {
 
   @override
   Future<List<ChatConversationPreview>> readConversationPreviews({
-    String? accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
   }) async =>
       conversations;
 
   @override
   Future<List<ChatStoredMessage>> searchMessages({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String keyword,
     int limit = 50,
   }) async {
@@ -120,6 +123,7 @@ void main() {
         home: ChatSearchPage(
           store: store,
           contactService: _FakeContacts(contacts),
+          cidNumber: _ownerCidNumber,
           accountId: _accountId,
           directChatOpener: directChatOpener,
           groupChatOpener: groupChatOpener,
@@ -170,7 +174,7 @@ void main() {
         findsOneWidget);
     expect(find.byKey(const ValueKey('search-conversation-grp:me:1')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('search-contact-$_peerAccountId')),
+    expect(find.byKey(const ValueKey('search-contact-$_peerCidNumber')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('search-message-env-1')), findsOneWidget);
     expect(find.text('张三说的那份材料'), findsOneWidget);
@@ -184,7 +188,7 @@ void main() {
         ChatConversationPreview(
           conversationId: 'dm:me:bob',
           title: 'Bob',
-          peerAccountId: _peerAccountId,
+          peerCidNumber: _peerCidNumber,
           lastMessage: 'hello',
           lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(5),
           unreadCount: 0,
@@ -206,8 +210,8 @@ void main() {
       tester,
       conversations: [_dmPreview, _groupPreview],
       directChatOpener: (context,
-          {required peerAccountId, required title}) async {
-        openedPeer = peerAccountId;
+          {required peerCidNumber, required title}) async {
+        openedPeer = peerCidNumber;
       },
       groupChatOpener: (context, {required groupId, required title}) async {
         openedGroupId = groupId;
@@ -219,7 +223,7 @@ void main() {
     await tester
         .tap(find.byKey(const ValueKey('search-conversation-dm:me:peer')));
     await tester.pump();
-    expect(openedPeer, _peerAccountId);
+    expect(openedPeer, _peerCidNumber);
 
     await tester
         .tap(find.byKey(const ValueKey('search-conversation-grp:me:1')));
@@ -234,18 +238,18 @@ void main() {
       tester,
       contacts: const [_contact],
       directChatOpener: (context,
-          {required peerAccountId, required title}) async {
-        openedPeer = peerAccountId;
+          {required peerCidNumber, required title}) async {
+        openedPeer = peerCidNumber;
         openedTitle = title;
       },
     );
 
     await search(tester, '张');
     await tester
-        .tap(find.byKey(const ValueKey('search-contact-$_peerAccountId')));
+        .tap(find.byKey(const ValueKey('search-contact-$_peerCidNumber')));
     await tester.pump();
 
-    expect(openedPeer, _peerAccountId);
+    expect(openedPeer, _peerCidNumber);
     expect(openedTitle, '张三');
   });
 
@@ -256,8 +260,8 @@ void main() {
       conversations: [_dmPreview],
       messages: const [_message],
       directChatOpener: (context,
-          {required peerAccountId, required title}) async {
-        openedPeer = peerAccountId;
+          {required peerCidNumber, required title}) async {
+        openedPeer = peerCidNumber;
       },
     );
 
@@ -265,7 +269,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('search-message-env-1')));
     await tester.pump();
 
-    expect(openedPeer, _peerAccountId);
+    expect(openedPeer, _peerCidNumber);
   });
 
   testWidgets('三段都没命中时显示空态', (tester) async {

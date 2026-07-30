@@ -69,14 +69,19 @@ class DeviceSubkey {
 
 /// 设备绑定证明消息（客户端）。**必须与 worker `buildDeviceBindingSigningMessage`
 /// 逐字节一致**：sr25519 主钥对
-/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, accountId ‖ p256_publicKey ‖ issued_at)`
-/// 签名，证明该 P-256 子钥属于此钱包。返回 32 字节摘要。
+/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND,
+/// cid_number ‖ binding_revision ‖ account_id ‖ p256_public_key ‖ issued_at)`
+/// 签名，证明该 P-256 子钥属于 CID 的当前绑定版本。返回 32 字节摘要。
 Uint8List buildDeviceBindingSigningMessage(
+  String cidNumber,
+  int bindingRevision,
   String accountId,
   String p256PublicKeyHex,
   int issuedAt,
 ) {
   final scalePayload = <int>[
+    ...scaleString(cidNumber),
+    ...u64Le(bindingRevision),
     ...scaleString(accountId),
     ...scaleString(p256PublicKeyHex),
     ...u64Le(issuedAt),

@@ -79,9 +79,10 @@ void main() {
         lessThan(cardTop(tester, MyIdTier.voting)));
     expect(cardTop(tester, MyIdTier.voting),
         lessThan(cardTop(tester, MyIdTier.candidate)));
-    expect(find.text('当前身份'), findsOneWidget);
+    // 纯访客(无 CID)当前卡置顶但不挂「当前身份」徽章。
+    expect(find.text('当前身份'), findsNothing);
     expect(find.byKey(const ValueKey<String>('current-identity-visitor')),
-        findsOneWidget);
+        findsNothing);
     expect(find.text('投票账户'), findsNWidgets(2));
     expect(find.text('公民姓名'), findsOneWidget);
     expect(find.text('—'), findsNothing);
@@ -165,7 +166,7 @@ void main() {
     expect(find.text('—'), findsNothing);
   });
 
-  testWidgets('没有默认热钱包时仍是访客当前身份并显示引导', (tester) async {
+  testWidgets('没有默认热钱包的纯访客不挂徽章但显示引导', (tester) async {
     await pumpPage(
       tester,
       const MyIdState(
@@ -175,8 +176,10 @@ void main() {
     );
 
     expect(find.text('请先创建钱包'), findsOneWidget);
+    // 纯访客(无 CID)不挂「当前身份」徽章。
     expect(find.byKey(const ValueKey<String>('current-identity-visitor')),
-        findsOneWidget);
+        findsNothing);
+    expect(find.text('当前身份'), findsNothing);
     // 空态文案已删，访客卡改以“匿名”小标签呈现
     expect(find.text('没有公民身份信息'), findsNothing);
     expect(find.byKey(const ValueKey<String>('passport-anonymous-tag')),
@@ -232,13 +235,16 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(home: MyIdPage(myIdService: service)));
     await tester.pumpAndSettle();
+    // 起始纯访客(无 CID)不挂徽章。
+    expect(find.text('当前身份'), findsNothing);
     expect(find.byKey(const ValueKey<String>('current-identity-visitor')),
-        findsOneWidget);
+        findsNothing);
 
     service.state = _candidateState;
     WalletManager.walletsRevision.value++;
     await tester.pumpAndSettle();
 
+    // 切到竞选后只保留一个当前标记。
     expect(find.text('当前身份'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('current-identity-candidate')),
         findsOneWidget);
@@ -261,8 +267,7 @@ void main() {
     expect(find.textContaining('余额不足'), findsOneWidget);
   });
 
-  testWidgets('余额读取失败 → 既不提交也不跳充值，只提示重试(fail-closed)',
-      (tester) async {
+  testWidgets('余额读取失败 → 既不提交也不跳充值，只提示重试(fail-closed)', (tester) async {
     final service = _RegisterFlowService(affordabilityThrows: true);
     await tester.pumpWidget(MaterialApp(home: MyIdPage(myIdService: service)));
     await tester.pumpAndSettle();
@@ -329,6 +334,10 @@ void main() {
     );
     expect(find.widgetWithText(TextButton, '更换'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '注册'), findsNothing);
+    // 匿名已注册(有 CID)访客卡挂「当前身份」徽章。
+    expect(find.text('当前身份'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('current-identity-visitor')),
+        findsOneWidget);
     final visitorCard = card(MyIdTier.visitor);
     expect(
       find.descendant(of: visitorCard, matching: find.text('身份CID号')),
@@ -398,8 +407,7 @@ class _RegisterFlowService extends MyIdService {
   int registerCalls = 0;
 
   @override
-  Future<MyIdState> getState() async =>
-      const MyIdState(tier: MyIdTier.visitor);
+  Future<MyIdState> getState() async => const MyIdState(tier: MyIdTier.visitor);
 
   @override
   Future<List<Account>> listBindableAccounts() async => const <Account>[];

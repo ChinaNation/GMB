@@ -31,6 +31,8 @@ void main() {
             jsonEncode({
               'ok': true,
               'challenge_id': 'sql_1',
+              'cid_number': _cidNumber,
+              'binding_revision': 1,
               'signing_payload_hex': _payloadHex,
             }),
             200,
@@ -43,6 +45,7 @@ void main() {
               'ok': true,
               'session_token': 'sqs_test',
               'cid_number': _cidNumber,
+              'binding_revision': 1,
               'expires_at': 4102444800000,
             }),
             200,
@@ -110,6 +113,8 @@ void main() {
               jsonEncode({
                 'ok': true,
                 'challenge_id': 'sql_2',
+                'cid_number': _cidNumber,
+                'binding_revision': 1,
                 'signing_payload_hex': _payloadHex,
               }),
               200,
@@ -121,6 +126,7 @@ void main() {
                 'ok': true,
                 'session_token': 'sqs_test',
                 'cid_number': _cidNumber,
+                'binding_revision': 1,
                 'expires_at': 4102444800000,
               }),
               200,
@@ -145,5 +151,106 @@ void main() {
       ),
       throwsA(isA<SquareApiException>()),
     );
+  });
+
+  test('CID 数据根接管钉死动作签名域并提交 finalized 精确绑定', () async {
+    Uint8List? signedMessage;
+    Map<String, dynamic>? confirmBody;
+    final client = SquareApiClient(
+      baseUrl: 'https://square.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/v1/square/identity/takeover/challenge') {
+          expect(jsonDecode(request.body), {
+            'cid_number': _cidNumber,
+            'account_id': _accountId,
+          });
+          return http.Response(
+            jsonEncode({
+              'ok': true,
+              'cid_number': _cidNumber,
+              'binding_revision': 7,
+              'account_id': _accountId,
+              'challenge_id': 'cidt_1',
+              'op_tag': 0x99,
+              'signing_payload_hex': _payloadHex,
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/v1/square/identity/takeover') {
+          confirmBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'ok': true,
+              'cid_number': _cidNumber,
+              'binding_revision': 7,
+              'account_id': _accountId,
+              'cid_data_root_base64': base64Encode(Uint8List(32)),
+              'data_root_hash':
+                  '66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925',
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final grant = await client.takeoverCidDataRoot(
+      cidNumber: _cidNumber,
+      bindingRevision: 7,
+      accountId: _accountId,
+      signAction: (message) async {
+        signedMessage = message;
+        return '0xNEW';
+      },
+    );
+
+    expect(
+      bytesToHex(signedMessage!),
+      bytesToHex(signingMessage(
+        opTag: kOpSignSquareAction,
+        scalePayload: hexToBytes(_payloadHex),
+      )),
+    );
+    expect(confirmBody, {
+      'cid_number': _cidNumber,
+      'binding_revision': 7,
+      'account_id': _accountId,
+      'challenge_id': 'cidt_1',
+      'signature': '0xNEW',
+    });
+    expect(grant.dataRoot, hasLength(32));
+  });
+
+  test('接管挑战 revision 与 finalized 预期不一致时拒绝签名', () async {
+    var signed = false;
+    final client = SquareApiClient(
+      baseUrl: 'https://square.test',
+      httpClient: MockClient((_) async => http.Response(
+            jsonEncode({
+              'ok': true,
+              'cid_number': _cidNumber,
+              'binding_revision': 8,
+              'account_id': _accountId,
+              'challenge_id': 'cidt_stale',
+              'signing_payload_hex': _payloadHex,
+            }),
+            200,
+          )),
+    );
+    await expectLater(
+      client.takeoverCidDataRoot(
+        cidNumber: _cidNumber,
+        bindingRevision: 7,
+        accountId: _accountId,
+        signAction: (_) async {
+          signed = true;
+          return '0x';
+        },
+      ),
+      throwsA(isA<SquareApiException>()),
+    );
+    expect(signed, isFalse);
   });
 }

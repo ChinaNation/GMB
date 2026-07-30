@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { nowMs } from '../shared/time';
 import { assertDeliverySize } from '../limits/delivery';
+import { fetchChainIdentityStateByCid } from '../chain/identity';
 
 type PushProvider = 'apns' | 'fcm';
 
@@ -25,12 +26,26 @@ export async function sendChatWake(
   recipientCidNumber: string,
   senderCidNumber: string,
 ): Promise<number> {
+  // 推送令牌也属于钱包授权派生凭证：每次唤醒前读取 finalized 当前绑定，
+  // 只向当前 binding_revision + account_id 注册的设备发送，换绑后的旧设备不得继续收信号。
+  const recipientIdentity = await fetchChainIdentityStateByCid(env, recipientCidNumber);
+  if (!recipientIdentity.account_id || recipientIdentity.binding_revision <= 0) {
+    return 0;
+  }
   const result = await env.DB.prepare(
     `SELECT push_provider, push_token
       FROM chat_devices
-      WHERE cid_number = ? AND expires_at > ?`,
+      WHERE cid_number = ?
+        AND binding_revision = ?
+        AND account_id = ?
+        AND expires_at > ?`,
   )
-    .bind(recipientCidNumber, nowMs())
+    .bind(
+      recipientCidNumber,
+      recipientIdentity.binding_revision,
+      recipientIdentity.account_id,
+      nowMs(),
+    )
     .all<PushDeviceRow>();
   const payload: WakePayload = {
     kind: 'chat_wake',

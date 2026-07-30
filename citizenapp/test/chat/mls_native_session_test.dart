@@ -18,6 +18,12 @@ import '../support/smoldot_native_probe.dart';
 /// MLS 本地状态信封测试密钥（固定 32 字节，仅测试用）。
 final Uint8List _testStateKey =
     Uint8List.fromList(List<int>.generate(32, (i) => i));
+const _aliceCidNumber = 'CN220-CTZN2-100000001-2026';
+const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
+const _aliceAccountId =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _bobAccountId =
+    '0x2222222222222222222222222222222222222222222222222222222222222222';
 
 void main() {
   useIsolatedIsar();
@@ -28,17 +34,23 @@ void main() {
       () async {
     final root = await Directory.systemTemp.createTemp('gmb-chat-native-');
     addTearDown(() => root.delete(recursive: true));
-    final aliceStore = MlsStateStore(Directory('${root.path}/alice'), stateKey: _testStateKey);
-    final bobStore = MlsStateStore(Directory('${root.path}/bob'), stateKey: _testStateKey);
+    final aliceStore = MlsStateStore(
+      Directory('${root.path}/alice'),
+      ownerCidNumber: _aliceCidNumber,
+      stateKey: _testStateKey,
+    );
+    final bobStore = MlsStateStore(
+      Directory('${root.path}/bob'),
+      ownerCidNumber: _bobCidNumber,
+      stateKey: _testStateKey,
+    );
     const alice = ChatDevice(
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      cidNumber: _aliceCidNumber,
       deviceId: 'alice-phone',
       devicePublicKey: 'aabbcc',
     );
     const bob = ChatDevice(
-      accountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      cidNumber: _bobCidNumber,
       deviceId: 'bob-phone',
       devicePublicKey: 'ddeeff',
     );
@@ -50,8 +62,7 @@ void main() {
     );
     final first = await aliceCrypto.encrypt(
       conversationId: 'conv-alice-bob',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       recipientKeyPackage: bobKeyPackage,
       plaintext: utf8.encode('第一条消息'),
     );
@@ -70,8 +81,7 @@ void main() {
     );
     final second = await aliceAfterRestart.encrypt(
       conversationId: 'conv-alice-bob',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      recipientCidNumber: _bobCidNumber,
       plaintext: utf8.encode('重启后的第二条消息'),
     );
     expect(second.createdNewSession, isFalse);
@@ -85,28 +95,36 @@ void main() {
     final root = await Directory.systemTemp.createTemp('gmb-chat-direct-');
     addTearDown(() => root.delete(recursive: true));
     const alice = ChatDevice(
-      accountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
+      cidNumber: _aliceCidNumber,
       deviceId: 'alice-phone',
       devicePublicKey: 'aabbcc',
     );
     const bob = ChatDevice(
-      accountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
+      cidNumber: _bobCidNumber,
       deviceId: 'bob-phone',
       devicePublicKey: 'ddeeff',
     );
     final aliceCrypto = NativeMlsCrypto(
       identity: alice,
-      stateStore: MlsStateStore(Directory('${root.path}/alice'), stateKey: _testStateKey),
+      stateStore: MlsStateStore(
+        Directory('${root.path}/alice'),
+        ownerCidNumber: _aliceCidNumber,
+        stateKey: _testStateKey,
+      ),
     );
     final bobCrypto = NativeMlsCrypto(
       identity: bob,
-      stateStore: MlsStateStore(Directory('${root.path}/bob'), stateKey: _testStateKey),
+      stateStore: MlsStateStore(
+        Directory('${root.path}/bob'),
+        ownerCidNumber: _bobCidNumber,
+        stateKey: _testStateKey,
+      ),
     );
     final keyPackage = await bobCrypto.createKeyPackage(bob);
     final relayed = <List<int>>[];
     final senderFlow = ChatFlow(
+      ownerCidNumber: _aliceCidNumber,
+      currentAccountId: _aliceAccountId,
       crypto: aliceCrypto,
       store: ChatStore(),
       deliverer: (envelope, bytes, recipientCidNumber) async {
@@ -121,11 +139,8 @@ void main() {
 
     await senderFlow.sendText(
       conversationId: 'conv-direct',
-      senderAccountId:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientAccountId:
-          '0x2222222222222222222222222222222222222222222222222222222222222222',
-      recipientCidNumber: 'CN220-CTZN2-100000002-2026',
+      senderCidNumber: _aliceCidNumber,
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       recipientKeyPackage: keyPackage,
       text: '瞬时直达',
@@ -134,6 +149,8 @@ void main() {
 
     await WalletIsar.instance.resetForTest();
     final receiverFlow = ChatFlow(
+      ownerCidNumber: _bobCidNumber,
+      currentAccountId: _bobAccountId,
       crypto: bobCrypto,
       store: ChatStore(),
       deliverer: (_, __, ___) => throw StateError('接收端不得重新投递'),
@@ -142,7 +159,11 @@ void main() {
       await receiverFlow.processIncomingEnvelopeBytes(bytes);
     }
 
-    final messages = await ChatStore().readMessages('conv-direct');
+    final messages = await ChatStore().readMessages(
+      ownerCidNumber: _bobCidNumber,
+      currentAccountId: _bobAccountId,
+      conversationId: 'conv-direct',
+    );
     expect(messages.single.plaintext, '瞬时直达');
     expect(messages.single.direction, 'incoming');
   }, skip: skip);

@@ -27,6 +27,7 @@ class SquareSession {
   const SquareSession({
     required this.sessionToken,
     required this.cidNumber,
+    required this.bindingRevision,
     required this.accountId,
     required this.expiresAt,
     this.signRequest,
@@ -36,6 +37,9 @@ class SquareSession {
 
   /// 本会话的身份主键 CID 号（Worker 登录响应下发；广场/聊天一切归属与寻址的主键）。
   final String cidNumber;
+
+  /// 本会话签发时的 finalized 绑定版本；与 CID、账户共同锁定当前授权。
+  final int bindingRevision;
 
   /// 本会话当前绑定的钱包账户 account_id（签名/链上交易用；换绑后由新账户重新登录）。
   final String accountId;
@@ -340,6 +344,23 @@ typedef SquareLoginSigner = Future<String> Function(Uint8List loginMessage);
 /// 的 32 字节摘要用 sr25519 **主钥**签名，返回 `0x` hex 签名（动钱动权，弹生物识别）。
 typedef SquareActionSigner = Future<String> Function(Uint8List actionMessage);
 
+/// finalized CID 当前绑定账户取得的稳定数据根授权。
+class CidDataRootGrant {
+  const CidDataRootGrant({
+    required this.cidNumber,
+    required this.bindingRevision,
+    required this.accountId,
+    required this.dataRoot,
+    required this.dataRootHash,
+  });
+
+  final String cidNumber;
+  final int bindingRevision;
+  final String accountId;
+  final Uint8List dataRoot;
+  final String dataRootHash;
+}
+
 class SquareApiConfig {
   const SquareApiConfig._();
 
@@ -455,7 +476,14 @@ class SquareApiClient
     });
     final signingPayloadHex = challenge['signing_payload_hex'];
     final challengeId = challenge['challenge_id'];
-    if (signingPayloadHex is! String || challengeId is! String) {
+    final challengeCidNumber = challenge['cid_number'];
+    final challengeBindingRevision = challenge['binding_revision'];
+    if (signingPayloadHex is! String ||
+        challengeId is! String ||
+        challengeCidNumber is! String ||
+        challengeCidNumber.isEmpty ||
+        challengeBindingRevision is! int ||
+        challengeBindingRevision <= 0) {
       throw const SquareApiException('广场登录挑战响应不完整');
     }
 
@@ -476,16 +504,22 @@ class SquareApiClient
     // 身份主键由 Worker 按链上绑定解析后随登录响应下发；缺失即会话不完整（未绑定 CID
     // 的账户在 Worker 侧已被拒绝建会话）。
     final cidNumber = session['cid_number'];
+    final bindingRevision = session['binding_revision'];
     if (token is! String ||
         expiresAt is! int ||
         cidNumber is! String ||
-        cidNumber.isEmpty) {
+        cidNumber.isEmpty ||
+        bindingRevision is! int ||
+        bindingRevision <= 0 ||
+        cidNumber != challengeCidNumber ||
+        bindingRevision != challengeBindingRevision) {
       throw const SquareApiException('广场登录态响应不完整');
     }
 
     final next = SquareSession(
       sessionToken: token,
       cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
       accountId: accountId,
       expiresAt: expiresAt,
       signRequest: signLoginPayload,
@@ -509,6 +543,92 @@ class SquareApiClient
       confirmPath: '/v1/square/account/delete',
       signAction: signAction,
     );
+  }
+
+  /// 由 finalized 当前绑定账户独立接管 CID 稳定数据根。
+  ///
+  /// 防重放由一次性 challenge、过期时间、创世哈希、CID、绑定版本和当前账户共同绑定；
+  /// 客户端钉死动作签名域。请求与响应均不包含此前账户或此前设备。
+  Future<CidDataRootGrant> takeoverCidDataRoot({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required SquareActionSigner signAction,
+  }) async {
+    final challenge = await _postJson(
+      '/v1/square/identity/takeover/challenge',
+      <String, Object?>{
+        'cid_number': cidNumber,
+        'account_id': accountId,
+      },
+    );
+    _requireTakeoverBinding(
+      challenge,
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
+    final signingPayloadHex = challenge['signing_payload_hex'];
+    final challengeId = challenge['challenge_id'];
+    if (signingPayloadHex is! String || challengeId is! String) {
+      throw const SquareApiException('CID 接管挑战响应不完整');
+    }
+    final message = signingMessage(
+      opTag: kOpSignSquareAction,
+      scalePayload: hexToBytes(signingPayloadHex),
+    );
+    final signature = await signAction(message);
+    final granted = await _postJson(
+      '/v1/square/identity/takeover',
+      <String, Object?>{
+        'cid_number': cidNumber,
+        'binding_revision': bindingRevision,
+        'account_id': accountId,
+        'challenge_id': challengeId,
+        'signature': signature,
+      },
+    );
+    _requireTakeoverBinding(
+      granted,
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
+    final dataRootBase64 = granted['cid_data_root_base64'];
+    final dataRootHash = granted['data_root_hash'];
+    if (dataRootBase64 is! String ||
+        dataRootHash is! String ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(dataRootHash)) {
+      throw const SquareApiException('CID 数据根授权响应不完整');
+    }
+    try {
+      final dataRoot = base64Decode(dataRootBase64);
+      if (dataRoot.length != 32) {
+        throw const SquareApiException('CID 数据根长度无效');
+      }
+      return CidDataRootGrant(
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        dataRoot: Uint8List.fromList(dataRoot),
+        dataRootHash: dataRootHash,
+      );
+    } on FormatException {
+      throw const SquareApiException('CID 数据根编码无效');
+    }
+  }
+
+  static void _requireTakeoverBinding(
+    Map<String, dynamic> body, {
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) {
+    if (body['cid_number'] != cidNumber ||
+        body['binding_revision'] != bindingRevision ||
+        body['account_id'] != accountId) {
+      throw const SquareApiException('CID 接管响应与 finalized 绑定不一致');
+    }
   }
 
   /// 账户敏感动作签名往返：取挑战 → 客户端**钉死** op_tag 重算摘要并签 → 提交确认。
@@ -1370,7 +1490,7 @@ class SquareApiClient
         accountId: _requireString(data, 'account_id'),
         cidNumber: data['cid_number']?.toString(),
         // 昵称与头像来自作者 profile.json（Worker feed 按去重作者回填）；缺失时
-        // Flutter 按作者账户稳定选择本地默认昵称和照片，绝不把账户当昵称。
+        // Flutter 优先按作者永久 CID 稳定选择本地默认昵称和照片；纯访客才按账户兜底。
         displayName:
             (data['display_name']?.toString().trim().isNotEmpty ?? false)
                 ? data['display_name'].toString().trim()

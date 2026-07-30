@@ -9,6 +9,7 @@ import 'package:citizenapp/my/creator/creator_service.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart' show TxPoolWatchCallback;
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -29,6 +30,7 @@ void main() {
   const session = SquareSession(
     sessionToken: 't',
     cidNumber: "CN220-CTZN2-198805200-2026",
+    bindingRevision: 1,
     accountId:
         '0x7777777777777777777777777777777777777777777777777777777777777777',
     expiresAt: 9999999999999,
@@ -90,6 +92,7 @@ void main() {
     final signedSession = SquareSession(
       sessionToken: 't',
       cidNumber: "CN220-CTZN2-198805200-2026",
+      bindingRevision: 1,
       accountId:
           '0x7777777777777777777777777777777777777777777777777777777777777777',
       expiresAt: 9999999999999,
@@ -155,11 +158,12 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final api = _FlakyCreatorApi()..failSave = true;
     final rpc = _FakeSubscriptionRpc();
+    final sessionProvider = _FakeSessionProvider();
     final service = CreatorService(
       api: api,
       subscriptionRpc: rpc,
       walletManager: _FakeWalletManager(),
-      sessionProvider: _FakeSessionProvider(),
+      sessionProvider: sessionProvider,
       preferences: prefs,
     );
 
@@ -169,17 +173,23 @@ void main() {
     expect(rpc.signCount, 1);
     expect(api.saveCount, 1);
     expect(
-      prefs.getString('creator_plan_mirror_pending:$_accountId'),
+      prefs.getString(
+        'creator_plan_mirror_pending_by_cid:$_creatorCidNumber',
+      ),
       isNotNull,
     );
 
+    // 同一 CID 已换绑到新钱包账户；待提交证明仍必须由新会话接续处理。
+    sessionProvider.accountId = _reboundAccountId;
     api.failSave = false;
     await service.load();
     expect(api.saveCount, 2, reason: '再次进入页面只重试 Cloudflare 展示镜像');
     expect(rpc.setPlansCount, 1, reason: '同一业务不得再次提交链上交易');
     expect(rpc.signCount, 1, reason: '同一业务不得再次账户签名');
     expect(
-      prefs.getString('creator_plan_mirror_pending:$_accountId'),
+      prefs.getString(
+        'creator_plan_mirror_pending_by_cid:$_creatorCidNumber',
+      ),
       isNull,
     );
   });
@@ -188,13 +198,19 @@ void main() {
 const _signerSs58Address = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 const _accountId =
     '0x0000000000000000000000000000000000000000000000000000000000000000';
+const _reboundAccountId =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _creatorCidNumber = 'CN220-CTZN2-198805200-2026';
 
 class _FakeSessionProvider extends SquareSessionProvider {
+  String accountId = _accountId;
+
   @override
-  Future<SquareSession?> ensureSession() async => const SquareSession(
+  Future<SquareSession?> ensureSession() async => SquareSession(
         sessionToken: 'creator-session',
-        cidNumber: "CN220-CTZN2-198805200-2026",
-        accountId: _accountId,
+        cidNumber: _creatorCidNumber,
+        bindingRevision: 1,
+        accountId: accountId,
         expiresAt: 9999999999999,
       );
 }
@@ -203,11 +219,16 @@ class _FakeSessionProvider extends SquareSessionProvider {
 class _FakeIdentityCache extends IdentityAccountCache {
   @override
   Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
-      const ResolvedIdentity(
+      ResolvedIdentity(
         accountId: _accountId,
         ss58Address: _signerSs58Address,
         accountIndex: 0,
-        snapshot: null,
+        snapshot: CitizenIdentityChainSnapshot(
+          cidNumber: _creatorCidNumber,
+          accountId: Uint8List(32),
+          bindingRevision: 1,
+          votingIdentity: null,
+        ),
       );
 
   @override

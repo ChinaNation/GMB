@@ -9,15 +9,22 @@ import 'package:citizenapp/wallet/core/device_subkey.dart';
 
 const _accountId =
     '0x1111111111111111111111111111111111111111111111111111111111111111';
+const _cidNumber = 'CN220-CTZN2-198805200-2026';
+const _bindingRevision = 1;
 final String _publicKey = '04${'ab' * 64}';
 const int _issuedAt = 1700000000000;
 const _goldenHex =
-    '0089e293c8ef5c4d7bb5820e18dcb0bdac4eb374eaf6675c1bc2e53e50c3b960';
+    'a12230133532467b7757ae9597b36255ba0228aaa2fe595b8975283d5efe148e';
 
 void main() {
   test('buildDeviceBindingSigningMessage matches Worker golden (0x1C)', () {
-    final message =
-        buildDeviceBindingSigningMessage(_accountId, _publicKey, _issuedAt);
+    final message = buildDeviceBindingSigningMessage(
+      _cidNumber,
+      _bindingRevision,
+      _accountId,
+      _publicKey,
+      _issuedAt,
+    );
     expect(message.length, 32);
     expect(bytesToHex(message), _goldenHex);
   });

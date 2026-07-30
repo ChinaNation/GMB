@@ -13,18 +13,17 @@ void main() {
       const wire = MlsWireMessage(
         wireBytes: [1, 2, 3, 4],
         cipherSuite: '',
-        conversationId: 'grp:acctA:n1',
+        conversationId: 'grp:CN220-CTZN2-100000001-2026:n1',
         messageKind: MlsMessageKind.application,
       );
       final envelopes = GroupFanout.fanOut(
         wire: wire,
-        recipientAccountIds: const [
-          '0x4444444444444444444444444444444444444444444444444444444444444444',
-          'acctC',
-          'acctD'
+        recipientCidNumbers: const [
+          'CN220-CTZN2-100000004-2026',
+          'CN220-CTZN2-100000003-2026',
+          'CN220-CTZN2-100000005-2026'
         ],
-        senderAccountId:
-            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        senderCidNumber: 'CN220-CTZN2-100000001-2026',
         senderDeviceId: 'devA',
         messageId: 'msg-1',
         nowMillis: 1000,
@@ -33,19 +32,21 @@ void main() {
 
       expect(envelopes.length, 3);
       expect(
-        envelopes.map((e) => e.recipientAccountId).toList(),
+        envelopes.map((e) => e.recipientCidNumber).toList(),
         [
-          '0x4444444444444444444444444444444444444444444444444444444444444444',
-          'acctC',
-          'acctD'
+          'CN220-CTZN2-100000004-2026',
+          'CN220-CTZN2-100000003-2026',
+          'CN220-CTZN2-100000005-2026'
         ],
       );
       // 同一份密文。
       for (final envelope in envelopes) {
         expect(envelope.mlsWireMessage, const [1, 2, 3, 4]);
-        expect(envelope.senderAccountId,
-            '0x3333333333333333333333333333333333333333333333333333333333333333');
-        expect(envelope.conversationId, 'grp:acctA:n1');
+        expect(envelope.senderCidNumber, 'CN220-CTZN2-100000001-2026');
+        expect(
+          envelope.conversationId,
+          'grp:CN220-CTZN2-100000001-2026:n1',
+        );
       }
       // envelope_id 唯一。
       final ids = envelopes.map((e) => e.envelopeId).toSet();
@@ -56,14 +57,13 @@ void main() {
       const wire = MlsWireMessage(
         wireBytes: [9],
         cipherSuite: '',
-        conversationId: 'grp:acctA:n1',
+        conversationId: 'grp:CN220-CTZN2-100000001-2026:n1',
         messageKind: MlsMessageKind.application,
       );
       final envelopes = GroupFanout.fanOut(
         wire: wire,
-        recipientAccountIds: const [],
-        senderAccountId:
-            '0x3333333333333333333333333333333333333333333333333333333333333333',
+        recipientCidNumbers: const [],
+        senderCidNumber: 'CN220-CTZN2-100000001-2026',
         senderDeviceId: 'devA',
         messageId: 'msg-2',
         nowMillis: 1,
@@ -106,20 +106,14 @@ void main() {
     test('仅 admin 可加/删', () {
       expect(
         () => GroupMembership.ensureAdmin(
-            adminSet: {
-              '0x3333333333333333333333333333333333333333333333333333333333333333'
-            },
-            actorAccountId:
-                '0x3333333333333333333333333333333333333333333333333333333333333333'),
+            adminSet: {'CN220-CTZN2-100000001-2026'},
+            actorCidNumber: 'CN220-CTZN2-100000001-2026'),
         returnsNormally,
       );
       expect(
         () => GroupMembership.ensureAdmin(
-            adminSet: {
-              '0x3333333333333333333333333333333333333333333333333333333333333333'
-            },
-            actorAccountId:
-                '0x4444444444444444444444444444444444444444444444444444444444444444'),
+            adminSet: {'CN220-CTZN2-100000001-2026'},
+            actorCidNumber: 'CN220-CTZN2-100000004-2026'),
         throwsA(isA<GroupMembershipException>()),
       );
     });
@@ -127,7 +121,7 @@ void main() {
 
   group('GroupEpochOrdering 乱序 Commit 缓冲/回放', () {
     test('未来 epoch Commit 先到被缓冲,前序补齐后按序回放', () async {
-      const groupId = 'grp:acctA:n1';
+      const groupId = 'grp:CN220-CTZN2-100000001-2026:n1';
       var current = 5;
       final buffer = <int, List<ChatEnvelope>>{};
 
@@ -140,8 +134,8 @@ void main() {
       ChatEnvelope envelopeFor(int messageEpoch) =>
           commitWire(messageEpoch).toEnvelope(
             envelopeId: 'e$messageEpoch',
-            senderAccountId: 'acctS',
-            recipientAccountId: 'acctR',
+            senderCidNumber: 'CN220-CTZN2-100000006-2026',
+            recipientCidNumber: 'CN220-CTZN2-100000007-2026',
             senderDeviceId: 'devS',
             createdAtMillis: 0,
             ttlMillis: 0,

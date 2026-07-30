@@ -480,6 +480,7 @@ function chainRpcEnv(overrides: Partial<Env> = {}): Env {
 function session(): SessionState {
   return {
     cid_number: sessionCid,
+    binding_revision: 1,
     account_id: accountId,
     device_key_hash: "a".repeat(64),
     created_at: 1,

@@ -17,8 +17,7 @@ void main() {
     test('文章草稿含图文块和媒体完整往返', () {
       final draft = SquareComposeDraft(
         draftId: 'd1',
-        accountId:
-            '0x8888888888888888888888888888888888888888888888888888888888888888',
+        cidNumber: 'CN001-CTZN-100000001-2026',
         contentFormat: SquarePostContentFormat.article,
         postCategory: SquarePostCategory.campaign,
         title: '论社区自治',
@@ -60,8 +59,7 @@ void main() {
       }) =>
           SquareComposeDraft(
             draftId: 'd',
-            accountId:
-                '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            cidNumber: 'CN001-CTZN-100000001-2026',
             contentFormat: format,
             postCategory: category,
             text: 't',
@@ -97,8 +95,7 @@ void main() {
     test('文章摘要优先标题；空内容 isEmpty', () {
       const article = SquareComposeDraft(
         draftId: 'd',
-        accountId:
-            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        cidNumber: 'CN001-CTZN-100000001-2026',
         contentFormat: SquarePostContentFormat.article,
         postCategory: SquarePostCategory.normal,
         title: '标题',
@@ -110,8 +107,7 @@ void main() {
 
       const empty = SquareComposeDraft(
         draftId: 'd',
-        accountId:
-            '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        cidNumber: 'CN001-CTZN-100000001-2026',
         contentFormat: SquarePostContentFormat.normal,
         postCategory: SquarePostCategory.normal,
         text: '  ',

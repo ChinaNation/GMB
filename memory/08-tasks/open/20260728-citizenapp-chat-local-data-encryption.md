@@ -12,7 +12,8 @@
 
 ## 已确认边界
 
-- 密钥从身份账户 child mini-secret 域隔离派生，必须覆盖派生、保存、读取、换绑、删除生命周期。
+- 业务用途子钥从 CID 稳定数据根域隔离派生；当前身份账户 child 只包装数据根，必须覆盖
+  发放、包装、读取、换绑接管和删除生命周期。
 - Isar 社区版不提供库级加密，本任务采用字段级/文件级信封加密。
 - Cloudflare Chat 不保存消息或普通附件；大媒体中转继续只承载端到端密文。
 - 每一步必须先提交技术方案，用户确认后才能执行。
@@ -33,7 +34,8 @@
 - OpenMLS 状态迁移失败会导致历史群状态不可读，必须使用临时文件、认证成功后原子替换。
 - HMAC 索引会泄露相同 token 的频率关系；不得保存明文 token。
 - 媒体展示期间可能产生临时明文字节，必须限定生命周期并在异常路径清理。
-- CID 换绑时必须重封装本地密文，不得依赖已泄漏旧账户密钥。
+- CID 换绑不得重写业务密文，也不得依赖此前账户密钥；当前新账户必须领取同一 CID
+  数据根并用自己的 child 包装。
 
 ## 实施记录
 
@@ -43,34 +45,34 @@
 
 ### 第 1 步：本地静止态加密基座（2026-07-29 完成，提交 bf017a8e）
 
-**设计定案：信封（LDK）而非直接派生。** 若照通讯录钥直接从账户 child 派生本地加密钥，
-CID 换绑就要把整个聊天历史 + MLS 状态 + 全部附件重新加密一遍（手机上可能数 GB，
-必然卡死或中断）。改为：
+**最终设计：CID 稳定数据根信封。** 业务密钥不能直接由钱包账户 child 决定，否则换绑
+会改变全部用途子钥。目标模型为：
 
 ```text
-账户 child mini-secret
-      │ HKDF(info="citizenapp.local/kek", salt=sha256(accountId))
+CID 永久业务数据 ──► CID 稳定数据根(32B，换绑不变)
+                            │ HKDF(info=cid 用途域)
+                            ├─ chat / chat-index / mls / attachment
+                            ├─ contacts-local / contacts-cloud
+                            └─ drafts
+
+当前绑定账户 child
+      │ HKDF(info="citizenapp.cid-data-root/kek",
+      │      salt=sha256(cid|revision|account))
       ▼
-    KEK ── AES-256-GCM wrap/unwrap ──► LDK(32B 随机，终身不变)
-                                         │ HKDF(info=用途域)
-                                         ▼
-                  chat / chat-index / mls / attachment / contacts-local 五把子钥
+    KEK ── AES-256-GCM wrap/unwrap ──► CID 稳定数据根
 ```
 
-换绑只重 wrap 一次 LDK（O(1)），**已落盘密文一个字节都不用重写**，死契约
-`cid-rebind-subkeys-must-auto-migrate` 以 O(1) 成本满足。
-
-**实施中发现的 UX 缺陷及对策**：LDK 每次解包都需账户 child，而读 child 会触发生物识别
-→ 每次开聊天都要按指纹，不可接受。沿用通讯录钥既有对策：**wrap 是持久真源与换绑迁移用，
-日常读走静默缓存**；钱包创建/导入时 child 本就在手，预置 LDK 零额外弹窗。
+绑定 finalized 后，当前新账户通过一次性挑战取得同一数据根，完成新包装写入和读回摘要
+校验后激活精确绑定标记，再删除低版本包装。已落盘密文不重写；此前账户、此前私钥和此前
+设备都不是输入。钱包创建/导入阶段不得生成 CID 数据根，因为当时尚无 CID。
 
 - 新增 `lib/security/local_cipher.dart`（AES-256-GCM，12B 随机 nonce，
   单串 `base64(nonce||ct||mac)`，**AAD 必填**防串位重放；错误密钥/AAD 不符/篡改/
   非法 base64/长度不足一律抛 `LocalCipherException`，绝不静默返回空）
-- 新增 `lib/security/local_data_key.dart`（`LocalKeyPurpose` 五用途域、子钥派生、信封金库）
-- `lib/wallet/core/wallet_manager.dart` 加 4 个公开入口 + blob store 适配器
-  （方向固定「钱包依赖安全基座」，基座不反向依赖钱包）；创建/导入两处预置 LDK。
-  **未改动任何既有通讯录派生逻辑。**
+- `lib/security/local_data_key.dart` 提供 `CidDataRoot`、七个 CID 用途域和
+  `CidDataRootVault`；文件名沿用现有安全基座路径，类型与协议语义已全部 CID 化。
+- `lib/wallet/core/wallet_manager.dart` 只在 finalized 精确绑定接管时安装数据根，
+  钱包创建/导入不再生成根；日常读取走已验证的 CID 缓存。
 - 验收：analyze 零问题；`test/security/` 25/25；`test/security/ + test/wallet/` 169/169
 
 ### 第 2 步：MLS 私钥与群秘密加密（2026-07-29 完成）
@@ -97,7 +99,7 @@ CID 换绑就要把整个聊天历史 + MLS 状态 + 全部附件重新加密一
 - `rust/Cargo.toml` 显式加 `aes-gcm`（RustCrypto 官方实现，禁自造 AEAD）+ `base64`；
   两者本已在 lock 中，无新增下载。
 - Dart：`mls_state_store.dart` 增 `stateKey`/`stateKeyHex` 并加密 pending 队列；
-  `mls_native.dart` 9 处 payload 下传密钥；`chat_runtime.dart` 从 LDK 取 mls 子钥。
+  `mls_native.dart` 9 处 payload 下传密钥；`chat_runtime.dart` 从 CID 数据根取 mls 子钥。
 - 验收：`cargo test` **13/13**（含真实三方群会话往返、信封往返、错误密钥/错误 AAD/
   篡改拒绝、nonce 随机、旧明文清除、原子写不留临时文件）；
   `flutter analyze lib/ test/` 零问题；`flutter test test/security/ test/chat/` **186 通过**。
@@ -133,13 +135,13 @@ CID 换绑就要把整个聊天历史 + MLS 状态 + 全部附件重新加密一
 - **`envelopeBytesHex` 刻意不加密**：其内容是 MLS 端到端密文，且随附元数据
   （sender/recipient/conversation）本就是明文列，再套一层不减少泄露面。
 - 新增 `lib/chat/storage/chat_crypto.dart`：`ChatCrypto`（按 accountId 缓存子钥、
-  加解密、分词、`tokenize` 静态方法便于单测）。含 `debugFixedLocalDataKey`
+  加解密、分词、`tokenize` 静态方法便于单测）。含测试专用 `debugFixedCidDataRoot`
   测试注入口，仿 `WalletManager.debugSeedStore` 惯例。
 - `lib/chat/storage/chat_store.dart`：4 个写入路径改为**事务外预加密**
   （不让密码学运算占住 Isar 写事务）；2 个读取路径解密；`searchMessages` 两段式重写；
   两个 mapper 改为接收已解密文本。
 
-**测试策略**：`test/support/isar_test_env.dart` 注入固定 LDK。这是
+**测试策略**：`test/support/isar_test_env.dart` 注入固定 CID 数据根。这是
 **换密钥来源、不绕过加密**——测试仍走真实 AES-GCM 与真实 HMAC 索引，
 否则加密就成了测试盲区。
 
@@ -204,15 +206,15 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
 **现状订正**：项 12 不是"完全没做"——云端**早已加密**（AES-256-GCM + HMAC 不透明
 索引，Worker 只见密文）；缺的是本地仍以 `jsonEncode` 明文写进 Isar KV。
 
-**改动**：本地四把 KV（`contact_book_by_account:` / `contact_pending_by_account:` /
-`contact_sync_by_account:` / `contact_cloud_reset_by_account:`）的值改为 AES-256-GCM。
+**最终改动**：本地三把 CID 分区 KV（`contact_book_by_cid:` /
+`contact_pending_by_cid:` / `contact_sync_by_cid:`）的值使用 AES-256-GCM。
 加解密收敛在 `_readKv` / `_writeKv` / `_writeSnapshot` 三处，上层模型与 UI 零改动。
 
-- **密钥与云端严格分开**：本地用 LDK 的 `LocalKeyPurpose.contactsLocal` 子钥，
-  云端仍用 `citizenapp.contacts/encryption`（账户 child 直接派生）。**不复用云端钥**——
+- **用途域严格分开**：本地用 CID 数据根的 `contactsLocal` 子钥，云端用同一根的
+  `contactsCloud` 子钥。两者不复用，当前账户 child 只负责包装根——
   否则本地密文一旦被拿到就等于同时暴露云端密文。
-- 归属账户直接从 KV 键名后缀解析（四个前缀都以 `:<accountId>` 结尾），
-  无需把 accountId 层层透传；子钥按账户缓存。
+- 属主 CID 直接从业务上下文取得；当前绑定账户只用于领取并解包同一 CID 稳定数据根，
+  子钥按 `cid_number + 当前账户` 的已验证上下文缓存，不改变密文归属。
 - AAD 绑完整 KV 键名，防三份密文被互换。
 - 加密在 Isar 事务**外**完成（与聊天同一原则）。
 - `_readKv` 解密失败**直接抛错，不静默返回 null**——静默会被上层当成"本地无缓存"
@@ -244,7 +246,7 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
 | 11 附件本地缓存 | 第 5 步 | ✅ 密文缓存 + 前台存活明文 |
 | 12 通讯录本地副本 | 第 6 步 | ✅ 本地 KV 密文 |
 
-全部密钥出自第 1 步的 LDK 信封，五个用途域隔离；CID 换绑只重 wrap 一次 LDK，
+全部业务密钥出自 CID 稳定数据根，各用途域隔离；CID 换绑由当前新账户重新包装同一根，
 已落盘密文无需重写。
 
 **仍未覆盖的明文面（须知悉，不在本卡范围）**：iOS 端 `HardwareBoundSeedVault`
@@ -256,26 +258,20 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
 按 `memory/07-ai/audit-recipe.md` 对本卡六步产出做自审,发现 **1 个 CRITICAL + 1 个
 HIGH + 1 个 MEDIUM**,均已修复。
 
-#### 🔴 A(CRITICAL,已修)换绑未接 LDK 重 wrap → 全部本地密文永久不可读
+#### 🔴 A(CRITICAL,最终修复)账户信封曾被误当成身份数据根
 
-**证据锚点**:`rewrapLocalDataKeyForRebind` 曾**零调用点**——
-`wallet_manager.dart:1154` 只有定义,全仓 `lib/` + `test/` 无调用方;换绑主流程
-`myid_service.dart:_doRunRebindMigration` 只调了通讯录迁移。
+旧实现把随机根与账户绑定，并试图在换绑时依赖此前账户解包再重封装；此前账户私钥或设备
+不可用时会导致全部本地密文不可读。最终修复改为三层模型：数据永久归 CID，稳定数据根
+由 CID 层按当前 finalized 绑定发放，当前账户仅包装。接管顺序固定为：
 
-**后果链**:换绑后 `ensureLocalDataKeyForAccountId(新账户)` 查不到缓存与 wrap →
-`vault.ensureForAccount` **新生成一把 LDK** → 五把子钥全变 → 聊天/MLS/附件/通讯录
-已落盘密文全部不可解密。且因解密失败被刻意做成**抛错而非静默降级**,表现为
-相关页面直接报错。**直接违反死契约 `cid-rebind-subkeys-must-auto-migrate`。**
+1. 当前新账户签一次性挑战；
+2. Worker 前后两次核验 finalized `cid + revision + account`；
+3. 新账户包装同一根并读回校验；
+4. 派生 CID 用途子钥并登记当前设备；
+5. 写完整接管标记后清低版本包装。
 
-**修复**:`myid_service.dart` 本地重建插入步骤 3,顺序**必须**是
-「通讯录迁移 → LDK 重 wrap → 广播身份变化」:
-- 在迁移**之后**——迁移要读旧账户本地密文 KV,而重 wrap 会删旧账户 LDK wrap,
-  倒过来迁移就读不出旧数据(这是修复时的真实陷阱,直接补调用会打断迁移);
-- 在广播**之前**——广播后各页按新账户读本地密文,此时新账户必须已有 wrap。
-- 不吞异常:失败让整个迁移重试。
-
-**测试补齐**:`myid_service_test.dart` 新增断言——重 wrap 实参正确 +
-`trace == ['contact_migrate', 'ldk_rewrap']` 钉死顺序。删掉调用即测试红。
+测试覆盖此前账户零输入、错误新账户 secret、摘要不符、revision 回退/冲突、同 CID 子钥
+稳定、旧密文换绑后可解和低版本包装清理。
 
 #### 🟠 B(HIGH,已修)打开会话会解密该会话全部媒体
 
@@ -289,13 +285,13 @@ HIGH + 1 个 MEDIUM**,均已修复。
 
 #### 🟡 C(MEDIUM,已修)`ChatCrypto.evict` 死代码
 
-零调用点。核验确认**不是正确性问题**:缓存按 accountId 分键,且换绑后 LDK 与
+零调用点。核验确认**不是正确性问题**：缓存按当前绑定校验，且换绑后 CID 数据根与
 五把子钥都不变,无陈旧风险。按「无残桩」死规则删除,并留注释说明为何不需要。
 
-#### 撤回:一条先前不成立的说法
+#### 最终订正
 
-第 1 步任务卡与提交 `bf017a8e` 写「死契约以 O(1) 成本**满足**」——**该说法不成立**,
-当时只做到金库层具备能力、业务链路未接。现已接上并有顺序断言,该说法此刻才成立。
+早期“账户间重包装即可接管”的方案已撤销。O(1) 的正确含义是：当前新账户从 CID 层领取
+同一稳定数据根并创建自己的包装，不扫描或重写业务密文，也不要求此前账户参与。
 
 #### 根因反思(给后续 auditor)
 
@@ -306,7 +302,7 @@ UI 每帧调几次)。982 项测试全绿反而给了虚假信心。这正是仓
 #### 已核验不成立的疑点(避免下轮重复排查)
 
 - 通讯录 `cid_number` 缺陷:已由 CID 重构修好,非本卡问题;
-- `_localKvKey` 从键名解析 accountId:四前缀各只含一个 `:`、accountId 是纯 hex,解析正确;
+- 本地 KV 已按 CID 分区，不再从键名解析账户作为归属；
 - `lib/isar/` 与线程 B / 广场双存的边界冲突:至今未发生,`git status` 干净。
 
 ## 完成标准
@@ -314,4 +310,4 @@ UI 每帧调几次)。982 项测试全绿反而给了虚假信心。这正是仓
 - Isar 和 App 私有目录不再保存联系人、聊天正文、会话摘要、MLS 秘密或附件明文。
 - 密文篡改 fail-closed，密钥删除后数据不可恢复。
 - 中文、英文和数字搜索能力按新 HMAC 索引真实可用。
-- Android 真机完成升级迁移、聊天、搜索、媒体和换绑验收；iOS 验收依赖硬件金库任务完成。
+- Android 真机完成聊天、搜索、媒体和 finalized 换绑接管验收；iOS 验收依赖硬件金库任务完成。

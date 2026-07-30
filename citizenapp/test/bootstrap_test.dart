@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/isar/app_isar.dart';
@@ -101,9 +102,19 @@ void main() {
   });
 
   testWidgets('first run shows permission guide', (tester) async {
+    addTearDown(() async {
+      // CitizenApp 使用全局 Navigator key；显式卸载，避免下一个用例复用已销毁的
+      // Navigator / 启动门禁状态而渲染空树。
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
     SharedPreferences.setMockInitialValues({});
 
-    await tester.pumpWidget(const CitizenApp());
+    // 每个用例使用不同根 key，强制重建全部启动门禁，避免上一用例的
+    // AppPermissionGate / WalletGate 状态跨用例复用。
+    await tester.pumpWidget(
+      const CitizenApp(key: ValueKey('permission-guide')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('权限设置'), findsOneWidget);
@@ -118,7 +129,9 @@ void main() {
       await seedHotWallet();
     });
 
-    await tester.pumpWidget(const CitizenApp());
+    await tester.pumpWidget(
+      const CitizenApp(key: ValueKey('app-bootstrap')),
+    );
     // 等待异步锁检查 + 账户门禁的 Isar 查询完成并渲染主界面。
     await pumpUntilFound(tester, find.text('广场'));
     await tester.pumpAndSettle();
@@ -139,6 +152,10 @@ void main() {
 
   testWidgets('no wallet: bootstraps into forced create-wallet page',
       (tester) async {
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
     // 无任何钱包时，账户门禁应拦在强制创建页，不进广场。
     // 强制创建页不建 AppShell(不触发 smoldot),纯 Dart CI 也照跑。
     // 页面内容较长,高视口避免 ListView 懒加载导致底部按钮未构建。
@@ -147,11 +164,21 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.runAsync(() => WalletIsar.instance.resetForTest());
 
-    await tester.pumpWidget(const CitizenApp());
+    await tester.pumpWidget(
+      const CitizenApp(key: ValueKey('no-wallet-bootstrap')),
+    );
     await pumpUntilFound(tester, find.text('创建钱包'));
     await tester.pump();
 
     // 标题与创建按钮同为"创建钱包"（两处 Text），故 findsWidgets（≥1）。
+    if (!tester.any(find.text('创建钱包'))) {
+      final visibleTexts = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((widget) => widget.data)
+          .whereType<String>()
+          .toList();
+      fail('未进入创建钱包页，当前文本：$visibleTexts');
+    }
     expect(find.text('创建钱包'), findsWidgets);
     expect(find.text('广场'), findsNothing);
   });

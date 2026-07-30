@@ -11,19 +11,25 @@ import 'package:citizenapp/security/local_cipher.dart';
 /// (`citizenapp.contacts/encryption`) 完全分开，云密文与本地密文不共钥。
 enum LocalKeyPurpose {
   /// 聊天正文、会话摘要等本地明文字段。
-  chat('citizenapp.local/chat'),
+  chat('citizenapp.cid/chat'),
 
   /// 聊天搜索的 HMAC 分词索引钥（只做 HMAC，不做加解密）。
-  chatIndex('citizenapp.local/chat-index'),
+  chatIndex('citizenapp.cid/chat-index'),
 
   /// OpenMLS 状态信封（含设备签名私钥与群 ratchet 秘密）。
-  mls('citizenapp.local/mls'),
+  mls('citizenapp.cid/mls'),
 
   /// 聊天附件本地缓存文件。
-  attachment('citizenapp.local/attachment'),
+  attachment('citizenapp.cid/attachment'),
 
   /// 通讯录**本地** Isar KV（区别于上云的通讯录密文）。
-  contactsLocal('citizenapp.local/contacts');
+  contactsLocal('citizenapp.cid/contacts-local'),
+
+  /// 通讯录云端端到端密文。
+  contactsCloud('citizenapp.cid/contacts-cloud'),
+
+  /// 本地草稿。
+  drafts('citizenapp.cid/drafts');
 
   const LocalKeyPurpose(this.domain);
 
@@ -31,17 +37,16 @@ enum LocalKeyPurpose {
   final String domain;
 }
 
-/// 本地数据密钥（LDK）：一次生成、终身不变的 32 字节随机主钥。
+/// CID 稳定数据根：每个 CID 唯一、换绑时不变的 32 字节随机主钥。
 ///
-/// 所有本地静止态子钥都从它派生，因此 **CID 换绑时只需用新账户重新 wrap 一次
-/// LDK，已落盘的密文一个字节都不用重写**——否则换绑要把整个聊天历史、MLS 状态
-/// 和全部附件重新加密一遍，手机上必然卡死或中断。
-class LocalDataKey {
-  const LocalDataKey(this.bytes);
+/// 所有业务数据子钥都从它派生；钱包账户只负责包装和签名授权。换绑 finalized 后，
+/// 新账户直接领取同一数据根并用自己的 child 包装，不读取此前账户的任何材料。
+class CidDataRoot {
+  const CidDataRoot(this.bytes);
 
   final Uint8List bytes;
 
-  /// 按用途派生 32 字节子钥。LDK 本身已是随机主钥，故 salt 用固定域常量即可。
+  /// 按用途派生 32 字节子钥。数据根本身已是随机主钥，salt 只承担域隔离。
   Future<Uint8List> subkey(LocalKeyPurpose purpose) async {
     final key = await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
       secretKey: SecretKey(bytes),
@@ -51,141 +56,270 @@ class LocalDataKey {
     return Uint8List.fromList(await key.extractBytes());
   }
 
-  static final List<int> _subkeySalt =
-      utf8.encode('citizenapp.local.subkey.v1');
+  static final List<int> _subkeySalt = utf8.encode('citizenapp.cid/subkey');
 }
 
-/// LDK 信封金库：用账户派生的 KEK 包裹 LDK 并持久化。
+/// 已在本机激活的 CID 绑定快照。
+class CidDataRootBinding {
+  const CidDataRootBinding({
+    required this.cidNumber,
+    required this.bindingRevision,
+    required this.accountId,
+    required this.dataRootHash,
+    required this.wrapperKey,
+  });
+
+  final String cidNumber;
+  final int bindingRevision;
+  final String accountId;
+  final String dataRootHash;
+  final String wrapperKey;
+
+  Map<String, Object> toJson() => <String, Object>{
+        'cid_number': cidNumber,
+        'binding_revision': bindingRevision,
+        'account_id': accountId,
+        'data_root_hash': dataRootHash,
+        'wrapper_key': wrapperKey,
+      };
+
+  static CidDataRootBinding? fromJson(String raw) {
+    try {
+      final value = jsonDecode(raw);
+      if (value is! Map<String, dynamic>) return null;
+      final cidNumber = value['cid_number'];
+      final bindingRevision = value['binding_revision'];
+      final accountId = value['account_id'];
+      final dataRootHash = value['data_root_hash'];
+      final wrapperKey = value['wrapper_key'];
+      if (cidNumber is! String ||
+          cidNumber.isEmpty ||
+          bindingRevision is! int ||
+          bindingRevision <= 0 ||
+          accountId is! String ||
+          !RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId) ||
+          dataRootHash is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(dataRootHash) ||
+          wrapperKey is! String ||
+          wrapperKey.isEmpty) {
+        return null;
+      }
+      return CidDataRootBinding(
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        dataRootHash: dataRootHash,
+        wrapperKey: wrapperKey,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// CID 数据根信封金库：当前绑定账户用自己的 child 派生 KEK 包装数据根。
 ///
 /// ```text
-/// 账户 child mini-secret
-///       │ HKDF(info="citizenapp.local/kek", salt=sha256(accountId))
+/// 当前绑定账户 child mini-secret
+///       │ HKDF(info="citizenapp.cid-data-root/kek",
+///       │      salt=sha256(cid|revision|account))
 ///       ▼
-///     KEK ── AES-256-GCM wrap/unwrap ──► LDK(32B 随机，终身不变)
+///     KEK ── AES-256-GCM wrap/unwrap ──► CID 数据根(32B，换绑不变)
 ///                                          │ HKDF(info=用途域)
 ///                                          ▼
-///                                     五把用途子钥
+///                                     各业务用途子钥
 /// ```
 ///
-/// 换绑只重 wrap（O(1)），满足死契约 `cid-rebind-subkeys-must-auto-migrate`
-/// 而不触发全盘重加密。
-class LocalDataKeyVault {
-  const LocalDataKeyVault(this._store);
+/// 接管输入只有 CID、finalized 版本、新账户和 CID 层发放的数据根。写新包装、读回验证、
+/// 落激活标记之后才删低版本包装；任何步骤都不接收此前账户参数。
+class CidDataRootVault {
+  const CidDataRootVault(this._store);
 
   /// 密文 blob 落地层，由调用方注入（生产为 flutter_secure_storage，单测可注入内存实现）。
   final LocalKeyBlobStore _store;
 
-  static const String _kekDomain = 'citizenapp.local/kek';
-  static const String _wrapAadDomain = 'citizenapp.local/ldk';
+  static const String _kekDomain = 'citizenapp.cid-data-root/kek';
+  static const String _wrapAadDomain = 'citizenapp.cid-data-root/wrapper';
+  static const String activeBindingKey =
+      'citizenapp_cid_data_root_active_binding';
 
-  static String storageKeyFor(String accountId) =>
-      'citizenapp_local_data_key_v1_$accountId';
+  static String wrapperKeyFor({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) =>
+      'citizenapp_cid_data_root_wrapper_${Uri.encodeComponent(cidNumber)}_'
+      '${bindingRevision}_$accountId';
 
-  /// 确保该账户已有 LDK：没有则**新生成一把**并 wrap 落地；已有则原样返回。
-  ///
-  /// 幂等——重复调用不会换钥，否则会把已落盘的密文全部作废。
-  Future<LocalDataKey> ensureForAccount({
+  /// 用当前新账户独立安装 CID 数据根。新包装读回验证成功并写入激活标记后，
+  /// 才删除此前版本的包装；清理失败不回滚已激活的新绑定。
+  Future<CidDataRoot> installForCurrentBinding({
+    required String cidNumber,
+    required int bindingRevision,
     required String accountId,
     required List<int> accountSecret,
+    required CidDataRoot dataRoot,
+    required String expectedDataRootHash,
   }) async {
-    final existing = await readForAccount(
+    _validateBinding(cidNumber, bindingRevision, accountId);
+    final actualHash = await dataRootHash(dataRoot);
+    if (actualHash != expectedDataRootHash) {
+      throw const LocalCipherException('CID 数据根摘要与服务端授权不一致');
+    }
+    final previous = await readActiveBinding();
+    if (previous != null) {
+      if (previous.bindingRevision > bindingRevision) {
+        throw const LocalCipherException('CID 本地绑定版本禁止回退');
+      }
+      if (previous.bindingRevision == bindingRevision &&
+          (previous.cidNumber != cidNumber ||
+              previous.accountId != accountId ||
+              previous.dataRootHash != expectedDataRootHash)) {
+        throw const LocalCipherException('同一绑定版本的 CID、账户或数据根不一致');
+      }
+    }
+    final wrapperKey = wrapperKeyFor(
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
+    await _writeWrapped(
+      wrapperKey: wrapperKey,
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+      accountSecret: accountSecret,
+      dataRoot: dataRoot,
+    );
+    final verified = await _readWrapped(
+      wrapperKey: wrapperKey,
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
       accountId: accountId,
       accountSecret: accountSecret,
     );
-    if (existing != null) return existing;
-
-    final ldk = LocalDataKey(LocalCipher.randomBytes(32));
-    await _writeWrapped(accountId, accountSecret, ldk);
-    return ldk;
+    if (await dataRootHash(verified) != expectedDataRootHash) {
+      throw const LocalCipherException('新账户数据根包装读回验证失败');
+    }
+    final next = CidDataRootBinding(
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+      dataRootHash: expectedDataRootHash,
+      wrapperKey: wrapperKey,
+    );
+    await _store.write(activeBindingKey, jsonEncode(next.toJson()));
+    if (previous != null && previous.wrapperKey != wrapperKey) {
+      try {
+        await _store.delete(previous.wrapperKey);
+      } catch (_) {
+        // 新绑定已经验证并激活；低版本包装清理失败只能重试，不能回滚控制权。
+      }
+    }
+    return verified;
   }
 
-  /// 读取并解包该账户的 LDK；未建立过返回 null。
-  ///
-  /// 密钥不匹配或密文损坏会抛 [LocalCipherException]——**不降级为 null**，
-  /// 否则会被上层误当成"尚未建立"而新生成一把，导致已有密文永久不可读。
-  Future<LocalDataKey?> readForAccount({
+  /// 读取当前精确绑定的数据根。没有激活标记或三元组不匹配时失败关闭。
+  Future<CidDataRoot> readForCurrentBinding({
+    required String cidNumber,
+    required int bindingRevision,
     required String accountId,
     required List<int> accountSecret,
   }) async {
-    final blob = await _store.read(storageKeyFor(accountId));
-    if (blob == null || blob.isEmpty) return null;
-    final kek = await _deriveKek(accountId, accountSecret);
+    final active = await readActiveBinding();
+    if (active == null ||
+        active.cidNumber != cidNumber ||
+        active.bindingRevision != bindingRevision ||
+        active.accountId != accountId) {
+      throw const LocalCipherException('当前 CID 绑定尚未完成数据根接管');
+    }
+    final root = await _readWrapped(
+      wrapperKey: active.wrapperKey,
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+      accountSecret: accountSecret,
+    );
+    if (await dataRootHash(root) != active.dataRootHash) {
+      throw const LocalCipherException('当前 CID 数据根摘要校验失败');
+    }
+    return root;
+  }
+
+  Future<CidDataRootBinding?> readActiveBinding() async {
+    final raw = await _store.read(activeBindingKey);
+    if (raw == null || raw.isEmpty) return null;
+    return CidDataRootBinding.fromJson(raw);
+  }
+
+  Future<void> clearActiveBinding() async {
+    final active = await readActiveBinding();
+    if (active != null) await _store.delete(active.wrapperKey);
+    await _store.delete(activeBindingKey);
+  }
+
+  Future<void> _writeWrapped({
+    required String wrapperKey,
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required List<int> accountSecret,
+    required CidDataRoot dataRoot,
+  }) async {
+    final kek = await _deriveKek(
+      cidNumber,
+      bindingRevision,
+      accountId,
+      accountSecret,
+    );
+    final wrapped = await LocalCipher.encryptBytes(
+      key: kek,
+      plaintext: dataRoot.bytes,
+      aad: _wrapAad(cidNumber, bindingRevision, accountId),
+    );
+    await _store.write(wrapperKey, wrapped);
+  }
+
+  Future<CidDataRoot> _readWrapped({
+    required String wrapperKey,
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required List<int> accountSecret,
+  }) async {
+    final blob = await _store.read(wrapperKey);
+    if (blob == null || blob.isEmpty) {
+      throw const LocalCipherException('当前 CID 数据根包装不存在');
+    }
+    final kek = await _deriveKek(
+      cidNumber,
+      bindingRevision,
+      accountId,
+      accountSecret,
+    );
     final bytes = await LocalCipher.decryptBytes(
       key: kek,
       blob: blob,
-      aad: _wrapAad(accountId),
+      aad: _wrapAad(cidNumber, bindingRevision, accountId),
     );
     if (bytes.length != 32) {
-      throw LocalCipherException('LDK 长度无效：期望 32 字节，实际 ${bytes.length}');
-    }
-    return LocalDataKey(bytes);
-  }
-
-  /// CID 换绑：用旧账户解包 LDK，再用新账户重新 wrap，最后删旧条目。
-  ///
-  /// **数据不动**——子钥由 LDK 派生，LDK 未变，已落盘密文继续可解。
-  Future<LocalDataKey> rewrapForRebind({
-    required String oldAccountId,
-    required List<int> oldAccountSecret,
-    required String newAccountId,
-    required List<int> newAccountSecret,
-  }) async {
-    final ldk = await readForAccount(
-      accountId: oldAccountId,
-      accountSecret: oldAccountSecret,
-    );
-    if (ldk == null) {
-      // 旧账户没建过 LDK（换绑前从未产生本地密文），直接给新账户建一把。
-      return ensureForAccount(
-        accountId: newAccountId,
-        accountSecret: newAccountSecret,
+      throw LocalCipherException(
+        'CID 数据根长度无效：期望 32 字节，实际 ${bytes.length}',
       );
     }
-    await _writeWrapped(newAccountId, newAccountSecret, ldk);
-    if (newAccountId != oldAccountId) {
-      await _store.delete(storageKeyFor(oldAccountId));
-    }
-    return ldk;
+    return CidDataRoot(bytes);
   }
 
-  /// 用**已在手的** LDK 为指定账户 wrap 落地。
-  ///
-  /// 换绑时若 LDK 已从静默缓存取到，就不必再解一次旧账户（省一次生物识别），
-  /// 直接用新账户 child wrap 即可。
-  Future<void> writeForAccount({
-    required String accountId,
-    required List<int> accountSecret,
-    required LocalDataKey ldk,
-  }) =>
-      _writeWrapped(accountId, accountSecret, ldk);
-
-  /// 删除该账户的 LDK 条目（钱包删除 / 换绑清理旧账户用）。
-  ///
-  /// 注意：删掉后该账户名下的本地密文将永久不可读，调用方须自行确认数据已不再需要。
-  Future<void> deleteForAccount(String accountId) =>
-      _store.delete(storageKeyFor(accountId));
-
-  Future<void> _writeWrapped(
-    String accountId,
-    List<int> accountSecret,
-    LocalDataKey ldk,
-  ) async {
-    final kek = await _deriveKek(accountId, accountSecret);
-    final wrapped = await LocalCipher.encryptBytes(
-      key: kek,
-      plaintext: ldk.bytes,
-      aad: _wrapAad(accountId),
-    );
-    await _store.write(storageKeyFor(accountId), wrapped);
-  }
-
-  /// KEK = HKDF(账户 child mini-secret, salt=sha256(accountId), info=kek 域)。
-  /// salt 取 accountId 哈希，与通讯录密钥派生保持同一套契约。
   static Future<Uint8List> _deriveKek(
+    String cidNumber,
+    int bindingRevision,
     String accountId,
     List<int> accountSecret,
   ) async {
-    final salt = (await Sha256().hash(utf8.encode(accountId))).bytes;
+    final salt = (await Sha256().hash(
+      utf8.encode('$cidNumber|$bindingRevision|$accountId'),
+    ))
+        .bytes;
     final key = await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
       secretKey: SecretKey(accountSecret),
       nonce: salt,
@@ -194,10 +328,42 @@ class LocalDataKeyVault {
     return Uint8List.fromList(await key.extractBytes());
   }
 
-  static String _wrapAad(String accountId) => '$_wrapAadDomain|$accountId';
+  static String _wrapAad(
+    String cidNumber,
+    int bindingRevision,
+    String accountId,
+  ) =>
+      '$_wrapAadDomain|$cidNumber|$bindingRevision|$accountId';
+
+  static Future<String> dataRootHash(CidDataRoot dataRoot) async {
+    final digest = await Sha256().hash(dataRoot.bytes);
+    return digest.bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  static void _validateBinding(
+    String cidNumber,
+    int bindingRevision,
+    String accountId,
+  ) {
+    if (cidNumber.trim().isEmpty || utf8.encode(cidNumber).length > 32) {
+      throw ArgumentError.value(cidNumber, 'cidNumber', 'CID 长度必须为 1 到 32 字节');
+    }
+    if (bindingRevision <= 0) {
+      throw ArgumentError.value(
+        bindingRevision,
+        'bindingRevision',
+        '绑定版本必须为正整数',
+      );
+    }
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountId)) {
+      throw ArgumentError.value(accountId, 'accountId', '账户标识格式不合法');
+    }
+  }
 }
 
-/// LDK 密文 blob 的持久化抽象（与安全存储解耦，便于单测注入内存实现）。
+/// CID 数据根密文 blob 的持久化抽象。
 abstract interface class LocalKeyBlobStore {
   Future<String?> read(String key);
   Future<void> write(String key, String value);

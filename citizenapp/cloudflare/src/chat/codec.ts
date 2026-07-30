@@ -14,7 +14,7 @@ export function assertChatAccountId(
   try {
     return assertAccountId(value);
   } catch {
-    throw new HttpError(400, code, "聊天账户标识格式不合法");
+    throw new HttpError(400, code, "Chat 当前绑定账户格式不合法");
   }
 }
 

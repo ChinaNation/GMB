@@ -13,15 +13,13 @@ class GroupManagePage extends StatefulWidget {
     required this.groupId,
     this.runtime,
     this.store,
-    this.accountId,
+    this.cidNumber,
   });
 
   final String groupId;
   final ChatRuntime? runtime;
   final ChatStore? store;
-
-  /// 本机账户;测试可注入以设定"我是谁"验 admin 门控。生产为 null → 取身份账户。
-  final String? accountId;
+  final String? cidNumber;
 
   @override
   State<GroupManagePage> createState() => _GroupManagePageState();
@@ -32,7 +30,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
   late final ChatStore _store = widget.store ?? ChatStore();
 
   ChatGroup? _group;
-  String _myAccount = '';
+  String _myCidNumber = '';
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -45,13 +43,15 @@ class _GroupManagePageState extends State<GroupManagePage> {
 
   Future<void> _load() async {
     try {
-      final me = widget.accountId ??
-          await IdentityAccountCache.instance.accountId() ??
-          '';
-      final group = await _store.readGroup(widget.groupId);
+      final identity = widget.cidNumber != null
+          ? null
+          : await IdentityAccountCache.instance.resolve();
+      final ownerCidNumber =
+          widget.cidNumber ?? identity?.snapshot?.cidNumber ?? '';
+      final group = await _store.readGroup(ownerCidNumber, widget.groupId);
       if (!mounted) return;
       setState(() {
-        _myAccount = me;
+        _myCidNumber = ownerCidNumber;
         _group = group;
         _loading = false;
       });
@@ -64,7 +64,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
     }
   }
 
-  bool get _isAdmin => _group?.adminSet.contains(_myAccount) ?? false;
+  bool get _isAdmin => _group?.adminSet.contains(_myCidNumber) ?? false;
 
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
@@ -112,12 +112,12 @@ class _GroupManagePageState extends State<GroupManagePage> {
   }
 
   Future<void> _addMembers() async {
-    final existing = _group?.memberAccountIds.toSet() ?? <String>{};
+    final existing = _group?.memberCidNumbers.toSet() ?? <String>{};
     final selected = await _pickContacts(existing);
     if (selected != null && selected.isNotEmpty) {
       await _run(() => _runtime.addGroupMembers(
             groupId: widget.groupId,
-            inviteeAccountIds: selected,
+            inviteeCidNumbers: selected,
           ));
     }
   }
@@ -154,7 +154,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
       contacts = const <UserContact>[];
     }
     final selectable =
-        contacts.where((c) => !exclude.contains(c.accountId)).toList();
+        contacts.where((c) => !exclude.contains(c.cidNumber)).toList();
     if (!mounted) return null;
     final chosen = <String>{};
     return showDialog<List<String>>(
@@ -171,17 +171,17 @@ class _GroupManagePageState extends State<GroupManagePage> {
                     children: [
                       for (final contact in selectable)
                         CheckboxListTile(
-                          value: chosen.contains(contact.accountId),
+                          value: chosen.contains(contact.cidNumber),
                           onChanged: (value) => setLocal(() {
                             if (value ?? false) {
-                              chosen.add(contact.accountId);
+                              chosen.add(contact.cidNumber);
                             } else {
-                              chosen.remove(contact.accountId);
+                              chosen.remove(contact.cidNumber);
                             }
                           }),
                           title: Text(
                             contact.contactRemark.isEmpty
-                                ? _short(contact.accountId)
+                                ? _short(contact.cidNumber)
                                 : contact.contactRemark,
                           ),
                         ),
@@ -257,18 +257,18 @@ class _GroupManagePageState extends State<GroupManagePage> {
                             ListTile(
                               leading: CircleAvatar(
                                 child: Text(
-                                  member.accountId.isEmpty
+                                  member.cidNumber.isEmpty
                                       ? '?'
-                                      : member.accountId.substring(0, 1),
+                                      : member.cidNumber.substring(0, 1),
                                 ),
                               ),
-                              title: Text(_short(member.accountId)),
+                              title: Text(_short(member.cidNumber)),
                               subtitle:
                                   member.isAdmin ? const Text('管理员') : null,
                               trailing: (_isAdmin &&
-                                      member.accountId != _myAccount &&
-                                      member.accountId !=
-                                          group.creatorAccountId)
+                                      member.cidNumber != _myCidNumber &&
+                                      member.cidNumber !=
+                                          group.creatorCidNumber)
                                   ? IconButton(
                                       tooltip: '移除',
                                       icon: const Icon(
@@ -278,8 +278,8 @@ class _GroupManagePageState extends State<GroupManagePage> {
                                           : () => _run(
                                               () => _runtime.removeGroupMembers(
                                                     groupId: widget.groupId,
-                                                    targetAccountIds: [
-                                                      member.accountId
+                                                    targetCidNumbers: [
+                                                      member.cidNumber
                                                     ],
                                                   )),
                                     )

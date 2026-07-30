@@ -61,8 +61,8 @@ class MlsWireMessage {
   /// Cloudflare 只在当前请求中转发，不解析也不保存其中内容。
   ChatEnvelope toEnvelope({
     required String envelopeId,
-    required String senderAccountId,
-    required String recipientAccountId,
+    required String senderCidNumber,
+    required String recipientCidNumber,
     required String senderDeviceId,
     required int createdAtMillis,
     required int ttlMillis,
@@ -72,8 +72,8 @@ class MlsWireMessage {
       protocolVersion: 1,
       envelopeId: envelopeId,
       conversationId: conversationId,
-      senderAccountId: senderAccountId,
-      recipientAccountId: recipientAccountId,
+      senderCidNumber: senderCidNumber,
+      recipientCidNumber: recipientCidNumber,
       senderDeviceId: senderDeviceId,
       mlsWireMessage: wireBytes,
       encryptedMetadata: encryptedMetadata,

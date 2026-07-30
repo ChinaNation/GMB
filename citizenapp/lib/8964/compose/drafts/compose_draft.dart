@@ -10,7 +10,7 @@ import 'package:citizenapp/8964/models/square_models.dart';
 class SquareComposeDraft {
   const SquareComposeDraft({
     required this.draftId,
-    required this.accountId,
+    required this.cidNumber,
     required this.contentFormat,
     required this.postCategory,
     this.title,
@@ -21,7 +21,9 @@ class SquareComposeDraft {
   });
 
   final String draftId;
-  final String accountId;
+
+  /// 草稿永久属于 CID；发布时再读取该 CID 当前绑定账户完成签名与付款。
+  final String cidNumber;
   final SquarePostContentFormat contentFormat;
   final SquarePostCategory postCategory;
   final String? title;
@@ -62,7 +64,7 @@ class SquareComposeDraft {
   }) {
     return SquareComposeDraft(
       draftId: draftId,
-      accountId: accountId,
+      cidNumber: cidNumber,
       contentFormat: contentFormat,
       postCategory: postCategory,
       title: title,
@@ -75,7 +77,7 @@ class SquareComposeDraft {
 
   Map<String, Object?> toJson() => {
         'draft_id': draftId,
-        'account_id': accountId,
+        'cid_number': cidNumber,
         'content_format': contentFormat.workerValue,
         'post_category': postCategory.workerValue,
         if (title != null) 'title': title,
@@ -103,7 +105,7 @@ class SquareComposeDraft {
     final rawBlocks = json['content_blocks'];
     return SquareComposeDraft(
       draftId: json['draft_id']?.toString() ?? '',
-      accountId: json['account_id']?.toString() ?? '',
+      cidNumber: json['cid_number']?.toString() ?? '',
       contentFormat: json['content_format'] == 'article'
           ? SquarePostContentFormat.article
           : SquarePostContentFormat.normal,

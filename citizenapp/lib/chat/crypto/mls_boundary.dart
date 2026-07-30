@@ -9,17 +9,17 @@ import 'mls_session.dart';
 
 /// 本机 Chat 设备身份。
 ///
-/// `accountId` 是聊天账户/公民币收款账户，不是 Chat 密钥来源。
+/// `cidNumber` 是 Chat 永久身份主键；钱包账户只负责外层会话授权。
 /// Chat 设备私钥必须由 OpenMLS/安全存储独立生成并保存在本机。
 class ChatDevice {
   const ChatDevice({
-    required this.accountId,
+    required this.cidNumber,
     required this.deviceId,
     required this.devicePublicKey,
   });
 
-  /// 钱包账户作为聊天账户名和收款账户。
-  final String accountId;
+  /// Chat 与 MLS 唯一成员身份。
+  final String cidNumber;
 
   /// Chat 设备 ID，独立于钱包地址。
   final String deviceId;
@@ -29,8 +29,8 @@ class ChatDevice {
 
   /// 校验身份边界，避免把空账户或空公钥写入 Chat 路由记录。
   String? validate() {
-    if (accountId.trim().isEmpty) {
-      return 'Chat 钱包聊天账户不能为空';
+    if (cidNumber.trim().isEmpty) {
+      return 'Chat CID 不能为空';
     }
     if (deviceId.trim().isEmpty) {
       return 'Chat 设备 ID 不能为空';
@@ -49,7 +49,7 @@ class ChatDevice {
 /// OpenMLS KeyPackage。
 class MlsKeyPackage {
   const MlsKeyPackage({
-    required this.accountId,
+    required this.cidNumber,
     required this.deviceId,
     required this.keyPackageId,
     required this.keyPackageBytes,
@@ -57,15 +57,9 @@ class MlsKeyPackage {
     required this.createdAtMillis,
     required this.expiresAtMillis,
     this.devicePublicKey = '',
-    this.cidNumber = '',
   });
 
-  /// KeyPackage 所属设备所有者的钱包聊天账户（MLS 成员名册身份主键，绝不用 CID 覆盖）。
-  final String accountId;
-
-  /// KeyPackage 所属设备所有者的身份主键 CID 号（寻址用；`accountId` 仍为 MLS 名册对齐）。
-  ///
-  /// 由 Worker 拉取/领取响应携带；本机 `createKeyPackage` 生成时留空，发布时另传自身 CID。
+  /// KeyPackage 所属设备所有者的永久身份主键，也是 MLS BasicCredential 身份。
   final String cidNumber;
 
   /// 发布设备 ID。
@@ -101,7 +95,7 @@ abstract class MlsCrypto {
 
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccountId,
+    required String recipientCidNumber,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   });
@@ -125,7 +119,7 @@ class UnsupportedMlsCrypto implements MlsCrypto {
   @override
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccountId,
+    required String recipientCidNumber,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   }) async {

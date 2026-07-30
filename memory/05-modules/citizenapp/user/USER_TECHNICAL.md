@@ -21,7 +21,7 @@
   - 用户资料模型与持久化
   - 用户二维码载荷模型
 - `lib/my/user/contact_service.dart`
-  - 通讯录模型、按身份账户隔离的 Isar 缓存、端侧加解密、Cloudflare 同步和待同步操作
+  - 通讯录模型、按属主 CID 隔离的 Isar 缓存、端侧加解密、Cloudflare 同步和待同步操作
 - `lib/my/user/contact_book_page.dart`
   - 通讯录页面、搜索、同步状态和单条联系人卡片
 
@@ -32,7 +32,7 @@
   - `walletName` 只作为本机钱包标签，不读写公开昵称
 - `lib/my/myid/`
   - 电子护照页面和链上唯一身份状态服务
-  - `identity_badge_snapshot_store.dart` 只保存按钱包账户隔离的公开身份徽章展示信号
+  - `identity_badge_snapshot_store.dart` 只保存按永久 CID 隔离的公开身份徽章展示信号
   - “我的”页面只提供入口和头像认证角标，不承载电子护照设置流程
 
 ## 3. 数据模型
@@ -46,8 +46,8 @@
 
 展示规则：
 
-- 当前用户账户唯一取自 `WalletManager.getDefaultWallet()`；`account_id` 是账户真源，
-  `ss58_address` 只作展示。
+- 当前用户身份唯一取自链上闭环解析出的 `cid_number`；当前绑定 `account_id` 只负责
+  签名、鉴权和付款，`ss58_address` 只作展示。
 - 公开昵称唯一真源是按 `cid_number` 寻址的 `CitizenProfile.displayName`
   （接口字段 `display_name`）。
 - `walletName` 是本机钱包标签，只在钱包列表、详情和账户选择场景展示，不能作为
@@ -66,7 +66,7 @@
 - 已删除旧 `NicknamePublisher` 与专用 `ensureSessionFor`。数据库打开时幂等删除
   `wallet_name_pending:*`、`wallet_name_synced_at:*`，不保留同步队列或双轨逻辑。
 - 用户设置的公开头像和背景上传 Cloudflare R2；`avatarPath/backgroundPath` 只承接旧本机图片迁移和“我的”页即时显示，迁移成功后清空
-- 用户未设置或真实图片读取失败时，从 `assets/profile_defaults/` 11 张本地照片中按账户稳定选择头像和背景，两个位置避免使用同一张图
+- 用户未设置或真实图片读取失败时，从 `assets/profile_defaults/` 11 张本地照片中按永久 CID 稳定选择头像和背景；无 CID 的纯访客才按当前账户兜底，两个位置避免使用同一张图
 
 ### 3.2 用户二维码 `UserContactBody`
 
@@ -91,8 +91,8 @@
 字段：
 
 - `cidNumber` — 对方永久身份主键 `cid_number`，关系去重与增删改唯一使用该字段
-- `accountId` — 对方规范 `account_id`，严格为小写 `0x` 加 64 位十六进制
-- `ss58Address` — 由同一账户派生的 SS58 展示地址（当前链 `ss58 = 2027`）
+- `accountId` — 对方当前 finalized 绑定的规范 `account_id` 快照，严格为小写 `0x` 加 64 位十六进制；可随换绑更新，不参与联系人关系主键
+- `ss58Address` — 由当前绑定账户派生的 SS58 展示地址快照（当前链 `ss58 = 2027`）；可随换绑更新
 - `contactRemark` — 当前用户为该联系人保存的私人备注，对应存储字段 `contact_remark`，允许空值
 - `createdAt` / `updatedAt` — 毫秒时间戳
 
@@ -115,24 +115,21 @@
 
 ### 4.2 通讯录
 
-本机缓存复用 Isar `AppKvEntity`，按 CID 当前绑定的身份账户 `account_id` 隔离：
+本机缓存复用 Isar `AppKvEntity`，全部按属主永久 `cid_number` 分区：
 
-- `contact_book_by_account:<account_id>`：解密后的本机通讯录缓存
-- `contact_pending_by_account:<account_id>`：按联系人 CID 记录的添加/改备注/删除操作
-- `contact_sync_by_account:<account_id>`：最近一次同步阶段、时间和错误状态
-- `contact_cloud_reset_by_account:<account_id>`：身份换绑后旧云端密文尚未全量删除的持久标记
+- `contact_book_by_cid:<owner_cid_number>`：解密后的本机通讯录缓存
+- `contact_pending_by_cid:<owner_cid_number>`：按联系人 CID 记录的添加/改备注/删除操作
+- `contact_sync_by_cid:<owner_cid_number>`：最近一次同步阶段、时间和错误状态
 
 Cloudflare D1 `square_contacts` 只保存端侧 AES-256-GCM 密文、HMAC `contact_id`、
 nonce、MAC 和更新时间；Worker 不接收联系人 CID、账户、SS58 或私人备注明文。
 `contact_id` 固定为索引钥对目标 CID 的 HMAC-SHA256。AES-GCM 载荷包含属主 CID、
-联系人四字段与时间戳，AAD 包含属主 CID；通讯录密钥由身份账户 child 经
-HKDF-SHA256 的 `citizenapp.contacts/encryption` 与 `citizenapp.contacts/index`
-域隔离派生并保存在设备安全存储。
+联系人四字段与时间戳，AAD 包含属主 CID；通讯录加密和索引密钥由 CID 稳定数据根的
+`citizenapp.cid/contacts-cloud` 用途域派生。当前账户 child 只包装 CID 数据根，不直接
+决定通讯录密钥；换绑不删除或重建云端密文。
 
-旧 `contacts:` / `contact_pending_ops:` / `contact_sync_state:` 在数据库打开时直接
-删除；旧 `wallet_contacts_key_v1_` 密钥只删不读；旧 `contact_name` JSON 和
-`citizenapp.contacts.v1` 密文不迁移、不兼容。D1 旧密文由一次性
-`0002_reset_contacts_for_cid_payload.sql` 清空，生产执行必须另行人工审核。
+废弃的账户分区缓存、待办、同步态和密钥名只清理不读取；旧联系人 JSON 与旧密文
+不迁移、不兼容。D1 废弃密文由一次性重建脚本清空，生产执行必须另行人工审核。
 
 ### 4.3 电子护照
 
@@ -141,8 +138,11 @@ HKDF-SHA256 的 `citizenapp.contacts/encryption` 与 `citizenapp.contacts/index`
 投票身份先由默认钱包反查永久 CID，校验 `CidRegistry` Active 与 CID↔钱包双向绑定，再读取 `CitizenIdentity::VotingIdentityByCid`：投票账户、公民身份 CID 号、居住选区、身份状态、投票身份有效期。竞选身份在此基础上读取 `CandidateIdentityByCid`，增加公民姓、名、性别、出生日期和出生地。
 状态由链上 `citizen_status` 和护照有效期窗口派生，不再使用 OnChina 本地状态接口或 `myid.*` 本地档案缓存。
 链读取或解析失败时三卡仍保留，但全部不标记当前身份、不展示真实值，并明确显示读取失败；不得把未知链状态静默降级成匿名访客。
-用户主页头像右下角认证图标使用 `IdentityBadgeSnapshotStore` 中当前默认钱包的 `visitor/voting/candidate` 公开展示快照；该快照不保存护照详情，不作为授权或身份真源，也不能替代电子护照页真实链查询。
-“我的”页面初次进入只读快照，不启动 smoldot；轻节点已被其他主动链流程启动并进入 operational 后，通过可取消监听为当前钱包刷新一次快照，不轮询。
+用户主页头像右下角认证图标使用 `IdentityBadgeSnapshotStore` 中当前永久 CID 的
+`visitor/voting/candidate` 公开展示快照；换绑账户后仍读写同一 CID 键。该快照
+不保存护照详情，不作为授权或身份真源，也不能替代电子护照页真实链查询。
+“我的”页面命中已解析 CID 与本地快照时可直接展示；轻节点进入 operational 后，
+通过可取消监听为当前 CID 刷新一次快照，不轮询。
 
 ## 5. 页面与交互流程
 
@@ -180,11 +180,19 @@ HKDF-SHA256 的 `citizenapp.contacts/encryption` 与 `citizenapp.contacts/index`
 
 - 通讯录所属身份账户唯一来源是 `IdentityAccountCache`；页面和服务均不接受交易付款钱包或调用方账户覆盖。`UserContactService.getContacts()/sync()`只读写当前 CID 身份账户对应的 Isar 缓存与当前 Session CID 的 Cloudflare 密文。
 - 扫码添加（`QrScanMode.contact`）只接受用户码：先按 SS58 派生 `account_id`，再经链上双向绑定解析 CID；对方未绑定 CID 时拒绝。收款码不再兼作联系人码。
+- 页面加载后按联系人 CID 在同一 finalized 块批量读取
+  `AccountIdByCid + CidRegistry + BindingRevisionByCid + CidByAccountId`，只有四项闭环
+  一致才原子更新联系人 `accountId/ss58Address` 快照；任一联系人解析失败不伪造新绑定。
+- 转账前必须对所选联系人执行一次同样的 finalized 双向闭环精确读取，成功后才把最新
+  SS58 交给支付页；链读取失败或闭环不一致时失败关闭，禁止回退使用本地旧账户快照。
+  页面批量刷新与转账前强校验构成双重保证。
 - 支持修改可留空的私人备注、按 CID 删除、搜索和下拉同步
 - 页面先显示按身份账户隔离的 Isar 缓存，再后台刷新 Cloudflare 密文和按 CID 寻址的公开资料
 - 单条联系人以公开昵称为主标题，并分别显示私人备注、CID、SS58、头像、身份徽章和个性签名
 - 单条联系人三点菜单固定为“转账、私信、修改备注、删除联系人”；删除项使用危险红色。备注表单自行管理输入生命周期，取消或保存后不得留下已销毁输入控制器。
-- “转账”只把联系人 SS58 账户预填为链上支付收款地址，不填写金额、不签名、不提交；“私信”复用 `openDirectChat()`进入统一一对一聊天。
+- “转账”只把链上刚解析出的联系人最新 SS58 预填为收款地址，不填写金额、不签名、
+  不提交；付款和扣费始终由用户当前选择的钱包账户完成。“私信”只把联系人永久 CID
+  交给 `openDirectChat()`，不得把联系人账户当作聊天身份。
 - 普通模式点击联系人进入唯一 `UserProfilePage`；不保留联系人详情副本
 - 交易页通讯录与“我的”入口使用同一页面、同一身份和同一联系人数据；选人模式只改变点击后的返回动作：返回 SS58 地址填入收款栏，不做 AccountId hex 转换。
 - 交易页选择的钱包只决定付款和签名账户，不得改变通讯录属主 CID；切换付款钱包不切换通讯录。

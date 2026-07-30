@@ -76,7 +76,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final fallback =
-        ProfilePresentation.forAccountId(_profileCidNumber).fallbackName;
+        ProfilePresentation.forIdentityKey(_profileCidNumber).fallbackName;
     final ss58Address = ss58FromAccountIdText(kOwner);
     expect(find.text(fallback), findsWidgets);
     expect(find.text('SS58：$ss58Address'), findsOneWidget);
@@ -322,8 +322,8 @@ void main() {
           cache: FakeProfileCache(),
           sessionProvider: FakeSessionProvider(fakeSession()),
           onOpenDirectChat: (context,
-              {required peerAccountId, required title}) {
-            peer = peerAccountId;
+              {required peerCidNumber, required title}) {
+            peer = peerCidNumber;
             chatTitle = title;
             return Future<void>.value();
           },
@@ -335,7 +335,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.chat_bubble_outline));
     await tester.pumpAndSettle();
 
-    expect(peer, kOwner);
+    expect(peer, _profileCidNumber);
     expect(chatTitle, '轻节点');
   });
 
@@ -352,8 +352,8 @@ void main() {
           // 浏览者账户 == 主页账户 = 他人视角看自己 → 按钮应置灰。
           viewerAccountLoader: () async => kOwner,
           onOpenDirectChat: (context,
-              {required peerAccountId, required title}) {
-            peer = peerAccountId;
+              {required peerCidNumber, required title}) {
+            peer = peerCidNumber;
             return Future<void>.value();
           },
         ),

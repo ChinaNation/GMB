@@ -18,7 +18,7 @@ class ChatCrypto {
 
   final WalletManager _walletManager;
 
-  /// 按 accountId 缓存已派生子钥，避免每条消息都重复走一遍 HKDF。
+  /// 按“永久 CID + 当前绑定账户”缓存子钥；CID 是属主，账户只负责解锁。
   final Map<String, _ChatKeys> _cache = <String, _ChatKeys>{};
 
   static final Hmac _hmac = Hmac.sha256();
@@ -30,41 +30,48 @@ class ChatCrypto {
   /// 统一用 bigram 两者通吃；查询短于 2 字符时由调用方回落到候选集扫描。
   static const int _gram = 2;
 
-  /// 测试注入口：设为非空后，子钥直接由该固定 LDK 派生，不再触碰
+  /// 测试注入口：设为非空后，子钥直接由该固定 CID 数据根派生，不再触碰
   /// `WalletManager` → 硬件金库 → `flutter_secure_storage` 的平台通道。
   ///
   /// 与 `WalletManager.debugSeedStore` 同一套惯例。**仅测试可用**，
   /// 生产路径必须走真实钱包派生。
   @visibleForTesting
-  static LocalDataKey? debugFixedLocalDataKey;
+  static CidDataRoot? debugFixedCidDataRoot;
 
-  Future<_ChatKeys> _keysFor(String accountId) async {
-    final cached = _cache[accountId];
+  Future<_ChatKeys> _keysFor({
+    required String ownerCidNumber,
+    required String currentAccountId,
+  }) async {
+    final bindingKey = '$ownerCidNumber|$currentAccountId';
+    final cached = _cache[bindingKey];
     if (cached != null) return cached;
-    final ldk = debugFixedLocalDataKey ??
-        await _walletManager.ensureLocalDataKeyForAccountId(accountId);
+    final dataRoot = debugFixedCidDataRoot ??
+        await _walletManager.ensureCidDataRootForCurrentBinding(
+          currentAccountId,
+        );
     final keys = _ChatKeys(
-      content: await ldk.subkey(LocalKeyPurpose.chat),
-      index: await ldk.subkey(LocalKeyPurpose.chatIndex),
+      content: await dataRoot.subkey(LocalKeyPurpose.chat),
+      index: await dataRoot.subkey(LocalKeyPurpose.chatIndex),
     );
-    _cache[accountId] = keys;
+    _cache[bindingKey] = keys;
     return keys;
   }
 
-  // 说明：不提供 evict——缓存按 accountId 分键，且 CID 换绑只重 wrap、LDK 与
-  // 五把子钥都不变，不存在陈旧子钥问题。加一个永不调用的清理入口只会变成残桩。
-
   /// 加密聊天正文 / 会话摘要。[recordId] 进 AAD，把密文钉死在该条记录上。
   Future<String> encryptText({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String recordId,
     required String plaintext,
   }) async {
-    final keys = await _keysFor(accountId);
+    final keys = await _keysFor(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
+    );
     return LocalCipher.encryptString(
       key: keys.content,
       plaintext: plaintext,
-      aad: _aad(recordId),
+      aad: _aad(ownerCidNumber, recordId),
     );
   }
 
@@ -73,27 +80,35 @@ class ChatCrypto {
   /// 空串代表"本来就没有正文"，直接返回空；真正的解密失败会抛
   /// [LocalCipherException]，**不静默降级**——否则用户会看到聊天记录凭空变空白。
   Future<String> decryptText({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String recordId,
     required String blob,
   }) async {
     if (blob.isEmpty) return '';
-    final keys = await _keysFor(accountId);
+    final keys = await _keysFor(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
+    );
     return LocalCipher.decryptString(
       key: keys.content,
       blob: blob,
-      aad: _aad(recordId),
+      aad: _aad(ownerCidNumber, recordId),
     );
   }
 
   /// 为一条正文生成去重后的 HMAC 分词索引。
   Future<List<String>> buildSearchTokens({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String text,
   }) async {
     final grams = tokenize(text);
     if (grams.isEmpty) return const <String>[];
-    final keys = await _keysFor(accountId);
+    final keys = await _keysFor(
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
+    );
     final out = <String>[];
     for (final gram in grams) {
       out.add(await _tokenHash(keys.index, gram));
@@ -103,10 +118,15 @@ class ChatCrypto {
 
   /// 把查询串转成索引 token；返回空表示查询过短，调用方须回落到候选集扫描。
   Future<List<String>> buildQueryTokens({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String query,
   }) =>
-      buildSearchTokens(accountId: accountId, text: query);
+      buildSearchTokens(
+        ownerCidNumber: ownerCidNumber,
+        currentAccountId: currentAccountId,
+        text: query,
+      );
 
   /// 字符 bigram 切分：小写归一化后按滑动窗口取 2 字符，去重且保持稳定顺序。
   ///
@@ -134,7 +154,8 @@ class ChatCrypto {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  static String _aad(String recordId) => 'citizenapp.local/chat|$recordId';
+  static String _aad(String ownerCidNumber, String recordId) =>
+      'citizenapp.local/chat|$ownerCidNumber|$recordId';
 }
 
 class _ChatKeys {

@@ -197,7 +197,8 @@ class _FollowsListPageState extends State<FollowsListPage> {
           }
           final entry = _entries[index];
           final profile = _profiles[entry.cidNumber];
-          final presentation = ProfilePresentation.forAccountId(entry.cidNumber);
+          final presentation =
+              ProfilePresentation.forIdentityKey(entry.cidNumber);
           final avatarKey = profile?.avatarObjectKey;
           return ListTile(
             leading: ProfileAvatar(

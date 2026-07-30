@@ -16,18 +16,23 @@ class ComposeDraftMedia {
     return dir;
   }
 
-  static Future<Directory> _draftDir(String draftId) async {
-    final dir = Directory('${(await _root()).path}/$draftId');
+  static Future<Directory> _draftDir(
+    String cidNumber,
+    String draftId,
+  ) async {
+    final ownerDir = Uri.encodeComponent(cidNumber);
+    final dir = Directory('${(await _root()).path}/$ownerDir/$draftId');
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }
 
   /// 已在本草稿目录内则原样返回（幂等）；否则复制进去并返回持久路径草稿。
   static Future<SquareLocalMediaDraft> persist(
+    String cidNumber,
     String draftId,
     SquareLocalMediaDraft media,
   ) async {
-    final dir = await _draftDir(draftId);
+    final dir = await _draftDir(cidNumber, draftId);
     if (media.path.startsWith('${dir.path}/')) return media;
     final ext = media.fileExt.isNotEmpty ? '.${media.fileExt}' : '';
     final target =
@@ -44,8 +49,9 @@ class ComposeDraftMedia {
   }
 
   /// 删除一条草稿的整个媒体目录（删草稿或发布成功后调用）。
-  static Future<void> deleteDir(String draftId) async {
-    final dir = Directory('${(await _root()).path}/$draftId');
+  static Future<void> deleteDir(String cidNumber, String draftId) async {
+    final ownerDir = Uri.encodeComponent(cidNumber);
+    final dir = Directory('${(await _root()).path}/$ownerDir/$draftId');
     if (await dir.exists()) await dir.delete(recursive: true);
   }
 }

@@ -1,4 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/chain/identity', () => ({
+  fetchChainIdentityStateByCid: vi.fn(async (_env: unknown, cidNumber: string) => ({
+    cid_number: cidNumber,
+    binding_revision: 1,
+    account_id: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    identity_level: 'visitor' as const,
+    has_voting_identity: false,
+    has_candidate_identity: false,
+    checked_at: 0,
+  })),
+}));
 import { buildChatDeviceBindingMessageBase64Url } from '../src/chat/binding';
 import { assertDevicePublicKeyHex, base64UrlToBytes, bytesToBase64Url } from '../src/chat/codec';
 import { openChatWebSocket, submitChatEnvelope } from '../src/chat/service';
@@ -23,6 +35,7 @@ class ChatStmt {
       // requireActiveDevice 按 (cid_number, device_id) 定位;WHERE 绑定顺序 = cid, device, now。
       return {
         cid_number: this.values[0],
+        binding_revision: 1,
         account_id: ACCOUNT_ID,
         device_id: this.values[1],
         device_public_key_hex: 'aabbcc',
@@ -48,6 +61,7 @@ class SessionKv {
       // 会话 fixture 含身份主键 cid_number + 当前绑定 account_id(设备所有者)。
       return {
         cid_number: SENDER_CID,
+        binding_revision: 1,
         account_id: ACCOUNT_ID,
         device_key_hash: 'device-key-hash',
         created_at: Date.now(),
@@ -86,6 +100,8 @@ describe('device-only Chat transport', () => {
 
   it('builds a deterministic device binding payload', () => {
     const input = {
+      cid_number: 'CN220-CTZN2-198805200-2026',
+      binding_revision: 1,
       account_id: ACCOUNT_ID,
       device_id: 'alice-phone',
       device_public_key_hex: 'aabbcc',

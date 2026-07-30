@@ -76,18 +76,32 @@ abstract interface class PublicInstitutionStore {
   /// 写某省(省 code)已同步版本戳。
   Future<void> setProvinceVersion(String provinceCode, String version);
 
-  // ── 订阅("关注")——按钱包公钥隔离 ──
+  // ── 订阅("关注")——按订阅者永久 CID 隔离 ──
 
-  Future<void> subscribe(String accountId, String cidNumber);
+  Future<void> subscribe(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  );
 
-  Future<void> unsubscribe(String accountId, String cidNumber);
+  Future<void> unsubscribe(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  );
 
-  Future<bool> isSubscribed(String accountId, String cidNumber);
+  Future<bool> isSubscribed(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  );
 
   /// 我订阅的机构(关注分组),跨省扁平。
-  Future<List<PublicInstitutionEntity>> listSubscribed(String accountId);
+  Future<List<PublicInstitutionEntity>> listSubscribed(
+    String subscriberCidNumber,
+  );
 }
 
-/// 订阅复合唯一键:`publicKey|cidNumber`。
-String subscriptionKeyOf(String accountId, String cidNumber) =>
-    '$accountId|$cidNumber';
+/// 订阅复合唯一键：`subscriberCidNumber|institutionCidNumber`。
+String subscriptionKeyOf(
+  String subscriberCidNumber,
+  String institutionCidNumber,
+) =>
+    '$subscriberCidNumber|$institutionCidNumber';

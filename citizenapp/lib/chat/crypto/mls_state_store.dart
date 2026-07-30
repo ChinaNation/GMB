@@ -14,9 +14,14 @@ import 'mls_session.dart';
 /// 该目录下**一律不得出现明文**：`openmls_storage.bin` / `device.bin` 由 Rust
 /// 用 [stateKey] 做 AES-256-GCM 信封；`pending_inbound.bin` 由本类同钥加密。
 class MlsStateStore {
-  const MlsStateStore(this.directory, {required this.stateKey});
+  const MlsStateStore(
+    this.directory, {
+    required this.ownerCidNumber,
+    required this.stateKey,
+  });
 
   final Directory directory;
+  final String ownerCidNumber;
 
   /// MLS 本地状态密钥（32 字节，来自 `LocalKeyPurpose.mls` 子钥）。
   final Uint8List stateKey;
@@ -27,7 +32,8 @@ class MlsStateStore {
   String get stateKeyHex =>
       stateKey.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-  static const String _pendingAad = 'citizenapp.local/mls|pending_inbound';
+  String get _pendingAad =>
+      'citizenapp.local/mls|$ownerCidNumber|pending_inbound';
 
   Future<void> ensureReady() async {
     if (!directory.existsSync()) {

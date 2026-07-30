@@ -65,6 +65,7 @@ class ChatPage extends StatefulWidget {
   ChatPage({
     super.key,
     required this.conversationId,
+    required this.ownerCidNumber,
     required this.accountId,
     required this.peerUserId,
     required this.title,
@@ -82,11 +83,12 @@ class ChatPage extends StatefulWidget {
   }) : store = store ?? ChatStore();
 
   final String conversationId;
+  final String ownerCidNumber;
   final String accountId;
   final String peerUserId;
   final String title;
 
-  /// 群聊模式:入站消息按各自 `senderAccountId` 归属并在气泡上方显示发送者名。
+  /// 群聊模式:入站消息按各自 `senderCidNumber` 归属并在气泡上方显示发送者名。
   final bool isGroup;
   final ChatStore store;
   final ChatSendTextCallback? onSendText;
@@ -112,6 +114,7 @@ class _ChatPageState extends State<ChatPage> {
 
   late final InMemoryChatController _chatController;
   late final _ChatLifecycleObserver _lifecycleObserver;
+
   /// 对端 account_id → cid_number 解析器（页内单例：进程缓存命中后免重复链读）。
   final PeerCidResolver _cidResolver = PeerCidResolver();
   // 自绘 composer 的文本控制器:贴纸面板与(步骤3b)表情插入共享,发送后由
@@ -190,12 +193,16 @@ class _ChatPageState extends State<ChatPage> {
       });
     }
     try {
-      final messages = await widget.store.readMessages(widget.conversationId);
+      final messages = await widget.store.readMessages(
+        ownerCidNumber: widget.ownerCidNumber,
+        currentAccountId: widget.accountId,
+        conversationId: widget.conversationId,
+      );
       final mediaPaths = await _resolveMediaPaths(messages);
       await _chatController.setMessages(
         storedMessagesToChatMessages(
           messages,
-          accountId: widget.accountId,
+          currentCidNumber: widget.ownerCidNumber,
           resolveLocalMediaPath: (content) => mediaPaths[content.attachmentId],
         ),
         animated: false,
@@ -607,7 +614,10 @@ class _ChatPageState extends State<ChatPage> {
     try {
       _pauseSync();
       final deleter = widget.onDeleteConversation ??
-          () => widget.store.deleteConversation(widget.conversationId);
+          () => widget.store.deleteConversation(
+                widget.ownerCidNumber,
+                widget.conversationId,
+              );
       await deleter();
       if (!mounted) {
         return;
@@ -1071,7 +1081,7 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final peerName = ProfilePresentation.forAccountId(widget.peerUserId)
+    final peerName = ProfilePresentation.forIdentityKey(widget.peerUserId)
         .resolveDisplayName(publicName: widget.title);
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
@@ -1170,7 +1180,7 @@ class _ChatPageState extends State<ChatPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : Chat(
-                    currentUserId: widget.accountId,
+                    currentUserId: widget.ownerCidNumber,
                     chatController: _chatController,
                     onMessageSend: _handleSend,
                     onAttachmentTap: _handleMediaTap,
@@ -1185,13 +1195,13 @@ class _ChatPageState extends State<ChatPage> {
                       composerBuilder: _buildComposer,
                     ),
                     resolveUser: (id) async {
-                      final isMe = id == widget.accountId;
+                      final isMe = id == widget.ownerCidNumber;
                       return User(
                         id: id,
                         name: isMe
                             ? '我'
                             : widget.isGroup
-                                ? ProfilePresentation.forAccountId(id)
+                                ? ProfilePresentation.forIdentityKey(id)
                                     .fallbackName
                                 : peerName,
                       );

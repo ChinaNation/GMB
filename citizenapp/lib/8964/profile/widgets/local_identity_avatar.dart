@@ -73,7 +73,7 @@ class LocalIdentityAvatar extends StatelessWidget {
               child: validImage
                   ? Image.file(file, fit: BoxFit.cover)
                   : Image.asset(
-                      ProfilePresentation.forAccountId(seed).avatarAsset,
+                      ProfilePresentation.forIdentityKey(seed).avatarAsset,
                       width: size,
                       height: size,
                       fit: BoxFit.cover,

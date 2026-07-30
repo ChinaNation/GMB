@@ -17,6 +17,7 @@ const _account =
 const _session = SquareSession(
   sessionToken: 'sqs_sync',
   cidNumber: _cid,
+  bindingRevision: 1,
   accountId: _account,
   expiresAt: 1900000000000,
 );

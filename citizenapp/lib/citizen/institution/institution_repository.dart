@@ -74,19 +74,28 @@ class InstitutionRepository {
     return rows.map(_toInstitution).toList(growable: false);
   }
 
-  /// 某钱包关注的机构列表(统一 Institution)。
-  Future<List<Institution>> listSubscribed(String accountId) async {
-    final rows = await directory.listSubscribed(accountId);
+  /// 某公民 CID 关注的机构列表（统一 Institution）。
+  Future<List<Institution>> listSubscribed(String subscriberCidNumber) async {
+    final rows = await directory.listSubscribed(subscriberCidNumber);
     return rows.map(_toInstitution).toList(growable: false);
   }
 
   // ── 订阅(关注)passthrough ──
-  Future<bool> isSubscribed(String accountId, String cidNumber) =>
-      directory.isSubscribed(accountId, cidNumber);
-  Future<void> subscribe(String accountId, String cidNumber) =>
-      directory.subscribe(accountId, cidNumber);
-  Future<void> unsubscribe(String accountId, String cidNumber) =>
-      directory.unsubscribe(accountId, cidNumber);
+  Future<bool> isSubscribed(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  ) =>
+      directory.isSubscribed(subscriberCidNumber, institutionCidNumber);
+  Future<void> subscribe(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  ) =>
+      directory.subscribe(subscriberCidNumber, institutionCidNumber);
+  Future<void> unsubscribe(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  ) =>
+      directory.unsubscribe(subscriberCidNumber, institutionCidNumber);
 
   /// 机构所属地显示路径(详情页 所属地行;省名带"省"全名 + 字典市/镇名,ADR-021)。
   Future<String> institutionAreaPath(Institution inst) {

@@ -7,7 +7,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 广场身份状态。
 ///
-/// `account_id` 固定使用当前钱包账户；`cid_number` 只能从链上
+/// `account_id` 固定使用 CID 当前绑定账户；`cid_number` 只能从链上
 /// 通过 `CidByAccountId`、`AccountIdByCid`、Active `CidRegistry` 和
 /// `VotingIdentityByCid` 闭环读取，App 不允许自行传入链上身份。
 class SquareIdentityState {
@@ -39,7 +39,7 @@ class SquareIdentityState {
 
   /// 发帖页展示公开昵称；资料尚未缓存时按 CID（无 CID 才按账户）稳定兜底。
   String get resolvedDisplayName =>
-      ProfilePresentation.forAccountId(cidNumber ?? accountId)
+      ProfilePresentation.forIdentityKey(cidNumber ?? accountId)
           .resolveDisplayName(publicName: displayName);
 
   String get accountLabel {
@@ -69,42 +69,49 @@ class SquareIdentityService {
   /// 身份主键 = CID 号:`accountId`/`ss58`/`cid` 跟随**身份账户**(CID 绑定账户,
   /// 常态=账户0),`walletIndex` 保持钱包级(设备子钥按 walletIndex 存)、公开昵称
   /// 只从 CID 资料缓存读取。[readLiveChain] 仅允许发布等主动链流程传 true;广场浏览必须传 false,
-  /// 只读账户级徽章快照,不能因此启动 smoldot(身份账户解析同样按此不链读)。
+  /// 只读 CID 级徽章快照，不能因此启动 smoldot（身份账户解析同样按此不链读）。
   Future<SquareIdentityState> loadCurrent({bool readLiveChain = true}) async {
     final wallet = await (walletManager ?? WalletManager()).getDefaultWallet();
     if (wallet == null) {
       return const SquareIdentityState(accountId: '');
     }
-    // 身份账户(CID 绑定账户);readLiveChain=false 时不链读,命中缓存或回退账户0。
+    // 身份账户（CID 当前绑定账户）；禁止链读时只使用已命中的身份缓存，
+    // 未命中则账户0仅作为访客展示账户，绝不据此授予 CID 权限。
     final identity =
         await (identityAccountCache ?? IdentityAccountCache.instance)
             .resolve(allowChainRead: readLiveChain);
     final identityAccountId = identity?.accountId ?? wallet.accountId;
     final identitySs58 = identity?.ss58Address ?? wallet.ss58Address;
 
-    String? cidNumber;
+    String? cidNumber = identity?.snapshot?.cidNumber;
     String identityLevel = 'visitor';
     final snapshotStore = badgeSnapshotStore ?? IdentityBadgeSnapshotStore();
     if (readLiveChain) {
       try {
         final chainIdentity = await (chainService ?? SquareChainService())
             .fetchIdentity(identityAccountId);
-        cidNumber = chainIdentity.cidNumber;
+        final liveCidNumber = chainIdentity.cidNumber?.trim();
+        cidNumber = liveCidNumber == null || liveCidNumber.isEmpty
+            ? null
+            : liveCidNumber;
         identityLevel = chainIdentity.identityLevel;
-        try {
-          await snapshotStore.write(
-            accountId: identityAccountId,
-            identityLevel: identityLevel,
-          );
-        } catch (_) {
-          // 快照写失败不影响本次发布流程使用真实链上身份。
+        if (cidNumber != null) {
+          try {
+            await snapshotStore.write(
+              cidNumber: cidNumber,
+              identityLevel: identityLevel,
+            );
+          } catch (_) {
+            // 快照写失败不影响本次发布流程使用真实链上身份。
+          }
         }
       } catch (_) {
         cidNumber = null;
         identityLevel = 'visitor';
       }
     } else {
-      final snapshot = await snapshotStore.read(identityAccountId);
+      final snapshot =
+          cidNumber == null ? null : await snapshotStore.read(cidNumber);
       identityLevel = snapshot?.identityLevel ?? 'visitor';
     }
 

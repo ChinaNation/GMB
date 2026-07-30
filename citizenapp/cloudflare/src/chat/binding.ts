@@ -9,6 +9,8 @@ import {
 import { verifyP256Signature } from "../auth/device_subkey";
 
 export interface ChatDeviceBindingInput {
+  cid_number: string;
+  binding_revision: number;
   account_id: string;
   device_id: string;
   device_public_key_hex: string;
@@ -21,6 +23,8 @@ export function buildChatDeviceBindingMessage(
 ): Uint8Array<ArrayBuffer> {
   // 必须与 CitizenApp 的 Chat 设备绑定 SCALE 字段顺序逐字节一致。
   const scalePayload = concatBytes(
+    scaleString(input.cid_number),
+    u64Le(input.binding_revision),
     scaleString(input.account_id),
     scaleString(input.device_id),
     scaleString(input.device_public_key_hex),

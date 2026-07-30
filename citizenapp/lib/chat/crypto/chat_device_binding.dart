@@ -8,12 +8,20 @@ import 'package:citizenapp/signer/signing.dart' as signing;
 /// CitizenWallet 均不得参与此流程。
 class ChatDeviceBinding {
   const ChatDeviceBinding({
+    required this.cidNumber,
+    required this.bindingRevision,
     required this.accountId,
     required this.deviceId,
     required this.devicePublicKey,
     required this.expiresAt,
     required this.nonce,
   });
+
+  /// 永久身份主键。
+  final String cidNumber;
+
+  /// 当前 finalized 钱包绑定版本。
+  final int bindingRevision;
 
   /// 当前 Worker session 对应的钱包账户。
   final String accountId;
@@ -33,6 +41,8 @@ class ChatDeviceBinding {
   /// 与 Worker `buildChatDeviceBindingMessage` 逐字节一致的 32 字节摘要。
   Uint8List signingMessage() {
     final payload = <int>[
+      ...signing.scaleString(cidNumber),
+      ...signing.u64Le(bindingRevision),
       ...signing.scaleString(accountId),
       ...signing.scaleString(deviceId),
       ...signing.scaleString(devicePublicKey),

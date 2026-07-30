@@ -18,7 +18,7 @@ class _FakeMls implements MlsCrypto {
   @override
   Future<MlsOutboundMessage> encrypt({
     required String conversationId,
-    required String recipientAccountId,
+    required String recipientCidNumber,
     MlsKeyPackage? recipientKeyPackage,
     required List<int> plaintext,
   }) async {
@@ -50,10 +50,11 @@ ChatMediaDraft _draft(int byteSize) => ChatMediaDraft(
       byteSize: byteSize,
     );
 
-/// 收件人钱包账户 account_id 与身份主键 cid_number 分离：前者进 proto 供 MLS，
-/// 后者是投递/WebRTC 信令路由键。
-const _peerAccountId = 'b';
+/// CID 是 Chat/MLS/投递唯一身份键；当前钱包账户只用于本地数据密钥。
 const _peerCidNumber = 'CN220-CTZN2-100000002-2026';
+const _ownerCidNumber = 'CN220-CTZN2-100000001-2026';
+const _ownerAccountId =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
 
 void main() {
   useIsolatedIsar();
@@ -63,6 +64,8 @@ void main() {
 
   ChatFlow buildFlow(ChatStore store, {required List<ChatEnvelope> delivered}) {
     return ChatFlow(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _ownerAccountId,
       crypto: _FakeMls(),
       store: store,
       deliverer: (envelope, bytes, recipientCidNumber) async {
@@ -83,9 +86,8 @@ void main() {
     var uploaderCalls = 0;
 
     await flow.sendMedia(
-      conversationId: 'dm:a:b',
-      senderAccountId: 'a',
-      recipientAccountId: _peerAccountId,
+      conversationId: 'dm:$_ownerCidNumber:$_peerCidNumber',
+      senderCidNumber: _ownerCidNumber,
       recipientCidNumber: _peerCidNumber,
       senderDeviceId: 'devA',
       media: _draft(200 * 1024 * 1024),
@@ -118,7 +120,11 @@ void main() {
 
     expect(uploaderCalls, 1);
     expect(webrtcCalls, 0); // 中转路径绝不走 WebRTC
-    final messages = await store.readMessages('dm:a:b');
+    final messages = await store.readMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _ownerAccountId,
+      conversationId: 'dm:$_ownerCidNumber:$_peerCidNumber',
+    );
     final content = ChatPayloadCodec.decode(messages.single.plaintext ?? '');
     expect(content.isRelayMedia, isTrue);
     expect(content.relayObjectKey, 'chat-relay/xyz');
@@ -131,9 +137,8 @@ void main() {
     var uploaderCalls = 0;
 
     await flow.sendMedia(
-      conversationId: 'dm:a:b',
-      senderAccountId: 'a',
-      recipientAccountId: _peerAccountId,
+      conversationId: 'dm:$_ownerCidNumber:$_peerCidNumber',
+      senderCidNumber: _ownerCidNumber,
       recipientCidNumber: _peerCidNumber,
       senderDeviceId: 'devA',
       media: _draft(50 * 1024 * 1024),
@@ -166,7 +171,11 @@ void main() {
 
     expect(uploaderCalls, 0);
     expect(webrtcCalls, 1);
-    final messages = await store.readMessages('dm:a:b');
+    final messages = await store.readMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _ownerAccountId,
+      conversationId: 'dm:$_ownerCidNumber:$_peerCidNumber',
+    );
     expect(
         ChatPayloadCodec.decode(messages.single.plaintext ?? '').isRelayMedia,
         isFalse);
@@ -177,9 +186,8 @@ void main() {
     final flow = buildFlow(store, delivered: []);
     await expectLater(
       flow.sendMedia(
-        conversationId: 'dm:a:b',
-        senderAccountId: 'a',
-        recipientAccountId: _peerAccountId,
+        conversationId: 'dm:$_ownerCidNumber:$_peerCidNumber',
+        senderCidNumber: _ownerCidNumber,
         recipientCidNumber: _peerCidNumber,
         senderDeviceId: 'devA',
         media: _draft(200 * 1024 * 1024),

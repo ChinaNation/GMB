@@ -467,6 +467,7 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   const sessionAccount = options.session?.account_id ?? viewer;
   const session: SessionState = {
     cid_number: cidForAccount(sessionAccount),
+    binding_revision: 1,
     account_id: sessionAccount,
     device_key_hash: 'a'.repeat(64),
     created_at: 0,

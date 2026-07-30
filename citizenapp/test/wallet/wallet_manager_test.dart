@@ -4,6 +4,8 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
+import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
@@ -148,8 +150,17 @@ void main() {
       final created = await manager.importWallet(_mnemonicA);
       final accountId = created.accountId;
       final legacyKey = 'wallet_contacts_key_v1_$accountId';
-      final currentKey = 'citizenapp_contacts_key_$accountId';
+      const cidNumber = 'GD-CTZN1-TEST';
+      const currentKey = 'citizenapp_cid_contacts_key_GD-CTZN1-TEST';
       contactBlobStore.values[legacyKey] = '旧派生密钥';
+      final root = CidDataRoot(Uint8List(32));
+      await manager.installCidDataRootForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: accountId,
+        dataRoot: root,
+        dataRootHash: await CidDataRootVault.dataRootHash(root),
+      );
 
       final material =
           await manager.ensureContactKeyMaterialForAccountId(accountId);
@@ -214,23 +225,58 @@ void main() {
         _mnemonicA,
       );
 
-      await manager.ensureLocalDataKeyForAccountId(account1.accountId);
+      final root = CidDataRoot(Uint8List(32));
+      await manager.installCidDataRootForCurrentBinding(
+        cidNumber: 'GD-CTZN1-TEST',
+        bindingRevision: 1,
+        accountId: account1.accountId,
+        dataRoot: root,
+        dataRootHash: await CidDataRootVault.dataRootHash(root),
+      );
+      const contactKey = 'contact_book_by_cid:GD-CTZN1-TEST';
+      await WalletIsar.instance.writeTxn((isar) async {
+        await isar.appKvEntitys.put(
+          AppKvEntity()
+            ..key = contactKey
+            ..stringValue = 'CID 通讯录密文',
+        );
+      });
       await manager.deleteAccount(account1.accountId);
 
       expect(deviceSubkey.deletedWalletIndexes, isEmpty);
       expect(fakeStore.accountKeys.containsKey(account1.accountId), isFalse);
+      expect(
+        await WalletIsar.instance.read(
+          (isar) => isar.appKvEntitys.getByKey(contactKey),
+        ),
+        isNotNull,
+        reason: '删除换绑后的旧账户不得删除永久 CID 的本机数据',
+      );
 
       await manager.deleteWallet(wallet.walletIndex);
       expect(deviceSubkey.deletedWalletIndexes, [wallet.walletIndex]);
       expect(contactBlobStore.values, isEmpty);
+      expect(
+        await WalletIsar.instance.read(
+          (isar) => isar.appKvEntitys.getByKey(contactKey),
+        ),
+        isNull,
+        reason: '明确删除当前热钱包时执行本机 CID 隐私数据擦除',
+      );
     });
 
     test('clearWallet 清全部账户秘密并只删除热钱包设备子钥', () async {
       final manager = WalletManager();
       final hot = await manager.importWallet(_mnemonicA);
       final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x44));
-      await manager.ensureContactKeyMaterialForAccountId(hot.accountId);
-      await manager.ensureLocalDataKeyForAccountId(hot.accountId);
+      final root = CidDataRoot(Uint8List(32));
+      await manager.installCidDataRootForCurrentBinding(
+        cidNumber: 'GD-CTZN1-TEST',
+        bindingRevision: 1,
+        accountId: hot.accountId,
+        dataRoot: root,
+        dataRootHash: await CidDataRootVault.dataRootHash(root),
+      );
 
       await manager.clearWallet();
 
@@ -319,6 +365,8 @@ void main() {
     /// 一旦被调用即抛，用来证明建钱包/导入根本不会走到子钥注册。
     Future<void> failingRegistrar({
       required int walletIndex,
+      required String cidNumber,
+      required int bindingRevision,
       required String accountId,
       required Future<String> Function(Uint8List bindingMessage) signBinding,
     }) async {
@@ -344,21 +392,33 @@ void main() {
       expect(fakeStore.accountKeys[profile.accountId], isNotNull);
     });
 
-    test('bindDeviceSubkeyToAccountId 才是唯一绑定入口，按身份账户签绑定证明', () async {
+    test('bindDeviceSubkeyToCurrentBinding 才是唯一绑定入口，按 CID 当前账户签证明', () async {
+      String? seenCidNumber;
+      int? seenBindingRevision;
       String? seenAccountId;
       final manager = WalletManager();
       final created = await manager.createWallet();
       // 建钱包阶段一次都不该调 registrar；绑定只在进入需 CID 页面时由门禁触发。
       WalletManager.subkeyRegistrar = ({
         required int walletIndex,
+        required String cidNumber,
+        required int bindingRevision,
         required String accountId,
         required Future<String> Function(Uint8List bindingMessage) signBinding,
       }) async {
+        seenCidNumber = cidNumber;
+        seenBindingRevision = bindingRevision;
         seenAccountId = accountId;
         final signature = await signBinding(Uint8List(32));
         expect(signature.startsWith('0x'), isTrue);
       };
-      await manager.bindDeviceSubkeyToAccountId(created.profile.accountId);
+      await manager.bindDeviceSubkeyToCurrentBinding(
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: created.profile.accountId,
+      );
+      expect(seenCidNumber, 'CN220-CTZN2-198805200-2026');
+      expect(seenBindingRevision, 1);
       expect(seenAccountId, created.profile.accountId);
     });
   });

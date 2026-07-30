@@ -5,7 +5,7 @@
 本节冻结全仓账户标识的最终命名和文本编码。任务卡 `memory/08-tasks/20260722-account-id-official-unify.md` 按步骤完成代码、协议和文档收口；现行契约只允许本节定义的 `AccountId`、`account_id`、角色化账户字段、`public_key` 与 `ss58_address`，不得把历史同义字段重新用于实现、接口、注释或文档。
 
 - runtime 账户类型统一为 `AccountId`；单一账户字段统一为 `account_id`。
-- 同一结构存在多个业务角色账户时统一为 `<role>_account_id`，例如 `actor_account_id`、`voter_account_id`、`sender_account_id`、`recipient_account_id`、`beneficiary_account_id`。
+- 同一结构存在多个业务角色账户时统一为 `<role>_account_id`，例如 `actor_account_id`、`voter_account_id`、`payer_account_id`、`beneficiary_account_id`；这些字段只表达签名、付款、收款或不可变交易事实，不得用作 CID 用户身份主键。
 - 签名公钥统一为 `public_key`；当前签名者公钥为 `signer_public_key`；凭证签名者公钥为 `credential_signer_public_key`。
 - SS58 字段统一为 `ss58_address`，只用于展示和边界输入输出；授权、索引、存储主键和缓存 key 必须使用账户字节对应的 `account_id`。
 - `account_id` 和 32 字节公钥的跨端文本编码唯一为小写 `0x` 加 64 位十六进制，校验式为 `^0x[0-9a-f]{64}$`。
@@ -435,17 +435,22 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 权益到期清理没有设备时间、等待天数或独立开关；它只接收同一轮订阅对账读到的 finalized 区块 `Timestamp.Now`，并以 `paid_until` 判断是否删除。每项清理先严格验证对象清单；失败项保留 provider/R2/D1 并记录失败，不阻断同批其它内容。
   - `VITE_API_URL`：官网构建时可选 Worker API 根地址；未设置时使用 production Worker 默认地址。
 - CitizenApp 本地缓存字段：
-  - `SquareDraft`: `account_id`、`post_category`、`text`、`media_drafts[]`、`draft_state`、`updated_at_millis`、`last_error`、可选 `upload_id/post_id/content_hash/storage_receipt_id/storage_until/tx_hash/block_hash_hex`；当前落地复用 `AppKvEntity`，不新增 Isar schema。
+  - `SquareDraft`: `cid_number`、`post_category`、`text`、`media_drafts[]`、`draft_state`、`updated_at_millis`、`last_error`、可选 `upload_id/post_id/content_hash/storage_receipt_id/storage_until/tx_hash/block_hash_hex`；当前落地复用 `AppKvEntity`，键前缀固定为 `square.compose.draft.by_cid.<cid_number>.`，媒体目录固定为 `square_drafts/<cid_number>/<draft_id>/`，不新增 Isar schema。
   - `SquareUploadTask`: 当前不落独立 Isar schema；发布中的上传状态由 `SquareDraft` 和 Worker `square_uploads.status` 表达。
   - `SquareLocalPost`: `post_id`、`cid_number`（本人副本归属主键）、`account_id`（发布时签名账户事实）、`post_category`、`content_format`、`manifest_bytes`（参与链上 `content_hash` 的原始 UTF-8 JSON 字节）、`content_hash`、`storage_receipt_id`、`chain_block`、`created_at`、`post_state`。本地只接受 `post_state=published`；写入和读取都必须重新校验 manifest SHA-256、schema、账户、分类与内容形态。`created_at` 只使用 Worker 返回值，禁止写设备时间；CID 换绑不迁移或改写；不保存媒体文件、路径、封面、临时 URL、`cached_at` 或整个公共 feed。当前实现为 Isar `SquareLocalPostEntity` + `SquarePostStore`。
   - `SquarePostSyncCheckpoint`: 复用 `AppKvEntity`，按 CID 只保存最近一次完整同步看到的远端最新 `post_id + created_at`；不保存设备同步时间。首次完整分页，后续从顶部扫描到旧检查点；一页必须原子落盘，失败不推进检查点。回灌是只增补流程，远端帖子因删除或权益到期消失时不得反向删除本地副本。
   - `SquareFeedCursor`: `account_id`、`feed_kind`、`cursor`、`updated_at`
   - `SquareUserSignalCache`: `account_id`、`post_id`、`signal_type`、`created_at`、`synced`
-  - `ContactCache`: 以 `contact_book_by_account:<identity_account_id>` 隔离保存解密后的 `cid_number`、`account_id`、`ss58_address`、`contact_remark`、`created_at`、`updated_at`，复用 `AppKvEntity`，不是公开资料真源。
-  - `ContactPendingOps`: 以 `contact_pending_by_account:<identity_account_id>` 隔离、按目标 CID 保存待同步的添加、改备注、删除操作；云端成功后立即移除，不把旧缓存当作待上传操作。
+  - `ContactCache`: 以 `contact_book_by_cid:<owner_cid_number>` 隔离保存解密后的 `cid_number`、`account_id`、`ss58_address`、`contact_remark`、`created_at`、`updated_at`，复用 `AppKvEntity`，不是公开资料真源。
+  - `ContactPendingOps`: 以 `contact_pending_by_cid:<owner_cid_number>` 隔离、按目标 CID 保存待同步的添加、改备注、删除操作；同步状态使用 `contact_sync_by_cid:<owner_cid_number>`，云端成功后立即移除待办，不把旧缓存当作待上传操作。
+  - `IdentityBadgeSnapshot`: 以 `identity_badge_snapshot_by_cid:<cid_number>` 保存公开身份档展示信号；账户换绑不产生新快照分区。
+  - `SubscriptionMirror`: 平台订阅、创作者订阅与创作者档位的 finalized 待提交证明和有限历史按订阅者/创作者 CID 分区；证明内部的 `signer_account_id` 只记录当时签名与付款事实。
 - 通讯录云端密文契约：
   - 明文记录只存在 CitizenApp 端，字段固定为 `owner_cid_number`、联系人 `cid_number`、`account_id`、`ss58_address`、`contact_remark`、`created_at`、`updated_at`；不保留版本化 schema 或旧字段兼容。
-  - `encryption_key` 与 `index_key` 必须由 CID 当前绑定的身份账户 child 经 HKDF-SHA256 的 `citizenapp.contacts/encryption`、`citizenapp.contacts/index` 域隔离派生；child 和派生密钥不得上传 Cloudflare。
+  - 本地与云端通讯录子钥都由 CID 稳定 `CidDataRoot` 域隔离派生；云端密文固定使用
+    `citizenapp.cid/contacts-cloud`，本地 KV 固定使用 `citizenapp.cid/contacts-local`。
+    当前账户 child 只派生包装数据根的 KEK，不直接决定通讯录密钥；CID 数据根及用途
+    子钥不得上传日志或写入业务数据库明文字段。
   - 单条记录使用 AES-256-GCM；AAD 必须绑定未版本化通讯录域、属主 `cid_number` 与 `contact_id`，防止跨身份或跨联系人替换。
   - D1 `square_contacts` 只允许保存属主 `cid_number`、`contact_id`、`ciphertext`、`nonce`、`mac`、`updated_at`；禁止保存联系人 CID、账户、SS58、私人备注、公开昵称或关系明文。
 - 编码：HTTP JSON 字段统一 snake_case；R2 manifest 为 UTF-8 JSON；hash 字段为 sha256 hex；Worker 阶段 3 已落地字段的时间统一使用毫秒时间戳。
@@ -481,10 +486,17 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - finalized inclusion 不等于 dispatch 成功。CitizenApp 收到交易回执后必须在回执的
     精确 finalized 区块读取 `AccountIdByCid` 与 `BindingRevisionByCid`：首次占号只接受
     目标账户且 revision=1，自助换绑只接受新账户且 revision 精确等于签名前 revision+1；
-    目标状态缺失或不一致一律 fail-closed，核验通过前不得迁移 MyId 本地数据或广播身份变化。
+    目标状态缺失或不一致一律 fail-closed，核验通过前不得执行本地接管或广播身份变化。
   - finalized 换绑后新账户立即取得 CID 控制权。CitizenApp 不得保存旧账户签名清理
     outbox，也不存在客户端换绑后吊销接口。旧账户凭证撤销只能由可信 finalized
     绑定版本事件驱动，禁止让客户端另交旧签名形成第二授权协议。
+  - CID 数据根接管接口固定为
+    `POST /v1/square/identity/takeover/challenge` 与
+    `POST /v1/square/identity/takeover`。Worker 必须在挑战前和验签后两次读取 finalized
+    `cid_number + account_id + binding_revision`；挑战正文绑定创世哈希、CID、当前账户、
+    revision、随机 challenge 与过期时间，并使用现有 `OP_SIGN_SQUARE_ACTION` 签名域。
+    挑战只能消费一次。当前新账户验签通过后取得同一 CID 稳定数据根；服务端只保存
+    按 CID 密封的数据根与单调激活版本，不得接收任何此前账户材料。
   - Worker 保留纯内部 `purgeFinalizedOldAccountCredentials` 幂等 helper，供后续 finalized
     绑定版本消费者删除同一 CID 下旧 `account_id` 的 `chat_keypackages`、`chat_devices`、
     `square_login_challenges`、`square_device_subkeys`、Worker 会话与账户身份缓存；该 helper
@@ -493,7 +505,9 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
     媒体、关注、会员等 CID 数据也一律保留。
   - P-256 设备子钥的跨端文本编码统一带 `0x`（ADR-041，§0.3）：`p256_public_key` = `^0x04[0-9a-f]{128}$`，`signature` / `binding_signature` / `x-device-signature` = `^0x[0-9a-f]{128}$`；Worker 边界一次 require 0x + strip，内部 SCALE 签名消息 / D1 存储 / `device_key_hash` preimage 继续裸字节（逐字节不变）。禁止裸或「两端都收」。
   - Worker 只能把钱包签名证明用于登录和上传授权，不得托管钱包私钥。
-  - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由 CID 当前绑定账户 child 域隔离派生；Worker 不得接收、生成、托管或恢复通讯录密钥，也不得记录联系人明文。
+  - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由 CID 稳定数据根域隔离派生；Worker
+    不得接收通讯录用途子钥，也不得记录联系人明文。Worker 仅可为当前 finalized 绑定
+    账户发放该 CID 的稳定数据根，并以服务端主密钥密封保存。
   - manifest 与图片必须经同域 Worker 有界读取并验证 P-256 设备签名；视频 TUS 地址必须绑定 `account_id`、`upload_id`、精确字节和最长时长。
   - CitizenApp 必须先用 finalized 余额确认钱包至少保留 `1.21 元`（ED 1.11 元 + 发布费 0.1 元），余额不足不得进入 Worker prepare 或媒体上传。
   - CitizenApp 必须在链上扣费交易入块后才上传 manifest 与主媒体；链上未入块不得占用 R2 / Images / Stream 存储，只能保存本地草稿。
@@ -685,9 +699,9 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - Android / iOS 跨平台：BLE 发现 + Wi-Fi / 热点数据通道，或二维码交换会话信息后 Wi-Fi 直连。
 - Wire 载荷：
   - `nearby_session_id`
-  - `sender_account_id`
+  - `sender_cid_number`
   - `sender_device_id`
-  - `recipient_account_id`
+  - `recipient_cid_number`
   - `recipient_device_id`
   - `envelope_id`
   - `envelope`
@@ -696,7 +710,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 近场 transport 不改变 OpenMLS 会话、不改变 `ChatEnvelope`。
 - 签名/验签规则：
   - 近场初次通信必须显示安全码或二维码校验入口。
-  - `account_id` 只作为聊天身份；OpenMLS 设备密钥负责端到端加密。
+  - `cid_number` 是唯一聊天身份；当前绑定 `account_id` 只负责签名鉴权，OpenMLS
+    设备密钥负责端到端加密。
 - 禁止事项：
   - 禁止近场依赖 Cloudflare、链 RPC 或区块链节点通信节点。
   - 禁止近场传输明文私聊/群聊内容。
@@ -1106,12 +1121,13 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 消费者：
   - `citizenapp/lib/chat/`
   - `citizenapp/cloudflare/src/chat/`
-- 字段（注：**proto `ChatEnvelope` 内嵌的 `sender_account_id`/`recipient_account_id` 是 MLS 名册/归属身份，Worker 视信封为不透明 base64url 不解析；HTTP 转发/寻址已改按 `recipient_cid_number`**，见上「HTTP API 字段」。KeyPackage 的 `*Request.account_id` 均已改 `cid_number`，`requester_account_id` 已删除——会话即领取者）：
+- 字段（`sender_cid_number` / `recipient_cid_number` 同时是信封、MLS 名册和
+  HTTP 投递的唯一身份字段；当前账户不得进入 ChatEnvelope、ChatRoute 或 KeyPackage）：
   - `ChatEnvelope.protocol_version`
   - `ChatEnvelope.envelope_id`
   - `ChatEnvelope.conversation_id`
-  - `ChatEnvelope.sender_account_id`
-  - `ChatEnvelope.recipient_account_id`
+  - `ChatEnvelope.sender_cid_number`
+  - `ChatEnvelope.recipient_cid_number`
   - `ChatEnvelope.sender_device_id`
   - `ChatEnvelope.mls_wire_message`
   - `ChatEnvelope.encrypted_metadata`
@@ -1123,65 +1139,67 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_WELCOME`
   - `MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION`
   - `ChatRoute.protocol_version`
-  - `ChatRoute.peer_account_id`
+  - `ChatRoute.peer_cid_number`
   - `ChatRoute.route_display_name`
   - `ChatRoute.device_id`
-  - `ChatRoute.device_public_key_hex`
+  - `ChatRoute.device_public_key`
   - `ChatRoute.safety_number`
   - `ChatRoute.nearby_peer_hint`
   - `ChatRoute.created_at_millis`
   - `ChatRoute.expires_at_millis`
   - `ChatKeyPackage.protocol_version`
-  - `ChatKeyPackage.account_id`
+  - `ChatKeyPackage.cid_number`
   - `ChatKeyPackage.device_id`
-  - `ChatKeyPackage.device_public_key_hex`
+  - `ChatKeyPackage.device_public_key`
   - `ChatKeyPackage.key_package_id`
   - `ChatKeyPackage.key_package`
   - `ChatKeyPackage.cipher_suite`
   - `ChatKeyPackage.created_at_millis`
   - `ChatKeyPackage.expires_at_millis`
-  - `PublishChatKeyPackageRequest.account_id`
+  - `PublishChatKeyPackageRequest.cid_number`
   - `PublishChatKeyPackageRequest.device_id`
-  - `PublishChatKeyPackageRequest.device_public_key_hex`
+  - `PublishChatKeyPackageRequest.device_public_key`
   - `PublishChatKeyPackageRequest.key_package_id`
   - `PublishChatKeyPackageRequest.key_package`
   - `PublishChatKeyPackageRequest.cipher_suite`
   - `PublishChatKeyPackageRequest.created_at_millis`
   - `PublishChatKeyPackageRequest.expires_at_millis`
-  - `FetchChatKeyPackagesRequest.account_id`
-  - `FetchChatKeyPackagesRequest.requester_account_id`
+  - `FetchChatKeyPackagesRequest.cid_number`
+  - `FetchChatKeyPackagesRequest.requester_cid_number`
   - `FetchChatKeyPackagesRequest.limit`
-  - `ConsumeChatKeyPackageRequest.account_id`
+  - `ConsumeChatKeyPackageRequest.cid_number`
   - `ConsumeChatKeyPackageRequest.key_package_id`
-  - `ConsumeChatKeyPackageRequest.requester_account_id`
+  - `ConsumeChatKeyPackageRequest.requester_cid_number`
 - 验收接口：
   - 互联网聊天只走 `P-API-CITIZENAPP-003：CitizenApp Chat 瞬时转发`。
   - 近场聊天只走 `P-CHAT-002：CitizenApp Nearby Chat Transport`。
   - 区块链节点不承担聊天投递、密钥池或设备配对。
 - 编码：外层 Protobuf；OpenMLS 标准 wire bytes 放入 `mls_wire_message`；链内 SCALE 不作为 Chat 主协议。
-- 当前实现状态：Dart Protobuf、OpenMLS Rust FFI、Isar 本地消息库、Cloudflare 瞬时密文转发、WebRTC 附件和无内容推送后台收发均已落地；`ChatRuntime.ensureReady(accountId)` 对同一账户/设备执行 single-flight，登录与设备登记只使用硬件 P-256 设备子钥，钱包 seed 和 CitizenWallet 均不进入聊天运行态。
+- 当前实现状态：Dart Protobuf、OpenMLS Rust FFI、Isar 本地消息库、Cloudflare 瞬时密文转发、WebRTC 附件和无内容推送后台收发均已落地；`ChatRuntime.ensureReady(accountId)` 先解析同一 finalized `cid_number + binding_revision + account_id`，再按完整绑定三元组和设备执行 single-flight。登录与设备登记只使用硬件 P-256 设备子钥，钱包 seed 和 CitizenWallet 均不进入聊天运行态。
 - iOS 硬件边界：`org.citizenapp/device_subkey` 按 `walletIndex` 在 Secure Enclave 生成
   P-256 私钥，访问控制仅为 `privateKeyUsage`，允许后台静默 ECDSA-SHA256；原生通道返回
   65 字节未压缩公钥裸 hex 与 DER 签名裸 hex，Dart 在内部转 `r||s`，进入 Worker wire
   边界时再按 ADR-041 添加唯一 `0x`。`org.citizenapp/hw_seed_vault` 使用另一命名域的
   Secure Enclave P-256 KEK，`biometryCurrentSet + privateKeyUsage` 只保护账户 child
   mini-secret 的 `ios-se-v1:` ECIES-AES-GCM 信封；两类私钥不得复用。
-- 设备子钥生命周期：CID 换绑时复用同一钱包的 `walletIndex` 子钥并重签绑定证明；删除
-  非末账户不得删除。整只热钱包删除、末账户级联删除和全量清空钱包必须销毁该
-  `walletIndex` 的原生设备子钥，并独立尝试清除账户 child、通讯录钥、LDK 信封/缓存与
-  钱包 KEK，禁止因首个删除错误跳过后续密钥。删除本地钱包不等于注销 CID，不扩大为
-  Cloudflare 身份数据删除；原生私钥销毁后服务端旧公钥无法再产生有效签名。
+- 设备子钥生命周期：CID 换绑成功后，新钱包账户的 `walletIndex` 生成或使用自己的
+  P-256 设备子钥，完成新绑定三元组登记后即接管；绝不读取、联系或要求旧账户私钥和
+  旧设备。Worker 按新 finalized 三元组撤销旧 Session、旧设备子钥、旧 Chat 设备、
+  KeyPackage 和旧 WebSocket。CID 数据根先由新账户完成可解密包装并验证，再删除本机
+  可见的旧账户包装；CID 所属业务数据、MLS 目录和用途子钥不重建。删除本地钱包不等于
+  注销 CID，也不得扩大为 Cloudflare 身份数据删除。
 - 签名/验签规则：
   - `ChatRoute` 是 Chat 模块内部路由缓存，不是第二套通讯录，不得替代“我的通讯录”联系人详情。
-  - 公民端发消息必须读取用户资料中的聊天账户；未设置聊天账户不得发送。
+  - 公民端发消息必须解析永久 CID 和当前 finalized 绑定；没有 CID 或绑定闭环不得发送。
   - 热钱包首次进入需要 CID 的功能时，由当前身份账户主私钥一次性绑定硬件 P-256 设备
     子钥；建钱包阶段不创建或注册子钥，聊天运行态不得读取钱包 seed。
-  - Chat 设备绑定载荷固定为 `account_id, device_id, device_public_key_hex, expires_at_millis, nonce` 的 SCALE bytes。
-  - 签名字节固定为 `signing_message(OP_SIGN_CHAT_DEVICE_BIND=0x1A, payload)`；Worker 从 session 派生身份主键 cid 与设备 `device_id`(=session `device_key_hash`)，按 **`(cid_number, device_id)`** 精确定位 `square_device_subkeys.p256_public_key` 验签（不得只按 account_id 取一行——多设备会取错公钥）。
+  - Chat 设备绑定载荷固定为 `cid_number, binding_revision, account_id, device_id, device_public_key_hex, expires_at_millis, nonce` 的 SCALE bytes。
+  - 签名字节固定为 `signing_message(OP_SIGN_CHAT_DEVICE_BIND=0x1A, payload)`；Worker 从 session 派生完整绑定三元组与设备 `device_id`(=session `device_key_hash`)，先核验 finalized 当前绑定，再按 **`(cid_number, device_id)`** 精确定位 `square_device_subkeys.p256_public_key` 验签。
   - 客户端不得提交 account_id 授权真源；CitizenWallet 不参与 Chat 设备绑定。
   - KeyPackage 由 Chat 设备密钥管理，必须具备 TTL、一次性领取即硬删除、防重放和注销清理。
   - 首次 MLS 会话发送会产生 Welcome + application 两条 wire message；Welcome 必须通过 `ChatEnvelope.ratchet_tree` 伴随传递 ratchet tree bytes。
-  - Worker 必须校验 session sender、登记设备；HTTP 转发按请求体 `recipient_cid_number` 路由（proto 内嵌 `ChatEnvelope.recipient_account_id` 只供收端 MLS/归属，Worker 不解析）。
+  - Worker 必须校验 session CID、绑定版本、当前账户和登记设备；HTTP 与
+    `ChatEnvelope` 均只按 `recipient_cid_number` 路由。
   - 附件字节和文件元数据不得进入 Worker、D1、KV、DO Storage 或 R2。
   - 近场 transport 只传输同一个 `ChatEnvelope`，不得另建明文近场消息格式。
 - 存储边界：

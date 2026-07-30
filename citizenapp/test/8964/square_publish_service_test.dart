@@ -308,6 +308,7 @@ class _FakeUploader implements SquareContentUploader {
       session: const SquareSession(
         sessionToken: 'sqs_test',
         cidNumber: "CN220-CTZN2-198805200-2026",
+        bindingRevision: 1,
         accountId:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         expiresAt: 1800000000000,

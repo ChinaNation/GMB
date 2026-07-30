@@ -12,8 +12,8 @@ use openmls::{
         tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize},
         BasicCredential, Ciphersuite, Credential, CredentialWithKey, Extensions, GroupId,
         KeyPackage, KeyPackageBundle, KeyPackageIn, MlsGroup, MlsGroupCreateConfig,
-        MlsMessageBodyIn, MlsMessageIn, ProcessedMessageContent, ProtocolMessage,
-        ProtocolVersion, RatchetTreeIn, StagedWelcome,
+        MlsMessageBodyIn, MlsMessageIn, ProcessedMessageContent, ProtocolMessage, ProtocolVersion,
+        RatchetTreeIn, StagedWelcome,
     },
     storage::OpenMlsProvider as OpenMlsStorageProvider,
 };
@@ -42,8 +42,7 @@ const STATE_NONCE_LEN: usize = 12;
 fn parse_state_key(state_key_hex: &str) -> Result<[u8; 32], String> {
     let bytes = hex::decode(state_key_hex.trim_start_matches("0x"))
         .map_err(|error| format!("MLS 状态密钥不是合法 hex: {error}"))?;
-    <[u8; 32]>::try_from(bytes.as_slice())
-        .map_err(|_| "MLS 状态密钥必须为 32 字节".to_string())
+    <[u8; 32]>::try_from(bytes.as_slice()).map_err(|_| "MLS 状态密钥必须为 32 字节".to_string())
 }
 
 /// AES-256-GCM 封装:随机 12 字节 nonce,输出 `nonce || ciphertext || tag`。
@@ -56,7 +55,13 @@ fn seal_state(key: &[u8; 32], plaintext: &[u8], aad: &[u8]) -> Result<Vec<u8>, S
         .map_err(|error| format!("构造 MLS 状态加密器失败: {error}"))?;
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     let ciphertext = cipher
-        .encrypt(&nonce, Payload { msg: plaintext, aad })
+        .encrypt(
+            &nonce,
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .map_err(|_| "MLS 状态加密失败".to_string())?;
     let mut out = Vec::with_capacity(STATE_NONCE_LEN + ciphertext.len());
     out.extend_from_slice(Nonce::<<Aes256Gcm as AeadCore>::NonceSize>::from_slice(
@@ -92,7 +97,7 @@ fn open_state(key: &[u8; 32], blob: &[u8], aad: &[u8]) -> Result<Vec<u8>, String
 
 #[derive(Deserialize)]
 struct CreateKeyPackageRequest {
-    account_id: String,
+    cid_number: String,
     device_id: String,
     state_store_dir: Option<String>,
     /// MLS 本地状态信封密钥(32 字节 hex)。无 state_store_dir 时可省。
@@ -109,10 +114,10 @@ struct EncryptRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     conversation_id: String,
-    recipient_account_id: String,
+    recipient_cid_number: String,
     plaintext_hex: String,
     recipient_key_package_hex: Option<String>,
 }
@@ -122,7 +127,7 @@ struct DecryptRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     conversation_id: String,
     wire_message_hex: String,
@@ -131,7 +136,7 @@ struct DecryptRequest {
 
 #[derive(Serialize, Deserialize)]
 struct DeviceRecord {
-    account_id: String,
+    cid_number: String,
     device_id: String,
     signature_public_key_hex: String,
     signature_scheme: String,
@@ -238,7 +243,7 @@ pub unsafe extern "C" fn gmb_chat_mls_decrypt_json(
 
 fn create_key_package_json(request_json: *const c_char) -> Result<String, String> {
     let request: CreateKeyPackageRequest = parse_request(request_json)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
 
     let (key_package_hex, cipher_suite, device_public_key_hex) =
@@ -253,7 +258,7 @@ fn create_key_package_json(request_json: *const c_char) -> Result<String, String
             let (credential, signer) = ensure_device_signer(
                 &provider,
                 state_dir,
-                &request.account_id,
+                &request.cid_number,
                 &request.device_id,
                 &state_key,
             )?;
@@ -274,7 +279,7 @@ fn create_key_package_json(request_json: *const c_char) -> Result<String, String
         } else {
             let provider = OpenMlsRustCrypto::default();
             let (credential, signer) = generate_credential(
-                format!("{}:{}", request.account_id, request.device_id).into_bytes(),
+                format!("{}:{}", request.cid_number, request.device_id).into_bytes(),
                 GMB_MLS_CIPHERSUITE.signature_algorithm(),
                 &provider,
             )?;
@@ -294,7 +299,7 @@ fn create_key_package_json(request_json: *const c_char) -> Result<String, String
     let now = now_millis();
     let response = json!({
         "protocol_version": 1,
-        "account_id": request.account_id,
+        "cid_number": request.cid_number,
         "device_id": request.device_id,
         "device_public_key_hex": device_public_key_hex,
         "key_package_id": format!("kp-{}", key_package_hex.chars().take(24).collect::<String>()),
@@ -408,10 +413,10 @@ fn two_party_smoke_json(request_json: *const c_char) -> Result<String, String> {
 fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
     let request: EncryptRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("conversation_id", &request.conversation_id)?;
-    require_non_empty("recipient_account_id", &request.recipient_account_id)?;
+    require_non_empty("recipient_cid_number", &request.recipient_cid_number)?;
     require_non_empty("plaintext_hex", &request.plaintext_hex)?;
 
     let state_dir = Path::new(&request.state_store_dir);
@@ -420,7 +425,7 @@ fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
     let (credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -486,7 +491,7 @@ fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
 
     let response = json!({
         "conversation_id": request.conversation_id,
-        "recipient_account_id": request.recipient_account_id,
+        "recipient_cid_number": request.recipient_cid_number,
         "cipher_suite": format!("{:?}", GMB_MLS_CIPHERSUITE),
         "created_new_session": created_new_session,
         "welcome_wire_message_hex": welcome_hex,
@@ -499,7 +504,7 @@ fn encrypt_json(request_json: *const c_char) -> Result<String, String> {
 fn decrypt_json(request_json: *const c_char) -> Result<String, String> {
     let request: DecryptRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("conversation_id", &request.conversation_id)?;
     require_non_empty("wire_message_hex", &request.wire_message_hex)?;
@@ -510,7 +515,7 @@ fn decrypt_json(request_json: *const c_char) -> Result<String, String> {
     let _ = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -719,36 +724,36 @@ fn save_provider(
 fn ensure_device_signer(
     provider: &MlsProvider,
     state_dir: &Path,
-    account_id: &str,
+    cid_number: &str,
     device_id: &str,
     state_key: &[u8; 32],
 ) -> Result<(CredentialWithKey, SignatureKeyPair), String> {
     let record_path = device_record_path(state_dir);
     let signature_algorithm = GMB_MLS_CIPHERSUITE.signature_algorithm();
     if record_path.exists() {
-        let blob = fs::read(&record_path)
-            .map_err(|error| format!("读取 MLS 设备记录失败: {error}"))?;
+        let blob =
+            fs::read(&record_path).map_err(|error| format!("读取 MLS 设备记录失败: {error}"))?;
         let clear = open_state(state_key, &blob, STATE_AAD_DEVICE)?;
         let record: DeviceRecord = serde_json::from_slice(&clear)
             .map_err(|error| format!("解析 MLS 设备记录失败: {error}"))?;
-        if record.account_id != account_id || record.device_id != device_id {
-            return Err("MLS 状态目录已绑定到其他钱包聊天账户或设备".to_string());
+        if record.cid_number != cid_number || record.device_id != device_id {
+            return Err("MLS 状态目录已绑定到其他 CID 或设备".to_string());
         }
         let public_key =
             decode_hex_field("signature_public_key_hex", &record.signature_public_key_hex)?;
         let signer = SignatureKeyPair::read(provider.storage(), &public_key, signature_algorithm)
             .ok_or_else(|| "MLS 设备签名密钥不在 OpenMLS storage 中".to_string())?;
-        let credential = credential_with_public_key(account_id, device_id, public_key);
+        let credential = credential_with_public_key(cid_number, device_id, public_key);
         return Ok((credential, signer));
     }
 
     let (credential, signer) = generate_credential(
-        format!("{account_id}:{device_id}").into_bytes(),
+        format!("{cid_number}:{device_id}").into_bytes(),
         signature_algorithm,
         provider,
     )?;
     let record = DeviceRecord {
-        account_id: account_id.to_string(),
+        cid_number: cid_number.to_string(),
         device_id: device_id.to_string(),
         signature_public_key_hex: hex::encode(signer.to_public_vec()),
         signature_scheme: format!("{:?}", signature_algorithm),
@@ -760,13 +765,12 @@ fn ensure_device_signer(
 }
 
 fn credential_with_public_key(
-    account_id: &str,
+    cid_number: &str,
     device_id: &str,
     public_key: Vec<u8>,
 ) -> CredentialWithKey {
     CredentialWithKey {
-        credential: BasicCredential::new(format!("{account_id}:{device_id}").into_bytes())
-            .into(),
+        credential: BasicCredential::new(format!("{cid_number}:{device_id}").into_bytes()).into(),
         signature_key: public_key.into(),
     }
 }
@@ -810,8 +814,8 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::io::Write;
     let tmp = path.with_extension("tmp");
     {
-        let mut file =
-            fs::File::create(&tmp).map_err(|error| format!("创建 MLS 状态临时文件失败: {error}"))?;
+        let mut file = fs::File::create(&tmp)
+            .map_err(|error| format!("创建 MLS 状态临时文件失败: {error}"))?;
         file.write_all(bytes)
             .map_err(|error| format!("写入 MLS 状态临时文件失败: {error}"))?;
         file.sync_all()
@@ -864,7 +868,7 @@ struct GroupCreateRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     group_id: String,
 }
@@ -874,7 +878,7 @@ struct GroupAddMembersRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     group_id: String,
     key_packages_hex: Vec<String>,
@@ -885,11 +889,11 @@ struct GroupRemoveMembersRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     group_id: String,
-    /// 按**账户**移除(移除该账户在群内的全部设备叶子)。
-    member_account_ids: Vec<String>,
+    /// 按 CID 移除（移除该 CID 在群内的全部设备叶子）。
+    member_cid_numbers: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -897,7 +901,7 @@ struct GroupCreateMessageRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     group_id: String,
     plaintext_hex: String,
@@ -908,7 +912,7 @@ struct GroupProcessRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     group_id: String,
     wire_message_hex: String,
@@ -920,7 +924,7 @@ struct GroupStateRequest {
     state_store_dir: String,
     /// MLS 本地状态信封密钥(32 字节 hex),由 Dart 侧 LocalKeyPurpose.mls 子钥下传。
     state_key_hex: String,
-    account_id: String,
+    cid_number: String,
     device_id: String,
     group_id: String,
 }
@@ -1034,16 +1038,16 @@ pub unsafe extern "C" fn gmb_chat_mls_group_state_json(
     }
 }
 
-/// 从 BasicCredential 还原成员标识("account_id:device_id")。
+/// 从 BasicCredential 还原成员标识（"cid_number:device_id"）。
 fn identity_of(credential: &Credential) -> String {
     String::from_utf8_lossy(credential.serialized_content()).into_owned()
 }
 
-/// 从成员标识取账户段("account_id:device_id" → "account_id")。
-fn account_of(credential: &Credential) -> String {
+/// 从成员标识取 CID 段（"cid_number:device_id" → "cid_number"）。
+fn cid_of(credential: &Credential) -> String {
     let identity = identity_of(credential);
     match identity.split_once(':') {
-        Some((account, _)) => account.to_string(),
+        Some((cid_number, _)) => cid_number.to_string(),
         None => identity,
     }
 }
@@ -1051,7 +1055,7 @@ fn account_of(credential: &Credential) -> String {
 fn group_create_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupCreateRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
 
@@ -1061,7 +1065,7 @@ fn group_create_json(request_json: *const c_char) -> Result<String, String> {
     let (credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -1094,7 +1098,7 @@ fn group_create_json(request_json: *const c_char) -> Result<String, String> {
 fn group_add_members_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupAddMembersRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
     if request.key_packages_hex.is_empty() {
@@ -1107,7 +1111,7 @@ fn group_add_members_json(request_json: *const c_char) -> Result<String, String>
     let (_credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -1175,11 +1179,11 @@ fn group_add_members_json(request_json: *const c_char) -> Result<String, String>
 fn group_remove_members_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupRemoveMembersRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
-    if request.member_account_ids.is_empty() {
-        return Err("group_remove_members 至少需要一个成员账户".to_string());
+    if request.member_cid_numbers.is_empty() {
+        return Err("group_remove_members 至少需要一个成员 CID".to_string());
     }
 
     let state_dir = Path::new(&request.state_store_dir);
@@ -1188,7 +1192,7 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
     let (_credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -1197,25 +1201,25 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
         .map_err(|error| format!("加载 MLS 群失败: {error:?}"))?
         .ok_or_else(|| "MLS 群不存在，无法删人".to_string())?;
 
-    // 按账户移除:该账户在群内的**全部设备叶子**都进移除集。
+    // 按 CID 移除：该 CID 在群内的全部设备叶子都进移除集。
     let targets: HashSet<&str> = request
-        .member_account_ids
+        .member_cid_numbers
         .iter()
         .map(|value| value.as_str())
         .collect();
     let mut indices = Vec::new();
-    let mut removed_account_ids = HashSet::new();
+    let mut removed_cid_numbers = HashSet::new();
     for member in group.members() {
-        let account = account_of(&member.credential);
-        if targets.contains(account.as_str()) {
+        let cid_number = cid_of(&member.credential);
+        if targets.contains(cid_number.as_str()) {
             indices.push(member.index);
-            removed_account_ids.insert(account);
+            removed_cid_numbers.insert(cid_number);
         }
     }
     if indices.is_empty() {
         return Err("未在群名册中找到要移除的成员".to_string());
     }
-    let removed_account_ids: Vec<String> = removed_account_ids.into_iter().collect();
+    let removed_cid_numbers: Vec<String> = removed_cid_numbers.into_iter().collect();
 
     let (commit, _welcome, _group_info) = group
         .remove_members(&provider, &signer, &indices)
@@ -1236,7 +1240,7 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
         "group_id": request.group_id,
         "epoch": epoch,
         "commit_wire_hex": commit_wire_hex,
-        "removed_account_ids": removed_account_ids,
+        "removed_cid_numbers": removed_cid_numbers,
     });
     serde_json::to_string(&response).map_err(|error| error.to_string())
 }
@@ -1244,7 +1248,7 @@ fn group_remove_members_json(request_json: *const c_char) -> Result<String, Stri
 fn group_create_message_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupCreateMessageRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
     require_non_empty("plaintext_hex", &request.plaintext_hex)?;
@@ -1255,7 +1259,7 @@ fn group_create_message_json(request_json: *const c_char) -> Result<String, Stri
     let (_credential, signer) = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -1287,7 +1291,7 @@ fn group_create_message_json(request_json: *const c_char) -> Result<String, Stri
 fn group_process_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupProcessRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
     require_non_empty("wire_message_hex", &request.wire_message_hex)?;
@@ -1298,7 +1302,7 @@ fn group_process_json(request_json: *const c_char) -> Result<String, String> {
     let _ = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -1332,8 +1336,10 @@ fn group_process_json(request_json: *const c_char) -> Result<String, String> {
                 return Err("Welcome group_id 与 group_id 不一致".to_string());
             }
             let epoch = group.epoch().as_u64();
-            let members: Vec<String> =
-                group.members().map(|m| identity_of(&m.credential)).collect();
+            let members: Vec<String> = group
+                .members()
+                .map(|m| identity_of(&m.credential))
+                .collect();
             save_provider(state_dir, &provider, &state_key)?;
             json!({
                 "group_id": request.group_id,
@@ -1436,7 +1442,10 @@ fn process_group_protocol(
                 .map_err(|error| format!("合并群 Commit 失败: {error:?}"))?;
             let epoch = group.epoch().as_u64();
             let members: Vec<String> = if group.is_active() {
-                group.members().map(|m| identity_of(&m.credential)).collect()
+                group
+                    .members()
+                    .map(|m| identity_of(&m.credential))
+                    .collect()
             } else {
                 Vec::new()
             };
@@ -1459,7 +1468,7 @@ fn process_group_protocol(
 fn group_state_json(request_json: *const c_char) -> Result<String, String> {
     let request: GroupStateRequest = parse_request(request_json)?;
     require_non_empty("state_store_dir", &request.state_store_dir)?;
-    require_non_empty("account_id", &request.account_id)?;
+    require_non_empty("cid_number", &request.cid_number)?;
     require_non_empty("device_id", &request.device_id)?;
     require_non_empty("group_id", &request.group_id)?;
 
@@ -1469,7 +1478,7 @@ fn group_state_json(request_json: *const c_char) -> Result<String, String> {
     let _ = ensure_device_signer(
         &provider,
         state_dir,
-        &request.account_id,
+        &request.cid_number,
         &request.device_id,
         &state_key,
     )?;
@@ -1478,7 +1487,10 @@ fn group_state_json(request_json: *const c_char) -> Result<String, String> {
         .map_err(|error| format!("加载 MLS 群失败: {error:?}"))?
         .ok_or_else(|| "MLS 群不存在".to_string())?;
     let epoch = group.epoch().as_u64();
-    let members: Vec<String> = group.members().map(|m| identity_of(&m.credential)).collect();
+    let members: Vec<String> = group
+        .members()
+        .map(|m| identity_of(&m.credential))
+        .collect();
 
     let response = json!({
         "group_id": request.group_id,
@@ -1492,10 +1504,9 @@ fn group_state_json(request_json: *const c_char) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_key_package_json, group_add_members_json, group_create_json,
-        group_create_message_json, group_process_json, group_remove_members_json,
-        atomic_write, group_state_json, open_state, parse_state_key,
-        purge_legacy_plaintext_state, seal_state,
+        atomic_write, create_key_package_json, group_add_members_json, group_create_json,
+        group_create_message_json, group_process_json, group_remove_members_json, group_state_json,
+        open_state, parse_state_key, purge_legacy_plaintext_state, seal_state,
         two_party_smoke_json, STATE_AAD_DEVICE, STATE_AAD_STORAGE,
     };
     use std::ffi::CString;
@@ -1507,13 +1518,13 @@ mod tests {
 
     #[test]
     fn creates_real_openmls_key_package() {
-        let request = CString::new(r#"{"account_id":"alice-wallet","device_id":"alice-phone"}"#)
+        let request = CString::new(r#"{"cid_number":"CID-ALICE","device_id":"alice-phone"}"#)
             .expect("request should be valid");
         let response =
             create_key_package_json(request.as_ptr()).expect("key package should be created");
         let json: serde_json::Value =
             serde_json::from_str(&response).expect("response should be json");
-        assert_eq!(json["account_id"], "alice-wallet");
+        assert_eq!(json["cid_number"], "CID-ALICE");
         assert!(json["key_package_hex"].as_str().unwrap().len() > 100);
     }
 
@@ -1544,7 +1555,7 @@ mod tests {
         for d in [&dir_a, &dir_b, &dir_c] {
             fs::create_dir_all(d).expect("临时目录应可创建");
         }
-        let group_id = "grp:acctA:testnonce";
+        let group_id = "grp:CID-A:testnonce";
         let path = |p: &Path| p.to_str().unwrap().to_string();
 
         let invoke = |f: fn(*const c_char) -> Result<String, String>, req: serde_json::Value| {
@@ -1556,21 +1567,21 @@ mod tests {
         // A 建群(创建者=唯一成员,epoch 0)。
         let created = invoke(
             group_create_json,
-            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id}),
+            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "cid_number": "CID-A", "device_id": "devA", "group_id": group_id}),
         );
         assert_eq!(created["epoch"].as_u64(), Some(0));
 
         // B / C 生成 KeyPackage。
         let b_kp = invoke(
             create_key_package_json,
-            json!({"account_id": "acctB", "device_id": "devB", "state_store_dir": path(&dir_b), "state_key_hex": TEST_STATE_KEY_HEX}),
+            json!({"cid_number": "CID-B", "device_id": "devB", "state_store_dir": path(&dir_b), "state_key_hex": TEST_STATE_KEY_HEX}),
         )["key_package_hex"]
             .as_str()
             .unwrap()
             .to_string();
         let c_kp = invoke(
             create_key_package_json,
-            json!({"account_id": "acctC", "device_id": "devC", "state_store_dir": path(&dir_c), "state_key_hex": TEST_STATE_KEY_HEX}),
+            json!({"cid_number": "CID-C", "device_id": "devC", "state_store_dir": path(&dir_c), "state_key_hex": TEST_STATE_KEY_HEX}),
         )["key_package_hex"]
             .as_str()
             .unwrap()
@@ -1579,17 +1590,17 @@ mod tests {
         // A 批量加 B、C(1 Commit + 1 Welcome)。
         let added = invoke(
             group_add_members_json,
-            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id, "key_packages_hex": [b_kp, c_kp]}),
+            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "cid_number": "CID-A", "device_id": "devA", "group_id": group_id, "key_packages_hex": [b_kp, c_kp]}),
         );
         let welcome_hex = added["welcome_wire_hex"].as_str().unwrap().to_string();
         let tree_hex = added["ratchet_tree_hex"].as_str().unwrap().to_string();
         assert_eq!(added["epoch"].as_u64(), Some(1));
 
         // B / C 处理 Welcome 入群,名册应为 3 人。
-        for (dir, owner, dev) in [(&dir_b, "acctB", "devB"), (&dir_c, "acctC", "devC")] {
+        for (dir, owner, dev) in [(&dir_b, "CID-B", "devB"), (&dir_c, "CID-C", "devC")] {
             let joined = invoke(
                 group_process_json,
-                json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(dir.as_path()), "account_id": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": welcome_hex, "ratchet_tree_hex": tree_hex}),
+                json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(dir.as_path()), "cid_number": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": welcome_hex, "ratchet_tree_hex": tree_hex}),
             );
             assert_eq!(joined["message_kind"].as_str(), Some("welcome"));
             assert_eq!(joined["member_identities"].as_array().unwrap().len(), 3);
@@ -1599,13 +1610,13 @@ mod tests {
         let plaintext_hex = hex::encode("你好，群聊".as_bytes());
         let msg = invoke(
             group_create_message_json,
-            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id, "plaintext_hex": plaintext_hex}),
+            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "cid_number": "CID-A", "device_id": "devA", "group_id": group_id, "plaintext_hex": plaintext_hex}),
         );
         let app_hex = msg["application_wire_hex"].as_str().unwrap().to_string();
-        for (dir, owner, dev) in [(&dir_b, "acctB", "devB"), (&dir_c, "acctC", "devC")] {
+        for (dir, owner, dev) in [(&dir_b, "CID-B", "devB"), (&dir_c, "CID-C", "devC")] {
             let got = invoke(
                 group_process_json,
-                json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(dir.as_path()), "account_id": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": app_hex}),
+                json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(dir.as_path()), "cid_number": owner, "device_id": dev, "group_id": group_id, "wire_message_hex": app_hex}),
             );
             assert_eq!(got["message_kind"].as_str(), Some("application"));
             assert_eq!(got["status"].as_str(), Some("applied"));
@@ -1615,7 +1626,7 @@ mod tests {
         // A 移除 C。
         let removed = invoke(
             group_remove_members_json,
-            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id, "member_account_ids": ["acctC"]}),
+            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "cid_number": "CID-A", "device_id": "devA", "group_id": group_id, "member_cid_numbers": ["CID-C"]}),
         );
         let remove_commit_hex = removed["commit_wire_hex"].as_str().unwrap().to_string();
         assert_eq!(removed["epoch"].as_u64(), Some(2));
@@ -1623,7 +1634,7 @@ mod tests {
         // B 应用 Commit → 名册剩 A、B,未自我移除。
         let b_after = invoke(
             group_process_json,
-            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_b), "account_id": "acctB", "device_id": "devB", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
+            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_b), "cid_number": "CID-B", "device_id": "devB", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
         );
         assert_eq!(b_after["message_kind"].as_str(), Some("commit"));
         assert_eq!(b_after["self_removed"].as_bool(), Some(false));
@@ -1632,14 +1643,14 @@ mod tests {
         // C 应用 Commit → 自身被移除(后向保密)。
         let c_after = invoke(
             group_process_json,
-            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_c), "account_id": "acctC", "device_id": "devC", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
+            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_c), "cid_number": "CID-C", "device_id": "devC", "group_id": group_id, "wire_message_hex": remove_commit_hex}),
         );
         assert_eq!(c_after["self_removed"].as_bool(), Some(true));
 
         // group_state 名册对账 = A、B。
         let state = invoke(
             group_state_json,
-            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "account_id": "acctA", "device_id": "devA", "group_id": group_id}),
+            json!({"state_key_hex": TEST_STATE_KEY_HEX, "state_store_dir": path(&dir_a), "cid_number": "CID-A", "device_id": "devA", "group_id": group_id}),
         );
         assert_eq!(state["member_count"].as_u64(), Some(2));
 
@@ -1707,7 +1718,6 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-
     #[test]
     fn atomic_write_replaces_without_leaving_temp() {
         let dir = std::env::temp_dir().join(format!("gmb_mls_atomic_{}", std::process::id()));
@@ -1721,5 +1731,4 @@ mod tests {
         assert!(!target.with_extension("tmp").exists());
         let _ = fs::remove_dir_all(&dir);
     }
-
 }

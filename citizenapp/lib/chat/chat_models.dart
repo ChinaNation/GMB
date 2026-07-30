@@ -42,7 +42,7 @@ class ChatConversationPreview {
   const ChatConversationPreview({
     required this.conversationId,
     required this.title,
-    required this.peerAccountId,
+    required this.peerCidNumber,
     required this.lastMessage,
     required this.lastUpdatedAt,
     required this.unreadCount,
@@ -53,11 +53,11 @@ class ChatConversationPreview {
   /// 会话 ID，由 Chat 层生成，不复用链上交易哈希。
   final String conversationId;
 
-  /// 用户可见名称，默认可以来自钱包地址短展示。
+  /// 用户可见名称，缺失公开昵称时按永久 CID 稳定生成。
   final String title;
 
-  /// 联系人的钱包账户地址；聊天账户与收付款账户共用该账户。
-  final String peerAccountId;
+  /// 联系人的永久身份主键；钱包换绑不改变会话。
+  final String peerCidNumber;
 
   /// 最近一条消息摘要。真实明文只允许存在于手机端本地。
   final String lastMessage;
@@ -80,13 +80,13 @@ class ChatConversationPreview {
 /// 聊天 Tab 顶部状态快照。
 class ChatInboxOverview {
   const ChatInboxOverview({
-    required this.accountId,
+    required this.cidNumber,
     required this.pendingOutgoing,
     required this.unreadCount,
   });
 
-  /// 当前作为聊天账户的钱包地址。
-  final String? accountId;
+  /// 当前聊天身份 CID。
+  final String? cidNumber;
 
   /// 等待发送或重试的密文消息数量。
   final int pendingOutgoing;
@@ -94,9 +94,9 @@ class ChatInboxOverview {
   /// 所有会话未读数量。
   final int unreadCount;
 
-  /// 当前没有聊天账户时使用的安全空快照。
+  /// 当前没有 CID 身份时使用的安全空快照。
   static const empty = ChatInboxOverview(
-    accountId: null,
+    cidNumber: null,
     pendingOutgoing: 0,
     unreadCount: 0,
   );

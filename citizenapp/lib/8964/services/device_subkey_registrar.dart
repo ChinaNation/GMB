@@ -29,6 +29,8 @@ class DeviceSubkeyRegistrar {
 
   Future<void> register({
     required int walletIndex,
+    required String cidNumber,
+    required int bindingRevision,
     required String accountId,
     required DeviceBindingSigner signBinding,
     int? issuedAtMillis,
@@ -37,8 +39,13 @@ class DeviceSubkeyRegistrar {
     // 跨端 wire 文本统一带 `0x`（ADR-041），后端入口一次 require 0x + strip。
     final publicKey = await _subkey.publicKeyHex(walletIndex);
     final issuedAt = issuedAtMillis ?? DateTime.now().millisecondsSinceEpoch;
-    final message =
-        buildDeviceBindingSigningMessage(accountId, publicKey, issuedAt);
+    final message = buildDeviceBindingSigningMessage(
+      cidNumber,
+      bindingRevision,
+      accountId,
+      publicKey,
+      issuedAt,
+    );
     final signatureHex = await signBinding(message);
     final turnstileToken = await _turnstileToken?.call();
     await _api.registerDeviceSubkey(

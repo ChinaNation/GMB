@@ -70,7 +70,7 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
     try {
       final group = await _runtime.createGroup(
         name: _nameController.text.trim(),
-        inviteeAccountIds: _selected.toList(growable: false),
+        inviteeCidNumbers: _selected.toList(growable: false),
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -152,23 +152,23 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
                           itemBuilder: (context, index) {
                             final contact = _contacts[index];
                             final checked =
-                                _selected.contains(contact.accountId);
+                                _selected.contains(contact.cidNumber);
                             return CheckboxListTile(
                               value: checked,
                               onChanged: (value) => setState(() {
                                 if (value ?? false) {
-                                  _selected.add(contact.accountId);
+                                  _selected.add(contact.cidNumber);
                                 } else {
-                                  _selected.remove(contact.accountId);
+                                  _selected.remove(contact.cidNumber);
                                 }
                               }),
                               title: Text(
                                 contact.contactRemark.isEmpty
-                                    ? _short(contact.accountId)
+                                    ? _short(contact.cidNumber)
                                     : contact.contactRemark,
                               ),
                               subtitle: Text(
-                                _short(contact.accountId),
+                                _short(contact.cidNumber),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),

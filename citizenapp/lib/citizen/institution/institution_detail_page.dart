@@ -24,6 +24,7 @@ import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -42,7 +43,7 @@ class InstitutionDetailPage extends StatefulWidget {
     required this.cidNumber,
     required this.repository,
     this.chainState,
-    this.accountIdProvider,
+    this.subscriberCidNumberProvider,
   });
 
   final String cidNumber;
@@ -51,8 +52,10 @@ class InstitutionDetailPage extends StatefulWidget {
   /// 链态读服务(余额/管理员/提案);测试注入,默认 Live。
   final InstitutionChainState? chainState;
 
-  /// 活动钱包AccountId(订阅 + 是否管理员);测试注入,默认 WalletManager。
-  final Future<String?> Function()? accountIdProvider;
+  /// 当前已注册公民的永久 CID（只用于本地关注关系归属）。
+  ///
+  /// 账户换绑后 CID 不变，因此关注列表不会随签名账户切换而分叉。
+  final Future<String?> Function()? subscriberCidNumberProvider;
 
   @override
   State<InstitutionDetailPage> createState() => _InstitutionDetailPageState();
@@ -83,7 +86,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   bool _loading = true;
 
-  String? _activeAccountId;
+  String? _subscriberCidNumber;
   bool _subscribed = false;
 
   List<InstitutionAccountRow> _accounts = const [];
@@ -122,15 +125,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     _load();
   }
 
-  Future<String?> _resolveAccountId() async {
-    final provider = widget.accountIdProvider;
+  Future<String?> _resolveSubscriberCidNumber() async {
+    final provider = widget.subscriberCidNumberProvider;
     if (provider != null) return provider();
-    return (await _walletManager.getWallet())?.accountId;
+    final identity = await IdentityAccountCache.instance.resolve();
+    return identity?.snapshot?.cidNumber;
   }
 
   Future<void> _load() async {
     final inst = await widget.repository.getByCid(widget.cidNumber);
-    final accountId = await _resolveAccountId();
+    final subscriberCidNumber = await _resolveSubscriberCidNumber();
     if (!mounted) return;
     if (inst == null) {
       setState(() => _loading = false);
@@ -140,15 +144,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     // 由目录 CID 派生主体。是否能发起某类提案交给 ProposalCapabilityRegistry。
     final govInfo = widget.repository.governanceInfo(inst.cidNumber) ??
         _infoFromInstitution(inst);
-    final subscribed = accountId == null
+    final subscribed = subscriberCidNumber == null
         ? false
-        : await widget.repository.isSubscribed(accountId, inst.cidNumber);
+        : await widget.repository.isSubscribed(
+            subscriberCidNumber,
+            inst.cidNumber,
+          );
     final areaPath = await widget.repository.institutionAreaPath(inst);
     if (!mounted) return;
     setState(() {
       _inst = inst;
       _govInfo = govInfo;
-      _activeAccountId = accountId;
+      _subscriberCidNumber = subscriberCidNumber;
       _subscribed = subscribed;
       _accounts = institutionAccountIdRows(inst);
       _areaPath = areaPath;
@@ -322,12 +329,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _toggleSubscribe() async {
     final inst = _inst;
-    final accountId = _activeAccountId;
-    if (inst == null || accountId == null) return;
+    final subscriberCidNumber = _subscriberCidNumber;
+    if (inst == null || subscriberCidNumber == null) return;
     if (_subscribed) {
-      await widget.repository.unsubscribe(accountId, inst.cidNumber);
+      await widget.repository.unsubscribe(
+        subscriberCidNumber,
+        inst.cidNumber,
+      );
     } else {
-      await widget.repository.subscribe(accountId, inst.cidNumber);
+      await widget.repository.subscribe(
+        subscriberCidNumber,
+        inst.cidNumber,
+      );
     }
     if (!mounted) return;
     setState(() => _subscribed = !_subscribed);
@@ -344,7 +357,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
         actions: [
-          if (inst != null && _activeAccountId != null)
+          if (inst != null && _subscriberCidNumber != null)
             IconButton(
               tooltip: _subscribed ? '取消关注' : '订阅关注',
               icon: Icon(

@@ -13,8 +13,10 @@ Future<void> openGroupChat(
   required String groupId,
   required String title,
 }) async {
-  final accountId = await IdentityAccountCache.instance.accountId() ?? '';
-  if (accountId.isEmpty) {
+  final identity = await IdentityAccountCache.instance.resolve();
+  final accountId = identity?.accountId ?? '';
+  final ownerCidNumber = identity?.snapshot?.cidNumber ?? '';
+  if (accountId.isEmpty || ownerCidNumber.isEmpty) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
@@ -27,6 +29,7 @@ Future<void> openGroupChat(
     MaterialPageRoute(
       builder: (_) => ChatPage(
         conversationId: groupId,
+        ownerCidNumber: ownerCidNumber,
         accountId: accountId,
         peerUserId: groupId,
         title: title,

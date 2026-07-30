@@ -24,7 +24,7 @@ void main() {
       gate: gate.future,
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, accountIdProvider: () async => null),
+      PublicTab(repository: repo, cidNumberProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -48,7 +48,7 @@ void main() {
       cityNames: const {'ZS|001': '中央'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, accountIdProvider: () async => null),
+      PublicTab(repository: repo, cidNumberProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -73,7 +73,7 @@ void main() {
       cityNames: const {'ZS|001': '中央', 'ZS|002': '北区'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, accountIdProvider: () async => null),
+      PublicTab(repository: repo, cidNumberProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -93,7 +93,7 @@ void main() {
       cityNames: const {'ZS|001': '中央'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, accountIdProvider: () async => null),
+      PublicTab(repository: repo, cidNumberProvider: () async => null),
     ));
     await tester.pumpAndSettle();
 
@@ -113,10 +113,10 @@ void main() {
         seedDto('A', provinceCode: 'ZS', cityCode: '001', name: '中枢省人民政府'),
       ],
       cityNames: const {'ZS|001': '中央'},
-      subscriptions: const {'aa': 'A'},
+      subscriptions: const {'CID-USER': 'A'},
     );
     await tester.pumpWidget(_wrap(
-      PublicTab(repository: repo, accountIdProvider: () async => 'aa'),
+      PublicTab(repository: repo, cidNumberProvider: () async => 'CID-USER'),
     ));
     await tester.pumpAndSettle();
 

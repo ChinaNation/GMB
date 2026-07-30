@@ -20,6 +20,7 @@ import { normalizeP256SignatureHex } from '../auth/device_subkey';
 import { relayChatPayload, requireChatRealtimeNamespace } from './realtime';
 import { sendChatWake } from './push';
 import { resourceLimit } from '../limits/catalog';
+import { fetchChainIdentityStateByCid } from '../chain/identity';
 
 type PushProvider = 'apns' | 'fcm';
 
@@ -66,6 +67,7 @@ interface SubmitSignalRequest {
 
 interface ChatDeviceRow {
   cid_number: string;
+  binding_revision: number;
   account_id: string;
   device_id: string;
   device_public_key_hex: string;
@@ -74,6 +76,7 @@ interface ChatDeviceRow {
 
 interface ChatKeyPackageRow {
   cid_number: string;
+  binding_revision: number;
   account_id: string;
   device_id: string;
   device_public_key_hex: string;
@@ -102,6 +105,8 @@ export async function registerChatDevice(request: Request, env: Env): Promise<Re
     throw new HttpError(400, 'invalid_binding_signature', 'Chat 设备绑定签名不合法');
   }
   const input = {
+    cid_number: cidNumber,
+    binding_revision: session.binding_revision,
     account_id: accountId,
     device_id: deviceId,
     device_public_key_hex: devicePublicKeyHex,
@@ -111,9 +116,16 @@ export async function registerChatDevice(request: Request, env: Env): Promise<Re
   // 子钥按 (cid_number, device_id) 精确定位当前请求所在设备(device_id == 会话
   // device_key_hash == sha256(p256));同一身份多设备并存时不得用别的设备公钥验签。
   const subkey = await env.DB.prepare(
-    `SELECT p256_public_key FROM square_device_subkeys WHERE cid_number = ? AND device_id = ?`
+    `SELECT p256_public_key FROM square_device_subkeys
+      WHERE cid_number = ? AND device_id = ?
+        AND binding_revision = ? AND account_id = ?`
   )
-    .bind(cidNumber, session.device_key_hash)
+    .bind(
+      cidNumber,
+      session.device_key_hash,
+      session.binding_revision,
+      accountId,
+    )
     .first<{ p256_public_key: string }>();
   if (!subkey) throw new HttpError(401, 'missing_device_subkey', '当前身份尚未登记硬件设备子钥');
   // 跨端签名文本须为 `0x`+128hex（ADR-041）；裸/大写/错长与验签失败一律 401。
@@ -140,11 +152,12 @@ export async function registerChatDevice(request: Request, env: Env): Promise<Re
   const deviceLimit = resourceLimit('chat_device').max_count!;
   const deviceWrite = await env.DB.prepare(
     `INSERT INTO chat_devices
-      (cid_number, account_id, device_id, device_public_key_hex, push_provider, push_token, expires_at, created_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?
+      (cid_number, binding_revision, account_id, device_id, device_public_key_hex, push_provider, push_token, expires_at, created_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM chat_devices WHERE cid_number = ? AND device_id = ?)
         OR (SELECT COUNT(*) FROM chat_devices WHERE cid_number = ? AND expires_at > ?) < ?
       ON CONFLICT(cid_number, device_id) DO UPDATE SET
+        binding_revision = excluded.binding_revision,
         account_id = excluded.account_id,
         device_public_key_hex = excluded.device_public_key_hex,
         push_provider = excluded.push_provider,
@@ -152,7 +165,8 @@ export async function registerChatDevice(request: Request, env: Env): Promise<Re
         expires_at = excluded.expires_at,
         created_at = excluded.created_at`,
   ).bind(
-    cidNumber, accountId, deviceId, devicePublicKeyHex, pushProvider, pushToken, expiresAt, createdAt,
+    cidNumber, session.binding_revision, accountId, deviceId, devicePublicKeyHex,
+    pushProvider, pushToken, expiresAt, createdAt,
     cidNumber, deviceId, cidNumber, createdAt, deviceLimit,
   ).run();
   if ((deviceWrite.meta?.changes ?? 0) !== 1) {
@@ -161,6 +175,7 @@ export async function registerChatDevice(request: Request, env: Env): Promise<Re
   return jsonResponse({
     ok: true,
     cid_number: cidNumber,
+    binding_revision: session.binding_revision,
     account_id: accountId,
     device_id: deviceId,
     device_public_key_hex: devicePublicKeyHex,
@@ -178,7 +193,14 @@ export async function publishChatKeyPackage(request: Request, env: Env): Promise
   const accountId = session.account_id;
   const deviceId = assertDeviceId(body.device_id);
   const publicKey = assertDevicePublicKeyHex(body.device_public_key_hex);
-  await requireActiveDevice(env, cidNumber, deviceId, publicKey);
+  await requireActiveDevice(
+    env,
+    cidNumber,
+    deviceId,
+    session.binding_revision,
+    session.account_id,
+    publicKey,
+  );
   const keyPackageId = assertKeyPackageId(body.key_package_id);
   const keyPackage = assertBase64Url(body.key_package, 'invalid_key_package', 'KeyPackage 必须是 base64url 编码');
   const cipherSuite = assertCipherSuite(body.cipher_suite);
@@ -196,13 +218,16 @@ export async function publishChatKeyPackage(request: Request, env: Env): Promise
   try {
     const inserted = await env.DB.prepare(
       `INSERT INTO chat_keypackages
-        (cid_number, account_id, device_id, key_package_id, key_package, cipher_suite, created_at, expires_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?
+        (cid_number, binding_revision, account_id, device_id, key_package_id, key_package, cipher_suite, created_at, expires_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE (SELECT COUNT(*) FROM chat_keypackages
-          WHERE cid_number = ? AND device_id = ? AND expires_at > ?) < ?`,
+          WHERE cid_number = ? AND device_id = ? AND binding_revision = ?
+            AND expires_at > ?) < ?`,
     ).bind(
-      cidNumber, accountId, deviceId, keyPackageId, keyPackage, cipherSuite, createdAt, expiresAt,
-      cidNumber, deviceId, nowMs(), keyPackageLimit.max_count!,
+      cidNumber, session.binding_revision, accountId, deviceId, keyPackageId,
+      keyPackage, cipherSuite, createdAt, expiresAt,
+      cidNumber, deviceId, session.binding_revision, nowMs(),
+      keyPackageLimit.max_count!,
     ).run();
     if ((inserted.meta?.changes ?? 0) !== 1) {
       throw new HttpError(429, 'key_package_limit_exceeded', 'KeyPackage 数量已达到设备上限');
@@ -211,7 +236,14 @@ export async function publishChatKeyPackage(request: Request, env: Env): Promise
     if (error instanceof HttpError) throw error;
     throw new HttpError(409, 'key_package_write_rejected', 'KeyPackage 已存在或数量达到上限');
   }
-  return jsonResponse({ ok: true, cid_number: cidNumber, device_id: deviceId, key_package_id: keyPackageId, expires_at: expiresAt });
+  return jsonResponse({
+    ok: true,
+    cid_number: cidNumber,
+    binding_revision: session.binding_revision,
+    device_id: deviceId,
+    key_package_id: keyPackageId,
+    expires_at: expiresAt,
+  });
 }
 
 export async function fetchChatKeyPackages(request: Request, env: Env): Promise<Response> {
@@ -219,15 +251,29 @@ export async function fetchChatKeyPackages(request: Request, env: Env): Promise<
   const url = new URL(request.url);
   // 路由末段 = 目标身份主键 cid_number;按 cid + device_id JOIN 设备名册。
   const cidNumber = assertChatCidNumber(url.pathname.split('/').pop());
+  const binding = await requireCurrentChatBinding(env, cidNumber);
   const limit = assertLimit(url.searchParams.get('limit'), 1, 20);
   const rows = await env.DB.prepare(
-    `SELECT kp.cid_number, kp.account_id, kp.device_id, d.device_public_key_hex, kp.key_package_id,
+    `SELECT kp.cid_number, kp.binding_revision, kp.account_id, kp.device_id,
+        d.device_public_key_hex, kp.key_package_id,
         kp.key_package, kp.cipher_suite, kp.created_at, kp.expires_at
       FROM chat_keypackages kp
       JOIN chat_devices d ON d.cid_number = kp.cid_number AND d.device_id = kp.device_id
-      WHERE kp.cid_number = ? AND kp.expires_at > ? AND d.expires_at > ?
+      WHERE kp.cid_number = ?
+        AND kp.binding_revision = ? AND kp.account_id = ?
+        AND d.binding_revision = ? AND d.account_id = ?
+        AND kp.expires_at > ? AND d.expires_at > ?
       ORDER BY kp.created_at ASC LIMIT ?`,
-  ).bind(cidNumber, nowMs(), nowMs(), limit).all<ChatKeyPackageRow>();
+  ).bind(
+    cidNumber,
+    binding.binding_revision,
+    binding.account_id,
+    binding.binding_revision,
+    binding.account_id,
+    nowMs(),
+    nowMs(),
+    limit,
+  ).all<ChatKeyPackageRow>();
   return jsonResponse({ ok: true, cid_number: cidNumber, key_packages: rows.results ?? [] });
 }
 
@@ -237,14 +283,28 @@ export async function consumeChatKeyPackage(request: Request, env: Env): Promise
   const body = await readJson<ConsumeKeyPackageRequest>(request);
   // 领取目标身份 = body.cid_number;领取者 = 当前会话身份(session.cid_number),无需另传。
   const cidNumber = assertChatCidNumber(body.cid_number);
+  const binding = await requireCurrentChatBinding(env, cidNumber);
   const keyPackageId = assertKeyPackageId(body.key_package_id);
   const row = await env.DB.prepare(
-    `SELECT kp.cid_number, kp.account_id, kp.device_id, d.device_public_key_hex, kp.key_package_id,
+    `SELECT kp.cid_number, kp.binding_revision, kp.account_id, kp.device_id,
+        d.device_public_key_hex, kp.key_package_id,
         kp.key_package, kp.cipher_suite, kp.created_at, kp.expires_at
       FROM chat_keypackages kp
       JOIN chat_devices d ON d.cid_number = kp.cid_number AND d.device_id = kp.device_id
-      WHERE kp.cid_number = ? AND kp.key_package_id = ? AND kp.expires_at > ? AND d.expires_at > ?`,
-  ).bind(cidNumber, keyPackageId, nowMs(), nowMs()).first<ChatKeyPackageRow>();
+      WHERE kp.cid_number = ? AND kp.key_package_id = ?
+        AND kp.binding_revision = ? AND kp.account_id = ?
+        AND d.binding_revision = ? AND d.account_id = ?
+        AND kp.expires_at > ? AND d.expires_at > ?`,
+  ).bind(
+    cidNumber,
+    keyPackageId,
+    binding.binding_revision,
+    binding.account_id,
+    binding.binding_revision,
+    binding.account_id,
+    nowMs(),
+    nowMs(),
+  ).first<ChatKeyPackageRow>();
   if (!row) throw new HttpError(404, 'key_package_not_available', 'KeyPackage 不存在或已被消费');
   const deleted = await env.DB.prepare(`DELETE FROM chat_keypackages WHERE key_package_id = ? AND cid_number = ?`)
     .bind(keyPackageId, cidNumber).run();
@@ -259,7 +319,13 @@ export async function submitChatEnvelope(request: Request, env: Env): Promise<Re
   // 发件人身份 = 会话 cid_number;收件人按身份主键 recipient_cid_number 寻址。
   const senderCidNumber = session.cid_number;
   const senderDeviceId = assertDeviceId(body.sender_device_id);
-  await requireActiveDevice(env, senderCidNumber, senderDeviceId);
+  await requireActiveDevice(
+    env,
+    senderCidNumber,
+    senderDeviceId,
+    session.binding_revision,
+    session.account_id,
+  );
   const recipientCidNumber = assertChatCidNumber(body.recipient_cid_number, 'invalid_recipient_cid_number');
   const recipientDeviceId = optionalDeviceId(body.recipient_device_id);
   const envelopeId = assertEnvelopeId(body.envelope_id);
@@ -292,7 +358,13 @@ export async function submitChatSignal(request: Request, env: Env): Promise<Resp
   // 发件人身份 = 会话 cid_number;收件人按身份主键 recipient_cid_number 寻址。
   const senderCidNumber = session.cid_number;
   const senderDeviceId = assertDeviceId(body.sender_device_id);
-  await requireActiveDevice(env, senderCidNumber, senderDeviceId);
+  await requireActiveDevice(
+    env,
+    senderCidNumber,
+    senderDeviceId,
+    session.binding_revision,
+    session.account_id,
+  );
   const recipientCidNumber = assertChatCidNumber(body.recipient_cid_number, 'invalid_recipient_cid_number');
   const signalText = JSON.stringify(body.signal);
   if (!body.signal || new TextEncoder().encode(signalText).byteLength > resourceLimit('chat_signal').max_bytes) {
@@ -314,9 +386,20 @@ export async function openChatWebSocket(request: Request, env: Env): Promise<Res
   const session = await requireSession(request, env);
   const deviceId = assertDeviceId(request.headers.get('x-chat-device'));
   // WS 信箱按身份主键 cid_number 命名(每身份一 DO,换绑后同一 cid 同一信箱)。
-  await requireActiveDevice(env, session.cid_number, deviceId);
+  await requireActiveDevice(
+    env,
+    session.cid_number,
+    deviceId,
+    session.binding_revision,
+    session.account_id,
+  );
   const internal = new Request('https://chat.internal/connect', request);
   internal.headers.set('x-chat-cid-number', session.cid_number);
+  internal.headers.set(
+    'x-chat-binding-revision',
+    String(session.binding_revision),
+  );
+  internal.headers.set('x-chat-account-id', session.account_id);
   internal.headers.set('x-chat-device', deviceId);
   return requireChatRealtimeNamespace(env).getByName(session.cid_number).fetch(internal);
 }
@@ -325,17 +408,40 @@ async function requireActiveDevice(
   env: Env,
   cidNumber: string,
   deviceId: string,
+  bindingRevision: number,
+  accountId: string,
   expectedPublicKey?: string,
 ): Promise<ChatDeviceRow> {
   const row = await env.DB.prepare(
-    `SELECT cid_number, account_id, device_id, device_public_key_hex, expires_at
-      FROM chat_devices WHERE cid_number = ? AND device_id = ? AND expires_at > ?`,
-  ).bind(cidNumber, deviceId, nowMs()).first<ChatDeviceRow>();
+    `SELECT cid_number, binding_revision, account_id, device_id,
+        device_public_key_hex, expires_at
+      FROM chat_devices
+      WHERE cid_number = ? AND device_id = ?
+        AND binding_revision = ? AND account_id = ? AND expires_at > ?`,
+  ).bind(
+    cidNumber,
+    deviceId,
+    bindingRevision,
+    accountId,
+    nowMs(),
+  ).first<ChatDeviceRow>();
   if (!row) throw new HttpError(403, 'chat_device_not_registered', 'Chat 设备未绑定或已过期');
   if (expectedPublicKey && row.device_public_key_hex !== expectedPublicKey) {
     throw new HttpError(403, 'chat_device_key_mismatch', 'Chat 设备公钥与绑定记录不一致');
   }
   return row;
+}
+
+async function requireCurrentChatBinding(env: Env, cidNumber: string) {
+  const binding = await fetchChainIdentityStateByCid(env, cidNumber);
+  if (
+    binding.cid_number !== cidNumber
+    || binding.binding_revision <= 0
+    || !binding.account_id
+  ) {
+    throw new HttpError(404, 'chat_cid_not_bound', '目标 CID 当前没有有效绑定账户');
+  }
+  return binding;
 }
 
 function assertPushProvider(value: unknown): PushProvider {

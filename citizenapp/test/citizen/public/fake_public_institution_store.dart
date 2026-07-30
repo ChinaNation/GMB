@@ -124,27 +124,38 @@ class FakePublicInstitutionStore implements PublicInstitutionStore {
   }
 
   @override
-  Future<void> subscribe(String accountId, String cidNumber) async {
-    subs.add(subscriptionKeyOf(accountId, cidNumber));
+  Future<void> subscribe(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  ) async {
+    subs.add(subscriptionKeyOf(subscriberCidNumber, institutionCidNumber));
   }
 
   @override
-  Future<void> unsubscribe(String accountId, String cidNumber) async {
-    subs.remove(subscriptionKeyOf(accountId, cidNumber));
+  Future<void> unsubscribe(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  ) async {
+    subs.remove(subscriptionKeyOf(subscriberCidNumber, institutionCidNumber));
   }
 
   @override
-  Future<bool> isSubscribed(String accountId, String cidNumber) async =>
-      subs.contains(subscriptionKeyOf(accountId, cidNumber));
+  Future<bool> isSubscribed(
+    String subscriberCidNumber,
+    String institutionCidNumber,
+  ) async =>
+      subs.contains(
+        subscriptionKeyOf(subscriberCidNumber, institutionCidNumber),
+      );
 
   @override
   Future<List<PublicInstitutionEntity>> listSubscribed(
-    String accountId,
+    String subscriberCidNumber,
   ) async {
     final out = <PublicInstitutionEntity>[];
     for (final key in subs) {
-      if (!key.startsWith('$accountId|')) continue;
-      final cid = key.substring(accountId.length + 1);
+      if (!key.startsWith('$subscriberCidNumber|')) continue;
+      final cid = key.substring(subscriberCidNumber.length + 1);
       final d = byId[cid];
       if (d != null) out.add(_entity(d));
     }

@@ -6,27 +6,27 @@
 
 import 'mls_boundary.dart';
 
-/// 群成员标识 = "account_id:device_id"(MLS BasicCredential 内容)。
-/// 扇出/名册以**账户**为单位(recipient_account_id),故从标识取账户段。
-String accountIdFromMemberIdentity(String identity) {
+/// 群成员标识 = "cid_number:device_id"（MLS BasicCredential 内容）。
+/// 扇出/名册以 CID 为单位，故从标识取 CID 段。
+String cidNumberFromMemberIdentity(String identity) {
   final index = identity.indexOf(':');
   return index < 0 ? identity : identity.substring(0, index);
 }
 
-/// 一批成员标识 → 去重账户集合(可选排除自己)。
-List<String> accountIdsFromMemberIdentities(
+/// 一批成员标识 → 去重 CID 集合（可选排除自己）。
+List<String> cidNumbersFromMemberIdentities(
   Iterable<String> identities, {
-  String? excludeAccountId,
+  String? excludeCidNumber,
 }) {
   final seen = <String>{};
   final result = <String>[];
   for (final identity in identities) {
-    final accountId = accountIdFromMemberIdentity(identity);
-    if (accountId.isEmpty || accountId == excludeAccountId) {
+    final cidNumber = cidNumberFromMemberIdentity(identity);
+    if (cidNumber.isEmpty || cidNumber == excludeCidNumber) {
       continue;
     }
-    if (seen.add(accountId)) {
-      result.add(accountId);
+    if (seen.add(cidNumber)) {
+      result.add(cidNumber);
     }
   }
   return result;
@@ -85,21 +85,21 @@ class GroupCreated {
 /// 加人/删人产生的 Commit 束。
 ///
 /// add:`commit` 发给现有成员,`welcome` 发给全部新人(单条覆盖 N 人)。
-/// remove:仅 `commit`,发给剩余成员 + 被删者;`removedAccountIds` 为被删账户。
+/// remove:仅 `commit`,发给剩余成员 + 被删者;`removedCidNumbers` 为被删 CID。
 class GroupCommitBundle {
   const GroupCommitBundle({
     required this.groupId,
     required this.epoch,
     required this.commit,
     this.welcome,
-    this.removedAccountIds = const [],
+    this.removedCidNumbers = const [],
   });
 
   final String groupId;
   final int epoch;
   final MlsWireMessage commit;
   final MlsWireMessage? welcome;
-  final List<String> removedAccountIds;
+  final List<String> removedCidNumbers;
 }
 
 /// `group_process` 处理入站群消息的结果。
@@ -163,10 +163,10 @@ abstract class MlsGroupCrypto {
     List<MlsKeyPackage> keyPackages,
   );
 
-  /// 删人:Commit(剩余成员 + 被删者)。按**账户**移除(含其全部设备叶子)。
+  /// 删人：Commit（剩余成员 + 被删者）。按 CID 移除（含其全部设备叶子）。
   Future<GroupCommitBundle> removeMembers(
     String groupId,
-    List<String> memberAccountIds,
+    List<String> memberCidNumbers,
   );
 
   /// 群 application message(单次加密,Dart 侧扇出)。

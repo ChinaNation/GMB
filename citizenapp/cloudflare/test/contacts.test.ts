@@ -25,6 +25,22 @@ vi.mock('../src/chain/identity', () => ({
       has_voting_identity: false,
       has_candidate_identity: false,
       cid_number: map[accountId] ?? null,
+      binding_revision: map[accountId] ? 1 : 0,
+      checked_at: 0
+    };
+  }),
+  fetchChainIdentityStateByCid: vi.fn(async (_env: unknown, cidNumber: string) => {
+    const map: Record<string, string> = {
+      ['CN220-CTZN2-100000001-2026']: '0x' + '11'.repeat(32),
+      ['CN220-CTZN2-100000002-2026']: '0x' + '22'.repeat(32)
+    };
+    return {
+      account_id: map[cidNumber] ?? '',
+      identity_level: 'visitor',
+      has_voting_identity: false,
+      has_candidate_identity: false,
+      cid_number: cidNumber,
+      binding_revision: map[cidNumber] ? 1 : 0,
       checked_at: 0
     };
   })
@@ -216,9 +232,14 @@ async function registerAccount(
   const cid = accountId === ACCOUNT_ID_A ? CID_A : CID_B;
   // device_id == 会话 device_key_hash == sha256(p256):子钥挂在 (cid, device_id) 下。
   const deviceId = await sha256Hex(pubkey);
-  db.subkeys.set(`${cid}:${deviceId}`, { p256_public_key: pubkey, account_id: accountId });
+  db.subkeys.set(`${cid}:${deviceId}`, {
+    p256_public_key: pubkey,
+    binding_revision: 1,
+    account_id: accountId
+  });
   kv.store.set(`square_session:${await sha256Hex(token)}`, {
     cid_number: cid,
+    binding_revision: 1,
     account_id: accountId,
     device_key_hash: deviceId,
     created_at: Date.now(),
@@ -333,7 +354,11 @@ class ContactStmt {
       const deviceId = this.binds[1] as string;
       const row = this.db.subkeys.get(`${cid}:${deviceId}`);
       return row
-        ? ({ p256_public_key: row.p256_public_key, account_id: row.account_id } as T)
+        ? ({
+            p256_public_key: row.p256_public_key,
+            binding_revision: row.binding_revision,
+            account_id: row.account_id
+          } as T)
         : null;
     }
     return null;
@@ -391,7 +416,11 @@ class ContactStmt {
 
 class ContactDb {
   readonly contacts = new Map<string, ContactCiphertextRow>();
-  readonly subkeys = new Map<string, { p256_public_key: string; account_id: string }>();
+  readonly subkeys = new Map<string, {
+    p256_public_key: string;
+    binding_revision: number;
+    account_id: string;
+  }>();
   readonly rateWindows = new Map<string, number>();
   readonly requestNonces = new Set<string>();
   forcedRateCount: number | null = null;

@@ -12,6 +12,7 @@ void main() {
   const session = SquareSession(
     sessionToken: 'test-session',
     cidNumber: "CN220-CTZN2-198805200-2026",
+    bindingRevision: 1,
     accountId:
         '0x6666666666666666666666666666666666666666666666666666666666666666',
     expiresAt: 9999999999999,
@@ -43,7 +44,7 @@ void main() {
     expect(find.text('关注'), findsOneWidget);
     // 缺公开资料时按身份主键 cid_number 稳定派生默认昵称。
     expect(
-      find.text(ProfilePresentation.forAccountId(cidA).fallbackName),
+      find.text(ProfilePresentation.forIdentityKey(cidA).fallbackName),
       findsOneWidget,
     );
     // 副标题展示身份主键 cid_number（完整）。

@@ -19,14 +19,14 @@ enum GroupMemberRole {
   }
 }
 
-/// 群成员镜像(账户 + 角色)。
+/// 群成员镜像（CID + 角色）。
 class GroupMember {
   const GroupMember({
-    required this.accountId,
+    required this.cidNumber,
     this.role = GroupMemberRole.member,
   });
 
-  final String accountId;
+  final String cidNumber;
   final GroupMemberRole role;
 
   bool get isAdmin => role == GroupMemberRole.admin;
@@ -37,7 +37,7 @@ class ChatGroup {
   const ChatGroup({
     required this.groupId,
     required this.name,
-    required this.creatorAccountId,
+    required this.creatorCidNumber,
     required this.epoch,
     required this.roster,
     this.leftLocally = false,
@@ -46,7 +46,7 @@ class ChatGroup {
   /// 群 ID = conversation_id,形如 `grp:<creator>:<nonce>`。
   final String groupId;
   final String name;
-  final String creatorAccountId;
+  final String creatorCidNumber;
 
   /// MLS 当前 epoch 的本地镜像(UI/调试用)。
   final int epoch;
@@ -57,13 +57,13 @@ class ChatGroup {
   /// 本机是否已退群/被移除。
   final bool leftLocally;
 
-  /// admin 账户集合。
+  /// admin CID 集合。
   Set<String> get adminSet => roster
       .where((member) => member.isAdmin)
-      .map((member) => member.accountId)
+      .map((member) => member.cidNumber)
       .toSet();
 
-  /// 全体成员账户(去重)。
-  List<String> get memberAccountIds =>
-      roster.map((member) => member.accountId).toList(growable: false);
+  /// 全体成员 CID（去重）。
+  List<String> get memberCidNumbers =>
+      roster.map((member) => member.cidNumber).toList(growable: false);
 }

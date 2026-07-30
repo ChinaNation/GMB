@@ -53,6 +53,7 @@ export async function deleteAccountChallengeRoute(request: Request, env: Env): P
   const challenge = await issueActionChallenge(
     env,
     session.cid_number,
+    session.binding_revision,
     accountId,
     'delete_account'
   );
@@ -81,6 +82,7 @@ export async function deleteAccountRoute(request: Request, env: Env): Promise<Re
   );
   await consumeActionSignature(env, {
     cidNumber: session.cid_number,
+    bindingRevision: session.binding_revision,
     accountId: parsed.accountId,
     action: 'delete_account',
     challengeId: parsed.challengeId,

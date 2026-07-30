@@ -1,6 +1,6 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(2026-07-29 第 1 步“绑定权限、版本与防重放”已完成并通过真实运行态验收；未创世，等待用户确认第 2 步“CID 控制权转移与三层密钥接管”技术方案)
+状态:open(2026-07-29 第 4 步“Cloudflare 绑定三元组、Chat CID 身份与联系人换绑刷新”已完成；未创世、未推送，等待用户确认第 5 步技术方案)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
 citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
@@ -50,16 +50,99 @@ citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本�
 - 已用全新临时双节点、真实 OnChina HTTP 服务和临时 PostgreSQL 完成运行态验收；
   临时服务、数据与 Rust 增量产物已清理。未生成或冻结正式创世，未提交、推送或触发 CI。
 
+### 第 2 步完成记录（2026-07-29）
+
+- Worker 新增按 `cid_number` 唯一存储的稳定数据根，服务端以
+  `CID_DATA_ROOT_MASTER_KEY` + 创世哈希/CID AAD 密封；同一 CID 换绑前后数据根与
+  `data_root_hash` 不变，激活版本只允许单调推进。
+- 接管接口使用当前 finalized 新账户的一次性挑战签名；挑战绑定创世哈希、CID、
+  `account_id`、`binding_revision`、随机 challenge 和过期时间，且在验签前后两次读取
+  finalized 绑定。旧挑战、旧 revision、错误账户和重复消费全部失败关闭。
+- CitizenApp 数据根金库固定执行“新账户包装 → 读回摘要校验 → 激活四元组标记 →
+  派生 CID 用途子钥 → 清理低版本包装”。接管函数没有此前账户参数，也不读取此前账户
+  私钥、公钥、签名或设备。
+- 自主换绑授权未被削弱：runtime 调用仍由当前绑定账户签授权摘要、新账户作为交易
+  origin 提交；注册局换绑仍只走注册局/管理员权限与新账户控制证明。两条链上路径
+  finalized 后统一由当前新账户独立接管。
+- `IdentityAccountCache` 与 Worker 受保护路由均改为 finalized 当前绑定失败关闭；
+  本地完成标记由账户单值升级为
+  `(cid_number, binding_revision, account_id, data_root_hash)`，崩溃后按链上真值幂等补齐。
+- 删除账户间通讯录搬运、旧账户重封装、钱包创建时生成随机数据根等错误流程；Chat、
+  MLS、附件、通讯录本地/云端和草稿用途域统一从 CID 稳定数据根派生。
+- 验收：Worker `npm run typecheck` 通过，Vitest 32 文件 222 项全绿，其中接管接口
+  已通过完整 Worker HTTP 入口与真实本地 D1/KV binding；基线 SQL + `0003` 也已在
+  内存 SQLite 实际执行通过。CitizenApp
+  `flutter analyze` 通过，Flutter 1036 项通过、5 项因本机无原生 smoldot 条件性跳过、
+  0 项失败。未修改 runtime，未创世、未推送、未触发 CI、未部署。
+
+### 第 3 步完成记录（2026-07-29）
+
+- Chat 会话、消息、出站队列、待投递媒体、待处理入站、路由、群镜像和乱序 Commit
+  全部改为 `ownerCidNumber` 复合唯一/查询/删除；消息信封、MLS 名册和投递统一使用
+  CID，当前绑定 `account_id` 不再作为本机数据归属键或 Chat 身份。
+- Chat 明文、搜索索引、附件和 MLS 状态统一从 CID 稳定数据根派生用途子钥；
+  路径固定为 `chat/by_cid/<cid_number>/...`。同一 CID 换绑新账户后可直接解密
+  原本地数据，不读取或要求此前账户、私钥或设备。
+- 广场草稿模型、KV 前缀和媒体目录全部按 `cid_number` 分区；通讯录本地 KV 固定为
+  `contact_book_by_cid:`、`contact_pending_by_cid:`、`contact_sync_by_cid:`。
+  删除普通旧账户不再删除 CID 通讯录；只有用户明确清空或删除当前热钱包时才执行
+  本机隐私擦除。
+- 公权机构关注改为 `subscriberCidNumber + institutionCidNumber`；身份徽章快照、
+  平台订阅/创作者订阅 finalized 待提交证明、创作者档位镜像和有限交易历史均按
+  永久 CID 分区。当时的 `signer_account_id` 只保留为不可变交易事实，新绑定账户的
+  同一 CID 会话可继续提交旧 finalized 证明。
+- Isar 生成模型已重建；中文注释、模块技术文档、统一协议和关联任务卡已同步，
+  本步废弃账户分区命名与错误换绑重建描述已清除。
+- 验证：`flutter analyze --no-pub` 零问题；草稿、通讯录、真实 Isar 机构关注和完整
+  Chat 定向套件 208 项通过，4 项原生 OpenMLS 因桌面宿主无动态库按既有条件跳过；
+  身份、创作者、机构页和钱包生命周期定向 77 项通过。最终全量 Flutter 套件
+  1038 项通过、5 项按原生库/链烟测环境条件跳过、0 项失败；同时修复
+  `bootstrap_test.dart` 全局 Navigator key 未卸载造成的顺序依赖。Worker
+  `npm run typecheck` 通过，Vitest 32 文件 222 项全绿；`git diff --check`
+  通过。未修改 runtime、未创世、未推送、未触发 CI、未部署。
+
+### 第 4 步完成记录（2026-07-29）
+
+- Worker 登录挑战、Session、设备子钥、动作挑战、Chat 设备、KeyPackage 和 WebSocket
+  全部绑定 `cid_number + binding_revision + account_id`；每次受保护请求和投递均重新
+  核验 finalized 当前绑定，旧 revision、旧账户和反向闭环不一致全部失败关闭。
+- CID 数据根接管固定由 finalized 新账户完成挑战签名；新包装读回摘要验证并激活后，
+  才清理旧 Session、设备子钥、Chat 设备、KeyPackage 和旧三元组 WebSocket。流程没有
+  旧账户、旧私钥或旧设备参数，CID 业务数据和稳定数据根不删除、不重建。
+- Chat Protobuf、Dart/Rust OpenMLS 凭证、群名册、Isar、HTTP 与推送路由统一以 CID
+  为唯一身份键。当前账户只负责 Session、设备登记签名、本地 CID 数据根包装和付款；
+  换绑不改变会话、消息、群成员、附件或 MLS 目录的归属。
+- 通讯录关系和私人备注继续以联系人 CID 归属；页面加载后在同一 finalized 块批量校验
+  CID 正向绑定、Active 记录、单调 revision 与账户反向绑定，再更新账户/SS58 快照。
+  转账前再次按联系人 CID 严格解析最新绑定，失败时禁止回退旧快照；私信只传联系人 CID。
+- 公开资料缺失时的默认昵称、头像和背景统一优先按 CID 稳定生成；完整 AccountId、
+  SS58 和截断身份键均不能充当公开昵称。纯访客没有 CID 时才允许用当前账户作展示种子。
+- 代码、中文注释、Chat/USER/钱包/安全/统一协议文档和关联任务卡已同步；旧
+  `sender_account_id`、`recipient_account_id`、`peer_account_id`、账户群成员及
+  `grp:acct*` Chat 残留已从实现和目标文档清除。Worker 瞬时投递内部保存的当前授权
+  账户也明确命名为 `recipient_binding_account_id`，不得被解释为收件人身份主键；
+  历史任务卡中的阶段性账户身份说明已经按 CID 终态订正。
+- 验收：`flutter analyze --no-pub` 零问题；CitizenApp 全量测试 1042 项通过、5 项因
+  桌面宿主无 native smoldot/OpenMLS 动态库按既有条件跳过、0 项失败。Worker
+  `npm run typecheck` 通过，Vitest 32 文件 222 项全绿；真实本地 D1/KV/R2 Worker
+  HTTP 入口覆盖 CID 数据根接管与换绑后数据延续。Rust OpenMLS 13 项全绿，
+  `chat_mls.rs` 独立 rustfmt 检查通过，增量产物已清理；`git diff --check` 通过。
+  收尾复跑时额外修复充值 intent 篡改单测偶发未真正改字节的问题，最终 Worker 仍为
+  32 文件、222 项全绿。
+  未修改 runtime、未创世、未推送、未触发 CI、未部署。
+
 ## 背景漏洞(用户 req 4)
 当前身份唯一主键 = 钱包账户,私钥热存本机;私钥泄漏 = 必须换身份 = 丢失全部动态/文章/粉丝等社交资产。
 修复:身份主键切为 **CID 号**,钱包账户降为**可更换的签名子钥**(仿链上个人多签 CID+账户组合)。
 
 ## 三决策(用户 2026-07-27 拍板)
 - **D1 自助·自付费**:公民本人 `Signed` origin 直接占号,自付最低链上费(`ONCHAIN_MIN_FEE=10`),绕过注册局。新增 permissionless `self_occupy_cid`。
-- **D2 仅自助轮换换绑**:`commitment = blake2_256(账户公钥)`;换绑由**当前绑定账户签名**授权换到新 `//index` 账户;彻底丢失助记词=不可恢复(接受)。暂不做恢复密钥、暂不做注册局 KYC 恢复。
+- **D2 两条换绑路径（2026-07-29 最终覆盖）**：非投票/竞选 CID 的自主换绑由当前绑定
+  账户签名授权、新账户提交；注册局换绑由在册机构 `admins` 权限和新账户控制证明完成，
+  不要求当前旧账户签名。投票/竞选以及曾成为投票公民的 CID 只能走注册局路径。
 - **D3 人主体 CID 去地域化 + 号段扩容(人/机构彻底分开)**:**人主体(公民 CTZN / 居民 NATP / 智能人 SMTP)统一**(用户 2026-07-27 修正:不留任何 person 走省码;NATP=居民,非自然人)R5 **位 1-2=`CN` 国家码;位 3-5 由固定 `000` 改为承载号码高 3 位**(原 000 对人无意义,回收作号段)。人号段 = R5 位3-5(高 3 位)+ N9(低 9 位)= **12 位 = 1e12/年**;人只吃公钥/码/年,不吃省市。机构 CID 才用省码+市码(`is_person_code` 分流,`CN` 前缀天然区分)。居住省/市仍单独存于 `VotingIdentity`/`CidRecord`(与 CID 号解耦)。[[unify-means-zero-exceptions]] 零例外。
 
-## 链侧现状(侦察定论,`runtime/misc/citizen-identity/src/lib.rs`)
+## 实施前链侧基线（历史侦察，`runtime/misc/citizen-identity/src/lib.rs`）
 - 存储**已全在位**:`CidRegistry`(CID→记录,含 `commitment[32]`/residence/status Active·Revoked)、`AccountIdByCid`+`CidByAccountId`(双向绑定闭环 `bind_account_id` L1407 / `ensure_account_id_binding_available` L1375)、`VotingIdentityByCid`、`CandidateIdentityByCid`、四级人口计数。**匿名 CID = 有 CidRegistry+双向绑定、无 VotingIdentityByCid**,存储天然可表达。
 - 缺口:①全部 extrinsic **注册局门**(`CitizenIdentityAuthority::can_manage_voting_identity`,CREG/FRG);无自助。②`occupy_cid`(call 6,L1085)**只写号不绑账户**;账户到 `register_voting_identity`(call 0)才绑。③**无换绑**(`update_*` 禁改账户 `ensure_current_account_id_binding` L1395)。
 - CID **客户端生成**(`primitives/cid/generator.rs`),链只格式+查重仲裁(`do_occupy_cid` L1237);现个人码强制市 `000`、R5=省+000、N9=hash(公钥|码|省名|000|年)。**D3 改为 R5=CN000。**
@@ -103,9 +186,13 @@ citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本�
   - **S8.3 身份主键切换 + 门控 + 删默认用户**(`getDefaultWallet()`→CID-bound account、`signWithWallet` re-plumb 到 accountId、聊天/广场/订阅/创作者/通讯录门控到已注册 CID、删「默认用户」)。**决策裁定(用户,2026-07-27,grounding 后校准)**:
     - **①时机=现在全做**;**验证=本地开发链重新创世**(本地起含本会话 S1-S3 `self_occupy_cid` 的 citizenchain 矿工端重新创世,app 连它走 新建钱包→自助占号→匿名已注册→门控解锁 全链路)。**⚠️纠正前提**:创世公民(法代 `CN220-CTZN2-198805200-2026`/账户 `0x0cb1d05c…4b06b`)在 `citizen-identity` **无 GenesisConfig 记录**=链上纯访客(`readByAccountId` 返回 null),**不能用它验证门控/主键**;助记词也不在仓。
     - **②门控=全功能门控 CID**,未注册即引导注册,访客无匿名可用面。
-    - **③身份账户=CID 绑定的钱包账户(可任意 `//n`,非恒账户0)**——见 [[citizenapp-cid-identity-master-key]]:身份主键=CID 号,钱包账户是 CID 绑定的鉴权凭证;**注册 CID 时用户自选绑定账户**;设备子钥/广场会话/通讯录密钥都从 CID 绑定账户派生(非恒账户0),换绑随之重派迁移(根治 agent 报告的三处对不齐,不是把身份拉回账户0)。
+    - **③身份账户=CID 当前绑定的钱包账户(可任意 `//n`,非恒账户0)**——身份主键始终是
+      CID；账户只负责签名、鉴权、付款和包装 CID 数据根。设备登记证明由当前账户签，
+      业务数据与用途密钥归 CID，换绑不搬迁业务数据。
     - **架构发现**:身份主键类型从 `WalletProfile`(钱包级)降到 `Account`(账户级);27 处 `getDefaultWallet`+27 处 `signWithWallet` 按用途分流(身份→身份账户 / 付款治理机构→保留账户0或所选)。QR 签名服务(citizen_identity/square_action)只遍历 WalletProfile,子账户身份有 gap 需扩。
-    - **拆子步**:S8.3a 身份账户单源 `getIdentityAccount()` + 注册选绑定账户 **✅完成(2026-07-27,875绿)**;S8.3b 鉴权凭证迁移(设备子钥/会话/通讯录钥/社交·会员·创作者签名从 CID 绑定账户派生;**死契约 [[cid-rebind-subkeys-must-auto-migrate]]**:换绑 Finalized 成功后所有派生子钥必自动成功更换,本地重派必成功、后端重注册持续重试到成功,不允许不更换或失败);S8.3c 全功能门控 CID(合并口径:CID门×设备子钥会话×发布四层门禁);S8.3d 删默认用户;S8.3e 本地开发链重新创世 e2e。
+    - **拆子步**:S8.3a 身份账户单源 `getIdentityAccount()` + 注册选绑定账户
+      **✅完成**；S8.3b finalized 当前账户鉴权与 CID 数据根接管 **✅由本任务第 2 步
+      最终收口**；S8.3c 全功能门控 CID；S8.3d 删默认用户；S8.3e 并入正式创世前 e2e。
 
 ## S1 落地(2026-07-27,完成 ✅)
 > **修正(2026-07-27,用户)**:CN 方案由「仅 CTZN」扩为「**全部 `is_person_code`(CTZN/NATP/SMTP)**」——删 `is_citizen_code`,generator/`cid_scope_codes` 守卫/node `valid_province_city` 均改 `is_person_code`,generator else 分支删原 person city=000 死逻辑,人主体金标测试覆盖三码。CTZN 金标值不变。**`cargo test --workspace` 全绿(81 批次 0 failed / 0 panicked)。**
@@ -226,32 +313,39 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 - **范围收敛**:S8.3a 只切身份页数据源 + 注册 + 单源基建;**其他身份展示调用方(chat/square/user)+ 设备子钥/广场会话/通讯录密钥迁移 = S8.3b**——常态身份=账户0 时无差异,换绑到子账户的全端一致性待 S8.3b。上链真跑待 S8.3e 本地链。
 
 ## S8.3b-1 落地(2026-07-27,完成 ✅)—— 身份账户缓存基建 + 广场身份
-- **`identity_account_cache.dart`**(新):`IdentityAccountCache` 给 chat/广场/会话等高频调用方提供身份账户低成本入口——按 `walletsRevision` 失效、并发请求合并成一次链读、`allowChainRead=false`(广场浏览**绝不启动 smoldot**:命中缓存或乐观回退账户0)、链读失败乐观回退账户0(与身份页 getState 严格 fail-closed 分工);`debugInstance`/`resetDebugInstance` 测试覆盖点(免逐处注入)。8 单测。
+- **`identity_account_cache.dart`**:`IdentityAccountCache` 给 chat/广场/会话等高频调用方
+  提供身份账户低成本入口；第 2 步已删除账户0乐观回退，链读失败、禁止链读时缓存未命中
+  和绑定闭环不完整全部返回失败，不能把钱包账户误当成 CID 当前授权账户。
 - **`square_identity_state`**:广场身份 `accountId`/`ss58`/`cid` 跟随身份账户,`walletIndex`(设备子钥锚点)/`walletName` 保持钱包级;`square_home_page_test` setUp 注入 `_NullIdentityCache`(回退 wallet.accountId,行为不变)。
 - 门禁:`dart analyze` No issues + `flutter test` **883 绿**。
 - **⚠️ 子步组织调整(grounding 后)**:切广场身份时确认「**本人 accountId」全 App 统一**(getDefaultWallet().accountId 同喂 身份展示/chat会话/广场会话/设备子钥绑定/社交签名),**纯展示与会话/签名无法干净拆**;且 `ensureSessionFor` 被「钱包名同步」复用、设备子钥按 walletIndex 绑 accountId、后端 device/register 证明归属——切身份账户须连带**设备子钥重绑**。故原 b-1/b-2「展示/会话」拆分作废,**S8.3b-2 重定义 = 本人 accountId 统一切换 + 设备子钥/会话/社交签名同步(自洽单元)**,开工前补 grounding 会话/设备子钥完整链路。
-- **⚠️ 原则纠正(用户,2026-07-27)**:**彻底改造,不搞迁移/不搞兼容**([[no-compatibility]]);**CID 号=唯一身份主键硬规则永不可改**([[citizenapp-cid-identity-master-key]])。收回「常态 identity=账户0 值不变(兼容框架)」「排除迁移到 b-4」的表述。彻底版:身份主键单源 = `IdentityAccountCache`(CID 绑定账户);**`getDefaultWallet` 彻底退出身份主键角色**(只保留拿 walletIndex/钱包元数据一个用途);全 App 本人 accountId(会话/签名/展示/chat/**通讯录纳入**)一律直取身份账户、**不留账户0 兼容路径**;换绑时子钥/会话/通讯录密钥 = **彻底重建到新账户**(死契约必成功),非搬旧数据。落地仍分步(会话解耦地基→会话+展示+chat+通讯录彻底切→社交签名→换绑重建),但每步彻底改无旧残留。
+- **最终原则**：CID 是唯一身份主键，`getDefaultWallet` 只保留钱包元数据用途；
+  全 App 当前授权账户由 finalized CID 绑定解析，失败关闭。业务数据和用途子钥归 CID，
+  当前账户仅负责签名、鉴权、付款与包装数据根；换绑不搬运 CID 数据。
 
 ## S8.3b-2 落地(2026-07-28,完成 ✅)—— 本人 accountId 全 App 彻底切身份账户
 **彻底改造(不半切/不留账户0):正交轴 accountId→身份账户、walletIndex/ss58/walletName/设备子钥存储→钱包级。全量 883 绿 + analyze clean。**
-- **基建**:`identity_account_cache.dart` `IdentityAccountCache`(walletsRevision 失效 + 并发合并 + `allowChainRead=false` 广场浏览不启 smoldot + `debugInstance` 测试覆盖 + 链读失败乐观回退账户0,8 单测);`WalletManager.rebindDeviceSubkeyToAccountId`(换绑用:P-256 子钥不动、身份账户 child 重签绑定证明、后端归属身份账户)。
+- **基建**:`identity_account_cache.dart` `IdentityAccountCache`(walletsRevision 失效 + 并发合并 + `allowChainRead=false` 广场浏览不启 smoldot + `debugInstance` 测试覆盖 + 8 单测);后续第 2 步已把“链读失败时回退账户0”彻底改为失败关闭。`WalletManager.rebindDeviceSubkeyToAccountId`(换绑用:P-256 子钥不动、身份账户 child 重签绑定证明、后端归属身份账户)。
 - **步1 会话解耦**:`ensureSession()` accountId=身份账户、签名用钱包 walletIndex 子钥(解耦),不复用 `ensureSessionFor`(留钱包名同步)。
 - **步2 会话+展示+chat 页**:8 文件本人 accountId 切身份账户(user.dart 同步 getter→异步 state 重构 + 徽章快照口径收口身份账户、`_refreshIdentityAfterChainOperational` 身份 dedupe+钱包级再入守卫修 //n 徽章不刷新 bug;user_profile/square_home 比对键;4 chat 页 self accountId);4 测试注 `_NullIdentityCache`。
 - **步3 社交签名**:5 service(subscription×3/creator_subscribe×3/creator/compose/注销)链上交易三件套切 `signForAccountId(身份账户)`;`_requireIdentity()` 一次 resolve;修 creator `session(身份)`vs`wallet(账户0)` 误拦 //n latent bug。
 - **步4 chat 运行态**:`chat_runtime.readAccountId`/`_readAccount` 切身份账户、walletIndex/walletName 钱包级、`expectedAccountId` 校验改身份账户;`ChatRuntime` 加 `IdentityAccountCache` 注入。
-- **通讯录(彻底切,根治半切)**:`ensureContactKeyMaterial`→`ensureContactKeyMaterialForAccountId(accountId)`(从**身份账户 child** 派生,删 walletIndex);`contact_service` 本人 accountId(9处)+`_syncWallet(String)`+`session.accountId` 校验全切身份账户,删 `_requireDefaultWallet`;`user_service_test` fake 改名+注 `_FakeIdentityCache`。
-- **换绑重建 helper 待 b-4 触发**:换绑 Finalized 后 `rebindDeviceSubkeyToAccountId` + 通讯录密文重加密(salt 变 sha256(新账户)) + 会话重建 = **S8.3b-4 换绑重建编排**,尚未接 `rebindCidTo`。
-- **剩余**:~~S8.3b-4 换绑重建编排~~(✅ 见下)/ S8.3c 全功能门控 CID / S8.3d 删默认用户 / S8.3e 本地开发链 e2e。
+- **通讯录鉴权切换**：本人签名账户统一取 CID finalized 当前绑定；第 2 步进一步把本地与
+  云端通讯录子钥改为 CID 稳定数据根派生，账户 child 不再直接决定通讯录密钥。
+- **剩余**：S8.3b-4 已由 finalized 当前账户接管最终实现覆盖；S8.3c/S8.3d 已完成，
+  S8.3e 留待正式创世前整体验收。
 
-## S8.3b-4 换绑重建编排(2026-07-28,完成 ✅)—— 死契约 [[cid-rebind-subkeys-must-auto-migrate]] 闭环
-**换绑链上 Finalized 后,设备子钥/会话/通讯录自动更换到新账户,不允许不更换或失败。全量 886 绿 + analyze clean。**
-- **触发点**:`myid_service.rebindCidTo`,`selfRebindCidAccount(waitForFinalized:true)` await 返回=已 Finalized(原方法只提交+广播零重建=缺口)。
-- **编排三步**(`_runRebindMigration`,全幂等):①`rebindDeviceSubkeyToAccountId(new)`(P-256 子钥不动、重签绑定证明、后端归属切 new;new 会话登录**硬前置**须最先)②`notifyIdentityBindingChanged()`(失效身份缓存,resolve/ensureSession 转指 new)③`contactService.migrateContactsToNewIdentity(old,new)`。
-- **通讯录迁移**(`migrateContactsToNewIdentity`,contact_service 新增):本地 `contacts:old`→`contacts:new` 搬明文(权威副本,无需解旧云端)+ 每条造 upsert pending 强制新 keys 重加密 + 清 old 本地缓存(contacts/pending/sync,新增 `_deleteKvKeys`)+ `WalletManager.deleteContactKeysForAccountId(old)`(新增 public)+ `_syncWallet(new)`(内部 ensureContactKeyMaterialForAccountId(new child)+ensureSession(new)+new keys 加密上云;内部吞异常落 pending 兜底)。
-- **失败=最终一致**:链上 Finalized 不可逆。换绑前落**续跑意图**`IdentityRebindPendingStore`(SharedPreferences,新建,存 {old,new});全步成才清;任一步抛则意图留存→进身份页 `getState` 开头 `resumePendingIdentityRebind()` 自动续跑(幂等,catch 吞不阻断展示),直到成功。设备子钥重绑=硬前置(失败则 new 会话建不了,fail-closed)。
-- **改动**:新建 `identity_rebind_pending_store.dart`;`wallet_manager` 加 `deleteContactKeysForAccountId`;`contact_service` 加 `migrateContactsToNewIdentity`+`_deleteKvKeys`;`myid_service` 注入 UserContactService+RebindStore、rebindCidTo 编排、`_runRebindMigration`、`resumePendingIdentityRebind`、getState 接入。
-- **测试**:myid_service_test +2(换绑三步编排断言 subkey+migrate+意图清;中断续跑=设备子钥首次失败→意图留存→resume 补齐);user_service_test +2(migrate 搬本地/清旧 keys/新 keys 重加密上云/旧缓存清空;同账户空操作)。
-- **剩余**:~~S8.3c 全功能门控 CID~~(✅ 见下)/ S8.3d 删默认用户 / S8.3e 本地开发链 e2e。
+## S8.3b-4 finalized 当前账户接管（2026-07-29，最终实现 ✅）
+
+- 自主换绑在 runtime 内由当前绑定账户授权、新账户提交；注册局换绑由注册局权限和新账户
+  控制证明授权。链上 finalized 后，两条路径都只认 CID 的当前新账户。
+- 接管编排为：新账户挑战签名 → 取得同一 CID 数据根 → 新包装读回校验 → 派生用途子钥
+  → 设备子钥用新账户重签登记 → 广播绑定变化 → 写四元组完成标记。
+- 冷启动按 finalized `cid_number + binding_revision + account_id` 与数据根摘要对账；
+  任一步失败不写完成标记，下次幂等重试。不存在旧账户参与的接管意图、通讯录搬运或
+  旧账户重封装。
+- 业务关系、聊天、动态、文章、粉丝、会员和通讯录均继续归 CID；旧账户仅能作为完成
+  接管后的账户级缓存/包装删除目标。
 
 ## S8.3c 全功能门控 CID(2026-07-28,完成 ✅)—— 访客无匿名可用面
 **未注册 CID 时聊天/广场/订阅/创作者/通讯录五大功能硬门引导注册。分块跑 891 全绿(块A 8964+chat 282 / 块B 其余 609)+ analyze clean。**
@@ -274,12 +368,18 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 ## S8.3e 本地开发链 e2e —— 决策:并入 S5 重新创世合流(2026-07-28,用户裁定)
 **S8.3 代码四子步(a/b/c/d)全部完成、单测全绿;S8.3e 链上真跑验证不单独起本地链,顺延到 S5 全网重新创世事件一次性验证。**
 - **理由**:e2e 需活链+真 app(smoldot native 不在测试环境,非 `flutter test` 可覆盖);创世公民无 GenesisConfig 不可用须现场新占 CID;已绑 S5 重新创世,另一会话(modelb)正做创世管理员重派+注册表重生([[regenesis-deploy]]),不宜各起各的链。
-- **S5 合流时验证清单**(本会话 S1-S3 `self_occupy_cid` 入创世后):app 连本地/新创世链走 **新建钱包→自助占号(self_occupy_cid)→匿名已注册(readByAccountId 命中)→五大功能门控解锁→换绑重建(设备子钥/会话/通讯录自动迁移)** 全链路;验证判据单源 `ResolvedIdentity.isRegistered`、死契约 [[cid-rebind-subkeys-must-auto-migrate]] 真跑。
+- **正式创世前验证清单**：App 连唯一候选创世链走
+  **新建钱包→自助占号→匿名已注册→五大功能门控解锁→自主换绑当前账户授权+
+  新账户提交→finalized 新账户独立接管数据根/设备/会话→CID 数据连续可读** 全链路；
+  另走注册局换绑验证无需旧账户签名。
 - **前提校正**:创世公民法代 `CN220-CTZN2-…`/账户 `0x0cb1d05c…4b06b` 在 citizen-identity 无 GenesisConfig=链上纯访客,不能用于验证;须现场占新 CID。
 
 ## S8.3 收口(2026-07-28)—— 身份主键 CID 化代码完成
-- **S8.3a** 身份账户单源+注册选账户 ✅ / **S8.3b**(b-1 缓存基建+广场 / b-2 全 App accountId 切身份账户 / b-4 换绑重建编排死契约)✅ / **S8.3c** 全功能门控 CID ✅ / **S8.3d** 删默认用户 ✅ / **S8.3e** 链上真跑→并入 S5。
-- **全系不变量**:非链功能唯一身份主键=CID 号([[citizenapp-cid-identity-master-key]]);`getDefaultWallet()` 退为钱包访问入口;鉴权凭证(设备子钥/会话/通讯录钥/社交·会员·创作者签名)全从 CID 绑定账户派生;换绑 Finalized 后自动重建到新账户(死契约);未注册 CID 五大功能硬门引导注册(访客无匿名可用面)。
+- **S8.3a** 身份账户单源+注册选账户 ✅ / **S8.3b** finalized 当前账户鉴权与 CID
+  数据根接管 ✅ / **S8.3c** 全功能门控 CID ✅ / **S8.3d** 删默认用户 ✅ /
+  **S8.3e** 链上真跑留待正式创世前整体验收。
+- **全系不变量**：非链功能唯一身份主键是 CID；当前 `account_id` 只负责签名、鉴权、
+  付款和包装数据根。业务用途钥从 CID 稳定根派生，换绑不迁移 CID 数据。
 
 ## S8.3 审计整改(2026-07-28,完成 ✅)—— 3 审计 agent(换绑安全/门控/命名注释)发现 2 CRITICAL+4 HIGH,全修
 **client 分块 892 绿(块A 282/块B 610)+ worker vitest 179 绿 + 双端 analyze/tsc clean + 0 残留。**
@@ -289,28 +389,37 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
   Worker 只允许可信 finalized 绑定版本消费者调用内部幂等
   `purgeFinalizedOldAccountCredentials`，删除旧账户级登录/设备/Chat 凭证；动态、文章、
   粉丝、关注、通讯录、会员和实时对象继续归 CID，不删除、不迁移。
-- **C2(CRITICAL)Finalized-意图崩溃窗口永久卡死**:一次性意图 KV 在 Finalized 后写,中间崩溃即丢失→resume 永不触发。**修**:改**对账式**——`IdentitySyncedAccountStore`(已同步账户标记)+ `getState` 冷启动比对链上真值≠标记即补齐迁移(`_reconcileIdentityRebuild`);标记只在迁移全成后推进,换绑失败不误迁移;删 `IdentityRebindPendingStore`/`resumePendingIdentityRebind`。
+- **C2(CRITICAL)Finalized 后崩溃窗口**：最终改为 finalized 四元组对账。
+  `IdentitySyncedAccountStore` 只在数据根安装、设备登记和广播全部成功后写
+  `(cid_number, binding_revision, account_id, data_root_hash)`；未完成则由
+  `reconcileFinalizedBindingTakeover` 幂等补齐。
 - **H1 通讯录扫码绕过门**:AppBar 扫码键在 gate 外(未注册可写联系人)。**修**:contact_book/membership 整 Scaffold 包 gate(新 `scaffoldTitle` 未放行态带返回键)。
 - **H2 gate 冷启动卡死**:gate 只听 walletsRevision,广场落地页 smoldot 未就绪→queryFailed 卡死。**修**:gate 加 `healthListenable` 监听,未就绪停 loading、operational 自动重判。
-- **H3 广播早于迁移竞态丢数据**:`notifyIdentityBindingChanged` 移到通讯录迁移**之后**(避免 contacts:new 尚空被读/读-改-写覆盖)。
+- **H3 广播顺序**：只在当前新账户已安装并验证 CID 数据根、派生用途子钥和登记设备
+  之后广播绑定变化；不存在账户间通讯录搬运。
 - **H4 观测**:对账式使每次 getState 自愈重试(不再永久静默),reconcile 失败区分日志。
-- **M1 并发锁**:`_runRebindMigration` 加 `_migrationInflight` 去重(rebindCidTo 直触发 vs getState 对账并发)。**M2** gate debugResolver 加 `kReleaseMode` 硬忽略。**M3** `_reresolve` 加代际号丢弃旧响应(注册成功不被瞬断覆盖回 queryFailed)。**M5** 会员刷新键随整 Scaffold 包 gate。
+- **M1 并发锁**：`_runBindingTakeover` 使用 `_takeoverInflight` 去重直接触发与冷启动
+  对账并发。**M2** gate debugResolver 加 `kReleaseMode` 硬忽略。**M3** `_reresolve`
+  加代际号丢弃旧响应。**M5** 会员刷新键随整 Scaffold 包 gate。
 - **注释 A1-A6**:wallet_manager signWithWallet/signForAccountId 文档身份签名路由订正、_deriveContactKeys/_contactKeyStore/ContactKeyMaterial「账户0 child」→身份账户 child、wallet_page:912「默认/身份徽标」→身份徽标、verifyWalletAccess 文档删已删概念(方法保守保留)。
-- **后续审计订正**：换绑吊销已改为新账户会话、安全 outbox 和启动/身份对账持续
-  重试，不再是失败后静默遗忘的 best-effort；posts/followers 等身份数据的 CID
-  主键改造已由 CID 重构任务完成。旧表述只保留为历史问题背景，不再构成当前待办。
+- **后续审计订正**：客户端旧账户安全 outbox 与换绑后吊销 API 均已删除；旧账户凭证
+  失效只由 finalized 当前绑定校验和后续可信事件消费者处理，不形成第二授权真源。
 
 ## S8.4 通讯录 CID 真源与昵称/备注分离（2026-07-28，完成 ✅）
 
 - **模型彻底切换**：`UserContact` 固定为 `cid_number + account_id + ss58_address + contact_remark + created_at + updated_at`；CID 必填且是关系主键，私人备注允许空值，公开昵称/头像/签名不复制进通讯录。旧 `contact_name` JSON 不兼容。
-- **索引与加密契约**：增删改、待同步、跨端冲突合并全部按 CID；`contact_id = HMAC(index_key, target cid_number)`。AES-256-GCM 明文载荷包含 `owner_cid_number`、联系人四字段与时间戳，AAD 使用属主 CID + 不透明 ID；删除旧 `citizenapp.contacts.v1` 域，HKDF 改为未版本化 `citizenapp.contacts/{encryption,index}`。
+- **索引与加密契约**：增删改、待同步、跨端冲突合并全部按 CID；
+  `contact_id = HMAC(index_key, target cid_number)`。本地/云端密钥改由 CID 稳定数据根
+  的 `contacts-local` / `contacts-cloud` 用途域派生；换绑后密钥不变。
 - **扫码入口**：本阶段先在入库前按二维码 SS58 派生 `account_id`，再经链上双向绑定
   读取永久 CID；随后 `20260728-citizenapp-nickname-contact-profile-qr` 已把
   `QR_V1/k=3 user_contact` 四端统一为
   `cid_number + ss58_address + display_name`。未绑定或声明 CID 不一致均拒绝；
   收款码不再兼作联系人码，二维码公开昵称不写入私人备注。
-- **换绑重建**：本地关系按 CID 合并并迁到新身份账户；持久化云端重建标记，分页删除属主 CID 下全部旧不透明密文成功后，才以新账户 child 密钥重新上传。断网时保留标记与待办，下次同步继续，不把旧密文当兼容数据。
-- **旧数据清理**：目标态本地 KV 改用 `contact_book_by_account:` / `contact_pending_by_account:` / `contact_sync_by_account:` / `contact_cloud_reset_by_account:`；数据库打开时删除旧 `contacts:` / `contact_pending_ops:` / `contact_sync_state:`。安全存储改用 `citizenapp_contacts_key_`，旧 `wallet_contacts_key_v1_` 只删不读。新增 `cloudflare/migrations/0002_reset_contacts_for_cid_payload.sql`，生产只允许单独审核后人工执行，本任务不部署。
+- **换绑行为**：关系与云端密文归属 CID，不分页删除、不重新上传、不搬到新账户；
+  finalized 后当前新账户接管同一数据根即可继续读取。
+- **第 3 步已完成**：本地 KV、Chat/MLS/附件、草稿、通讯录、机构关注、身份徽章和
+  finalized 镜像均按 owner CID 分区；当前账户只承担签名、鉴权、付款或不可变交易事实。
 - **UI 口径**：通讯录卡片公开昵称为主标题；`备注：`、`CID：`、`SS58：` 分行展示；修改动作只编辑私人备注。资料页和公开资料缓存直接按联系人 CID 寻址，不再对已有联系人重复做 account→CID 链读。
 
 ## 待办 / 未决
@@ -320,11 +429,10 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
   AccountId→CID 三项闭环。剩余的是使用同一份 CI WASM 重生正式 chainspec、
   CitizenApp 轻链资产、公权机构快照与 Cloudflare 创世哈希；禁止各端自行生成不同
   创世锚点。
-- **后置测试**：正式资产重生后再执行自助占号、换绑重建、五大功能门控和真实管理员
+- **后置测试**：正式资产重生后再执行自助占号、finalized 换绑接管、五大功能门控和真实管理员
   QR 会话闭环；当前不以本地 fresh 链结果冒充正式发布验收。
 - **独立任务**：联系人、聊天正文、MLS 密钥和附件的本地静止态加密归
   `20260728-citizenapp-chat-local-data-encryption`，不并入本卡。
-- **后期范围**：跨注册局完善档案或换绑不属于本卡完成标准。
 
 ## 验收
 冷热链逐字节一致(citizenapp `//0//1//2` == Step 1 金标 == 链读);CID CN000 金标钉死;自助占号/换绑链上闭环;门控 fail-closed;全端 analyze/test 绿;残留复扫 0。

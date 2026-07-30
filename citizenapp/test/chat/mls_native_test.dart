@@ -12,15 +12,13 @@ void main() {
     final crypto = NativeMlsCrypto();
     final keyPackage = await crypto.createKeyPackage(
       const ChatDevice(
-        accountId:
-            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        cidNumber: 'CN220-CTZN2-100000001-2026',
         deviceId: 'alice-phone',
         devicePublicKey: 'aabbcc',
       ),
     );
 
-    expect(keyPackage.accountId,
-        '0x1111111111111111111111111111111111111111111111111111111111111111');
+    expect(keyPackage.cidNumber, 'CN220-CTZN2-100000001-2026');
     expect(keyPackage.deviceId, 'alice-phone');
     expect(keyPackage.devicePublicKey, isNotEmpty);
     expect(RegExp(r'^[0-9a-f]+$').hasMatch(keyPackage.devicePublicKey), isTrue);

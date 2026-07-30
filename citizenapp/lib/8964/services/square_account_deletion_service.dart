@@ -65,7 +65,7 @@ class SquareAccountDeletionService {
     await attempt('会话缓存', () async => _api.clearSession(accountId));
     await attempt(
       '私信历史',
-      () => _chatStore.clearAllForAccountId(accountId),
+      () => _chatStore.clearAllForCidNumber(cidNumber),
     );
     // 服务端 square_device_subkeys 已 purge，删本机原生子钥迫使下次干净重注册。
     await attempt('设备子钥', () => _deviceSubkey.delete(walletIndex));

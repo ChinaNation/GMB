@@ -20,62 +20,87 @@ class _MemoryStore implements LocalKeyBlobStore {
 }
 
 void main() {
-  const oldAccountId =
+  const cidNumber = 'GD-CTZN1-8F3A2B';
+  const firstAccountId =
       '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-  const newAccountId =
+  const secondAccountId =
       '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-  final oldSecret = Uint8List.fromList(List<int>.generate(32, (i) => i));
-  final newSecret = Uint8List.fromList(List<int>.generate(32, (i) => 100 + i));
+  final firstSecret = Uint8List.fromList(List<int>.generate(32, (i) => i));
+  final secondSecret =
+      Uint8List.fromList(List<int>.generate(32, (i) => 100 + i));
+  final dataRoot =
+      CidDataRoot(Uint8List.fromList(List<int>.generate(32, (i) => 200 - i)));
 
   late _MemoryStore store;
-  late LocalDataKeyVault vault;
+  late CidDataRootVault vault;
+  late String dataRootHash;
 
-  setUp(() {
+  setUp(() async {
     store = _MemoryStore();
-    vault = LocalDataKeyVault(store);
+    vault = CidDataRootVault(store);
+    dataRootHash = await CidDataRootVault.dataRootHash(dataRoot);
   });
 
-  group('LDK 建立与幂等', () {
-    test('首次生成后落地为密文，且不含 LDK 明文', () async {
-      final ldk = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
+  group('CID 数据根安装', () {
+    test('当前账户独立安装并读回，不需要此前账户输入', () async {
+      final installed = await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: firstAccountId,
+        accountSecret: firstSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
       );
-      expect(ldk.bytes.length, 32);
-      final blob = store.entries[LocalDataKeyVault.storageKeyFor(oldAccountId)];
-      expect(blob, isNotNull);
-      expect(blob, isNot(contains(String.fromCharCodes(ldk.bytes))));
+      expect(installed.bytes, dataRoot.bytes);
+      final active = await vault.readActiveBinding();
+      expect(active?.cidNumber, cidNumber);
+      expect(active?.bindingRevision, 1);
+      expect(active?.accountId, firstAccountId);
+      expect(store.entries[active!.wrapperKey], isNotNull);
+      expect(
+        store.entries[active.wrapperKey],
+        isNot(contains(String.fromCharCodes(dataRoot.bytes))),
+      );
+      final reopened = await vault.readForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: firstAccountId,
+        accountSecret: firstSecret,
+      );
+      expect(reopened.bytes, dataRoot.bytes);
     });
 
-    test('重复调用幂等：绝不换钥（换钥会作废已落盘密文）', () async {
-      final first = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
+    test('摘要不匹配时拒绝且不落任何激活状态', () async {
+      await expectLater(
+        vault.installForCurrentBinding(
+          cidNumber: cidNumber,
+          bindingRevision: 1,
+          accountId: firstAccountId,
+          accountSecret: firstSecret,
+          dataRoot: dataRoot,
+          expectedDataRootHash: '0' * 64,
+        ),
+        throwsA(isA<LocalCipherException>()),
       );
-      final second = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      expect(second.bytes, first.bytes);
+      expect(await vault.readActiveBinding(), isNull);
+      expect(store.entries, isEmpty);
     });
 
-    test('未建立过返回 null', () async {
-      final got = await vault.readForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      expect(got, isNull);
-    });
-
-    test('错误账户密钥解包必须抛错，不得降级为 null', () async {
-      await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
+    test('错误的新账户私钥不能解包', () async {
+      await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: firstAccountId,
+        accountSecret: firstSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
       );
       await expectLater(
-        vault.readForAccount(
-          accountId: oldAccountId,
-          accountSecret: newSecret,
+        vault.readForCurrentBinding(
+          cidNumber: cidNumber,
+          bindingRevision: 1,
+          accountId: firstAccountId,
+          accountSecret: secondSecret,
         ),
         throwsA(isA<LocalCipherException>()),
       );
@@ -83,197 +108,148 @@ void main() {
   });
 
   group('用途子钥域隔离', () {
-    test('五个用途派生出五把互不相同的子钥', () async {
-      final ldk = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
+    test('全部用途派生出互不相同的稳定子钥', () async {
       final keys = <LocalKeyPurpose, Uint8List>{};
       for (final purpose in LocalKeyPurpose.values) {
-        keys[purpose] = await ldk.subkey(purpose);
+        keys[purpose] = await dataRoot.subkey(purpose);
       }
       expect(keys.length, LocalKeyPurpose.values.length);
       for (final key in keys.values) {
         expect(key.length, 32);
       }
       final distinct = keys.values.map((k) => k.join(',')).toSet();
-      expect(distinct.length, LocalKeyPurpose.values.length,
-          reason: '任意两个用途的子钥都不得相同');
+      expect(
+        distinct.length,
+        LocalKeyPurpose.values.length,
+        reason: '任意两个用途的子钥都不得相同',
+      );
     });
 
-    test('派生确定性：同 LDK 同用途逐字节稳定', () async {
-      final ldk = LocalDataKey(
-        Uint8List.fromList(List<int>.generate(32, (i) => i * 7 % 256)),
-      );
-      final a = await ldk.subkey(LocalKeyPurpose.chat);
-      final b = await ldk.subkey(LocalKeyPurpose.chat);
-      expect(a, b);
-    });
-
-    test('子钥可直接驱动 LocalCipher 往返', () async {
-      final ldk = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      final key = await ldk.subkey(LocalKeyPurpose.chat);
+    test('数据根相同则换绑前后用途钥和密文均不变', () async {
+      final key = await dataRoot.subkey(LocalKeyPurpose.chat);
       final blob = await LocalCipher.encryptString(
         key: key,
-        plaintext: '聊天正文',
+        plaintext: '换绑前聊天正文',
         aad: '${LocalKeyPurpose.chat.domain}|msg-1',
       );
+      await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: firstAccountId,
+        accountSecret: firstSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
+      );
+      final after = await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 2,
+        accountId: secondAccountId,
+        accountSecret: secondSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
+      );
+      expect(await after.subkey(LocalKeyPurpose.chat), key);
       expect(
         await LocalCipher.decryptString(
-          key: key,
+          key: await after.subkey(LocalKeyPurpose.chat),
           blob: blob,
           aad: '${LocalKeyPurpose.chat.domain}|msg-1',
         ),
-        '聊天正文',
+        '换绑前聊天正文',
+      );
+    });
+  });
+
+  group('绑定版本接管', () {
+    test('新账户验证上岗后清理低版本包装', () async {
+      await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: firstAccountId,
+        accountSecret: firstSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
+      );
+      final oldWrapper = (await vault.readActiveBinding())!.wrapperKey;
+      await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 2,
+        accountId: secondAccountId,
+        accountSecret: secondSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
+      );
+      final active = await vault.readActiveBinding();
+      expect(active?.bindingRevision, 2);
+      expect(active?.accountId, secondAccountId);
+      expect(store.entries[oldWrapper], isNull);
+      expect(
+        (await vault.readForCurrentBinding(
+          cidNumber: cidNumber,
+          bindingRevision: 2,
+          accountId: secondAccountId,
+          accountSecret: secondSecret,
+        ))
+            .bytes,
+        dataRoot.bytes,
       );
     });
 
-    test('跨用途子钥不可互解（域隔离真实生效）', () async {
-      final ldk = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      final chatKey = await ldk.subkey(LocalKeyPurpose.chat);
-      final mlsKey = await ldk.subkey(LocalKeyPurpose.mls);
-      final blob = await LocalCipher.encryptString(
-        key: chatKey,
-        plaintext: '正文',
-        aad: '${LocalKeyPurpose.chat.domain}|x',
+    test('本机绑定版本禁止回退', () async {
+      await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 2,
+        accountId: secondAccountId,
+        accountSecret: secondSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
       );
       await expectLater(
-        LocalCipher.decryptBytes(
-          key: mlsKey,
-          blob: blob,
-          aad: '${LocalKeyPurpose.chat.domain}|x',
+        vault.installForCurrentBinding(
+          cidNumber: cidNumber,
+          bindingRevision: 1,
+          accountId: firstAccountId,
+          accountSecret: firstSecret,
+          dataRoot: dataRoot,
+          expectedDataRootHash: dataRootHash,
+        ),
+        throwsA(isA<LocalCipherException>()),
+      );
+    });
+
+    test('同一 revision 不允许账户或数据根摘要冲突', () async {
+      await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: firstAccountId,
+        accountSecret: firstSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
+      );
+      await expectLater(
+        vault.installForCurrentBinding(
+          cidNumber: cidNumber,
+          bindingRevision: 1,
+          accountId: secondAccountId,
+          accountSecret: secondSecret,
+          dataRoot: dataRoot,
+          expectedDataRootHash: dataRootHash,
         ),
         throwsA(isA<LocalCipherException>()),
       );
     });
   });
 
-  group('CID 换绑：只重 wrap，数据不动', () {
-    test('换绑后 LDK 与全部子钥逐字节不变', () async {
-      final before = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      final subkeysBefore = <Uint8List>[
-        for (final p in LocalKeyPurpose.values) await before.subkey(p),
-      ];
-
-      final after = await vault.rewrapForRebind(
-        oldAccountId: oldAccountId,
-        oldAccountSecret: oldSecret,
-        newAccountId: newAccountId,
-        newAccountSecret: newSecret,
-      );
-
-      expect(after.bytes, before.bytes, reason: 'LDK 终身不变');
-      for (var i = 0; i < LocalKeyPurpose.values.length; i += 1) {
-        expect(await after.subkey(LocalKeyPurpose.values[i]), subkeysBefore[i],
-            reason: '换绑后子钥必须不变，否则已落盘密文全部作废');
-      }
-    });
-
-    test('换绑前加密的密文，换绑后仍能解开', () async {
-      final before = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      final blob = await LocalCipher.encryptString(
-        key: await before.subkey(LocalKeyPurpose.chat),
-        plaintext: '换绑前写下的聊天记录',
-        aad: '${LocalKeyPurpose.chat.domain}|msg-9',
-      );
-
-      await vault.rewrapForRebind(
-        oldAccountId: oldAccountId,
-        oldAccountSecret: oldSecret,
-        newAccountId: newAccountId,
-        newAccountSecret: newSecret,
-      );
-
-      final reopened = await vault.readForAccount(
-        accountId: newAccountId,
-        accountSecret: newSecret,
-      );
-      expect(reopened, isNotNull);
-      expect(
-        await LocalCipher.decryptString(
-          key: await reopened!.subkey(LocalKeyPurpose.chat),
-          blob: blob,
-          aad: '${LocalKeyPurpose.chat.domain}|msg-9',
-        ),
-        '换绑前写下的聊天记录',
-      );
-    });
-
-    test('换绑后旧账户条目被清除，旧账户不再能解包', () async {
-      await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      await vault.rewrapForRebind(
-        oldAccountId: oldAccountId,
-        oldAccountSecret: oldSecret,
-        newAccountId: newAccountId,
-        newAccountSecret: newSecret,
-      );
-      expect(
-        store.entries[LocalDataKeyVault.storageKeyFor(oldAccountId)],
-        isNull,
-      );
-      expect(
-        await vault.readForAccount(
-          accountId: oldAccountId,
-          accountSecret: oldSecret,
-        ),
-        isNull,
-      );
-    });
-
-    test('writeForAccount：用已在手的 LDK 直接为新账户 wrap（省一次生物识别）', () async {
-      final ldk = await vault.ensureForAccount(
-        accountId: oldAccountId,
-        accountSecret: oldSecret,
-      );
-      await vault.writeForAccount(
-        accountId: newAccountId,
-        accountSecret: newSecret,
-        ldk: ldk,
-      );
-      final reopened = await vault.readForAccount(
-        accountId: newAccountId,
-        accountSecret: newSecret,
-      );
-      expect(reopened, isNotNull);
-      expect(reopened!.bytes, ldk.bytes);
-    });
-
-    test('换绑前从未建立过 LDK：为新账户直接建一把', () async {
-      final ldk = await vault.rewrapForRebind(
-        oldAccountId: oldAccountId,
-        oldAccountSecret: oldSecret,
-        newAccountId: newAccountId,
-        newAccountSecret: newSecret,
-      );
-      expect(ldk.bytes.length, 32);
-      expect(
-        store.entries[LocalDataKeyVault.storageKeyFor(newAccountId)],
-        isNotNull,
-      );
-    });
-  });
-
-  test('deleteForAccount 清除条目', () async {
-    await vault.ensureForAccount(
-      accountId: oldAccountId,
-      accountSecret: oldSecret,
+  test('clearActiveBinding 清除当前包装与激活标记', () async {
+    await vault.installForCurrentBinding(
+      cidNumber: cidNumber,
+      bindingRevision: 1,
+      accountId: firstAccountId,
+      accountSecret: firstSecret,
+      dataRoot: dataRoot,
+      expectedDataRootHash: dataRootHash,
     );
-    await vault.deleteForAccount(oldAccountId);
+    await vault.clearActiveBinding();
     expect(store.entries, isEmpty);
   });
 }

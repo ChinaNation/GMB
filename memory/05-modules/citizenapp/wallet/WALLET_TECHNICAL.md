@@ -343,14 +343,16 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 
 - seed 不写入 Isar/Postgres/日志
 - **seed 不出 WalletManager**：所有签名操作通过 `signWithWallet()` / `signUtf8WithWallet()` 完成，seed 仅在方法内短暂存在，签名后立即清零
-- 通讯录只从 CID 当前绑定的身份账户 child 派生 `citizenapp.contacts/encryption` 与
-  `citizenapp.contacts/index` 两把 32 字节 HKDF-SHA256 域隔离密钥；salt 固定为
-  `SHA256(account_id)`。业务层只能读取派生后的 `ContactKeyMaterial`，不能接触 child，
-  也不能用通讯录密钥签名或恢复钱包。
-- 身份账户首次进入通讯录时读取一次硬件金库 child、派生密钥并以
-  `citizenapp_contacts_key_<account_id>` 写入系统安全存储；旧
-  `wallet_contacts_key_v1_` 条目只删不读。删除钱包必须同时删除派生密钥及该账户的
-  联系人缓存、待同步操作、同步状态和云重建标记。
+- 通讯录本地与云端子钥都从 CID 稳定 `CidDataRoot` 派生，域固定为
+  `citizenapp.cid/contacts-local` 与 `citizenapp.cid/contacts-cloud`。业务层只能读取
+  派生后的 `ContactKeyMaterial`，不能接触当前账户 child，也不能用通讯录密钥签名或
+  恢复钱包。
+- 当前 finalized 绑定账户的 child 只派生 KEK，用于包装该 CID 的稳定数据根。首次绑定
+  或换绑后的正确接管顺序是：当前账户签一次性挑战领取同一数据根 → 新包装写入并读回
+  摘要校验 → 激活精确绑定标记 → 派生 CID 用途子钥 → 清理低版本包装。不得读取或要求
+  此前账户私钥、公钥、签名或设备。
+- 删除钱包必须清除该钱包的账户 child 和设备子钥；只有被删账户拥有本机当前激活 CID
+  绑定时，才清理对应的数据根包装、缓存和用途子钥。删除本地钱包不得删除 CID 业务数据。
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端

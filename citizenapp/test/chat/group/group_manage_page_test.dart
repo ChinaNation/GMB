@@ -11,32 +11,32 @@ class _FakeStore extends ChatStore {
   final ChatGroup _group;
 
   @override
-  Future<ChatGroup?> readGroup(String groupId) async => _group;
+  Future<ChatGroup?> readGroup(
+    String ownerCidNumber,
+    String groupId,
+  ) async =>
+      _group;
 }
 
 ChatGroup _group() => const ChatGroup(
-      groupId: 'grp:acctA:n',
+      groupId: 'grp:CN220-CTZN2-100000003-2026:n',
       name: '测试群',
-      creatorAccountId:
-          '0x3333333333333333333333333333333333333333333333333333333333333333',
+      creatorCidNumber: 'CN220-CTZN2-100000003-2026',
       epoch: 1,
       roster: [
         GroupMember(
-            accountId:
-                '0x3333333333333333333333333333333333333333333333333333333333333333',
+            cidNumber: 'CN220-CTZN2-100000003-2026',
             role: GroupMemberRole.admin),
-        GroupMember(
-            accountId:
-                '0x4444444444444444444444444444444444444444444444444444444444444444'),
+        GroupMember(cidNumber: 'CN220-CTZN2-100000004-2026'),
       ],
     );
 
-Future<void> _pump(WidgetTester tester, String accountId) async {
+Future<void> _pump(WidgetTester tester, String cidNumber) async {
   await tester.pumpWidget(MaterialApp(
     home: GroupManagePage(
-      groupId: 'grp:acctA:n',
+      groupId: 'grp:CN220-CTZN2-100000003-2026:n',
       store: _FakeStore(_group()),
-      accountId: accountId,
+      cidNumber: cidNumber,
     ),
   ));
   await tester.pumpAndSettle();
@@ -44,8 +44,7 @@ Future<void> _pump(WidgetTester tester, String accountId) async {
 
 void main() {
   testWidgets('admin 可见 添加 / 移除 / 改群名', (tester) async {
-    await _pump(tester,
-        '0x3333333333333333333333333333333333333333333333333333333333333333');
+    await _pump(tester, 'CN220-CTZN2-100000003-2026');
     expect(find.text('添加'), findsOneWidget);
     expect(find.byIcon(Icons.remove_circle_outline), findsWidgets); // 可移除 acctB
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget); // 改群名
@@ -53,8 +52,7 @@ void main() {
   });
 
   testWidgets('非 admin 无 添加 / 移除 / 改群名,但可退群', (tester) async {
-    await _pump(tester,
-        '0x4444444444444444444444444444444444444444444444444444444444444444');
+    await _pump(tester, 'CN220-CTZN2-100000004-2026');
     expect(find.text('添加'), findsNothing);
     expect(find.byIcon(Icons.remove_circle_outline), findsNothing);
     expect(find.byIcon(Icons.edit_outlined), findsNothing);

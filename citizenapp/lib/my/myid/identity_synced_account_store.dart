@@ -1,22 +1,70 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
-/// 「本地鉴权凭证(设备子钥 / 会话 / 通讯录)当前已同步到的身份账户」持久标记。
+/// 本机已经完整接管的 CID finalized 绑定标记。
 ///
-/// CID 换绑重建采用**对账式**触发(死契约 [[cid-rebind-subkeys-must-auto-migrate]]):
-/// 每次成功完成本地重建后把标记更新为该身份账户;冷启动 / 进身份页时,把链上实时
-/// 解析出的身份账户与本标记比对,不一致即视为「存在待补齐的迁移」并触发重建。
-///
-/// 相对旧的「一次性换绑意图」:只要「链上真值 != 本标记」这个事实存在就会被发现并补齐,
-/// 无论换绑 Finalized 与本地写入之间是否发生过崩溃、意图有没有精确写中某一步——
-/// 消除了「Finalized 后崩溃 → 意图丢失 → 永久卡死」的窗口;且标记只在迁移**完全成功**
-/// 后更新,换绑正常失败(链上仍旧账户)时标记与链上一致、不会误触发迁移。
+/// 单独记录 account_id 会遗漏“同一账户撤销后重新绑定”等版本变化，因此必须把 CID、
+/// binding_revision、当前账户及稳定数据根摘要作为一个不可拆分的完成标记。
+class IdentitySyncedBinding {
+  const IdentitySyncedBinding({
+    required this.cidNumber,
+    required this.bindingRevision,
+    required this.accountId,
+    required this.dataRootHash,
+  });
+
+  final String cidNumber;
+  final int bindingRevision;
+  final String accountId;
+  final String dataRootHash;
+
+  Map<String, Object> toJson() => <String, Object>{
+        'cid_number': cidNumber,
+        'binding_revision': bindingRevision,
+        'account_id': accountId,
+        'data_root_hash': dataRootHash,
+      };
+
+  static IdentitySyncedBinding? fromJson(String raw) {
+    try {
+      final value = jsonDecode(raw);
+      if (value is! Map<String, dynamic>) return null;
+      final cidNumber = value['cid_number'];
+      final bindingRevision = value['binding_revision'];
+      final accountId = value['account_id'];
+      final dataRootHash = value['data_root_hash'];
+      if (cidNumber is! String ||
+          cidNumber.isEmpty ||
+          utf8.encode(cidNumber).length > 32 ||
+          bindingRevision is! int ||
+          bindingRevision <= 0 ||
+          accountId is! String ||
+          !isAccountIdText(accountId) ||
+          dataRootHash is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(dataRootHash)) {
+        return null;
+      }
+      return IdentitySyncedBinding(
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        dataRootHash: dataRootHash,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 class IdentitySyncedAccountStore {
   IdentitySyncedAccountStore({SharedPreferences? preferences})
       : _preferences = preferences;
 
-  static const _key = 'identity_synced_account_v1';
+  static const _key = 'identity_synced_binding';
+  static const _removedAccountOnlyKey = 'identity_synced_account_v1';
 
   final SharedPreferences? _preferences;
 
@@ -26,28 +74,29 @@ class IdentitySyncedAccountStore {
     return SharedPreferences.getInstance();
   }
 
-  /// 已同步身份账户;无记录 / 损坏返回 null(视作尚无基线)。
-  Future<String?> read() async {
+  /// 已完整接管的精确绑定；无记录或损坏时返回 null，触发重新接管。
+  Future<IdentitySyncedBinding?> read() async {
     final prefs = await _prefs;
     final raw = prefs.getString(_key);
-    if (raw == null || raw.isEmpty || !isAccountIdText(raw)) return null;
-    return raw;
+    if (raw == null || raw.isEmpty) return null;
+    return IdentitySyncedBinding.fromJson(raw);
   }
 
-  Future<void> write(String accountId) async {
-    if (!isAccountIdText(accountId)) {
-      throw ArgumentError.value(
-        accountId,
-        'accountId',
-        'account_id 必须为小写 0x + 64 位十六进制',
-      );
+  Future<void> write(IdentitySyncedBinding binding) async {
+    final validated =
+        IdentitySyncedBinding.fromJson(jsonEncode(binding.toJson()));
+    if (validated == null) {
+      throw ArgumentError.value(binding, 'binding', 'CID 接管完成标记不合法');
     }
     final prefs = await _prefs;
-    await prefs.setString(_key, accountId);
+    await prefs.setString(_key, jsonEncode(validated.toJson()));
+    // 旧账户单字段标记只删不读，避免重新成为授权或完成状态真源。
+    await prefs.remove(_removedAccountOnlyKey);
   }
 
   Future<void> clear() async {
     final prefs = await _prefs;
     await prefs.remove(_key);
+    await prefs.remove(_removedAccountOnlyKey);
   }
 }

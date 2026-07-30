@@ -545,21 +545,23 @@ class PublicInstitutionEntity {
 
 /// 公权机构订阅("关注"分组)。
 ///
-/// 按账户 ID 隔离的纯本地决策表；[subscriptionKey] = `accountId|cidNumber`
-/// 复合唯一,只有订阅的机构才纳入动态刷新集(详情页卡C),目录浏览不依赖本表。
+/// 按订阅者永久 CID 隔离的纯本地决策表；钱包账户只负责当前签名授权，
+/// 换绑不得产生一套新的关注关系。只有订阅的机构才纳入动态刷新集
+/// (详情页卡C)，目录浏览不依赖本表。
 @collection
 class PublicInstitutionSubscriptionEntity {
   Id id = Isar.autoIncrement;
 
-  /// 复合唯一键：`subscriberAccountId|cidNumber`。
+  /// 复合唯一键：`subscriberCidNumber|institutionCidNumber`。
   @Index(unique: true, replace: true)
   late String subscriptionKey;
 
-  /// 订阅者账户 ID（查“我的关注”用）。
+  /// 订阅者永久 CID（查“我的关注”用）。
   @Index()
-  late String subscriberAccountId;
+  late String subscriberCidNumber;
 
-  late String cidNumber;
+  /// 被关注公权机构的永久 CID。
+  late String institutionCidNumber;
   late int subscribedAtMillis;
 }
 
@@ -613,17 +615,20 @@ class SquareLocalPostEntity {
 class ChatConversationEntity {
   Id id = Isar.autoIncrement;
 
+  /// 本机聊天数据的永久属主 CID；与会话 ID 组成复合唯一键。
+  @Index(
+    composite: [CompositeIndex('conversationId')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
   /// 会话 ID，对应 MLS group id。
-  @Index(unique: true, replace: true)
   late String conversationId;
 
-  /// 本机钱包聊天账户。
+  /// 对方永久身份主键；换绑不改变会话归属或会话 ID。
   @Index()
-  late String accountId;
-
-  /// 对方钱包聊天账户。
-  @Index()
-  late String peerAccountId;
+  late String peerCidNumber;
 
   late String title;
 
@@ -650,18 +655,22 @@ class ChatConversationEntity {
 class ChatMessageEntity {
   Id id = Isar.autoIncrement;
 
-  @Index(unique: true, replace: true)
+  /// 本机聊天数据的永久属主 CID；与 envelope ID 组成复合唯一键。
+  @Index(
+    composite: [CompositeIndex('envelopeId')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
   late String envelopeId;
 
   @Index()
   late String conversationId;
 
-  @Index()
-  late String accountId;
-
   late String direction;
-  late String senderAccountId;
-  late String recipientAccountId;
+  late String senderCidNumber;
+  late String recipientCidNumber;
   late String senderDeviceId;
   late String messageKind;
   late String mlsMessageKind;
@@ -693,13 +702,20 @@ class ChatMessageEntity {
 class ChatOutboundQueueEntity {
   Id id = Isar.autoIncrement;
 
-  @Index(unique: true, replace: true)
+  /// 本机出站队列的永久属主 CID。
+  @Index(
+    composite: [CompositeIndex('envelopeId')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
   late String envelopeId;
 
   @Index()
   late String conversationId;
 
-  /// 收件人身份主键 CID 号（Worker 路由键；proto envelope 内嵌 account_id 供 MLS/归属）。
+  /// 收件人身份主键 CID，也是信封、MLS 名册和 Worker 的唯一投递键。
   late String recipientCidNumber;
   late String envelopeBytesHex;
   late String deliveryState;
@@ -721,9 +737,16 @@ class ChatOutboundQueueEntity {
 class ChatOutgoingMediaEntity {
   Id id = Isar.autoIncrement;
 
+  /// 本机待投递媒体的永久属主 CID。
+  @Index(
+    composite: [CompositeIndex('pendingKey')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
   /// 唯一键 = "<attachmentId>|<recipientCidNumber>"。群里同一媒体发 N 成员需 N 行,
   /// 故不再以 attachmentId 单键唯一。
-  @Index(unique: true, replace: true)
   late String pendingKey;
 
   @Index()
@@ -748,7 +771,14 @@ class ChatOutgoingMediaEntity {
 class ChatPendingInboundEntity {
   Id id = Isar.autoIncrement;
 
-  @Index(unique: true, replace: true)
+  /// 本机入站缓冲的永久属主 CID。
+  @Index(
+    composite: [CompositeIndex('envelopeId')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
   late String envelopeId;
 
   @Index()
@@ -763,19 +793,22 @@ class ChatPendingInboundEntity {
 
 /// Chat 路由缓存记录。
 ///
-/// Chat 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
+/// Chat 路由缓存只保存在公民手机本地，用于把联系人 CID 映射到
 /// OpenMLS 设备和近场提示；用户联系人仍以“我的通讯录”为准。
 @collection
 class ChatRouteCacheEntity {
   Id id = Isar.autoIncrement;
 
-  /// 路由唯一键，当前等于钱包聊天账户。
-  @Index(unique: true, replace: true)
-  late String routeId;
+  /// 本机路由缓存的永久属主 CID；与对方 CID 组成复合唯一键。
+  @Index(
+    composite: [CompositeIndex('peerCidNumber')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
 
-  /// 对方钱包聊天账户，也是公民币收款账户。
-  @Index(unique: true, replace: true)
-  late String peerAccountId;
+  /// 对方永久身份主键；钱包换绑不修改路由身份。
+  late String peerCidNumber;
 
   /// Chat 路由显示名，只用于联系人路由列表，不承载机构全称或简称。
   late String routeDisplayName;
@@ -793,16 +826,19 @@ class ChatRouteCacheEntity {
 class ChatGroupEntity {
   Id id = Isar.autoIncrement;
 
+  /// 本机群聊镜像的永久属主 CID。
+  @Index(
+    composite: [CompositeIndex('groupId')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
   /// 群 ID = conversation_id,形如 `grp:<creator>:<nonce>`。
-  @Index(unique: true, replace: true)
   late String groupId;
 
   late String groupName;
-  late String creatorAccountId;
-
-  /// 本机钱包聊天账户。
-  @Index()
-  late String accountId;
+  late String creatorCidNumber;
 
   /// MLS 当前 epoch 的本地镜像。
   late int epoch;
@@ -815,19 +851,26 @@ class ChatGroupEntity {
   late int updatedAtMillis;
 }
 
-/// 群成员镜像(一条 = 群内一个账户)。每次 Commit 后按 MLS 名册对账覆盖。
+/// 群成员镜像（一条 = 群内一个 CID）。每次 Commit 后按 MLS 名册对账覆盖。
 @collection
 class ChatGroupMemberEntity {
   Id id = Isar.autoIncrement;
 
-  /// 唯一键 = "<groupId>|<memberAccountId>"。
-  @Index(unique: true, replace: true)
+  /// 本机群成员镜像的永久属主 CID。
+  @Index(
+    composite: [CompositeIndex('memberKey')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
+  /// 唯一键 = "<groupId>|<memberCidNumber>"。
   late String memberKey;
 
   @Index()
   late String groupId;
 
-  late String memberAccountId;
+  late String memberCidNumber;
 
   /// 角色:admin | member。
   late String role;
@@ -840,7 +883,14 @@ class ChatGroupMemberEntity {
 class ChatGroupPendingCommitEntity {
   Id id = Isar.autoIncrement;
 
-  @Index(unique: true, replace: true)
+  /// 本机乱序 Commit 缓冲的永久属主 CID。
+  @Index(
+    composite: [CompositeIndex('envelopeId')],
+    unique: true,
+    replace: true,
+  )
+  late String ownerCidNumber;
+
   late String envelopeId;
 
   @Index()

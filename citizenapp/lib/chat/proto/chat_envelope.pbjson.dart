@@ -36,7 +36,7 @@ const ChatRoute$json = {
   '1': 'ChatRoute',
   '2': [
     {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
-    {'1': 'peer_account_id', '3': 2, '4': 1, '5': 9, '10': 'peerAccountId'},
+    {'1': 'peer_cid_number', '3': 2, '4': 1, '5': 9, '10': 'peerCidNumber'},
     {
       '1': 'route_display_name',
       '3': 3,
@@ -56,7 +56,7 @@ const ChatRoute$json = {
 /// Descriptor for `ChatRoute`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List chatRouteDescriptor = $convert.base64Decode(
     'CglDaGF0Um91dGUSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEi'
-    'YKD3BlZXJfYWNjb3VudF9pZBgCIAEoCVINcGVlckFjY291bnRJZBIsChJyb3V0ZV9kaXNwbGF5'
+    'YKD3BlZXJfY2lkX251bWJlchgCIAEoCVINcGVlckNpZE51bWJlchIsChJyb3V0ZV9kaXNwbGF5'
     'X25hbWUYAyABKAlSEHJvdXRlRGlzcGxheU5hbWUSGwoJZGV2aWNlX2lkGAQgASgJUghkZXZpY2'
     'VJZBIqChFkZXZpY2VfcHVibGljX2tleRgFIAEoCVIPZGV2aWNlUHVibGljS2V5EiMKDXNhZmV0'
     'eV9udW1iZXIYBiABKAlSDHNhZmV0eU51bWJlchIoChBuZWFyYnlfcGVlcl9oaW50GAcgASgJUg'
@@ -70,13 +70,13 @@ const ChatEnvelope$json = {
     {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
     {'1': 'envelope_id', '3': 2, '4': 1, '5': 9, '10': 'envelopeId'},
     {'1': 'conversation_id', '3': 3, '4': 1, '5': 9, '10': 'conversationId'},
-    {'1': 'sender_account_id', '3': 4, '4': 1, '5': 9, '10': 'senderAccountId'},
+    {'1': 'sender_cid_number', '3': 4, '4': 1, '5': 9, '10': 'senderCidNumber'},
     {
-      '1': 'recipient_account_id',
+      '1': 'recipient_cid_number',
       '3': 5,
       '4': 1,
       '5': 9,
-      '10': 'recipientAccountId'
+      '10': 'recipientCidNumber'
     },
     {'1': 'sender_device_id', '3': 6, '4': 1, '5': 9, '10': 'senderDeviceId'},
     {'1': 'mls_wire_message', '3': 7, '4': 1, '5': 12, '10': 'mlsWireMessage'},
@@ -105,9 +105,9 @@ const ChatEnvelope$json = {
 final $typed_data.Uint8List chatEnvelopeDescriptor = $convert.base64Decode(
     'CgxDaGF0RW52ZWxvcGUSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW'
     '9uEh8KC2VudmVsb3BlX2lkGAIgASgJUgplbnZlbG9wZUlkEicKD2NvbnZlcnNhdGlvbl9pZBgD'
-    'IAEoCVIOY29udmVyc2F0aW9uSWQSKgoRc2VuZGVyX2FjY291bnRfaWQYBCABKAlSD3NlbmRlck'
-    'FjY291bnRJZBIwChRyZWNpcGllbnRfYWNjb3VudF9pZBgFIAEoCVIScmVjaXBpZW50QWNjb3Vu'
-    'dElkEigKEHNlbmRlcl9kZXZpY2VfaWQYBiABKAlSDnNlbmRlckRldmljZUlkEigKEG1sc193aX'
+    'IAEoCVIOY29udmVyc2F0aW9uSWQSKgoRc2VuZGVyX2NpZF9udW1iZXIYBCABKAlSD3NlbmRlck'
+    'NpZE51bWJlchIwChRyZWNpcGllbnRfY2lkX251bWJlchgFIAEoCVIScmVjaXBpZW50Q2lkTnVt'
+    'YmVyEigKEHNlbmRlcl9kZXZpY2VfaWQYBiABKAlSDnNlbmRlckRldmljZUlkEigKEG1sc193aX'
     'JlX21lc3NhZ2UYByABKAxSDm1sc1dpcmVNZXNzYWdlEi0KEmVuY3J5cHRlZF9tZXRhZGF0YRgI'
     'IAEoDFIRZW5jcnlwdGVkTWV0YWRhdGESKgoRY3JlYXRlZF9hdF9taWxsaXMYCSABKARSD2NyZW'
     'F0ZWRBdE1pbGxpcxIdCgp0dGxfbWlsbGlzGAogASgEUgl0dGxNaWxsaXMSSQoQbWxzX21lc3Nh'
@@ -119,7 +119,7 @@ const ChatKeyPackage$json = {
   '1': 'ChatKeyPackage',
   '2': [
     {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
-    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'cid_number', '3': 2, '4': 1, '5': 9, '10': 'cidNumber'},
     {'1': 'device_id', '3': 3, '4': 1, '5': 9, '10': 'deviceId'},
     {'1': 'device_public_key', '3': 4, '4': 1, '5': 9, '10': 'devicePublicKey'},
     {'1': 'key_package_id', '3': 5, '4': 1, '5': 9, '10': 'keyPackageId'},
@@ -133,7 +133,7 @@ const ChatKeyPackage$json = {
 /// Descriptor for `ChatKeyPackage`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List chatKeyPackageDescriptor = $convert.base64Decode(
     'Cg5DaGF0S2V5UGFja2FnZRIpChBwcm90b2NvbF92ZXJzaW9uGAEgASgNUg9wcm90b2NvbFZlcn'
-    'Npb24SHQoKYWNjb3VudF9pZBgCIAEoCVIJYWNjb3VudElkEhsKCWRldmljZV9pZBgDIAEoCVII'
+    'Npb24SHQoKY2lkX251bWJlchgCIAEoCVIJY2lkTnVtYmVyEhsKCWRldmljZV9pZBgDIAEoCVII'
     'ZGV2aWNlSWQSKgoRZGV2aWNlX3B1YmxpY19rZXkYBCABKAlSD2RldmljZVB1YmxpY0tleRIkCg'
     '5rZXlfcGFja2FnZV9pZBgFIAEoCVIMa2V5UGFja2FnZUlkEh8KC2tleV9wYWNrYWdlGAYgASgM'
     'UgprZXlQYWNrYWdlEiEKDGNpcGhlcl9zdWl0ZRgHIAEoCVILY2lwaGVyU3VpdGUSKgoRY3JlYX'
@@ -144,7 +144,7 @@ final $typed_data.Uint8List chatKeyPackageDescriptor = $convert.base64Decode(
 const PublishChatKeyPackageRequest$json = {
   '1': 'PublishChatKeyPackageRequest',
   '2': [
-    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'cid_number', '3': 1, '4': 1, '5': 9, '10': 'cidNumber'},
     {'1': 'device_id', '3': 2, '4': 1, '5': 9, '10': 'deviceId'},
     {'1': 'device_public_key', '3': 3, '4': 1, '5': 9, '10': 'devicePublicKey'},
     {'1': 'key_package_id', '3': 4, '4': 1, '5': 9, '10': 'keyPackageId'},
@@ -157,8 +157,8 @@ const PublishChatKeyPackageRequest$json = {
 
 /// Descriptor for `PublishChatKeyPackageRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List publishChatKeyPackageRequestDescriptor = $convert.base64Decode(
-    'ChxQdWJsaXNoQ2hhdEtleVBhY2thZ2VSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCWFjY2'
-    '91bnRJZBIbCglkZXZpY2VfaWQYAiABKAlSCGRldmljZUlkEioKEWRldmljZV9wdWJsaWNfa2V5'
+    'ChxQdWJsaXNoQ2hhdEtleVBhY2thZ2VSZXF1ZXN0Eh0KCmNpZF9udW1iZXIYASABKAlSCWNpZE'
+    '51bWJlchIbCglkZXZpY2VfaWQYAiABKAlSCGRldmljZUlkEioKEWRldmljZV9wdWJsaWNfa2V5'
     'GAMgASgJUg9kZXZpY2VQdWJsaWNLZXkSJAoOa2V5X3BhY2thZ2VfaWQYBCABKAlSDGtleVBhY2'
     'thZ2VJZBIfCgtrZXlfcGFja2FnZRgFIAEoDFIKa2V5UGFja2FnZRIhCgxjaXBoZXJfc3VpdGUY'
     'BiABKAlSC2NpcGhlclN1aXRlEioKEWNyZWF0ZWRfYXRfbWlsbGlzGAcgASgEUg9jcmVhdGVkQX'
@@ -168,13 +168,13 @@ final $typed_data.Uint8List publishChatKeyPackageRequestDescriptor = $convert.ba
 const FetchChatKeyPackagesRequest$json = {
   '1': 'FetchChatKeyPackagesRequest',
   '2': [
-    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'cid_number', '3': 1, '4': 1, '5': 9, '10': 'cidNumber'},
     {
-      '1': 'requester_account_id',
+      '1': 'requester_cid_number',
       '3': 2,
       '4': 1,
       '5': 9,
-      '10': 'requesterAccountId'
+      '10': 'requesterCidNumber'
     },
     {'1': 'limit', '3': 3, '4': 1, '5': 13, '10': 'limit'},
   ],
@@ -183,22 +183,22 @@ const FetchChatKeyPackagesRequest$json = {
 /// Descriptor for `FetchChatKeyPackagesRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List fetchChatKeyPackagesRequestDescriptor =
     $convert.base64Decode(
-        'ChtGZXRjaENoYXRLZXlQYWNrYWdlc1JlcXVlc3QSHQoKYWNjb3VudF9pZBgBIAEoCVIJYWNjb3'
-        'VudElkEjAKFHJlcXVlc3Rlcl9hY2NvdW50X2lkGAIgASgJUhJyZXF1ZXN0ZXJBY2NvdW50SWQS'
+        'ChtGZXRjaENoYXRLZXlQYWNrYWdlc1JlcXVlc3QSHQoKY2lkX251bWJlchgBIAEoCVIJY2lkTn'
+        'VtYmVyEjAKFHJlcXVlc3Rlcl9jaWRfbnVtYmVyGAIgASgJUhJyZXF1ZXN0ZXJDaWROdW1iZXIS'
         'FAoFbGltaXQYAyABKA1SBWxpbWl0');
 
 @$core.Deprecated('Use consumeChatKeyPackageRequestDescriptor instead')
 const ConsumeChatKeyPackageRequest$json = {
   '1': 'ConsumeChatKeyPackageRequest',
   '2': [
-    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'cid_number', '3': 1, '4': 1, '5': 9, '10': 'cidNumber'},
     {'1': 'key_package_id', '3': 2, '4': 1, '5': 9, '10': 'keyPackageId'},
     {
-      '1': 'requester_account_id',
+      '1': 'requester_cid_number',
       '3': 3,
       '4': 1,
       '5': 9,
-      '10': 'requesterAccountId'
+      '10': 'requesterCidNumber'
     },
   ],
 };
@@ -206,6 +206,6 @@ const ConsumeChatKeyPackageRequest$json = {
 /// Descriptor for `ConsumeChatKeyPackageRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List consumeChatKeyPackageRequestDescriptor =
     $convert.base64Decode(
-        'ChxDb25zdW1lQ2hhdEtleVBhY2thZ2VSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCWFjY2'
-        '91bnRJZBIkCg5rZXlfcGFja2FnZV9pZBgCIAEoCVIMa2V5UGFja2FnZUlkEjAKFHJlcXVlc3Rl'
-        'cl9hY2NvdW50X2lkGAMgASgJUhJyZXF1ZXN0ZXJBY2NvdW50SWQ=');
+        'ChxDb25zdW1lQ2hhdEtleVBhY2thZ2VSZXF1ZXN0Eh0KCmNpZF9udW1iZXIYASABKAlSCWNpZE'
+        '51bWJlchIkCg5rZXlfcGFja2FnZV9pZBgCIAEoCVIMa2V5UGFja2FnZUlkEjAKFHJlcXVlc3Rl'
+        'cl9jaWRfbnVtYmVyGAMgASgJUhJyZXF1ZXN0ZXJDaWROdW1iZXI=');

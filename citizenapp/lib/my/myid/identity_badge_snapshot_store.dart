@@ -1,25 +1,26 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/citizen/shared/account_derivation.dart';
 
-/// 单个钱包账户的公开链上身份徽章快照。
+/// 单个永久 CID 的公开链上身份徽章快照。
 ///
 /// 这里只保存 `visitor` / `voting` / `candidate` 展示信号，不保存护照详情、
 /// 私钥或签名材料。快照用于非链页面展示，不得作为发布、投票或权限判断依据。
 class IdentityBadgeSnapshot {
   const IdentityBadgeSnapshot({
-    required this.accountId,
+    required this.cidNumber,
     required this.identityLevel,
     required this.updatedAtMillis,
   });
 
-  final String accountId;
+  final String cidNumber;
   final String identityLevel;
   final int updatedAtMillis;
 }
 
-/// 按钱包账户隔离的身份徽章持久快照。
+/// 按永久 CID 隔离的身份徽章持久快照。
+///
+/// 钱包账户只负责取得最新链上快照；换绑后新账户继续读写同一个 CID 键。
 class IdentityBadgeSnapshotStore {
   IdentityBadgeSnapshotStore({
     SharedPreferences? preferences,
@@ -28,7 +29,7 @@ class IdentityBadgeSnapshotStore {
         _nowProvider = nowProvider ?? DateTime.now;
 
   static const _schemaVersion = 1;
-  static const _keyPrefix = 'identity_badge_snapshot_v1:';
+  static const _keyPrefix = 'identity_badge_snapshot_by_cid:';
   static const _allowedLevels = {'visitor', 'voting', 'candidate'};
 
   final SharedPreferences? _preferences;
@@ -40,11 +41,12 @@ class IdentityBadgeSnapshotStore {
     return SharedPreferences.getInstance();
   }
 
-  Future<IdentityBadgeSnapshot?> read(String accountId) async {
-    if (!isAccountIdText(accountId)) return null;
+  Future<IdentityBadgeSnapshot?> read(String cidNumber) async {
+    final normalizedCidNumber = cidNumber.trim();
+    if (normalizedCidNumber.isEmpty) return null;
 
     final preferences = await _prefs;
-    final key = _key(accountId);
+    final key = _key(normalizedCidNumber);
     final raw = preferences.getString(key);
     if (raw == null || raw.isEmpty) return null;
 
@@ -52,14 +54,14 @@ class IdentityBadgeSnapshotStore {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic> ||
           decoded['schema_version'] != _schemaVersion ||
-          decoded['account_id'] != accountId ||
+          decoded['cid_number'] != normalizedCidNumber ||
           decoded['identity_level'] is! String ||
           !_allowedLevels.contains(decoded['identity_level']) ||
           decoded['updated_at_millis'] is! int) {
         throw const FormatException('身份徽章快照字段无效');
       }
       return IdentityBadgeSnapshot(
-        accountId: accountId,
+        cidNumber: normalizedCidNumber,
         identityLevel: decoded['identity_level'] as String,
         updatedAtMillis: decoded['updated_at_millis'] as int,
       );
@@ -71,14 +73,15 @@ class IdentityBadgeSnapshotStore {
   }
 
   Future<void> write({
-    required String accountId,
+    required String cidNumber,
     required String identityLevel,
   }) async {
-    if (!isAccountIdText(accountId)) {
+    final normalizedCidNumber = cidNumber.trim();
+    if (normalizedCidNumber.isEmpty) {
       throw ArgumentError.value(
-        accountId,
-        'accountId',
-        'account_id 必须为小写 0x + 64 位十六进制',
+        cidNumber,
+        'cidNumber',
+        'cid_number 不能为空',
       );
     }
     if (!_allowedLevels.contains(identityLevel)) {
@@ -91,19 +94,20 @@ class IdentityBadgeSnapshotStore {
 
     final payload = jsonEncode({
       'schema_version': _schemaVersion,
-      'account_id': accountId,
+      'cid_number': normalizedCidNumber,
       'identity_level': identityLevel,
       'updated_at_millis': _nowProvider().millisecondsSinceEpoch,
     });
     final preferences = await _prefs;
-    await preferences.setString(_key(accountId), payload);
+    await preferences.setString(_key(normalizedCidNumber), payload);
   }
 
-  Future<void> remove(String accountId) async {
-    if (!isAccountIdText(accountId)) return;
+  Future<void> remove(String cidNumber) async {
+    final normalizedCidNumber = cidNumber.trim();
+    if (normalizedCidNumber.isEmpty) return;
     final preferences = await _prefs;
-    await preferences.remove(_key(accountId));
+    await preferences.remove(_key(normalizedCidNumber));
   }
 
-  String _key(String accountId) => '$_keyPrefix$accountId';
+  String _key(String cidNumber) => '$_keyPrefix$cidNumber';
 }

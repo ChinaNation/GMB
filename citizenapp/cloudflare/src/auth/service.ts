@@ -11,10 +11,7 @@ import {
   rollbackIdentitySession,
   sessionCacheKey
 } from './session_index';
-import {
-  fetchChainIdentityState,
-  fetchChainIdentityStateFreshIfUnbound
-} from '../chain/identity';
+import { fetchChainIdentityState } from '../chain/identity';
 import {
   assertP256PublicKeyHex,
   buildDeviceBindingSigningMessage,
@@ -50,18 +47,21 @@ interface DeviceRegisterRequest {
   turnstile_token?: unknown;
 }
 
-/// 登录挑战的 SCALE payload：`account_id ‖ cid_number ‖ challenge_id ‖ expires_at`。
+/// 登录挑战的 SCALE payload：
+/// `cid_number ‖ binding_revision ‖ account_id ‖ challenge_id ‖ expires_at`。
 /// 被签消息 = signing_message(OP_SIGN_SQUARE_LOGIN, payload)，由客户端重算摘要后
 /// 用 P-256 设备子钥签名。worker 单侧编码 payload，客户端只 hash+sign，杜绝字段漂移。
 function buildLoginScalePayload(
-  accountId: string,
   cidNumber: string,
+  bindingRevision: number,
+  accountId: string,
   challengeId: string,
   expiresAt: number
 ): Uint8Array {
   return concatBytes(
-    scaleString(accountId),
     scaleString(cidNumber),
+    u64Le(bindingRevision),
+    scaleString(accountId),
     scaleString(challengeId),
     u64Le(expiresAt)
   );
@@ -84,22 +84,34 @@ export async function createLoginChallenge(request: Request, env: Env): Promise<
 
   const challengeId = createId('sqc');
   const expiresAt = secondsFromNow(300);
-  const signingPayloadHex = bytesToHex(
-    buildLoginScalePayload(accountId, cidNumber, challengeId, expiresAt)
-  );
+  const signingPayloadHex = bytesToHex(buildLoginScalePayload(
+    cidNumber,
+    identity.binding_revision,
+    accountId,
+    challengeId,
+    expiresAt,
+  ));
 
   await env.DB.prepare(
     `INSERT INTO square_login_challenges
-      (challenge_id, cid_number, account_id, signing_payload, expires_at, used_at)
-      VALUES (?, ?, ?, ?, ?, NULL)`
+      (challenge_id, cid_number, binding_revision, account_id, signing_payload, expires_at, used_at)
+      VALUES (?, ?, ?, ?, ?, ?, NULL)`
   )
-    .bind(challengeId, cidNumber, accountId, signingPayloadHex, expiresAt)
+    .bind(
+      challengeId,
+      cidNumber,
+      identity.binding_revision,
+      accountId,
+      signingPayloadHex,
+      expiresAt,
+    )
     .run();
 
   return jsonResponse({
     ok: true,
     challenge_id: challengeId,
     cid_number: cidNumber,
+    binding_revision: identity.binding_revision,
     account_id: accountId,
     op_tag: OP_SIGN_SQUARE_LOGIN,
     signing_payload_hex: signingPayloadHex,
@@ -121,7 +133,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   }
 
   const challenge = await env.DB.prepare(
-    `SELECT challenge_id, cid_number, account_id, signing_payload, expires_at, used_at
+    `SELECT challenge_id, cid_number, binding_revision, account_id, signing_payload, expires_at, used_at
       FROM square_login_challenges
       WHERE challenge_id = ?`
   )
@@ -144,16 +156,22 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法登录');
   }
   const cidNumber = identity.cid_number;
-  if (challenge.cid_number !== cidNumber) {
+  if (
+    challenge.cid_number !== cidNumber
+    || challenge.binding_revision !== identity.binding_revision
+  ) {
     throw new HttpError(401, 'cid_binding_changed', 'CID 当前绑定账户已变更，请重新登录');
   }
 
   // 后台握手用 P-256 设备子钥（硬件、静默）验签 signing_message(OP_SIGN_SQUARE_LOGIN)。
-  // 子钥挂在 (cid_number, account_id) 下(同一身份可多设备);逐个验签,任一匹配即通过。
+  // 子钥挂在当前 (cid_number, binding_revision, account_id) 下（同一身份可多设备）；
+  // 换绑后的旧 revision 子钥即使仍残留，也不得参与登录验签。
   const subkeys = await env.DB.prepare(
-    `SELECT p256_public_key FROM square_device_subkeys WHERE cid_number = ? AND account_id = ?`
+    `SELECT p256_public_key
+      FROM square_device_subkeys
+      WHERE cid_number = ? AND binding_revision = ? AND account_id = ?`
   )
-    .bind(cidNumber, accountId)
+    .bind(cidNumber, identity.binding_revision, accountId)
     .all<{ p256_public_key: string }>();
   if (!subkeys.results || subkeys.results.length === 0) {
     throw new HttpError(401, 'device_not_registered', '设备子钥未注册，请先注册设备子钥');
@@ -186,11 +204,19 @@ export async function createSession(request: Request, env: Env): Promise<Respons
       SET used_at = ?
       WHERE challenge_id = ?
         AND cid_number = ?
+        AND binding_revision = ?
         AND account_id = ?
         AND used_at IS NULL
         AND expires_at > ?`
   )
-    .bind(claimedAt, challenge.challenge_id, cidNumber, accountId, claimedAt)
+    .bind(
+      claimedAt,
+      challenge.challenge_id,
+      cidNumber,
+      identity.binding_revision,
+      accountId,
+      claimedAt,
+    )
     .run();
   if ((claimed.meta?.changes ?? 0) !== 1) {
     if (challenge.expires_at <= claimedAt) {
@@ -205,6 +231,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   const sessionToken = createId('sqs');
   const session: SessionState = {
     cid_number: cidNumber,
+    binding_revision: identity.binding_revision,
     account_id: accountId,
     device_key_hash: await sha256Hex(matchedP256),
     created_at: nowMs(),
@@ -228,13 +255,15 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     ok: true,
     session_token: sessionToken,
     cid_number: cidNumber,
+    binding_revision: identity.binding_revision,
     account_id: accountId,
     expires_at: session.expires_at
   });
 }
 
 /// 注册 P-256 设备子钥：客户端用 sr25519 主钥对
-/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, account_id ‖ p256_public_key ‖ issued_at)`
+/// `signing_message(OP_SIGN_SQUARE_DEVICE_BIND,
+/// cid_number ‖ binding_revision ‖ account_id ‖ p256_public_key ‖ issued_at)`
 /// 签名做绑定证明；后端复用 sr25519 验签确认子钥归属，再由链上绑定解析出身份主键
 /// cid_number，落库主键 (cid_number, device_id)：同一身份可多设备并存（各一行），
 /// 同设备（同 P-256 公钥）重注册按 issued_at 单调覆盖 = 轮换/续期。子钥属生成它的
@@ -262,7 +291,15 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
     throw new HttpError(400, 'invalid_binding', '设备绑定签名缺失');
   }
 
+  // 设备绑定属于 CID 当前控制版本，必须直接读取 finalized，不允许复用身份展示缓存。
+  const identity = await fetchChainIdentityState(env, accountId);
+  if (!identity.cid_number || identity.binding_revision <= 0) {
+    throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法注册设备子钥');
+  }
+  const cidNumber = identity.cid_number;
   const bindingMessage = buildDeviceBindingSigningMessage({
+    cid_number: cidNumber,
+    binding_revision: identity.binding_revision,
     account_id: accountId,
     p256_public_key: p256PublicKey,
     issued_at: body.issued_at
@@ -276,36 +313,41 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
     throw new HttpError(401, 'invalid_binding_signature', '设备绑定签名校验失败');
   }
 
-  // 身份主键 = 该钱包账户链上当前绑定的 cid_number(占即绑,匿名亦可)。
-  // 未绑定 CID 的账户是访客,不能注册社交身份的设备子钥。
-  //
-  // 子钥是**懒绑定**的:用户占完号后初次进广场 / 聊天才来注册,距离占号上链往往只有
-  // 几秒,而身份缓存 45 秒。读到「无 CID」必须旁路缓存回源核实一次,否则会拿占号前的
-  // 空值拒绝刚刚上链的身份。
-  const identity = await fetchChainIdentityStateFreshIfUnbound(env, accountId);
-  if (!identity.cid_number) {
-    throw new HttpError(403, 'cid_not_bound', '该钱包账户未绑定 CID,无法注册设备子钥');
-  }
-  const cidNumber = identity.cid_number;
   // device_id = 该设备 P-256 公钥的 sha256:同一身份多设备各一行;换机(新公钥)=新设备。
   const deviceId = await sha256Hex(p256PublicKey);
 
   const updated = await env.DB.prepare(
     `INSERT INTO square_device_subkeys
-      (cid_number, device_id, account_id, p256_public_key, issued_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      (cid_number, device_id, binding_revision, account_id, p256_public_key, issued_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(cid_number, device_id) DO UPDATE SET
+        binding_revision = excluded.binding_revision,
         account_id = excluded.account_id,
         p256_public_key = excluded.p256_public_key,
         issued_at = excluded.issued_at,
         updated_at = excluded.updated_at
-      WHERE excluded.issued_at > square_device_subkeys.issued_at`
+      WHERE excluded.binding_revision > square_device_subkeys.binding_revision
+        OR (excluded.binding_revision = square_device_subkeys.binding_revision
+          AND excluded.issued_at > square_device_subkeys.issued_at)`
   )
-    .bind(cidNumber, deviceId, accountId, p256PublicKey, body.issued_at, now, now)
+    .bind(
+      cidNumber,
+      deviceId,
+      identity.binding_revision,
+      accountId,
+      p256PublicKey,
+      body.issued_at,
+      now,
+      now,
+    )
     .run();
   if ((updated.meta?.changes ?? 0) !== 1) {
     throw new HttpError(409, 'stale_device_binding', '设备绑定证明已使用或早于当前绑定');
   }
 
-  return jsonResponse({ ok: true, cid_number: cidNumber });
+  return jsonResponse({
+    ok: true,
+    cid_number: cidNumber,
+    binding_revision: identity.binding_revision,
+  });
 }

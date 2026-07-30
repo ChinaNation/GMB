@@ -13,8 +13,8 @@ class ChatStoredMessage {
     required this.envelopeId,
     required this.conversationId,
     required this.direction,
-    required this.senderAccountId,
-    required this.recipientAccountId,
+    required this.senderCidNumber,
+    required this.recipientCidNumber,
     required this.messageKind,
     required this.deliveryState,
     required this.createdAtMillis,
@@ -24,8 +24,8 @@ class ChatStoredMessage {
   final String envelopeId;
   final String conversationId;
   final String direction;
-  final String senderAccountId;
-  final String recipientAccountId;
+  final String senderCidNumber;
+  final String recipientCidNumber;
   final ChatMessageKind messageKind;
   final ChatMessageDeliveryState deliveryState;
   final int createdAtMillis;
@@ -42,7 +42,7 @@ class ChatQueuedEnvelope {
 
   final String envelopeId;
 
-  /// 收件人身份主键 CID 号（路由键；proto envelope 内嵌 account_id 供 MLS/归属）。
+  /// 收件人身份主键 CID，也是信封与 Worker 的唯一投递键。
   final String recipientCidNumber;
   final List<int> envelopeBytes;
 }
@@ -72,7 +72,7 @@ class ChatPendingMedia {
 /// Chat 路由缓存记录。
 class ChatRoute {
   const ChatRoute({
-    required this.peerAccountId,
+    required this.peerCidNumber,
     required this.routeDisplayName,
     required this.deviceId,
     required this.devicePublicKey,
@@ -83,7 +83,7 @@ class ChatRoute {
     this.updatedAtMillis,
   });
 
-  final String peerAccountId;
+  final String peerCidNumber;
   final String routeDisplayName;
   final String deviceId;
   final String devicePublicKey;
@@ -92,8 +92,6 @@ class ChatRoute {
   final String? note;
   final int? createdAtMillis;
   final int? updatedAtMillis;
-
-  String get routeId => peerAccountId;
 }
 
 /// 公民 Chat 的 Isar 持久化仓库。
@@ -115,7 +113,8 @@ class ChatStore {
 
   /// 把正文加密成密文 + 搜索索引;正文为空时返回空密文与空索引。
   Future<_SealedMessage> _sealMessage({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String envelopeId,
     required String? plaintext,
   }) async {
@@ -124,96 +123,123 @@ class ChatStore {
     }
     return _SealedMessage(
       cipher: await _crypto.encryptText(
-        accountId: accountId,
+        ownerCidNumber: ownerCidNumber,
+        currentAccountId: currentAccountId,
         recordId: envelopeId,
         plaintext: plaintext,
       ),
       // 索引建在**摘要**上,与搜索时的匹配口径一致(媒体/贴纸取类型化占位)。
       tokens: await _crypto.buildSearchTokens(
-        accountId: accountId,
+        ownerCidNumber: ownerCidNumber,
+        currentAccountId: currentAccountId,
         text: _messageSummary(plaintext),
       ),
     );
   }
 
   Future<String> _sealSummary({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String conversationId,
     required String? plaintext,
   }) =>
       _crypto.encryptText(
-        accountId: accountId,
+        ownerCidNumber: ownerCidNumber,
+        currentAccountId: currentAccountId,
         recordId: conversationId,
         plaintext: _messageSummary(plaintext),
       );
 
-  Future<String?> _openMessage(ChatMessageEntity row) async {
+  Future<String?> _openMessage(
+    ChatMessageEntity row,
+    String currentAccountId,
+  ) async {
     final cipher = row.plaintextCipher;
     if (cipher == null || cipher.isEmpty) return null;
     return _crypto.decryptText(
-      accountId: row.accountId,
+      ownerCidNumber: row.ownerCidNumber,
+      currentAccountId: currentAccountId,
       recordId: row.envelopeId,
       blob: cipher,
     );
   }
 
-  Future<String> _openSummary(ChatConversationEntity row) => _crypto.decryptText(
-        accountId: row.accountId,
+  Future<String> _openSummary(
+    ChatConversationEntity row,
+    String currentAccountId,
+  ) =>
+      _crypto.decryptText(
+        ownerCidNumber: row.ownerCidNumber,
+        currentAccountId: currentAccountId,
         recordId: row.conversationId,
         blob: row.lastMessageCipher,
       );
 
   Future<List<ChatConversationPreview>> readConversationPreviews({
-    String? accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
   }) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatConversationEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final filtered = accountId == null || accountId.isEmpty
-          ? rows
-          : rows
-              .where((row) => row.accountId == accountId)
-              .toList(growable: false);
+      final filtered = rows
+          .where((row) => row.ownerCidNumber == ownerCidNumber)
+          .toList(growable: false);
       filtered.sort(
           (a, b) => b.lastUpdatedAtMillis.compareTo(a.lastUpdatedAtMillis));
       final out = <ChatConversationPreview>[];
       for (final row in filtered) {
-        out.add(_conversationPreviewFromEntity(row, await _openSummary(row)));
+        out.add(_conversationPreviewFromEntity(
+          row,
+          await _openSummary(row, currentAccountId),
+        ));
       }
       return List<ChatConversationPreview>.unmodifiable(out);
     });
   }
 
-  Future<List<ChatRoute>> readRouteRecords() {
+  Future<List<ChatRoute>> readRouteRecords(String ownerCidNumber) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatRouteCacheEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      rows.sort((a, b) => a.routeDisplayName.compareTo(b.routeDisplayName));
-      return rows.map(_routeFromEntity).toList(growable: false);
+      final owned = rows
+          .where((row) => row.ownerCidNumber == ownerCidNumber)
+          .toList(growable: false)
+        ..sort((a, b) => a.routeDisplayName.compareTo(b.routeDisplayName));
+      return owned.map(_routeFromEntity).toList(growable: false);
     });
   }
 
-  Future<ChatRoute?> getRouteRecord(String peerAccountId) {
+  Future<ChatRoute?> getRouteRecord(
+    String ownerCidNumber,
+    String peerCidNumber,
+  ) {
     return _walletIsar.read((isar) async {
       final row =
-          await isar.chatRouteCacheEntitys.getByPeerAccountId(peerAccountId);
+          await isar.chatRouteCacheEntitys.getByOwnerCidNumberPeerCidNumber(
+        ownerCidNumber,
+        peerCidNumber,
+      );
       return row == null ? null : _routeFromEntity(row);
     });
   }
 
-  Future<void> upsertRouteRecord(ChatRoute route) {
+  Future<void> upsertRouteRecord(String ownerCidNumber, ChatRoute route) {
     return _walletIsar.writeTxn((isar) async {
       final now = DateTime.now().millisecondsSinceEpoch;
       final existing =
-          await isar.chatRouteCacheEntitys.getByRouteId(route.routeId);
+          await isar.chatRouteCacheEntitys.getByOwnerCidNumberPeerCidNumber(
+        ownerCidNumber,
+        route.peerCidNumber,
+      );
       final entity = existing ?? ChatRouteCacheEntity();
       entity
-        ..routeId = route.routeId
-        ..peerAccountId = route.peerAccountId
+        ..ownerCidNumber = ownerCidNumber
+        ..peerCidNumber = route.peerCidNumber
         ..routeDisplayName = route.routeDisplayName
         ..deviceId = route.deviceId
         ..devicePublicKey = route.devicePublicKey
@@ -223,23 +249,32 @@ class ChatStore {
         ..createdAtMillis =
             existing?.createdAtMillis ?? route.createdAtMillis ?? now
         ..updatedAtMillis = route.updatedAtMillis ?? now;
-      await isar.chatRouteCacheEntitys.putByRouteId(entity);
+      await isar.chatRouteCacheEntitys.putByOwnerCidNumberPeerCidNumber(entity);
     });
   }
 
-  Future<List<ChatStoredMessage>> readMessages(String conversationId) {
+  Future<List<ChatStoredMessage>> readMessages({
+    required String ownerCidNumber,
+    required String currentAccountId,
+    required String conversationId,
+  }) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatMessageEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
       final filtered = rows
-          .where((row) => row.conversationId == conversationId)
+          .where((row) =>
+              row.ownerCidNumber == ownerCidNumber &&
+              row.conversationId == conversationId)
           .toList(growable: false)
         ..sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
       final out = <ChatStoredMessage>[];
       for (final row in filtered) {
-        out.add(_messageFromEntity(row, await _openMessage(row)));
+        out.add(_messageFromEntity(
+          row,
+          await _openMessage(row, currentAccountId),
+        ));
       }
       return List<ChatStoredMessage>.unmodifiable(out);
     });
@@ -257,19 +292,21 @@ class ChatStore {
   /// 复验保证结果与旧的明文 `contains` 语义完全一致。
   ///
   /// 匹配口径仍是**摘要**（文本取正文，媒体/贴纸取类型化占位），与建索引时一致；
-  /// 大小写不敏感。查询不足 2 字符时无 bigram 可用，回落到按 `accountId` 收窄后
+  /// 大小写不敏感。查询不足 2 字符时无 bigram 可用，回落到按属主 CID 收窄后
   /// 解密扫描——单字符查询在中文里很常见，不能直接拒绝。
   Future<List<ChatStoredMessage>> searchMessages({
-    required String accountId,
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String keyword,
     int limit = 50,
   }) async {
     final needle = keyword.trim().toLowerCase();
-    if (needle.isEmpty || accountId.isEmpty) {
+    if (needle.isEmpty || ownerCidNumber.isEmpty || currentAccountId.isEmpty) {
       return const <ChatStoredMessage>[];
     }
     final tokens = await _crypto.buildQueryTokens(
-      accountId: accountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       query: needle,
     );
     return _walletIsar.read((isar) async {
@@ -277,12 +314,12 @@ class ChatStore {
       if (tokens.isEmpty) {
         candidates = await isar.chatMessageEntitys
             .filter()
-            .accountIdEqualTo(accountId)
+            .ownerCidNumberEqualTo(ownerCidNumber)
             .findAll();
       } else {
         var query = isar.chatMessageEntitys
             .filter()
-            .accountIdEqualTo(accountId)
+            .ownerCidNumberEqualTo(ownerCidNumber)
             .and()
             .searchTokensElementEqualTo(tokens.first);
         for (final token in tokens.skip(1)) {
@@ -290,13 +327,12 @@ class ChatStore {
         }
         candidates = await query.findAll();
       }
-      candidates
-          .sort((a, b) => b.createdAtMillis.compareTo(a.createdAtMillis));
+      candidates.sort((a, b) => b.createdAtMillis.compareTo(a.createdAtMillis));
 
       final hits = <ChatStoredMessage>[];
       for (final row in candidates) {
         if (hits.length >= limit) break;
-        final plaintext = await _openMessage(row);
+        final plaintext = await _openMessage(row, currentAccountId);
         if (!_messageSummary(plaintext).toLowerCase().contains(needle)) {
           continue; // 索引假阳性，复验滤掉
         }
@@ -310,14 +346,19 @@ class ChatStore {
   ///
   /// Cloudflare 不保存聊天内容；用户删除聊天记录时，本地 Isar 是唯一
   /// 需要清理的聊天历史真源，附件缓存目录由运行态在同一操作中删除。
-  Future<void> deleteConversation(String conversationId) {
+  Future<void> deleteConversation(
+    String ownerCidNumber,
+    String conversationId,
+  ) {
     return _walletIsar.writeTxn((isar) async {
       final messages = await isar.chatMessageEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
       for (final message in messages.where(
-        (message) => message.conversationId == conversationId,
+        (message) =>
+            message.ownerCidNumber == ownerCidNumber &&
+            message.conversationId == conversationId,
       )) {
         await isar.chatMessageEntitys.delete(message.id);
       }
@@ -327,7 +368,9 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final conversation in conversations.where(
-        (conversation) => conversation.conversationId == conversationId,
+        (conversation) =>
+            conversation.ownerCidNumber == ownerCidNumber &&
+            conversation.conversationId == conversationId,
       )) {
         await isar.chatConversationEntitys.delete(conversation.id);
       }
@@ -337,7 +380,9 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final row in outboundRows.where(
-        (row) => row.conversationId == conversationId,
+        (row) =>
+            row.ownerCidNumber == ownerCidNumber &&
+            row.conversationId == conversationId,
       )) {
         await isar.chatOutboundQueueEntitys.delete(row.id);
       }
@@ -347,7 +392,9 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final row in pendingRows.where(
-        (row) => row.conversationId == conversationId,
+        (row) =>
+            row.ownerCidNumber == ownerCidNumber &&
+            row.conversationId == conversationId,
       )) {
         await isar.chatPendingInboundEntitys.delete(row.id);
       }
@@ -357,28 +404,28 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final row in outgoingMediaRows.where(
-        (row) => row.conversationId == conversationId,
+        (row) =>
+            row.ownerCidNumber == ownerCidNumber &&
+            row.conversationId == conversationId,
       )) {
         await isar.chatOutgoingMediaEntitys.delete(row.id);
       }
     });
   }
 
-  /// 注销用户：清除该 accountId 在本机的全部 Chat 历史（会话/消息/出入站队列）。
+  /// 注销用户：清除该 CID 在本机的全部 Chat 历史与队列。
   ///
   /// Cloudflare 端 A 的设备登记由 Worker purge 删除；本地 Isar 是 A 私信**明文**
-  /// 的唯一残留处，须一并清空以做到零残留。路由缓存（imRouteCacheEntity）是设备级
-  /// 对端路由、非 accountId 归属，不在此清除。
-  Future<void> clearAllForAccountId(String accountId) {
+  /// 的唯一残留处，须一并清空以做到零残留。
+  Future<void> clearAllForCidNumber(String cidNumber) {
     return _walletIsar.writeTxn((isar) async {
       final conversations = await isar.chatConversationEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
       final owned = conversations
-          .where((c) => c.accountId == accountId)
+          .where((c) => c.ownerCidNumber == cidNumber)
           .toList(growable: false);
-      final ownedIds = owned.map((c) => c.conversationId).toSet();
       for (final c in owned) {
         await isar.chatConversationEntitys.delete(c.id);
       }
@@ -388,7 +435,7 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final m in messages.where(
-        (m) => m.accountId == accountId || ownedIds.contains(m.conversationId),
+        (m) => m.ownerCidNumber == cidNumber,
       )) {
         await isar.chatMessageEntitys.delete(m.id);
       }
@@ -398,7 +445,7 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final o in outbound.where(
-        (o) => ownedIds.contains(o.conversationId),
+        (o) => o.ownerCidNumber == cidNumber,
       )) {
         await isar.chatOutboundQueueEntitys.delete(o.id);
       }
@@ -408,7 +455,7 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final p in pending.where(
-        (p) => ownedIds.contains(p.conversationId),
+        (p) => p.ownerCidNumber == cidNumber,
       )) {
         await isar.chatPendingInboundEntitys.delete(p.id);
       }
@@ -418,14 +465,23 @@ class ChatStore {
           .idGreaterThan(0, include: true)
           .findAll();
       for (final row in outgoingMedia.where(
-        (row) => ownedIds.contains(row.conversationId),
+        (row) => row.ownerCidNumber == cidNumber,
       )) {
         await isar.chatOutgoingMediaEntitys.delete(row.id);
+      }
+      final routes = await isar.chatRouteCacheEntitys
+          .filter()
+          .ownerCidNumberEqualTo(cidNumber)
+          .findAll();
+      for (final row in routes) {
+        await isar.chatRouteCacheEntitys.delete(row.id);
       }
     });
   }
 
   Future<void> saveOutgoingEnvelope({
+    required String ownerCidNumber,
+    required String currentAccountId,
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
     required String recipientCidNumber,
@@ -435,32 +491,34 @@ class ChatStore {
   }) async {
     // 加解密在事务外完成，避免密码学运算占住 Isar 写事务。
     final sealed = await _sealMessage(
-      accountId: envelope.senderAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       envelopeId: envelope.envelopeId,
       plaintext: plaintext,
     );
     final summaryCipher = await _sealSummary(
-      accountId: envelope.senderAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       conversationId: envelope.conversationId,
       plaintext: plaintext,
     );
     return _walletIsar.writeTxn((isar) async {
       await _putConversationInTxn(
         isar: isar,
+        ownerCidNumber: ownerCidNumber,
         conversationId: envelope.conversationId,
-        accountId: envelope.senderAccountId,
-        peerAccountId: envelope.recipientAccountId,
-        title: envelope.recipientAccountId,
+        peerCidNumber: envelope.recipientCidNumber,
+        title: envelope.recipientCidNumber,
         lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 0,
         deliveryState: deliveryState,
       );
-      await isar.chatMessageEntitys.putByEnvelopeId(
+      await isar.chatMessageEntitys.putByOwnerCidNumberEnvelopeId(
         _messageEntity(
+          ownerCidNumber: ownerCidNumber,
           envelope: envelope,
           envelopeBytes: envelopeBytes,
-          accountId: envelope.senderAccountId,
           direction: 'outgoing',
           messageKind: messageKind,
           deliveryState: deliveryState,
@@ -468,8 +526,9 @@ class ChatStore {
           searchTokens: sealed.tokens,
         ),
       );
-      await isar.chatOutboundQueueEntitys.putByEnvelopeId(
+      await isar.chatOutboundQueueEntitys.putByOwnerCidNumberEnvelopeId(
         ChatOutboundQueueEntity()
+          ..ownerCidNumber = ownerCidNumber
           ..envelopeId = envelope.envelopeId
           ..conversationId = envelope.conversationId
           ..recipientCidNumber = recipientCidNumber
@@ -483,14 +542,16 @@ class ChatStore {
   }
 
   Future<void> queueOutgoingEnvelope({
+    required String ownerCidNumber,
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
     required String recipientCidNumber,
     required ChatMessageDeliveryState deliveryState,
   }) {
     return _walletIsar.writeTxn((isar) async {
-      await isar.chatOutboundQueueEntitys.putByEnvelopeId(
+      await isar.chatOutboundQueueEntitys.putByOwnerCidNumberEnvelopeId(
         ChatOutboundQueueEntity()
+          ..ownerCidNumber = ownerCidNumber
           ..envelopeId = envelope.envelopeId
           ..conversationId = envelope.conversationId
           ..recipientCidNumber = recipientCidNumber
@@ -504,38 +565,42 @@ class ChatStore {
   }
 
   Future<void> saveIncomingEnvelope({
+    required String ownerCidNumber,
+    required String currentAccountId,
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
     required ChatMessageKind messageKind,
     required String plaintext,
   }) async {
     final sealed = await _sealMessage(
-      accountId: envelope.recipientAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       envelopeId: envelope.envelopeId,
       plaintext: plaintext,
     );
     final summaryCipher = await _sealSummary(
-      accountId: envelope.recipientAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       conversationId: envelope.conversationId,
       plaintext: plaintext,
     );
     return _walletIsar.writeTxn((isar) async {
       await _putConversationInTxn(
         isar: isar,
+        ownerCidNumber: ownerCidNumber,
         conversationId: envelope.conversationId,
-        accountId: envelope.recipientAccountId,
-        peerAccountId: envelope.senderAccountId,
-        title: envelope.senderAccountId,
+        peerCidNumber: envelope.senderCidNumber,
+        title: envelope.senderCidNumber,
         lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 1,
         deliveryState: ChatMessageDeliveryState.receivedByDevice,
       );
-      await isar.chatMessageEntitys.putByEnvelopeId(
+      await isar.chatMessageEntitys.putByOwnerCidNumberEnvelopeId(
         _messageEntity(
+          ownerCidNumber: ownerCidNumber,
           envelope: envelope,
           envelopeBytes: envelopeBytes,
-          accountId: envelope.recipientAccountId,
           direction: 'incoming',
           messageKind: messageKind,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -547,13 +612,14 @@ class ChatStore {
   }
 
   Future<void> markOutgoingDelivery({
+    required String ownerCidNumber,
     required String envelopeId,
     required ChatMessageDeliveryState state,
     String? errorMessage,
   }) {
     return _walletIsar.writeTxn((isar) async {
-      final queue =
-          await isar.chatOutboundQueueEntitys.getByEnvelopeId(envelopeId);
+      final queue = await isar.chatOutboundQueueEntitys
+          .getByOwnerCidNumberEnvelopeId(ownerCidNumber, envelopeId);
       if (queue != null) {
         if (state == ChatMessageDeliveryState.sent ||
             state == ChatMessageDeliveryState.receivedByDevice) {
@@ -564,31 +630,39 @@ class ChatStore {
             ..attemptCount = queue.attemptCount + 1
             ..lastError = errorMessage
             ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
-          await isar.chatOutboundQueueEntitys.putByEnvelopeId(queue);
+          await isar.chatOutboundQueueEntitys
+              .putByOwnerCidNumberEnvelopeId(queue);
         }
       }
-      final message = await isar.chatMessageEntitys.getByEnvelopeId(envelopeId);
+      final message = await isar.chatMessageEntitys
+          .getByOwnerCidNumberEnvelopeId(ownerCidNumber, envelopeId);
       if (message != null) {
         message.deliveryState = state.name;
-        await isar.chatMessageEntitys.putByEnvelopeId(message);
+        await isar.chatMessageEntitys.putByOwnerCidNumberEnvelopeId(message);
         final conversation = await isar.chatConversationEntitys
-            .getByConversationId(message.conversationId);
+            .getByOwnerCidNumberConversationId(
+          ownerCidNumber,
+          message.conversationId,
+        );
         if (conversation != null) {
           conversation.lastDeliveryState = state.name;
-          await isar.chatConversationEntitys.putByConversationId(conversation);
+          await isar.chatConversationEntitys
+              .putByOwnerCidNumberConversationId(conversation);
         }
       }
     });
   }
 
   Future<void> savePendingInbound({
+    required String ownerCidNumber,
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
     required String reason,
   }) {
     return _walletIsar.writeTxn((isar) async {
-      await isar.chatPendingInboundEntitys.putByEnvelopeId(
+      await isar.chatPendingInboundEntitys.putByOwnerCidNumberEnvelopeId(
         ChatPendingInboundEntity()
+          ..ownerCidNumber = ownerCidNumber
           ..envelopeId = envelope.envelopeId
           ..conversationId = envelope.conversationId
           ..envelopeBytesHex = _bytesToHex(envelopeBytes)
@@ -598,14 +672,19 @@ class ChatStore {
     });
   }
 
-  Future<List<ChatEnvelope>> takePendingInbound(String conversationId) {
+  Future<List<ChatEnvelope>> takePendingInbound(
+    String ownerCidNumber,
+    String conversationId,
+  ) {
     return _walletIsar.writeTxn((isar) async {
       final rows = await isar.chatPendingInboundEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
       final matched = rows
-          .where((row) => row.conversationId == conversationId)
+          .where((row) =>
+              row.ownerCidNumber == ownerCidNumber &&
+              row.conversationId == conversationId)
           .toList(growable: false)
         ..sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
       for (final row in matched) {
@@ -618,28 +697,29 @@ class ChatStore {
     });
   }
 
-  Future<int> pendingInboundCount() {
+  Future<int> pendingInboundCount(String ownerCidNumber) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatPendingInboundEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      return rows.length;
+      return rows.where((row) => row.ownerCidNumber == ownerCidNumber).length;
     });
   }
 
-  Future<int> outboundQueueCount() {
+  Future<int> outboundQueueCount(String ownerCidNumber) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatOutboundQueueEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      return rows.length;
+      return rows.where((row) => row.ownerCidNumber == ownerCidNumber).length;
     });
   }
 
   /// 读取发送设备上的待重试密文；Cloudflare 不提供远程补拉。
   Future<List<ChatQueuedEnvelope>> readQueuedEnvelopes({
+    required String ownerCidNumber,
     String? recipientCidNumber,
   }) {
     return _walletIsar.read((isar) async {
@@ -647,9 +727,11 @@ class ChatStore {
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
+      final owned =
+          rows.where((row) => row.ownerCidNumber == ownerCidNumber).toList();
       final matched = recipientCidNumber == null
-          ? rows
-          : rows
+          ? owned
+          : owned
               .where((row) => row.recipientCidNumber == recipientCidNumber)
               .toList(growable: false);
       matched.sort((a, b) => a.updatedAtMillis.compareTo(b.updatedAtMillis));
@@ -667,6 +749,7 @@ class ChatStore {
 
   /// 登记一条待设备投递的媒体(字节未送达对方设备,留待上线补发)。
   Future<void> recordOutgoingMedia({
+    required String ownerCidNumber,
     required String attachmentId,
     required String recipientCidNumber,
     required String conversationId,
@@ -675,8 +758,9 @@ class ChatStore {
     required int byteSize,
   }) {
     return _walletIsar.writeTxn((isar) async {
-      await isar.chatOutgoingMediaEntitys.putByPendingKey(
+      await isar.chatOutgoingMediaEntitys.putByOwnerCidNumberPendingKey(
         ChatOutgoingMediaEntity()
+          ..ownerCidNumber = ownerCidNumber
           ..pendingKey = '$attachmentId|$recipientCidNumber'
           ..attachmentId = attachmentId
           ..recipientCidNumber = recipientCidNumber
@@ -691,15 +775,21 @@ class ChatStore {
 
   /// 字节已送达某成员设备(收到 WebRTC ack)后删除该 (媒体, 成员) 待投递行。
   Future<void> deleteOutgoingMedia(
-      String attachmentId, String recipientCidNumber) {
+    String ownerCidNumber,
+    String attachmentId,
+    String recipientCidNumber,
+  ) {
     return _walletIsar.writeTxn((isar) async {
-      await isar.chatOutgoingMediaEntitys
-          .deleteByPendingKey('$attachmentId|$recipientCidNumber');
+      await isar.chatOutgoingMediaEntitys.deleteByOwnerCidNumberPendingKey(
+        ownerCidNumber,
+        '$attachmentId|$recipientCidNumber',
+      );
     });
   }
 
   /// 读取待设备投递的媒体(可按对端过滤),供上线补发。
   Future<List<ChatPendingMedia>> readPendingOutgoingMedia({
+    required String ownerCidNumber,
     String? recipientCidNumber,
   }) {
     return _walletIsar.read((isar) async {
@@ -707,9 +797,11 @@ class ChatStore {
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
+      final owned =
+          rows.where((row) => row.ownerCidNumber == ownerCidNumber).toList();
       final matched = recipientCidNumber == null
-          ? rows
-          : rows
+          ? owned
+          : owned
               .where((row) => row.recipientCidNumber == recipientCidNumber)
               .toList(growable: false);
       matched.sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
@@ -728,13 +820,13 @@ class ChatStore {
     });
   }
 
-  Future<int> outgoingMediaCount() {
+  Future<int> outgoingMediaCount(String ownerCidNumber) {
     return _walletIsar.read((isar) async {
       final rows = await isar.chatOutgoingMediaEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      return rows.length;
+      return rows.where((row) => row.ownerCidNumber == ownerCidNumber).length;
     });
   }
 
@@ -742,35 +834,36 @@ class ChatStore {
 
   /// 建群/入群时落群会话壳 + 群会话记录(conversationKind=group,title=群名)。
   Future<void> upsertGroupShell({
+    required String ownerCidNumber,
     required String groupId,
     required String groupName,
-    required String creatorAccountId,
-    required String accountId,
+    required String creatorCidNumber,
     required int epoch,
   }) {
     return _walletIsar.writeTxn((isar) async {
       final now = DateTime.now().millisecondsSinceEpoch;
-      final existing = await isar.chatGroupEntitys.getByGroupId(groupId);
+      final existing = await isar.chatGroupEntitys
+          .getByOwnerCidNumberGroupId(ownerCidNumber, groupId);
       final entity = existing ?? ChatGroupEntity();
       entity
+        ..ownerCidNumber = ownerCidNumber
         ..groupId = groupId
         ..groupName = groupName
-        ..creatorAccountId = creatorAccountId
-        ..accountId = accountId
+        ..creatorCidNumber = creatorCidNumber
         ..epoch = epoch
         ..memberCount = existing?.memberCount ?? 1
         ..leftLocally = existing?.leftLocally ?? false
         ..createdAtMillis = existing?.createdAtMillis ?? now
         ..updatedAtMillis = now;
-      await isar.chatGroupEntitys.putByGroupId(entity);
+      await isar.chatGroupEntitys.putByOwnerCidNumberGroupId(entity);
 
-      final conversation =
-          await isar.chatConversationEntitys.getByConversationId(groupId);
+      final conversation = await isar.chatConversationEntitys
+          .getByOwnerCidNumberConversationId(ownerCidNumber, groupId);
       final shell = conversation ?? ChatConversationEntity();
       shell
+        ..ownerCidNumber = ownerCidNumber
         ..conversationId = groupId
-        ..accountId = accountId
-        ..peerAccountId = creatorAccountId
+        ..peerCidNumber = creatorCidNumber
         ..title = groupName
         ..conversationKind = 'group'
         ..lastMessageCipher = conversation?.lastMessageCipher ?? ''
@@ -778,12 +871,14 @@ class ChatStore {
         ..unreadCount = conversation?.unreadCount ?? 0
         ..lastDeliveryState = conversation?.lastDeliveryState ??
             ChatMessageDeliveryState.queued.name;
-      await isar.chatConversationEntitys.putByConversationId(shell);
+      await isar.chatConversationEntitys
+          .putByOwnerCidNumberConversationId(shell);
     });
   }
 
-  /// 按 MLS 名册(account→role)覆盖群成员镜像 + 更新 epoch/人数。
+  /// 按 MLS 名册（CID→角色）覆盖群成员镜像，并更新 epoch/人数。
   Future<void> reconcileGroupRoster({
+    required String ownerCidNumber,
     required String groupId,
     required Map<String, GroupMemberRole> members,
     required int epoch,
@@ -792,62 +887,69 @@ class ChatStore {
       final now = DateTime.now().millisecondsSinceEpoch;
       final existing = await isar.chatGroupMemberEntitys
           .filter()
+          .ownerCidNumberEqualTo(ownerCidNumber)
+          .and()
           .groupIdEqualTo(groupId)
           .findAll();
       final joinedAt = <String, int>{
-        for (final row in existing) row.memberAccountId: row.joinedAtMillis,
+        for (final row in existing) row.memberCidNumber: row.joinedAtMillis,
       };
       for (final row in existing) {
         await isar.chatGroupMemberEntitys.delete(row.id);
       }
       for (final entry in members.entries) {
-        await isar.chatGroupMemberEntitys.putByMemberKey(
+        await isar.chatGroupMemberEntitys.putByOwnerCidNumberMemberKey(
           ChatGroupMemberEntity()
+            ..ownerCidNumber = ownerCidNumber
             ..memberKey = '$groupId|${entry.key}'
             ..groupId = groupId
-            ..memberAccountId = entry.key
+            ..memberCidNumber = entry.key
             ..role = entry.value.wireName
             ..joinedAtMillis = joinedAt[entry.key] ?? now,
         );
       }
-      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      final group = await isar.chatGroupEntitys
+          .getByOwnerCidNumberGroupId(ownerCidNumber, groupId);
       if (group != null) {
         group
           ..epoch = epoch
           ..memberCount = members.length
           ..updatedAtMillis = now;
-        await isar.chatGroupEntitys.putByGroupId(group);
+        await isar.chatGroupEntitys.putByOwnerCidNumberGroupId(group);
       }
     });
   }
 
-  Future<ChatGroup?> readGroup(String groupId) {
+  Future<ChatGroup?> readGroup(String ownerCidNumber, String groupId) {
     return _walletIsar.read((isar) async {
-      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      final group = await isar.chatGroupEntitys
+          .getByOwnerCidNumberGroupId(ownerCidNumber, groupId);
       if (group == null) return null;
       final members = await isar.chatGroupMemberEntitys
           .filter()
+          .ownerCidNumberEqualTo(ownerCidNumber)
+          .and()
           .groupIdEqualTo(groupId)
           .findAll();
       return _groupFromEntities(group, members);
     });
   }
 
-  Future<List<ChatGroup>> readGroups({String? accountId}) {
+  Future<List<ChatGroup>> readGroups(String ownerCidNumber) {
     return _walletIsar.read((isar) async {
       final groups = await isar.chatGroupEntitys
           .filter()
           .idGreaterThan(0, include: true)
           .findAll();
-      final filtered = accountId == null || accountId.isEmpty
-          ? groups
-          : groups
-              .where((row) => row.accountId == accountId)
-              .toList(growable: false);
+      final filtered = groups
+          .where((row) => row.ownerCidNumber == ownerCidNumber)
+          .toList(growable: false);
       final result = <ChatGroup>[];
       for (final group in filtered) {
         final members = await isar.chatGroupMemberEntitys
             .filter()
+            .ownerCidNumberEqualTo(ownerCidNumber)
+            .and()
             .groupIdEqualTo(group.groupId)
             .findAll();
         result.add(_groupFromEntities(group, members));
@@ -857,52 +959,61 @@ class ChatStore {
   }
 
   /// 退群/被移除:本机标记已退,停止参与。
-  Future<void> markGroupLeft(String groupId) {
+  Future<void> markGroupLeft(String ownerCidNumber, String groupId) {
     return _walletIsar.writeTxn((isar) async {
-      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      final group = await isar.chatGroupEntitys
+          .getByOwnerCidNumberGroupId(ownerCidNumber, groupId);
       if (group != null) {
         group
           ..leftLocally = true
           ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
-        await isar.chatGroupEntitys.putByGroupId(group);
+        await isar.chatGroupEntitys.putByOwnerCidNumberGroupId(group);
       }
     });
   }
 
   /// 改群名(群记录 + 群会话 title 同步)。空名忽略。
-  Future<void> renameGroup(String groupId, String name) {
+  Future<void> renameGroup(
+    String ownerCidNumber,
+    String groupId,
+    String name,
+  ) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
       return Future<void>.value();
     }
     return _walletIsar.writeTxn((isar) async {
       final now = DateTime.now().millisecondsSinceEpoch;
-      final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+      final group = await isar.chatGroupEntitys
+          .getByOwnerCidNumberGroupId(ownerCidNumber, groupId);
       if (group != null) {
         group
           ..groupName = trimmed
           ..updatedAtMillis = now;
-        await isar.chatGroupEntitys.putByGroupId(group);
+        await isar.chatGroupEntitys.putByOwnerCidNumberGroupId(group);
       }
-      final conversation =
-          await isar.chatConversationEntitys.getByConversationId(groupId);
+      final conversation = await isar.chatConversationEntitys
+          .getByOwnerCidNumberConversationId(ownerCidNumber, groupId);
       if (conversation != null) {
         conversation.title = trimmed;
-        await isar.chatConversationEntitys.putByConversationId(conversation);
+        await isar.chatConversationEntitys
+            .putByOwnerCidNumberConversationId(conversation);
       }
     });
   }
 
   /// 缓冲一条乱序群 Commit(键 groupId+messageEpoch)。
   Future<void> bufferGroupCommit({
+    required String ownerCidNumber,
     required String groupId,
     required int messageEpoch,
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
   }) {
     return _walletIsar.writeTxn((isar) async {
-      await isar.chatGroupPendingCommitEntitys.putByEnvelopeId(
+      await isar.chatGroupPendingCommitEntitys.putByOwnerCidNumberEnvelopeId(
         ChatGroupPendingCommitEntity()
+          ..ownerCidNumber = ownerCidNumber
           ..envelopeId = envelope.envelopeId
           ..groupId = groupId
           ..messageEpoch = messageEpoch
@@ -914,12 +1025,15 @@ class ChatStore {
 
   /// 取出并删除某 (groupId, messageEpoch) 下最早的一条缓冲;无则 null。
   Future<ChatEnvelope?> takeGroupPendingCommit(
+    String ownerCidNumber,
     String groupId,
     int messageEpoch,
   ) {
     return _walletIsar.writeTxn((isar) async {
       final rows = await isar.chatGroupPendingCommitEntitys
           .filter()
+          .ownerCidNumberEqualTo(ownerCidNumber)
+          .and()
           .groupIdEqualTo(groupId)
           .messageEpochEqualTo(messageEpoch)
           .findAll();
@@ -933,47 +1047,50 @@ class ChatStore {
 
   /// 群发出:一条逻辑消息 + N 条按收件人的出站队列(投递/重试复用 1:1 路径)。
   ///
-  /// [recipientCidByAccountId] 把每个成员账户映射到其身份主键 CID 号（队列路由键）；
-  /// envelope 内嵌 account_id 仍供 MLS/归属。
+  /// [recipientCidByCidNumber] 固定按成员 CID 建立队列路由；账户不进入群消息身份。
   Future<void> saveOutgoingGroupMessage({
+    required String ownerCidNumber,
+    required String currentAccountId,
     required String groupId,
-    required String senderAccountId,
+    required String senderCidNumber,
     required String senderDeviceId,
     required String logicalEnvelopeId,
     required ChatMessageKind messageKind,
     required String payload,
     required int createdAtMillis,
     required List<ChatEnvelope> envelopes,
-    required Map<String, String> recipientCidByAccountId,
+    required Map<String, String> recipientCidByCidNumber,
   }) async {
     final sealed = await _sealMessage(
-      accountId: senderAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       envelopeId: logicalEnvelopeId,
       plaintext: payload,
     );
     final summaryCipher = await _sealSummary(
-      accountId: senderAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       conversationId: groupId,
       plaintext: payload,
     );
     return _walletIsar.writeTxn((isar) async {
       await _touchGroupConversationInTxn(
         isar: isar,
+        ownerCidNumber: ownerCidNumber,
         groupId: groupId,
-        accountId: senderAccountId,
         lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: createdAtMillis,
         unreadDelta: 0,
         deliveryState: ChatMessageDeliveryState.queued,
       );
-      await isar.chatMessageEntitys.putByEnvelopeId(
+      await isar.chatMessageEntitys.putByOwnerCidNumberEnvelopeId(
         ChatMessageEntity()
+          ..ownerCidNumber = ownerCidNumber
           ..envelopeId = logicalEnvelopeId
           ..conversationId = groupId
-          ..accountId = senderAccountId
           ..direction = 'outgoing'
-          ..senderAccountId = senderAccountId
-          ..recipientAccountId = groupId
+          ..senderCidNumber = senderCidNumber
+          ..recipientCidNumber = groupId
           ..senderDeviceId = senderDeviceId
           ..messageKind = messageKind.name
           ..mlsMessageKind =
@@ -986,13 +1103,13 @@ class ChatStore {
       );
       for (final envelope in envelopes) {
         final recipientCidNumber =
-            recipientCidByAccountId[envelope.recipientAccountId];
+            recipientCidByCidNumber[envelope.recipientCidNumber];
         if (recipientCidNumber == null || recipientCidNumber.isEmpty) {
-          throw StateError(
-              '群出站队列缺少收件人 CID 映射: ${envelope.recipientAccountId}');
+          throw StateError('群出站队列缺少收件人 CID 映射: ${envelope.recipientCidNumber}');
         }
-        await isar.chatOutboundQueueEntitys.putByEnvelopeId(
+        await isar.chatOutboundQueueEntitys.putByOwnerCidNumberEnvelopeId(
           ChatOutboundQueueEntity()
+            ..ownerCidNumber = ownerCidNumber
             ..envelopeId = envelope.envelopeId
             ..conversationId = groupId
             ..recipientCidNumber = recipientCidNumber
@@ -1008,36 +1125,40 @@ class ChatStore {
 
   /// 群收到:一条入站逻辑消息(该成员就收到一封)。会话保持群名,不被发送方覆盖。
   Future<void> saveIncomingGroupMessage({
+    required String ownerCidNumber,
+    required String currentAccountId,
     required ChatEnvelope envelope,
     required List<int> envelopeBytes,
     required ChatMessageKind messageKind,
     required String plaintext,
   }) async {
     final sealed = await _sealMessage(
-      accountId: envelope.recipientAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       envelopeId: envelope.envelopeId,
       plaintext: plaintext,
     );
     final summaryCipher = await _sealSummary(
-      accountId: envelope.recipientAccountId,
+      ownerCidNumber: ownerCidNumber,
+      currentAccountId: currentAccountId,
       conversationId: envelope.conversationId,
       plaintext: plaintext,
     );
     return _walletIsar.writeTxn((isar) async {
       await _touchGroupConversationInTxn(
         isar: isar,
+        ownerCidNumber: ownerCidNumber,
         groupId: envelope.conversationId,
-        accountId: envelope.recipientAccountId,
         lastMessageCipher: summaryCipher,
         lastUpdatedAtMillis: envelope.createdAtMillis.toInt(),
         unreadDelta: 1,
         deliveryState: ChatMessageDeliveryState.receivedByDevice,
       );
-      await isar.chatMessageEntitys.putByEnvelopeId(
+      await isar.chatMessageEntitys.putByOwnerCidNumberEnvelopeId(
         _messageEntity(
+          ownerCidNumber: ownerCidNumber,
           envelope: envelope,
           envelopeBytes: envelopeBytes,
-          accountId: envelope.recipientAccountId,
           direction: 'incoming',
           messageKind: messageKind,
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
@@ -1051,31 +1172,31 @@ class ChatStore {
   /// 更新群会话的 lastMessage/未读/投递态,但保留群名 title 与 conversationKind。
   Future<void> _touchGroupConversationInTxn({
     required Isar isar,
+    required String ownerCidNumber,
     required String groupId,
-    required String accountId,
     required String lastMessageCipher,
     required int lastUpdatedAtMillis,
     required int unreadDelta,
     required ChatMessageDeliveryState deliveryState,
   }) async {
-    final existing =
-        await isar.chatConversationEntitys.getByConversationId(groupId);
-    final group = await isar.chatGroupEntitys.getByGroupId(groupId);
+    final existing = await isar.chatConversationEntitys
+        .getByOwnerCidNumberConversationId(ownerCidNumber, groupId);
+    final group = await isar.chatGroupEntitys
+        .getByOwnerCidNumberGroupId(ownerCidNumber, groupId);
     final entity = existing ?? ChatConversationEntity();
     entity
+      ..ownerCidNumber = ownerCidNumber
       ..conversationId = groupId
-      ..accountId = existing?.accountId.isNotEmpty == true
-          ? existing!.accountId
-          : accountId
-      ..peerAccountId =
-          existing?.peerAccountId ?? (group?.creatorAccountId ?? '')
+      ..peerCidNumber =
+          existing?.peerCidNumber ?? (group?.creatorCidNumber ?? '')
       ..title = group?.groupName ?? existing?.title ?? groupId
       ..conversationKind = 'group'
       ..lastMessageCipher = lastMessageCipher
       ..lastUpdatedAtMillis = lastUpdatedAtMillis
       ..unreadCount = (existing?.unreadCount ?? 0) + unreadDelta
       ..lastDeliveryState = deliveryState.name;
-    await isar.chatConversationEntitys.putByConversationId(entity);
+    await isar.chatConversationEntitys
+        .putByOwnerCidNumberConversationId(entity);
   }
 
   ChatGroup _groupFromEntities(
@@ -1085,12 +1206,12 @@ class ChatStore {
     return ChatGroup(
       groupId: group.groupId,
       name: group.groupName,
-      creatorAccountId: group.creatorAccountId,
+      creatorCidNumber: group.creatorCidNumber,
       epoch: group.epoch,
       leftLocally: group.leftLocally,
       roster: members
           .map((row) => GroupMember(
-                accountId: row.memberAccountId,
+                cidNumber: row.memberCidNumber,
                 role: GroupMemberRole.fromName(row.role),
               ))
           .toList(growable: false),
@@ -1099,9 +1220,9 @@ class ChatStore {
 
   Future<void> _putConversationInTxn({
     required Isar isar,
+    required String ownerCidNumber,
     required String conversationId,
-    required String accountId,
-    required String peerAccountId,
+    required String peerCidNumber,
     required String title,
     required String lastMessageCipher,
     required int lastUpdatedAtMillis,
@@ -1109,18 +1230,22 @@ class ChatStore {
     required ChatMessageDeliveryState deliveryState,
   }) async {
     final existing =
-        await isar.chatConversationEntitys.getByConversationId(conversationId);
+        await isar.chatConversationEntitys.getByOwnerCidNumberConversationId(
+      ownerCidNumber,
+      conversationId,
+    );
     final entity = existing ?? ChatConversationEntity();
     entity
+      ..ownerCidNumber = ownerCidNumber
       ..conversationId = conversationId
-      ..accountId = accountId
-      ..peerAccountId = peerAccountId
+      ..peerCidNumber = peerCidNumber
       ..title = title
       ..lastMessageCipher = lastMessageCipher
       ..lastUpdatedAtMillis = lastUpdatedAtMillis
       ..unreadCount = (existing?.unreadCount ?? 0) + unreadDelta
       ..lastDeliveryState = deliveryState.name;
-    await isar.chatConversationEntitys.putByConversationId(entity);
+    await isar.chatConversationEntitys
+        .putByOwnerCidNumberConversationId(entity);
   }
 }
 
@@ -1130,7 +1255,7 @@ ChatConversationPreview _conversationPreviewFromEntity(
   return ChatConversationPreview(
     conversationId: row.conversationId,
     title: row.title,
-    peerAccountId: row.peerAccountId,
+    peerCidNumber: row.peerCidNumber,
     lastMessage: lastMessage,
     lastUpdatedAt: DateTime.fromMillisecondsSinceEpoch(row.lastUpdatedAtMillis),
     unreadCount: row.unreadCount,
@@ -1145,8 +1270,8 @@ ChatStoredMessage _messageFromEntity(ChatMessageEntity row, String? plaintext) {
     envelopeId: row.envelopeId,
     conversationId: row.conversationId,
     direction: row.direction,
-    senderAccountId: row.senderAccountId,
-    recipientAccountId: row.recipientAccountId,
+    senderCidNumber: row.senderCidNumber,
+    recipientCidNumber: row.recipientCidNumber,
     messageKind: _messageKindFromName(row.messageKind),
     deliveryState: _deliveryStateFromName(row.deliveryState),
     createdAtMillis: row.createdAtMillis,
@@ -1156,7 +1281,7 @@ ChatStoredMessage _messageFromEntity(ChatMessageEntity row, String? plaintext) {
 
 ChatRoute _routeFromEntity(ChatRouteCacheEntity row) {
   return ChatRoute(
-    peerAccountId: row.peerAccountId,
+    peerCidNumber: row.peerCidNumber,
     routeDisplayName: row.routeDisplayName,
     deviceId: row.deviceId,
     devicePublicKey: row.devicePublicKey,
@@ -1169,9 +1294,9 @@ ChatRoute _routeFromEntity(ChatRouteCacheEntity row) {
 }
 
 ChatMessageEntity _messageEntity({
+  required String ownerCidNumber,
   required ChatEnvelope envelope,
   required List<int> envelopeBytes,
-  required String accountId,
   required String direction,
   required ChatMessageKind messageKind,
   required ChatMessageDeliveryState deliveryState,
@@ -1179,12 +1304,12 @@ ChatMessageEntity _messageEntity({
   List<String> searchTokens = const <String>[],
 }) {
   return ChatMessageEntity()
+    ..ownerCidNumber = ownerCidNumber
     ..envelopeId = envelope.envelopeId
     ..conversationId = envelope.conversationId
-    ..accountId = accountId
     ..direction = direction
-    ..senderAccountId = envelope.senderAccountId
-    ..recipientAccountId = envelope.recipientAccountId
+    ..senderCidNumber = envelope.senderCidNumber
+    ..recipientCidNumber = envelope.recipientCidNumber
     ..senderDeviceId = envelope.senderDeviceId
     ..messageKind = messageKind.name
     ..mlsMessageKind = envelope.mlsMessageKind.name

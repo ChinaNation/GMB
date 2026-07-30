@@ -11,11 +11,11 @@ import 'package:citizenapp/ui/app_theme.dart';
 class DraftsPage extends StatefulWidget {
   const DraftsPage({
     super.key,
-    required this.accountId,
+    required this.cidNumber,
     this.store,
   });
 
-  final String accountId;
+  final String cidNumber;
   final SquareComposeDraftRepository? store;
 
   @override
@@ -30,11 +30,11 @@ class _DraftsPageState extends State<DraftsPage> {
   void initState() {
     super.initState();
     _store = widget.store ?? SquareComposeDraftStore.instance;
-    _future = _store.list(widget.accountId);
+    _future = _store.list(widget.cidNumber);
   }
 
   Future<void> _delete(SquareComposeDraft draft) async {
-    await _store.delete(widget.accountId, draft.draftId);
+    await _store.delete(widget.cidNumber, draft.draftId);
   }
 
   @override

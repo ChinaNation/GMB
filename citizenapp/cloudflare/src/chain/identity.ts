@@ -11,6 +11,7 @@ export type IdentityLevel = "visitor" | "voting" | "candidate";
 
 export interface ChainIdentityState {
   account_id: string;
+  binding_revision: number;
   identity_level: IdentityLevel;
   has_voting_identity: boolean;
   has_candidate_identity: boolean;
@@ -34,6 +35,7 @@ const IDENTITY_CACHE_TTL_SECONDS = 45;
 function visitorIdentityState(accountId: string): ChainIdentityState {
   return {
     account_id: accountId,
+    binding_revision: 0,
     identity_level: "visitor",
     has_voting_identity: false,
     has_candidate_identity: false,
@@ -104,6 +106,7 @@ export async function fetchChainIdentityStateFreshIfUnbound(
 function visitorIdentityStateByCid(cidNumber: string): ChainIdentityState {
   return {
     account_id: "",
+    binding_revision: 0,
     identity_level: "visitor",
     has_voting_identity: false,
     has_candidate_identity: false,
@@ -125,11 +128,17 @@ async function readChainIdentityByCid(
   const cidRegistryKey = storageMapKey("CitizenIdentity", "CidRegistry", cidScale);
   const votingKey = storageMapKey("CitizenIdentity", "VotingIdentityByCid", cidScale);
   const candidateKey = storageMapKey("CitizenIdentity", "CandidateIdentityByCid", cidScale);
-  const [walletHex, cidRecordHex, votingHex, candidateHex] = await Promise.all([
+  const bindingRevisionKey = storageMapKey(
+    "CitizenIdentity",
+    "BindingRevisionByCid",
+    cidScale,
+  );
+  const [walletHex, cidRecordHex, votingHex, candidateHex, bindingRevisionHex] = await Promise.all([
     fetchChainStorage(env, `0x${bytesToHex(walletByCidKey)}`, finalizedHead),
     fetchChainStorage(env, `0x${bytesToHex(cidRegistryKey)}`, finalizedHead),
     fetchChainStorage(env, `0x${bytesToHex(votingKey)}`, finalizedHead),
     fetchChainStorage(env, `0x${bytesToHex(candidateKey)}`, finalizedHead),
+    fetchChainStorage(env, `0x${bytesToHex(bindingRevisionKey)}`, finalizedHead),
   ]);
 
   const walletBinding = walletHex ? hexToBytes(walletHex) : null;
@@ -138,6 +147,10 @@ async function readChainIdentityByCid(
     return null;
   }
   const boundAccountId = `0x${bytesToHex(walletBinding)}`;
+  const bindingRevision = decodeU64(bindingRevisionHex);
+  if (bindingRevision <= 0) {
+    return null;
+  }
 
   const votingIdentity = votingHex ? decodeVotingIdentity(hexToBytes(votingHex)) : null;
   const hasVotingIdentity = votingIdentity ? votingIdentityIsActive(votingIdentity) : false;
@@ -154,12 +167,24 @@ async function readChainIdentityByCid(
   // 单独表达,不决定"有没有身份"。account_id = AccountIdByCid 即当前绑定钱包账户。
   return {
     account_id: boundAccountId,
+    binding_revision: bindingRevision,
     identity_level: identityLevel,
     has_voting_identity: hasVotingIdentity,
     has_candidate_identity: hasCandidateIdentity,
     cid_number: cidNumber,
     checked_at: nowMs(),
   };
+}
+
+function decodeU64(value: string | null): number {
+  if (!value) return 0;
+  const bytes = hexToBytes(value);
+  if (bytes.length !== 8) return 0;
+  let decoded = 0n;
+  for (let index = bytes.length - 1; index >= 0; index -= 1) {
+    decoded = (decoded << 8n) | BigInt(bytes[index]);
+  }
+  return decoded <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(decoded) : 0;
 }
 
 /// 按钱包账户 account_id 读取链上身份:CidByAccountId → cid,再经 readChainIdentityByCid

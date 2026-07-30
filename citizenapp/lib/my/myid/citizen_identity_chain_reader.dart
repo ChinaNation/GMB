@@ -18,6 +18,7 @@ class CitizenIdentityChainSnapshot {
   const CitizenIdentityChainSnapshot({
     required this.cidNumber,
     required this.accountId,
+    required this.bindingRevision,
     required this.votingIdentity,
     this.candidateIdentity,
   });
@@ -27,8 +28,28 @@ class CitizenIdentityChainSnapshot {
 
   final String cidNumber;
   final Uint8List accountId;
+
+  /// CID 单调绑定版本；初绑为 1，每次换绑或撤销递增。
+  final int bindingRevision;
   final Uint8List? votingIdentity;
   final Uint8List? candidateIdentity;
+}
+
+/// 某 CID 在同一 finalized 区块上的有效钱包绑定。
+///
+/// 该快照只表达“CID 当前由哪个钱包授权”，不把钱包提升为身份主键。
+class CitizenBindingChainSnapshot {
+  const CitizenBindingChainSnapshot({
+    required this.cidNumber,
+    required this.accountId,
+    required this.bindingRevision,
+  });
+
+  final String cidNumber;
+  final Uint8List accountId;
+  final int bindingRevision;
+
+  String get accountIdText => CitizenIdentityChainReader.hexEncode(accountId);
 }
 
 /// `citizen-identity` 永久 CID 存储的统一读取器。
@@ -37,6 +58,92 @@ class CitizenIdentityChainReader {
       : _chainRpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _chainRpc;
+
+  /// 在同一个 finalized 区块批量读取 CID 的当前有效钱包绑定。
+  ///
+  /// 每条结果都同时验证 `AccountIdByCid`、`CidRegistry Active`、
+  /// `BindingRevisionByCid` 与反向 `CidByAccountId`，任一不闭环就不返回该 CID。
+  Future<Map<String, CitizenBindingChainSnapshot>> readBindingsByCidNumbers(
+    Iterable<String> cidNumbers,
+  ) async {
+    final normalized = <String>{
+      for (final cidNumber in cidNumbers) _normalizeCidNumber(cidNumber),
+    };
+    if (normalized.isEmpty) {
+      return const <String, CitizenBindingChainSnapshot>{};
+    }
+
+    final finalized = await _chainRpc.fetchFinalizedBlock();
+    final finalizedHash = hexEncode(finalized.blockHash);
+    final candidates = <String, CitizenBindingChainSnapshot>{};
+
+    await Future.wait(normalized.map((cidNumber) async {
+      final cidScale = encodeBoundedBytes(utf8.encode(cidNumber));
+      final rows = await Future.wait([
+        _chainRpc.fetchStorageAtBlock(
+          hexEncode(storageMapKey(
+            'CitizenIdentity',
+            'AccountIdByCid',
+            cidScale,
+          )),
+          finalizedHash,
+        ),
+        _chainRpc.fetchStorageAtBlock(
+          hexEncode(storageMapKey(
+            'CitizenIdentity',
+            'CidRegistry',
+            cidScale,
+          )),
+          finalizedHash,
+        ),
+        _chainRpc.fetchStorageAtBlock(
+          hexEncode(storageMapKey(
+            'CitizenIdentity',
+            'BindingRevisionByCid',
+            cidScale,
+          )),
+          finalizedHash,
+        ),
+      ]);
+      final accountId = rows[0];
+      final bindingRevision = _decodeU64(rows[2]);
+      if (accountId == null ||
+          accountId.length != 32 ||
+          !cidRecordIsActive(rows[1]) ||
+          bindingRevision <= 0) {
+        return;
+      }
+      candidates[cidNumber] = CitizenBindingChainSnapshot(
+        cidNumber: cidNumber,
+        accountId: accountId,
+        bindingRevision: bindingRevision,
+      );
+    }));
+
+    final verified = <String, CitizenBindingChainSnapshot>{};
+    await Future.wait(candidates.values.map((candidate) async {
+      final reverse = await _chainRpc.fetchStorageAtBlock(
+        hexEncode(storageMapKey(
+          'CitizenIdentity',
+          'CidByAccountId',
+          candidate.accountId,
+        )),
+        finalizedHash,
+      );
+      if (decodeCidNumber(reverse) == candidate.cidNumber) {
+        verified[candidate.cidNumber] = candidate;
+      }
+    }));
+    return verified;
+  }
+
+  /// 严格读取一个 CID 的当前有效钱包绑定。
+  Future<CitizenBindingChainSnapshot?> readBindingByCidNumber(
+    String cidNumber,
+  ) async {
+    final normalized = _normalizeCidNumber(cidNumber);
+    return (await readBindingsByCidNumbers([normalized]))[normalized];
+  }
 
   /// 按规范账户 ID 读取身份闭环,区分**纯访客 / 匿名已注册 / 投票 / 竞选**。
   ///
@@ -96,11 +203,17 @@ class CitizenIdentityChainReader {
       'CandidateIdentityByCid',
       cidScale,
     );
+    final bindingRevisionKey = storageMapKey(
+      'CitizenIdentity',
+      'BindingRevisionByCid',
+      cidScale,
+    );
     final keys = <String>[
       hexEncode(accountIdByCidKey),
       hexEncode(cidRegistryKey),
       hexEncode(votingKey),
       hexEncode(candidateKey),
+      hexEncode(bindingRevisionKey),
     ];
     final rows = await Future.wait(
       keys.map((key) => _chainRpc.fetchStorageAtBlock(key, finalizedHash)),
@@ -109,12 +222,14 @@ class CitizenIdentityChainReader {
     final cidRecord = rows[1];
     final votingIdentity = rows[2];
     final candidateIdentity = rows[3];
+    final bindingRevision = _decodeU64(rows[4]);
     // 绑定闭环:AccountIdByCid 反向一致 + CidRegistry Active。不闭环(反查为空/错配/
     // 非 Active)= 该账户没有有效 CID → 纯访客兜底(可重新占号,链上残留绑定占号时再拒)。
     if (boundAccountId == null ||
         boundAccountId.length != accountId.length ||
         !_sameBytes(boundAccountId, accountId) ||
-        !cidRecordIsActive(cidRecord)) {
+        !cidRecordIsActive(cidRecord) ||
+        bindingRevision <= 0) {
       return null;
     }
 
@@ -124,6 +239,7 @@ class CitizenIdentityChainReader {
       return CitizenIdentityChainSnapshot(
         cidNumber: cidNumber,
         accountId: accountId,
+        bindingRevision: bindingRevision,
         votingIdentity: null,
         candidateIdentity: null,
       );
@@ -133,6 +249,7 @@ class CitizenIdentityChainReader {
     return CitizenIdentityChainSnapshot(
       cidNumber: cidNumber,
       accountId: accountId,
+      bindingRevision: bindingRevision,
       votingIdentity: votingIdentity,
       candidateIdentity: candidateIdentity != null &&
               candidateIdentityLayoutIsValid(candidateIdentity)
@@ -170,6 +287,15 @@ class CitizenIdentityChainReader {
     return Uint8List.fromList([value.length << 2, ...value]);
   }
 
+  static String _normalizeCidNumber(String cidNumber) {
+    final normalized = cidNumber.trim();
+    final bytes = utf8.encode(normalized);
+    if (bytes.isEmpty || bytes.length > 32) {
+      throw const FormatException('CID 长度不合法');
+    }
+    return normalized;
+  }
+
   static String? decodeCidNumber(Uint8List? data) {
     if (data == null) return null;
     try {
@@ -180,6 +306,15 @@ class CitizenIdentityChainReader {
     } catch (_) {
       return null;
     }
+  }
+
+  static int _decodeU64(Uint8List? data) {
+    if (data == null || data.length != 8) return 0;
+    var value = 0;
+    for (var index = data.length - 1; index >= 0; index--) {
+      value = (value << 8) | data[index];
+    }
+    return value;
   }
 
   /// 解码 `CidRecord` 到 status 字段；只接受 `Active = 0`。
