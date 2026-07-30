@@ -71,7 +71,7 @@ ElectionMeta {
 }
 ```
 
-`VotingIdentityByCid`、`CandidateIdentityByCid` 和资格版本历史统一以永久 CID 为 storage key；身份结构不重复保存 CID，也不以钱包搬迁身份资料。`WalletAccountByCid` 与 `CidByWalletAccount` 只保存当前唯一签名钱包的双向绑定。需要授权、候选或票据主体时，必须由永久 CID 与当前双向绑定的钱包构造完整 `CitizenSubject`，任何缺失或错配均 fail-closed。
+`VotingIdentityByCid`、`CandidateIdentityByCid` 和资格版本历史统一以永久 CID 为 storage key；身份结构不重复保存 CID，也不因账户换绑搬迁身份资料。`AccountIdByCid` 与 `CidByAccountId` 只保存当前唯一签名账户的双向绑定。需要授权、候选或票据主体时，必须由永久 CID 与当前双向绑定账户构造完整 `CitizenSubject`，任何缺失或错配均 fail-closed。
 
 ## 分步骤实施
 
@@ -152,12 +152,12 @@ ElectionMeta {
 
 ## 第 3 步完成记录（2026-07-21）
 
-- `citizen-identity` 新增只读 `CitizenSubject { cid_number, wallet_account }`。身份和资格历史以永久 CID 为主键，钱包只通过 `WalletAccountByCid` 与 `CidByWalletAccount` 表达当前签名绑定；读取时必须同时验证双向绑定、正常身份状态和 Active CID，任何缺失、吊销或错配均返回 `None`。
+- `citizen-identity` 新增只读 `CitizenSubject { cid_number, account_id }`。身份和资格历史以永久 CID 为主键，账户只通过 `AccountIdByCid` 与 `CidByAccountId` 表达当前签名绑定；读取时必须同时验证双向绑定、正常身份状态和 Active CID，任何缺失、吊销或错配均返回 `None`。
 - 公民 CID 不提供修改、替换、删除或复用路径。资料更新和迁居只能更新同一个 CID 下的身份版本；传入另一 CID 会被当作无权修改并拒绝，不能把原身份迁移到新 CID。
 - `CandidateIdentityPayload` 与 `CandidateIdentity` 已删除 `citizen_full_name`，统一拆分为 `family_name`、`given_name`；姓、名分别限定最多 128 字节且分别校验非空，没有旧字段、别名、双读或 migration。
 - `can_vote` 已先校验完整公民主体，避免在 CID↔钱包反向绑定损坏时退化为裸钱包授权；投票引擎将于第 5、6 步把现有裸钱包快照和票据切换到完整主体。
 - 已为三个目标结构补齐中文字段注释，并增加完整主体正常读取、绑定错配 fail-closed、吊销 fail-closed、姓/名分别必填及 runtime 集成覆盖。
-- NodeGuard 直接读取 `VotingIdentityByCid`、`WalletAccountByCid` 与 `CidByWalletAccount`，逐块和完整状态都要求永久 CID 身份及当前钱包双向绑定闭环；公民首次认证发行同样以该闭环为依据。
+- NodeGuard 直接读取 `VotingIdentityByCid`、`AccountIdByCid` 与 `CidByAccountId`，逐块和完整状态都要求永久 CID 身份及当前账户双向绑定闭环；公民首次认证发行同样以该闭环为依据。
 - 验证通过：`citizen-identity` 30 项、runtime 46 项、NodeGuard 公民发行 8 项、NodeGuard CID 生命周期 3 项；`citizen-identity --no-default-features`、runtime `wasm32v1-none`、`runtime-benchmarks`、`try-runtime` 和 Rust 1.94.0 固定工具链 release Node 构建全部通过。
 - 当前源码以 `citizenchain-fresh --tmp` 启动全新隔离链，NodeGuard 与创世装载通过；RPC 返回 `peers=0`、`isSyncing=false`、runtime 六项项目版本均为 `0`，metadata 二进制 215,796 字节。block #0 / genesis hash 为 `0x45144d74a7af61bb25cc08a803a19af1cdc946b007d22c774ce3acdeeebd7db4`，state root 为 `0xe916b283c7cd017aa87d2bfda2b835298195d2cbfc53c19536d0fddeae9874ea`；验收节点已停止，临时数据由 `--tmp` 清理。
 - 本轮首次完成记录时未修改投票引擎、OnChina、CitizenApp、CitizenWallet 或 QR；随后用户明确要求全仓字段和机构授权协议立即统一，并补充确认全部相关 runtime 路径，具体补充结果见下节。
@@ -219,9 +219,9 @@ ElectionMeta {
 
 ## 第 8 步完成记录（2026-07-22）
 
-- CitizenApp 的“我的身份”和广场身份统一通过永久 CID 闭环读取：同一 finalized 区块内依次校验 `CidByWalletAccount`、Active `CidRegistry`、`WalletAccountByCid` 反向绑定和 CID 主键身份；CID 只作 storage key，不再从身份值重复解码。截断、尾随、状态矛盾或钱包错配全部 fail-closed。
+- CitizenApp 的“我的身份”和广场身份统一通过永久 CID 闭环读取：同一 finalized 区块内依次校验 `CidByAccountId`、Active `CidRegistry`、`AccountIdByCid` 反向绑定和 CID 主键身份；CID 只作 storage key，不再从身份值重复解码。截断、尾随、状态矛盾或账户错配全部 fail-closed。
 - Cloudflare 身份投影采用同一 finalized head 的五项读取与同一 SCALE 布局，护照有效期按 UTC+8 判定；竞选身份只使用 `family_name`、`given_name`，不保留合并姓名或带公民前缀的姓名字段。
-- QR 唯一注册表新增 `ElectionVote.cast_popular_vote = 0x1602` 与 `cast_mutual_vote = 0x1603`，两端生成表已同步。CitizenWallet 按最终 call data 严格展示 `proposal_id + cid_number + wallet_account`，互选另展示 `voter_role_code`，旧裸钱包、截断 CID 和尾随载荷一律拒签。
+- QR 唯一注册表新增 `ElectionVote.cast_popular_vote = 0x1602` 与 `cast_mutual_vote = 0x1603`，两端生成表已同步。CitizenWallet 按最终 call data 严格展示 `proposal_id + cid_number + account_id`，互选另展示 `voter_role_code`，旧裸账户、截断 CID 和尾随载荷一律拒签。
 - CitizenApp 未虚构通用选举业务入口；“选举”和“发起选举”继续禁用，并明确只有未来具体公权选举业务模块接入后才能开放。OnChina 仅清理数据库启动期旧列兼容语句，保持注册局管理员与公民双签、机构登记和权限业务流程不变。
 - 验证通过：CitizenApp 全量 763 项通过、5 项跳过并通过静态分析；Cloudflare 29 个测试文件 172 项与类型检查通过；CitizenWallet 全量 185 项与静态分析通过；QR registry 6 项一致性/仓库守卫测试、OnChina 后端 134 项和前端生产构建通过；`git diff --check` 通过。
 - 真实验收使用临时 PostgreSQL 初始化 OnChina 最终 schema，确认 `family_name`、`given_name`、护照有效期和行政区字段存在，7 个旧列为 0；生产前端经 Vite preview 真实渲染管理员扫码登录页。临时数据库和服务均已停止，临时数据已移入系统废纸篓。

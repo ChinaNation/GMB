@@ -233,7 +233,8 @@ fn build_genesis() -> Value {
     );
 
     // 基金会创世管理员的永久公民 CID 已被公权管理员和法定代表人记录引用，
-    // 必须同时写入 citizen-identity 的 Active 登记及 CID↔AccountId 双向绑定。
+    // 必须同时写入 citizen-identity 的 Active 登记、CID↔AccountId 双向绑定及
+    // BindingRevisionByCid=1。
     // 登记来源使用既有联邦注册局机构 CID；这里只建立匿名身份闭环，不伪造投票/
     // 竞选身份。CID 是永久主键，账户只是可依法换绑的授权凭证，禁止按当前账户重派 CID。
     let genesis_admin_account = AccountId::new(CITIZENCHAIN_GENESIS_ADMINS[0].account_id);

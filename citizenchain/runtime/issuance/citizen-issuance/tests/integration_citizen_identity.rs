@@ -219,6 +219,9 @@ fn registrar_role_code() -> citizen_identity::RoleCodeBound {
 
 /// 占号先行:身份写入前必须先占号(注册局 CID + 管理员 100)。占即绑账户 1。
 fn occupy_tag(tag: &str) {
+    let expires_at = <FixedTime as frame_support::traits::UnixTime>::now()
+        .as_secs()
+        .saturating_add(300);
     assert_ok!(CitizenIdentity::occupy_cid(
         RuntimeOrigin::signed(100),
         registrar_cid_number(),
@@ -227,6 +230,7 @@ fn occupy_tag(tag: &str) {
             .try_into()
             .expect("cid number should fit"),
         1,
+        expires_at,
         valid_signature(),
     ));
 }

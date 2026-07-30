@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:citizenapp/citizen/shared/account_derivation.dart'
+    show ss58FromAccountIdText;
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_response_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
@@ -195,7 +197,8 @@ Future<void> _handleCitizenIdentitySignRequest(
   }
 }
 
-/// 注册局占号/换绑:请求 b.u 留空,用户自选一个本机热账户绑定到该 CID,再签内层域签名。
+/// 注册局占号/换绑：请求 b.u 留空，完整授权模板内的账户槽必须为零；用户选择本机
+/// 热账户后，服务把账户原位填入并签名。确认页展示全部防重放字段，禁止盲签。
 Future<void> _handleOccupySignRequest(
   BuildContext context,
   String raw,
@@ -212,17 +215,25 @@ Future<void> _handleOccupySignRequest(
     final prep = await service.prepare(raw, selected);
     if (!context.mounted) return;
     final reviewEntries = <(String, String)>[
+      ('创世哈希', prep.genesisHash),
       ('身份CID', prep.cidNumber),
-      ('绑定账户', _shortAddress(prep.account.accountId)),
+      if (prep.expectedOldAccountId != null)
+        ('当前绑定账户', ss58FromAccountIdText(prep.expectedOldAccountId!)),
+      ('预期绑定版本', prep.expectedBindingRevision.toString()),
+      ('过期时间（Unix 秒）', prep.expiresAt.toString()),
+      (prep.isOccupy ? '绑定账户' : '新绑定账户', prep.account.ss58Address),
     ];
+    final reviewText =
+        reviewEntries.map((entry) => '${entry.$1}：${entry.$2}').join('\n');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(prep.actionLabel),
-        content: Text(
-          '${prep.isOccupy ? '把此 CID 占号绑定到你的账户' : '把此 CID 换绑到你的新账户'}\n'
-          '身份CID：${prep.cidNumber}\n'
-          '绑定账户：${_shortAddress(prep.account.accountId)}',
+        content: SingleChildScrollView(
+          child: SelectableText(
+            '${prep.isOccupy ? '把此 CID 占号绑定到你的账户' : '把此 CID 换绑到你的新账户'}\n'
+            '$reviewText',
+          ),
         ),
         actions: [
           TextButton(

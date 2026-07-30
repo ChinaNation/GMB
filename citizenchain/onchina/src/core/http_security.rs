@@ -85,6 +85,48 @@ pub(crate) async fn global_rate_limit_middleware(
     next.run(request).await
 }
 
+/// 带内容哈希的前端产物目录前缀。必须带尾斜杠:写成 `/assets` 会让 `/assetsfoo`
+/// 之类路径误命中永久缓存档。
+const HASHED_ASSET_PREFIX: &str = "/assets/";
+
+/// 内容哈希产物:内容变则文件名变,永久缓存零风险。
+const CACHE_IMMUTABLE: &str = "public, max-age=31536000, immutable";
+
+/// 非哈希资源:允许缓存但每次必须校验。配 `ServeDir` 已发的 `Last-Modified`
+/// 走条件请求,未变即 304、响应体 0 字节;不用 `no-store` 白传全量。
+const CACHE_REVALIDATE: &str = "no-cache";
+
+/// 静态资源缓存策略单源。
+///
+/// `index.html` 是内容哈希的唯一索引,一旦被缓存整套 vite 哈希失效机制就废掉:
+/// 客户端永远拿不到新的 `assets/index-<hash>.js` 引用。`ServeDir` 本身不发
+/// `Cache-Control`,浏览器按 RFC 9111 走启发式缓存(新鲜期 ≈ `(Date − Last-Modified) × 10%`),
+/// 因此必须显式声明。
+///
+/// 兜底档是 `no-cache` 而非永久缓存,这是刻意的 fail-safe:将来 dist 里出现
+/// `favicon.ico`、`robots.txt` 等**不带内容哈希**的资源时默认保守,只有明确带哈希的
+/// 路径才升级。反向配置(默认永久 + 白名单校验)漏一个就永久钉死客户端,代价不对称。
+pub(crate) fn static_cache_control(path: &str) -> &'static str {
+    if path.starts_with(HASHED_ASSET_PREFIX) {
+        CACHE_IMMUTABLE
+    } else {
+        CACHE_REVALIDATE
+    }
+}
+
+/// 给静态资源响应打 `Cache-Control`。只包前端静态服务,不碰 API 路由
+/// (静态与 API 的缓存策略分开管)。
+pub(crate) async fn static_cache_headers(request: Request, next: middleware::Next) -> Response {
+    let policy = static_cache_control(request.uri().path());
+    let mut response = next.run(request).await;
+    // insert 而非 append:避免出现两个 Cache-Control。
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        HeaderValue::from_static(policy),
+    );
+    response
+}
+
 pub(crate) fn required_env(key: &str) -> String {
     match std::env::var(key) {
         Ok(v) if !v.trim().is_empty() => v.trim().to_string(),
@@ -282,4 +324,61 @@ pub(crate) fn actor_ip_from_headers(headers: &HeaderMap) -> Option<String> {
 pub(crate) fn request_id_from_headers(headers: &HeaderMap) -> Option<String> {
     chain_header_value(headers, "x-chain-request-id")
         .or_else(|| chain_header_value(headers, "x-request-id"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hashed_assets_get_immutable_cache() {
+        // vite 内容哈希产物:内容变则文件名变,永久缓存零风险。
+        for path in [
+            "/assets/index-BH-jNQdT.js",
+            "/assets/index-BdOndhxL.css",
+            "/assets/nested/chunk-abc123.js",
+        ] {
+            assert_eq!(static_cache_control(path), CACHE_IMMUTABLE, "path={path}");
+        }
+    }
+
+    #[test]
+    fn index_and_spa_routes_must_revalidate() {
+        // index.html 是哈希索引,被缓存则整套失效机制作废;SPA 回退路由同样返回 index.html。
+        for path in [
+            "/",
+            "/index.html",
+            "/citizens",
+            "/admins/institutions",
+            "/legislation/proposals/42",
+        ] {
+            assert_eq!(static_cache_control(path), CACHE_REVALIDATE, "path={path}");
+        }
+    }
+
+    #[test]
+    fn assets_prefix_requires_trailing_slash() {
+        // 前缀判断必须带尾斜杠,否则这些路径会误命中永久缓存档。
+        for path in [
+            "/assets",
+            "/assetsfoo",
+            "/assets-old/index.js",
+            "/x/assets/a.js",
+        ] {
+            assert_eq!(static_cache_control(path), CACHE_REVALIDATE, "path={path}");
+        }
+    }
+
+    #[test]
+    fn unhashed_future_resources_default_to_revalidate() {
+        // 兜底档必须是 no-cache:非哈希资源误配永久缓存会永久钉死客户端。
+        for path in [
+            "/favicon.ico",
+            "/robots.txt",
+            "/logo.svg",
+            "/manifest.webmanifest",
+        ] {
+            assert_eq!(static_cache_control(path), CACHE_REVALIDATE, "path={path}");
+        }
+    }
 }

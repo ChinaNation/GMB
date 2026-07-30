@@ -61,7 +61,8 @@ class SignRequestBody implements QrBody {
     if (signerPublicKey is! String) {
       throw const FormatException('签名请求 u 必须是字符串');
     }
-    // 注册局占号/换绑域签名:b.u 留空,钱包扫码自填本账户;其余动作 u 必填 32B。
+    // 注册局占号/换绑域签名：b.u 留空，d 的完整授权模板包含 32B 账户零槽，
+    // 钱包严格解码后原位填入所选账户；其余动作 u 必填 32B。
     if (QrActions.isSelfAccountDomainAction(action)) {
       if (signerPublicKey.isNotEmpty) {
         throw const FormatException('占号/换绑签名请求 u 必须留空(钱包自填账户)');

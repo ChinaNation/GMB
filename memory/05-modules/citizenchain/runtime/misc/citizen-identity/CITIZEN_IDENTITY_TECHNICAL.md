@@ -25,8 +25,10 @@
 
 - `VotingIdentityByCid`：永久公民 CID 到投票身份；身份更新只覆盖同一 CID 下的当前版本。
 - `CandidateIdentityByCid`：永久公民 CID 到参选身份；更换当前签名钱包不得搬迁资料。
-- `WalletAccountByCid`：永久公民 CID 到当前唯一签名钱包。
-- `CidByWalletAccount`：当前签名钱包到永久公民 CID；必须与 `WalletAccountByCid` 严格闭环。
+- `AccountIdByCid`：永久公民 CID 到当前唯一有效签名钱包账户。
+- `CidByAccountId`：当前签名钱包账户到永久公民 CID；必须与 `AccountIdByCid` 严格闭环。
+- `BindingRevisionByCid`：CID 钱包绑定的单调版本；首次绑定写 `1`，每次成功换绑精确加一，
+  与创世哈希、预期旧/新账户和授权过期时间共同阻断跨链、竞态与重放。
 - `CountryVotingCount` / `ProvinceVotingCount` / `CityVotingCount` / `TownVotingCount`：按作用域维护就绪日期内状态正常且护照有效的投票人口。
 - `PopulationReadyDate`：四级人口已经完整推进至的 UTC+8 日期；`0` 只表示全新创世尚未完成首次 `on_idle` 初始化。
 - `PopulationTransitionCountByDate` / `PopulationTransitionCursorByDate` / `PopulationTransitions`：
@@ -45,8 +47,17 @@
 - `update_voting_identity`：更新投票身份。
 - `update_candidate_identity`：更新参选身份。
 - `revoke_identity`：注销链上身份。
+- `self_occupy_cid`（call 5）：公民 App 在线自助首次绑定；当前账户为 extrinsic origin，
+  同时提交带创世、CID、revision=0 和过期时间的账户控制授权。
+- `occupy_cid`（call 6）：注册局代办首次绑定；匿名 CID 可由任一在册 CREG/FRG 办理，
+  civic CID 按投票身份居住地限制为同市 CREG 或对应省 FRG。
+- `admin_rebind_cid_account_id`（call 7）：注册局代办换绑；不要求旧钱包签名，新账户必须
+  对带创世、CID、预期旧账户、预期 revision 和过期时间的完整授权签名。
+- `self_rebind_cid_account_id`（call 9）：公民 App 在线自助换绑；新账户为 extrinsic
+  origin，旧账户授权同样绑定完整防重放字段。
 
-人口数据读取不是公开交易。已删除的 call index 5 永久留洞，不得复用；任何模块都不得在 citizen-identity 恢复提案快照或 snapshot_id。
+人口数据读取不是公开交易。任何模块都不得在 citizen-identity 恢复提案快照或
+`snapshot_id`；人口快照只属于投票引擎。
 
 ## 投票引擎接入
 
@@ -89,8 +100,8 @@
 
 - CID 记录写入后不得删除；
 - `VotingIdentityByCid` 不得删除，身份资料及资格历史不得从一个 CID 迁移到另一个 CID；
-- `WalletAccountByCid` 与 `CidByWalletAccount` 只表达当前签名钱包，必须一一对应并与 CID 主键身份闭环；
-- `registrar_account`、`commitment`、居住省市和 `registered_at` 不得通过 runtime 升级换主体；
+- `AccountIdByCid` 与 `CidByAccountId` 只表达当前有效签名钱包，必须一一对应并与 CID 主键身份闭环；
+- `registrar_cid_number`、`commitment`、居住省市和 `registered_at` 不得通过 runtime 升级换主体；
 - 只允许 `Active → Revoked`，`Revoked` 为不可恢复终态；
 - CID 必须持续是合法 `CTZN` 家族号，登记/吊销高度不得指向未来。
 

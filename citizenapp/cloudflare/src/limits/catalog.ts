@@ -185,8 +185,6 @@ const routeLimits: readonly RouteLimit[] = [
   route('GET', /^\/v1\/square\/membership$/),
   route('POST', /^\/v1\/square\/membership\/confirm$/),
   route('POST', /^\/v1\/square\/account\/delete(?:\/challenge)?$/),
-  // 换绑 finalized 后由新账户会话提交旧账户授权，只含两个短 hex 字段。
-  route('POST', /^\/v1\/square\/rebind\/revoke$/),
   route('GET', /^\/v1\/square\/topup\/config$/),
   route('POST', /^\/v1\/square\/topup\/intent$/),
   route('POST', /^\/v1\/square\/topup\/confirm$/),

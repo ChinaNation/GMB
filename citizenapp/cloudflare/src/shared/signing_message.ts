@@ -12,8 +12,7 @@ import { blake2AsU8a } from '@polkadot/util-crypto/blake2';
 export const GMB_SIGN_DOMAIN = [0x47, 0x4d, 0x42];
 
 // 本 Worker 会验签的链下哈希域 op_tag（单源 citizenchain primitives::sign）。
-/// CID 自助换绑：旧账户授权 `(cid_number, new_account_id)`。
-export const OP_SIGN_CID_REBIND = 0x11;
+// CID 换绑授权只在钱包与 runtime 间验证，Worker 不提供第二授权 endpoint。
 /// Chat 设备绑定（硬件 P-256 设备子钥签 digest）。
 export const OP_SIGN_CHAT_DEVICE_BIND = 0x1a;
 /// 广场 BFF 登录挑战（设备子钥 ES256 签 digest）。

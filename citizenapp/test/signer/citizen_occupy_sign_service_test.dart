@@ -7,41 +7,77 @@ import 'package:citizenapp/qr/generated/qr_action_registry.g.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/citizen_occupy_sign_service.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/signer/signing.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _cid = 'CN220-CTZN2-198805200-2026';
+const _expiresAt = 1900000000;
 
-Account _account({int index = 0}) => Account(
-      masterId: '0x${'ab' * 32}',
+Account _account({int index = 0, int accountByte = 0xab}) => Account(
+      masterId: '0x${_hexByte(accountByte) * 32}',
       accountIndex: index,
-      accountId: '0x${'ab' * 32}',
+      accountId: '0x${_hexByte(accountByte) * 32}',
       ss58Address: 'w5FhTestAddress',
       accountName: '账户$index',
     );
 
 class _FakeWalletManager extends WalletManager {
   String? signedAccountId;
+  Uint8List? signedPayload;
 
   @override
   Future<Uint8List> signForAccountId(
       String accountId, Uint8List payload) async {
     signedAccountId = accountId;
+    signedPayload = Uint8List.fromList(payload);
     return Uint8List(64);
   }
 }
 
-/// 造占号/换绑域签名 QR(b.u 留空、d=append_bounded(cid))。
-String _domainRaw({int? action, List<int>? payload}) {
-  final boundedCid = payload ?? <int>[_cid.length << 2, ..._cid.codeUnits];
-  final payloadB64 = base64Url.encode(boundedCid).replaceAll('=', '');
+String _hexByte(int value) => value.toRadixString(16).padLeft(2, '0');
+
+List<int> _u64Le(int value) =>
+    List<int>.generate(8, (index) => (value >> (index * 8)) & 0xff);
+
+List<int> _occupyTemplate({int revision = 0, int expiresAt = _expiresAt}) => [
+      ...List<int>.filled(32, 0x44),
+      _cid.length << 2,
+      ..._cid.codeUnits,
+      ...List<int>.filled(32, 0),
+      ..._u64Le(revision),
+      ..._u64Le(expiresAt),
+    ];
+
+List<int> _rebindTemplate({int revision = 7, int expiresAt = _expiresAt}) => [
+      ...List<int>.filled(32, 0x44),
+      _cid.length << 2,
+      ..._cid.codeUnits,
+      ...List<int>.filled(32, 0x55),
+      ...List<int>.filled(32, 0),
+      ..._u64Le(revision),
+      ..._u64Le(expiresAt),
+    ];
+
+/// 造注册局占号/换绑域签名 QR：b.u 留空，d 是带零账户槽的完整授权模板。
+String _domainRaw({
+  int? action,
+  List<int>? payload,
+  int outerExpiresAt = _expiresAt,
+}) {
+  final actualAction = action ?? QrActions.citizenOccupy;
+  final authorization = payload ??
+      (actualAction == QrActions.citizenOccupy
+          ? _occupyTemplate()
+          : _rebindTemplate());
+  final payloadB64 = base64Url.encode(authorization).replaceAll('=', '');
   return QrSigner().encodeRequest(QrEnvelope<SignRequestBody>(
     kind: QrKind.signRequest,
     id: 'citizen-occupy-req-000001',
     issuedAt: 1800000000,
-    expiresAt: 1900000000,
+    expiresAt: outerExpiresAt,
     body: SignRequestBody(
-      action: action ?? QrActions.citizenOccupy,
+      action: actualAction,
       signerPublicKey: '', // 占号/换绑 b.u 留空
       payload: payloadB64,
     ),
@@ -56,20 +92,41 @@ void main() {
         GeneratedQrActionRegistry.actionCodeByKey['citizen_occupy']);
     expect(QrActions.citizenRebind,
         GeneratedQrActionRegistry.actionCodeByKey['citizen_rebind']);
+    for (final field in const <String>[
+      'genesis_hash',
+      'cid_number',
+      'expected_old_account_id',
+      'expected_binding_revision',
+      'expires_at',
+    ]) {
+      expect(
+        GeneratedQrActionRegistry.hasFieldLabel(field),
+        isTrue,
+        reason: '$field 必须由共享 QR registry 生成中文字段名',
+      );
+    }
   });
 
-  test('prepare 从 bounded d 解出 CID(占号)', () async {
+  test('prepare 严格解出占号完整授权模板并展示全部防重放字段', () async {
     final prep = await service.prepare(_domainRaw(), _account());
     expect(prep.cidNumber, _cid);
     expect(prep.isOccupy, isTrue);
+    expect(prep.genesisHash, '0x${'44' * 32}');
+    expect(prep.expectedOldAccountId, isNull);
+    expect(prep.expectedBindingRevision, BigInt.zero);
+    expect(prep.expiresAt, BigInt.from(_expiresAt));
     expect(prep.account.accountId, '0x${'ab' * 32}');
   });
 
-  test('prepare 换绑动作 isOccupy=false', () async {
+  test('prepare 严格解出换绑旧账户、非零 revision 与 expires', () async {
     final prep = await service.prepare(
         _domainRaw(action: QrActions.citizenRebind), _account());
     expect(prep.isOccupy, isFalse);
     expect(prep.cidNumber, _cid);
+    expect(prep.genesisHash, '0x${'44' * 32}');
+    expect(prep.expectedOldAccountId, '0x${'55' * 32}');
+    expect(prep.expectedBindingRevision, BigInt.from(7));
+    expect(prep.expiresAt, BigInt.from(_expiresAt));
   });
 
   test('非占号/换绑动作即拒', () async {
@@ -85,19 +142,93 @@ void main() {
     );
   });
 
-  test('d 非合法 bounded cid 即拒(不签寂寞)', () async {
+  test('旧 CID-only 载荷即拒，不恢复末尾追加账户协议', () async {
     await expectLater(
-      service.prepare(_domainRaw(payload: [0xff, 0xff, 0xff]), _account()),
+      service.prepare(
+        _domainRaw(payload: [_cid.length << 2, ..._cid.codeUnits]),
+        _account(),
+      ),
       throwsA(isA<CitizenOccupySignException>()),
     );
   });
 
-  test('账户卡锁定的子账户直接作为占号签名账户', () async {
+  test('外层 e 与内层 expires_at 不一致即拒', () async {
+    await expectLater(
+      service.prepare(
+        _domainRaw(outerExpiresAt: _expiresAt + 1),
+        _account(),
+      ),
+      throwsA(
+        isA<CitizenOccupySignException>().having(
+          (error) => error.message,
+          'message',
+          contains('过期时间'),
+        ),
+      ),
+    );
+  });
+
+  test('零槽污染、尾字节与错误 revision 全部 fail-closed', () async {
+    final nonZeroSlot = _occupyTemplate();
+    nonZeroSlot[32 + 1 + _cid.length] = 1;
+    final malformed = <List<int>>[
+      nonZeroSlot,
+      [..._occupyTemplate(), 0xff],
+      _occupyTemplate(revision: 1),
+      _rebindTemplate(revision: 0),
+    ];
+    for (var index = 0; index < malformed.length; index++) {
+      await expectLater(
+        service.prepare(
+          _domainRaw(
+            action: index == malformed.length - 1
+                ? QrActions.citizenRebind
+                : QrActions.citizenOccupy,
+            payload: malformed[index],
+          ),
+          _account(),
+        ),
+        throwsA(isA<CitizenOccupySignException>()),
+        reason: 'malformed template #$index must reject',
+      );
+    }
+  });
+
+  test('换绑选择账户与 expected_old_account_id 相同即拒', () async {
+    await expectLater(
+      service.prepare(
+        _domainRaw(action: QrActions.citizenRebind),
+        _account(accountByte: 0x55),
+      ),
+      throwsA(
+        isA<CitizenOccupySignException>().having(
+          (error) => error.message,
+          'message',
+          contains('不得与当前绑定账户相同'),
+        ),
+      ),
+    );
+  });
+
+  test('账户卡锁定的子账户原位填入占号零槽后签名', () async {
     final account = _account(index: 5);
     final manager = _FakeWalletManager();
     final prep = await service.prepare(_domainRaw(), account);
     await service.sign(prep, manager);
     expect(prep.account.accountIndex, 5);
     expect(manager.signedAccountId, account.accountId);
+    final exactAuthorization = _occupyTemplate()
+      ..setRange(
+        32 + 1 + _cid.length,
+        32 + 1 + _cid.length + 32,
+        List<int>.filled(32, 0xab),
+      );
+    expect(
+      manager.signedPayload,
+      signingMessage(
+        opTag: kOpSignCidOccupy,
+        scalePayload: exactAuthorization,
+      ),
+    );
   });
 }

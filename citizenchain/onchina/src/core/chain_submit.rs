@@ -2,19 +2,83 @@
 //!
 //! OnChina 侧唯一的 extrinsic 组装+提交通路：CitizenWallet 只签名一次并显示响应二维码，
 //! OnChina 回扫后由本模块「重建签名材料 → 本地 sr25519 验签 → system_dryRun
-//! 拒 Future/Stale → author_submitExtrinsic → 轮询 nonce 消费(InBestBlock 代理)」。
+//! 拒 Future/Stale → submit-and-watch → finalized + ExtrinsicSuccess」。
 //! 签名材料构建统一调用 `chain-signing`,避免 OnChina 和 node 各自拼 payload。
 
+use codec::Encode;
 use serde_json::{json, Value};
 use sp_core::crypto::Ss58Codec;
+use subxt::{tx::SubmittableTransaction, OnlineClient, PolkadotConfig};
 
-use super::chain_url::chain_http_url;
+use super::chain_url::{chain_http_url, chain_ws_url};
 
 const RPC_TIMEOUT_SECS: u64 = 10;
 /// 客户端等待确认的观察窗口，不是 PoW 最晚出块期限；窗口结束后交易仍可能继续等待进块。
 const WAIT_CONFIRMATION_OBSERVATION_SECS: u64 = 20 * 60;
-/// nonce 消费轮询间隔。
-const WAIT_POLL_INTERVAL_SECS: u64 = 3;
+/// 单次请求最多扫描的 finalized 块数，防止长期会话把一次 HTTP 请求放大成无界 O(N)。
+const FINALIZED_RECOVERY_BATCH_BLOCKS: usize = 128;
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct FinalizedChainSubmit {
+    pub(crate) tx_hash: String,
+    pub(crate) block_number: u64,
+    pub(crate) block_hash: [u8; 32],
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct SubmissionAttempt {
+    pub(crate) tx_hash: String,
+    pub(crate) from_block_number: u64,
+    pub(crate) from_block_hash: [u8; 32],
+    pub(crate) recovery_cursor_block_number: Option<u64>,
+    pub(crate) recovery_cursor_block_hash: Option<[u8; 32]>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum FinalizedRecoveryScan {
+    Found(FinalizedChainSubmit),
+    /// 本批尚未抵达提交前锚点；游标指向下一批第一个尚未扫描的块。
+    Continue {
+        cursor_block_number: u64,
+        cursor_block_hash: [u8; 32],
+    },
+    /// 已完整扫描到提交前 finalized 锚点，目标交易不在该区间内。
+    Exhausted,
+}
+
+#[derive(Debug)]
+pub(crate) struct ChainSubmitError {
+    message: String,
+    submitted_tx_hash: Option<String>,
+}
+
+impl ChainSubmitError {
+    fn submitted_unconfirmed(tx_hash: String, message: String) -> Self {
+        Self {
+            message,
+            submitted_tx_hash: Some(tx_hash),
+        }
+    }
+
+    pub(crate) fn submitted_tx_hash(&self) -> Option<&str> {
+        self.submitted_tx_hash.as_deref()
+    }
+}
+
+impl std::fmt::Display for ChainSubmitError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl From<String> for ChainSubmitError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            submitted_tx_hash: None,
+        }
+    }
+}
 
 /// prepare 阶段产物:随会话持久化,submit 阶段重建校验。
 pub(crate) struct PreparedChainSign {
@@ -112,13 +176,17 @@ pub(crate) async fn prepare_signing(
 }
 
 /// submit:重建材料校验哈希 → 本地验签 → dry-run → 提交,返回交易哈希。
-pub(crate) async fn assemble_and_submit(
+pub(crate) async fn assemble_and_submit<F>(
     call_data: &[u8],
     account_id: &str,
     signature_hex: &str,
     nonce: u32,
     expected_signing_hash_hex: &str,
-) -> Result<String, String> {
+    before_submit: F,
+) -> Result<FinalizedChainSubmit, ChainSubmitError>
+where
+    F: FnOnce(&SubmissionAttempt) -> Result<(), String>,
+{
     let (spec_version, tx_version) = fetch_runtime_version().await?;
     let genesis_hash = fetch_genesis_hash().await?;
     let material = chain_signing::build_signing_material(
@@ -130,17 +198,22 @@ pub(crate) async fn assemble_and_submit(
     )?;
     // 会话期间 runtime 版本/创世哈希不得漂移,否则签名对不上载荷。
     if chain_signing::sha256_hex(&material.signing_bytes) != expected_signing_hash_hex {
-        return Err("签名载荷与会话不一致(runtime 版本或创世哈希已变化),请重新发起".into());
+        return Err(
+            "签名载荷与会话不一致(runtime 版本或创世哈希已变化),请重新发起"
+                .to_string()
+                .into(),
+        );
     }
 
     let public = chain_signing::parse_sr25519_public_key(account_id)?;
     let signature = chain_signing::parse_sr25519_signature_hex(signature_hex)?;
     if !chain_signing::verify_signature(&material, &signature, &public) {
-        return Err("sr25519 本地验签失败,拒绝提交".to_string());
+        return Err("sr25519 本地验签失败,拒绝提交".to_string().into());
     }
 
     let extrinsic = chain_signing::assemble_signed_extrinsic(material, public, signature);
     let extrinsic_hex = chain_signing::signed_extrinsic_hex(&extrinsic);
+    let extrinsic_bytes = extrinsic.encode();
 
     // dry-run 是提交前硬预检。任何 RuntimeApi trap、交易无效或 RPC 不可用都必须
     // 停止提交，禁止跳过预检后把 wasm panic 原样推给浏览器。
@@ -156,97 +229,189 @@ pub(crate) async fn assemble_and_submit(
             let bytes = hex::decode(raw)
                 .map_err(|e| format!("dry-run 结果异常,拒绝提交: {e} (raw: {s})"))?;
             if bytes.is_empty() {
-                return Err("dry-run 返回空结果,拒绝提交".to_string());
+                return Err("dry-run 返回空结果,拒绝提交".to_string().into());
             }
             if bytes[0] != 0x00 {
-                return Err(chain_signing::dry_run_reject_message(&bytes, raw));
+                return Err(chain_signing::dry_run_reject_message(&bytes, raw).into());
             }
             if bytes.len() > 1 && bytes[1] != 0x00 {
-                return Err(format!("交易执行会失败: DispatchError (hex: {s})"));
+                return Err(format!("交易执行会失败: DispatchError (hex: {s})").into());
             }
         }
         Err(e) => {
-            return Err(chain_signing::preflight_reject_message(&e));
+            return Err(chain_signing::preflight_reject_message(&e).into());
         }
     }
 
-    let result = rpc_post(
-        "author_submitExtrinsic",
-        Value::Array(vec![Value::from(extrinsic_hex)]),
+    let ws_url = chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for finalized submit failed: {e}"))?;
+    let transaction = SubmittableTransaction::from_bytes(client.clone(), extrinsic_bytes);
+    let tx_hash = format!("{:#x}", transaction.hash());
+    let from_block = client
+        .blocks()
+        .at_latest()
+        .await
+        .map_err(|e| format!("read pre-submit finalized block failed: {e}"))?;
+    let attempt = SubmissionAttempt {
+        tx_hash: tx_hash.clone(),
+        from_block_number: u64::from(from_block.number()),
+        from_block_hash: from_block.hash().0,
+        recovery_cursor_block_number: None,
+        recovery_cursor_block_hash: None,
+    };
+    // 在任何网络提交前先持久化 tx_hash 与 finalized 扫描锚点；DB 失败时绝不提交。
+    before_submit(&attempt)?;
+    // submit-and-watch 精确绑定本次 extrinsic；只有进入 finalized block 且出现
+    // System.ExtrinsicSuccess 才返回，Dropped/Invalid/ExtrinsicFailed/超时全部失败。
+    let finalized_result = tokio::time::timeout(
+        std::time::Duration::from_secs(WAIT_CONFIRMATION_OBSERVATION_SECS),
+        async {
+            let progress = transaction
+                .submit_and_watch()
+                .await
+                .map_err(|e| format!("submit and watch extrinsic failed: {e}"))?;
+            let finalized = progress
+                .wait_for_finalized()
+                .await
+                .map_err(|e| format!("wait extrinsic finalized failed: {e}"))?;
+            let block_hash = finalized.block_hash();
+            finalized
+                .wait_for_success()
+                .await
+                .map_err(|e| format!("finalized extrinsic execution failed: {e}"))?;
+            let block = client
+                .blocks()
+                .at(block_hash)
+                .await
+                .map_err(|e| format!("read finalized extrinsic block failed: {e}"))?;
+            Ok::<(u64, [u8; 32]), String>((u64::from(block.number()), block_hash.0))
+        },
     )
-    .await?;
-    result
-        .as_str()
-        .map(str::to_string)
-        .ok_or_else(|| format!("author_submitExtrinsic 返回非字符串: {result}"))
-}
-
-/// 等交易进块:immortal + 显式 nonce 下,accountNextIndex 越过提交 nonce
-/// 即已被打包(InBestBlock 可靠代理)。观察窗口结束只表示本次请求尚未确认，
-/// 不得解释为 PoW 已超过最晚出块时间或交易必然失效。
-pub(crate) async fn wait_nonce_consumed(
-    account_id: &str,
-    submitted_nonce: u32,
-) -> Result<(), String> {
-    let deadline = std::time::Instant::now()
-        + std::time::Duration::from_secs(WAIT_CONFIRMATION_OBSERVATION_SECS);
-    loop {
-        let current = fetch_nonce(account_id).await?;
-        if current > submitted_nonce {
-            return Ok(());
+    .await;
+    let (block_number, block_hash) = match finalized_result {
+        Ok(Ok(finalized)) => finalized,
+        Ok(Err(message)) => {
+            return Err(ChainSubmitError::submitted_unconfirmed(tx_hash, message));
         }
-        if std::time::Instant::now() >= deadline {
-            return Err(format!(
-                "交易确认观察窗口已结束({WAIT_CONFIRMATION_OBSERVATION_SECS} 秒):nonce {submitted_nonce} 尚未消费，交易仍可能继续等待进块"
+        Err(_) => {
+            return Err(ChainSubmitError::submitted_unconfirmed(
+                tx_hash,
+                format!(
+                    "交易 finalized 观察窗口已结束({WAIT_CONFIRMATION_OBSERVATION_SECS} 秒)，结果未知"
+                ),
             ));
         }
-        tokio::time::sleep(std::time::Duration::from_secs(WAIT_POLL_INTERVAL_SECS)).await;
-    }
+    };
+
+    Ok(FinalizedChainSubmit {
+        tx_hash,
+        block_number,
+        block_hash,
+    })
 }
 
-/// 交易进块后回查块高:从链头回溯比对交易哈希(blake2_256(extrinsic 字节))。
-/// 提交路径同步回写(ADR-031 D8),不依赖后台 indexer。
-pub(crate) async fn find_extrinsic_block(tx_hash_hex: &str) -> Result<Option<u64>, String> {
-    let target = hex::decode(tx_hash_hex.trim_start_matches("0x"))
-        .map_err(|e| format!("tx hash decode failed: {e}"))?;
-    let mut hash: String = rpc_post("chain_getBlockHash", Value::Array(vec![]))
-        .await?
-        .as_str()
-        .ok_or("head hash malformed")?
-        .to_string();
-    for _ in 0..20 {
-        let block = rpc_post(
-            "chain_getBlock",
-            Value::Array(vec![Value::from(hash.clone())]),
-        )
-        .await?;
-        let header = &block["block"]["header"];
-        let number = header["number"]
-            .as_str()
-            .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
-            .ok_or("block number malformed")?;
-        if let Some(exts) = block["block"]["extrinsics"].as_array() {
-            for ext in exts {
-                let Some(ext_hex) = ext.as_str() else {
-                    continue;
-                };
-                let Ok(bytes) = hex::decode(ext_hex.trim_start_matches("0x")) else {
-                    continue;
-                };
-                if sp_core::hashing::blake2_256(&bytes)[..] == target[..] {
-                    return Ok(Some(number));
+/// 恢复 submit-and-watch 断线/超时后的结果：从 finalized head（或持久化游标）
+/// 分批向提交前锚点回扫，并要求目标 extrinsic 自身存在 System.ExtrinsicSuccess。
+/// 只有确实扫描到锚点才返回 Exhausted；中途必须返回并持久化下一批游标。
+pub(crate) async fn find_finalized_success(
+    tx_hash_hex: &str,
+    from_block_number: u64,
+    from_block_hash: [u8; 32],
+    recovery_cursor_block_number: Option<u64>,
+    recovery_cursor_block_hash: Option<[u8; 32]>,
+) -> Result<FinalizedRecoveryScan, String> {
+    if recovery_cursor_block_number.is_some() != recovery_cursor_block_hash.is_some() {
+        return Err("finalized recovery cursor is incomplete".to_string());
+    }
+    let raw = hex::decode(tx_hash_hex.strip_prefix("0x").unwrap_or(tx_hash_hex))
+        .map_err(|e| format!("submitted tx hash decode failed: {e}"))?;
+    let target_hash = subxt::utils::H256(
+        <[u8; 32]>::try_from(raw.as_slice())
+            .map_err(|_| "submitted tx hash must be 32 bytes".to_string())?,
+    );
+    let ws_url = chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for finalized recovery failed: {e}"))?;
+    let mut block = match (recovery_cursor_block_number, recovery_cursor_block_hash) {
+        (Some(cursor_number), Some(cursor_hash)) => {
+            let block = client
+                .blocks()
+                .at(subxt::utils::H256(cursor_hash))
+                .await
+                .map_err(|e| format!("read finalized recovery cursor block failed: {e}"))?;
+            if u64::from(block.number()) != cursor_number {
+                return Err("finalized recovery cursor number/hash mismatch".to_string());
+            }
+            block
+        }
+        (None, None) => client
+            .blocks()
+            .at_latest()
+            .await
+            .map_err(|e| format!("read latest finalized block failed: {e}"))?,
+        _ => unreachable!("cursor completeness checked above"),
+    };
+
+    for _ in 0..FINALIZED_RECOVERY_BATCH_BLOCKS {
+        let block_hash = block.hash();
+        let block_number = u64::from(block.number());
+        if block_number < from_block_number {
+            return Err("finalized recovery cursor moved below submission anchor".to_string());
+        }
+        let extrinsics = block
+            .extrinsics()
+            .await
+            .map_err(|e| format!("read finalized block extrinsics failed: {e}"))?;
+        for extrinsic in extrinsics.iter() {
+            if extrinsic.hash() != target_hash {
+                continue;
+            }
+            let events = extrinsic
+                .events()
+                .await
+                .map_err(|e| format!("read finalized extrinsic events failed: {e}"))?;
+            let mut success = false;
+            for event in events.iter() {
+                let event =
+                    event.map_err(|e| format!("decode finalized extrinsic event failed: {e}"))?;
+                if event.pallet_name() == "System" && event.variant_name() == "ExtrinsicFailed" {
+                    return Err("submitted extrinsic finalized with ExtrinsicFailed".to_string());
+                }
+                if event.pallet_name() == "System" && event.variant_name() == "ExtrinsicSuccess" {
+                    success = true;
                 }
             }
+            if !success {
+                return Err(
+                    "submitted extrinsic finalized without System.ExtrinsicSuccess".to_string(),
+                );
+            }
+            return Ok(FinalizedRecoveryScan::Found(FinalizedChainSubmit {
+                tx_hash: tx_hash_hex.to_string(),
+                block_number,
+                block_hash: block_hash.0,
+            }));
         }
-        if number == 0 {
-            break;
+        if block_number == from_block_number {
+            if block_hash.0 != from_block_hash {
+                return Err("finalized recovery anchor hash mismatch".to_string());
+            }
+            return Ok(FinalizedRecoveryScan::Exhausted);
         }
-        hash = header["parentHash"]
-            .as_str()
-            .ok_or("parent hash malformed")?
-            .to_string();
+        let parent_hash = block.header().parent_hash;
+        block = client
+            .blocks()
+            .at(parent_hash)
+            .await
+            .map_err(|e| format!("read parent finalized block failed: {e}"))?;
     }
-    Ok(None)
+    Ok(FinalizedRecoveryScan::Continue {
+        cursor_block_number: u64::from(block.number()),
+        cursor_block_hash: block.hash().0,
+    })
 }
 
 #[cfg(test)]
@@ -288,5 +453,20 @@ mod tests {
         let mut data = call.encode();
         data.push(0xff);
         assert!(chain_signing::decode_runtime_call(&data).is_err());
+    }
+
+    #[test]
+    fn only_post_submit_uncertainty_carries_recoverable_tx_hash() {
+        let rejected = super::ChainSubmitError::from("dry-run rejected".to_string());
+        assert_eq!(rejected.submitted_tx_hash(), None);
+
+        let uncertain = super::ChainSubmitError::submitted_unconfirmed(
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            "subscription dropped".to_string(),
+        );
+        assert_eq!(
+            uncertain.submitted_tx_hash(),
+            Some("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
     }
 }

@@ -34,8 +34,24 @@ pub(super) enum GateError {
     BindingExpired,
     /// 当前管理员不再属于待绑定机构。
     BindingMismatch,
-    /// 本地元数据 / 会话落库失败。
+    /// 授权作用域无法确定(业务前置条件不满足,重试无用)。
+    ///
+    /// 与 [`GateError::Db`] 严格分开:后者是数据库故障(瞬时,可重试),前者是数据本身
+    /// 不足以派生作用域(机构 CID 非法、FRG 缺省码等),重试永远不会成功。
+    AuthorizationScopeUnavailable(String),
+    /// 本地状态读写失败(数据库故障)。
     Db(String),
+}
+
+/// 把 `db.with_client` 返回的字符串错误按前缀分流成 GateError。
+///
+/// `repo::SCOPE_ERROR_PREFIX` 标记的是「授权作用域无法确定」,不是数据库故障;
+/// 混进 [`GateError::Db`] 会让前端显示「请稍后重试」,而这类错误重试永远不成功。
+fn classify_state_error(message: String) -> GateError {
+    match message.strip_prefix(repo::SCOPE_ERROR_PREFIX) {
+        Some(reason) => GateError::AuthorizationScopeUnavailable(reason.to_string()),
+        None => GateError::Db(message),
+    }
 }
 
 pub(super) enum GateOutcome {
@@ -79,12 +95,22 @@ pub(super) fn gate_error_response(err: GateError) -> axum::response::Response {
             2002,
             "admin no longer belongs to selected institution",
         ),
+        GateError::AuthorizationScopeUnavailable(reason) => {
+            // 业务前置条件不满足,不是故障:给出可操作原因,且不得暗示「重试可解」。
+            tracing::warn!(reason = %reason, "login gate authorization scope unavailable");
+            api_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2005,
+                &format!("authorization scope unavailable: {reason}"),
+            )
+        }
         GateError::Db(message) => {
-            tracing::error!(error = %message, "login gate db error");
+            // 完整原因只进服务端日志;响应只带不含敏感信息的短码,避免泄露库结构。
+            tracing::error!(error = %message, "login gate state error");
             api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 5001,
-                "login persist failed",
+                "login state error",
             )
         }
     }
@@ -180,7 +206,7 @@ pub(super) async fn issue_session_after_onchain_gate(
     let candidates = state
         .db
         .with_client(move |conn| candidates_from_memberships_conn(conn, &memberships))
-        .map_err(GateError::Db)?;
+        .map_err(classify_state_error)?;
     let Some(binding) = repo::active_node_binding(&state.db).map_err(GateError::Db)? else {
         let binding_challenge_id = Uuid::new_v4().to_string();
         let challenge = NodeBindingChallenge {
@@ -261,7 +287,7 @@ pub(super) async fn confirm_node_binding_after_onchain_gate(
     let fresh_candidates = state
         .db
         .with_client(move |conn| candidates_from_memberships_conn(conn, &memberships))
-        .map_err(GateError::Db)?;
+        .map_err(classify_state_error)?;
     let Some(fresh_selected) = fresh_candidates
         .into_iter()
         .find(|candidate| candidate.candidate_id == selected.candidate_id)

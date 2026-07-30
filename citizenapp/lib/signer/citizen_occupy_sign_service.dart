@@ -19,6 +19,10 @@ class CitizenOccupySignPrep {
     required this.actionLabel,
     required this.cidNumber,
     required this.isOccupy,
+    required this.genesisHash,
+    required this.expectedOldAccountId,
+    required this.expectedBindingRevision,
+    required this.expiresAt,
     required this.account,
   });
 
@@ -26,14 +30,18 @@ class CitizenOccupySignPrep {
   final String actionLabel;
   final String cidNumber;
   final bool isOccupy;
+  final String genesisHash;
+  final String? expectedOldAccountId;
+  final BigInt expectedBindingRevision;
+  final BigInt expiresAt;
   final Account account;
 }
 
 /// 注册局占号/换绑签名服务。
 ///
-/// 与 [CitizenIdentitySignService] 的三方一致校验**相反**:占号/换绑请求 `b.u` 留空、
-/// `d = append_bounded(cid)` 不含账户,由用户自选本机账户绑定到该 CID;只从 `d` 读
-/// CID 两色展示,签名字节 = `signingMessage(op, d ++ 选中账户32)`,响应 `b.u` 用选中账户带回。
+/// 请求 `b.u` 留空；`d` 必须是包含创世哈希、CID、账户零槽、绑定 revision 和过期时间的
+/// 完整 Runtime 授权模板。服务严格解码、核对外层 `e == 内层 expires_at`，再把用户选择
+/// 的本机账户原位填入零槽签名；响应 `b.u` 用该账户带回。
 class CitizenOccupySignService {
   CitizenOccupySignService({QrSigner? signer}) : _signer = signer ?? QrSigner();
   final QrSigner _signer;
@@ -57,15 +65,36 @@ class CitizenOccupySignService {
     if (actionLabel == null) {
       throw const CitizenOccupySignException('未登记的签名动作，已拒绝签名');
     }
-    final cid = _readBoundedCid(Uint8List.fromList(request.body.payloadBytes));
-    if (cid == null) {
+    final authorization = QrSigner.decodeCidAccountAuthorizationTemplate(
+      action: action,
+      payload: Uint8List.fromList(request.body.payloadBytes),
+    );
+    if (authorization == null) {
       throw const CitizenOccupySignException('签名内容无法完整中文展示，已拒绝签名');
+    }
+    final outerExpiresAt = request.expiresAt;
+    if (outerExpiresAt == null ||
+        BigInt.from(outerExpiresAt) != authorization.expiresAt) {
+      throw const CitizenOccupySignException(
+        '二维码过期时间与授权载荷不一致，已拒绝签名',
+      );
+    }
+    final accountId = _accountIdBytes(selectedAccount.accountId);
+    if (accountId == null) {
+      throw const CitizenOccupySignException('所选账户 account_id 格式错误');
+    }
+    if (authorization.materialize(accountId) == null) {
+      throw const CitizenOccupySignException('换绑新账户不得与当前绑定账户相同');
     }
     return CitizenOccupySignPrep(
       request: request,
       actionLabel: actionLabel,
-      cidNumber: cid,
+      cidNumber: authorization.cidNumber,
       isOccupy: action == QrActions.citizenOccupy,
+      genesisHash: authorization.genesisHash,
+      expectedOldAccountId: authorization.expectedOldAccountId,
+      expectedBindingRevision: authorization.expectedBindingRevision,
+      expiresAt: authorization.expiresAt,
       account: selectedAccount,
     );
   }
@@ -74,10 +103,14 @@ class CitizenOccupySignService {
     CitizenOccupySignPrep prep,
     WalletManager walletManager,
   ) async {
+    final accountId = _accountIdBytes(prep.account.accountId);
+    if (accountId == null) {
+      throw const CitizenOccupySignException('所选账户 account_id 格式错误');
+    }
     final bytes = QrSigner.signingBytesForHex(
       payloadHex: prep.request.body.payloadHex,
       action: prep.request.body.action,
-      selfAccountId: _accountIdBytes(prep.account.accountId),
+      selfAccountId: accountId,
     );
     if (bytes.isEmpty) {
       throw const CitizenOccupySignException('签名负载为空,无法签名');
@@ -93,44 +126,10 @@ class CitizenOccupySignService {
     ));
   }
 
-  /// `d = append_bounded(cid) = Compact(len) ++ cid`,读满全部字节得 CID。
-  static String? _readBoundedCid(Uint8List bytes) {
-    if (bytes.isEmpty) return null;
-    final (len, next) = _readCompact(bytes, 0);
-    if (len == 0 || len > 32 || next == 0) return null;
-    final end = next + len;
-    if (end != bytes.length) return null;
-    final raw = bytes.sublist(next, end);
-    if (raw.any((b) => b < 0x21 || b > 0x7e)) return null;
-    return String.fromCharCodes(raw);
-  }
-
-  /// SCALE compact-u32 解码,返回 `(value, nextOffset)`;失败时 nextOffset=0。
-  static (int, int) _readCompact(Uint8List bytes, int offset) {
-    if (offset >= bytes.length) return (0, 0);
-    final mode = bytes[offset] & 0x03;
-    if (mode == 0) return (bytes[offset] >> 2, offset + 1);
-    if (mode == 1) {
-      if (offset + 2 > bytes.length) return (0, 0);
-      return ((bytes[offset] | (bytes[offset + 1] << 8)) >> 2, offset + 2);
-    }
-    if (mode == 2) {
-      if (offset + 4 > bytes.length) return (0, 0);
-      final v = (bytes[offset] |
-              (bytes[offset + 1] << 8) |
-              (bytes[offset + 2] << 16) |
-              (bytes[offset + 3] << 24)) >>
-          2;
-      return (v, offset + 4);
-    }
-    return (0, 0); // big-integer mode 不用于 CID 长度
-  }
-
-  static Uint8List _accountIdBytes(String accountIdHex) {
-    final hex = accountIdHex.startsWith('0x') || accountIdHex.startsWith('0X')
-        ? accountIdHex.substring(2)
-        : accountIdHex;
-    final out = Uint8List(hex.length ~/ 2);
+  static Uint8List? _accountIdBytes(String accountIdHex) {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(accountIdHex)) return null;
+    final hex = accountIdHex.substring(2);
+    final out = Uint8List(32);
     for (var i = 0; i < out.length; i++) {
       out[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
     }

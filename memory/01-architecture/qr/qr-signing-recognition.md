@@ -27,10 +27,12 @@
 3. `i` 合法且未过期
 4. `b.a` 是已登记动作码
 5. `b.g == 1`
-6. `b.u` 解码为 32 字节公钥
+6. `b.u` 解码为 32 字节公钥；仅已登记的 `citizen_occupy/citizen_rebind` 必须为空，
+   由钱包选择账户并填入 `b.d` 的 32 字节零槽
 7. `b.d` 解码为非空 `review_payload`
-8. 当前钱包 `account_id` 等于规范化后的 `b.u`；当前 sr25519
-   `AccountId32` 直接取签名公钥 32 字节
+8. 普通动作要求当前钱包 `account_id` 等于规范化后的 `b.u`；当前 sr25519
+   `AccountId32` 直接取签名公钥 32 字节。占号/换绑则要求完整模板严格解码、外层
+   `e == expires_at`，并禁止换绑新旧账户相同
 
 业务识别:
 
@@ -41,6 +43,11 @@
 5. action 名、字段名或枚举值缺少中文翻译,红色拒签。
 6. 普通链交易 `b.d` 只有 32B signing bytes 且不能完整解码,红色拒签。
 7. 固定展示值必须来自 `qr-protocol/registry/fields.yaml` 的 `field_value_zh`；decoder 只允许填动态变量，不允许在移动端另写“默认岗位”“制度账户”“费用付款账户”等第二套展示值。
+8. `citizen_occupy` 必须严格解码
+   `genesis_hash + bounded cid + 32B 零 account 槽 + revision=0 + expires_at`；
+   `citizen_rebind` 必须严格解码
+   `genesis_hash + bounded cid + expected_old_account_id + 32B 零 new_account 槽`
+   `+ nonzero revision + expires_at`。零槽污染、尾字节或旧 CID-only 载荷一律拒签。
 
 签名字节:
 
@@ -48,8 +55,12 @@
 2. 链交易 `review_payload` 长度 ≤256B:签 payload 原文。
 3. 链交易 `review_payload` 长度 >256B:签 `blake2_256(review_payload)`。
 4. `a=2 citizen_identity`:签 `blake2_256(GMB || 0x10 || VotingIdentityPayload SCALE bytes)`。
-5. 其它非链文本/二进制 payload:签原文。
-6. Runtime hash-only:签同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes 原文。
+5. `a=10 citizen_occupy`：账户原位填入后签
+   `blake2_256(GMB || 0x12 || CidOccupyAuthorization SCALE bytes)`。
+6. `a=11 citizen_rebind`：新账户原位填入后签
+   `blake2_256(GMB || 0x1f || CidRebindAuthorization SCALE bytes)`。
+7. 其它非链文本/二进制 payload:签原文。
+8. Runtime hash-only:签同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes 原文。
 
 ## 3. k=2 签名响应校验
 
@@ -156,16 +167,22 @@ UTF-8 和重复账户一律红色拒签。
 
 ## 10. CitizenApp 当前落地状态
 
-公民端当前承担两类 QR 签名职责:
+公民端当前承担三类 QR 签名职责:
 
 1. 生成普通链交易/身份确认签名请求,交由公民钱包扫码签名。
 2. 作为热钱包签名方处理广场账户动作 `square_account_action`。
+3. 作为热钱包签名方处理注册局占号/换绑完整授权模板
+   `citizen_occupy/citizen_rebind`。
 
 已落地规则:
 
 - `citizenapp/lib/qr/generated/qr_action_registry.g.dart` 是由 `qr-protocol` 生成的 action/字段中文产物；`citizenapp/lib/qr/qr_protocols.dart` 只消费生成产物并保留调用方常量别名。
 - `citizenapp/lib/signer/square_action_payload.dart` 对广场账户 payload 做本地解码,字段名必须来自生成产物。未知子动作、布局错误、字段中文缺失均返回 null。
 - `citizenapp/lib/signer/square_action_sign_service.dart` 在触发钱包私钥签名前完成 action 登记、中文动作名、payload 中文展示、账户匹配和冷钱包边界校验。任一失败只返回拒绝,不得触发签名。
+- `citizenapp/lib/signer/qr_signer.dart` 与
+  `citizenapp/lib/signer/citizen_occupy_sign_service.dart` 严格解码注册局授权模板、核对
+  零槽/revision/内外过期时间/无尾字节并原位填入账户；确认页展示创世哈希、CID、旧账户
+  （换绑）、绑定版本、过期时间和所选账户。
 - `citizenapp/lib/qr/scan_dispatch_flow.dart` 和 `citizenapp/lib/qr/pages/qr_sign_response_page.dart` 只展示中文动作名和中文字段列表,不得恢复英文 action key、动作数字或原始 payload 展示。
 
 公民端广场动作签名不使用 CitizenWallet 的离线 decoder；但两端都必须以 `citizenchain/crates/qr-protocol/registry/*` 为唯一登记真源同步 action code 和中文文案。当前 Dart 产物由 `citizenchain/crates/qr-protocol/src/bin/export_registry.rs` 生成，禁止恢复移动端手写 action/字段表。

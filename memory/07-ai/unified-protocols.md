@@ -219,9 +219,22 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `memory/01-architecture/qr/qr-action-registry.md`
 - 生产者：`citizenapp`、`citizenwallet`（仅 `k=4` 临时收款码）、`citizenchain/node`、`citizenchain/onchina`
 - 消费者：`citizenwallet`、`citizenapp`、`citizenchain/onchina`
-- 字段：顶层只允许 `p/k/i/e/b`;`k=1/2` 的压缩键 `b.u` 在各端唯一映射为 `signer_public_key`;`k=1` 的 `b.d` 是 `review_payload`,除 Runtime 升级 hash-only 外必须完整可解码和可中文展示;`k=3` body 只允许 `cid_number + ss58_address + display_name`，且仅由 CitizenApp 已绑定 CID 的身份账户生成；`k=4` 的展示地址同样只允许 `ss58_address`;具体字段以 `qr-protocol-spec.md` 为准
+- 字段：顶层只允许 `p/k/i/e/b`;`k=1/2` 的压缩键 `b.u` 在各端唯一映射为 `signer_public_key`，仅 `citizen_occupy/citizen_rebind` 的请求必须留空并由钱包原位填授权模板零槽;`k=1` 的 `b.d` 是 `review_payload`,除 Runtime 升级 hash-only 外必须完整可解码和可中文展示;`k=3` body 只允许 `cid_number + ss58_address + display_name`，且仅由 CitizenApp 已绑定 CID 的身份账户生成；`k=4` 的展示地址同样只允许 `ss58_address`;具体字段以 `qr-protocol-spec.md` 为准
 - 编码：紧凑 JSON envelope
 - 签名/验签规则：按 `k` 和 `b.a + b.d(review_payload)` 执行;普通链交易由扫码端按 Substrate 规则从 `review_payload` 计算 `signing_bytes`;签名响应只带 `u/s`
+- 注册局占号/换绑：`citizen_occupy` 的 `b.d` 固定为
+  `genesis_hash + bounded cid + 32B 零 account 槽 + revision=0 + expires_at`；
+  `citizen_rebind` 固定为
+  `genesis_hash + bounded cid + expected_old_account_id + 32B 零 new_account 槽`
+  `+ nonzero revision + expires_at`。外层 `e` 必须等于内层过期时间；钱包严格解码、确认
+  无尾字节并拒绝换绑新旧相同后，才可原位填选定账户并分别走 `0x12/0x1f` 哈希域签名。
+  OnChina 段 3 管理员冷签 call 固定为：
+  `occupy_cid(10/6) = actor_cid + actor_role + cid + account_id(32B) + expires_at(u64 LE)
+  + citizen_signature(Vec64)`；
+  `admin_rebind_cid_account_id(10/7) = actor_cid + actor_role + cid + new_account_id(32B)
+  + expected_binding_revision(u64 LE) + expires_at(u64 LE) + new_account_signature(Vec64)`。
+  call 6 的展示字段用 `account_id`，call 7 同时涉及旧/新账户时必须用
+  `expected_old_account_id`/`new_account_id`，不得退回含糊 `account_id`。
 - 平台调价动作：`propose_set_platform_price`，pallet/call 为 `SquarePost/propose_set_platform_price`；必审字段为 `actor_cid_number`、`membership_level`、`new_price_fen`。CitizenWallet 必须严格中文解码并输出标准签名响应二维码，OnChina 负责回扫提交。
 - 禁止兼容：开发期不做旧协议兼容
 - 禁止事项：
@@ -457,19 +470,27 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 会员支付只允许在 CitizenApp 内完成；CitizenWeb 不承载会员订阅或钱包签名入口。
 - 签名/验签规则：
   - Worker session 必须由已登记的 P-256 设备子钥对 `signing_payload` 签名获得；设备子钥归属仍由钱包主钥绑定证明建立。会话不得读取链上账户、余额或存在性存款。
-  - CID 换绑后的旧账户止损唯一走 `POST /v1/square/rebind/revoke`：Bearer session
-    必须属于 CID **当前绑定的新账户**，请求只提交 `old_account_id` 与
-    `old_account_signature`。后者固定为旧账户对
-    `signing_message(OP_SIGN_CID_REBIND=0x11, SCALE(cid_number, new_account_id))`
-    的链上换绑授权签名；Worker 必须用 session 的 `cid_number + account_id` 重建摘要并以
-    `old_account_id` 验签。禁止以“旧账户当前未绑定/链上查询为空”作为授权证据。
-  - 换绑授权必须在 extrinsic 提交前写入客户端安全 outbox，Worker 确认幂等清理成功后
-    才删除；网络失败、App 重启以及功能同步标记已经推进时仍须继续重试。存在不同三元组的
-    未完成清理时禁止再次换绑，不得静默吞错或把功能迁移成功冒充安全吊销成功。
-  - 换绑吊销只删除同一 CID 下旧 `account_id` 的 `chat_keypackages`、`chat_devices`、
-    `square_login_challenges`、`square_device_subkeys`、Worker 会话与账户身份缓存。
-    `ChatRealtimeObject` 和 `chat_device_binding_nonces` 均按 `cid_number` 归属，换绑时
-    **禁止关闭/删除**；通讯录、动态、媒体、关注、会员等 CID 数据也一律保留。
+  - CID 账户绑定防重放真源为 finalized `BindingRevisionByCid[cid_number]`。
+    `CidRebindAuthorization` 的 SCALE 字段顺序固定为
+    `genesis_hash(H256) + cid_number(BoundedVec<u8,32>) + expected_old_account_id(AccountId32)`
+    `+ new_account_id(AccountId32) + expected_binding_revision(u64 LE) + expires_at(u64 LE)`；
+    `expires_at` 是 Unix 秒，链端要求晚于当前时间且不超过 600 秒。CitizenApp 自助换绑
+    使用 `OP_SIGN_CID_REBIND=0x11`；call 9 参数固定为
+    `cid_number, expected_binding_revision, expires_at, old_account_signature`，新账户为
+    extrinsic origin。创世、当前旧账户、revision 或过期时间任一变化都必须使旧授权失效。
+  - finalized inclusion 不等于 dispatch 成功。CitizenApp 收到交易回执后必须在回执的
+    精确 finalized 区块读取 `AccountIdByCid` 与 `BindingRevisionByCid`：首次占号只接受
+    目标账户且 revision=1，自助换绑只接受新账户且 revision 精确等于签名前 revision+1；
+    目标状态缺失或不一致一律 fail-closed，核验通过前不得迁移 MyId 本地数据或广播身份变化。
+  - finalized 换绑后新账户立即取得 CID 控制权。CitizenApp 不得保存旧账户签名清理
+    outbox，也不存在客户端换绑后吊销接口。旧账户凭证撤销只能由可信 finalized
+    绑定版本事件驱动，禁止让客户端另交旧签名形成第二授权协议。
+  - Worker 保留纯内部 `purgeFinalizedOldAccountCredentials` 幂等 helper，供后续 finalized
+    绑定版本消费者删除同一 CID 下旧 `account_id` 的 `chat_keypackages`、`chat_devices`、
+    `square_login_challenges`、`square_device_subkeys`、Worker 会话与账户身份缓存；该 helper
+    不接收 HTTP 请求或旧账户签名。`ChatRealtimeObject` 和
+    `chat_device_binding_nonces` 均按 `cid_number` 归属，不得整体关闭/删除；通讯录、动态、
+    媒体、关注、会员等 CID 数据也一律保留。
   - P-256 设备子钥的跨端文本编码统一带 `0x`（ADR-041，§0.3）：`p256_public_key` = `^0x04[0-9a-f]{128}$`，`signature` / `binding_signature` / `x-device-signature` = `^0x[0-9a-f]{128}$`；Worker 边界一次 require 0x + strip，内部 SCALE 签名消息 / D1 存储 / `device_key_hash` preimage 继续裸字节（逐字节不变）。禁止裸或「两端都收」。
   - Worker 只能把钱包签名证明用于登录和上传授权，不得托管钱包私钥。
   - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由 CID 当前绑定账户 child 域隔离派生；Worker 不得接收、生成、托管或恢复通讯录密钥，也不得记录联系人明文。
@@ -876,7 +897,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `memory/01-architecture/qr/qr-signing-recognition.md`
   - `memory/01-architecture/qr/qr-action-registry.md`
 - 生产者：`citizenapp`、`citizenchain/node`、`citizenchain/onchina`
-- 消费者：`citizenwallet`
+- 消费者：`citizenwallet`、`citizenapp`
 - 字段：
   - `b.a`:业务动作码
   - `b.g`:签名算法码,当前 `1 = sr25519`
@@ -890,7 +911,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 用户确认页只展示 decoder 产出的 `reviewFields`;左侧分类名必须由统一映射翻译为中文，禁止直接渲染机器 key
   - 用户确认页的账户字段必须展示 SS58 地址，禁止把原始公钥 hex 当作普通用户确认字段展示
   - `activate_admin_account` 载荷中的 `institution_code` 必须用共享机构码编码，禁止各端手写第二套字节映射。
-  - **OnChina 控制台链写动作码（`b.d`=裸 SCALE call data，CitizenWallet 解码核对并只签名一次、显示响应二维码，OnChina 回扫响应后通过统一入口提交）**：链交易统一 `a=(pallet<<8)|call`(禁止扁平小整数,会撞非链动作码 1..9)。本机构治理=公权 `0x1e08`/私权 `0x1f08`，注册局直接登记管理员=公权 `0x1e09`/私权 `0x1f09`(见 P-TX-012);公民投票身份注册=`0x0a00`(CitizenIdentity 10/call 0,见 P-TX-011);公民参选身份上链=`0x0a01`(CitizenIdentity 10/call 1,见 P-TX-011);个人多签管理员集合变更为 `0x1d00`(PersonalAdmins 29/call 0,见 P-TX-007);平台调价提案=`0x2205`(SquarePost 34/call 5,见 P-TX-014);CREG 市注册局无独立链动作码；非链文本治理统一使用 registry 的 `a=3 onchina_admin_action`（`onchina_admin_governance` JSON）。`0x1e05`、`0x1f05` 已永久留洞，旧机构直接创建载荷不得进入 QR。动作码由 `onchina/src/core/institution_call.rs::chain_action_code(pallet,call)` 与 call data 同源派生，非链动作码从 `qr-protocol` registry 读取，均与 `qr-action-registry.md` 同步；动作码 `8` 已取消登记，Chat 设备绑定不得进入 QR。
+  - **OnChina 控制台链写动作码（`b.d`=裸 SCALE call data，CitizenWallet 解码核对并只签名一次、显示响应二维码，OnChina 回扫响应后通过统一入口提交）**：链交易统一 `a=(pallet<<8)|call`(禁止扁平小整数,会撞非链动作码 1..9)。本机构治理=公权 `0x1e08`/私权 `0x1f08`，注册局直接登记管理员=公权 `0x1e09`/私权 `0x1f09`(见 P-TX-012);公民投票身份注册=`0x0a00`(CitizenIdentity 10/call 0,见 P-TX-011);公民参选身份上链=`0x0a01`(CitizenIdentity 10/call 1,见 P-TX-011);注册局代办首次绑定=`0x0a06`，注册局代办换绑=`0x0a07`；个人多签管理员集合变更为 `0x1d00`(PersonalAdmins 29/call 0,见 P-TX-007);平台调价提案=`0x2205`(SquarePost 34/call 5,见 P-TX-014);CREG 市注册局无独立链动作码；非链文本治理统一使用 registry 的 `a=3 onchina_admin_action`（`onchina_admin_governance` JSON）。`0x1e05`、`0x1f05` 已永久留洞，旧机构直接创建载荷不得进入 QR。动作码由 `onchina/src/core/institution_call.rs::chain_action_code(pallet,call)` 与 call data 同源派生，非链动作码从 `qr-protocol` registry 读取，均与 `qr-action-registry.md` 同步；动作码 `8` 已取消登记，Chat 设备绑定不得进入 QR。
   - Substrate 交易 payload 长度 >256B 时必须签 `blake2_256(payload)`
 - 禁止兼容：开发期严格模式，不做别名兼容
 - 禁止事项：
@@ -1437,7 +1458,8 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   4. `eligibility_date: u32`（UTC+8，YYYYMMDD）
 - 编码：只保存为 runtime 内部 `PopulationData`，再由投票引擎按 `proposal_id` 写入
   `ProposalPopulationSnapshots`；不存在独立 `snapshot_id`、SCALE extrinsic 或客户端
-  快照载荷。CitizenIdentity call 5、JointVote call 2、LegislationVote call 0 永久留洞。
+  快照载荷。CitizenIdentity call 5 已用于公民自主首次绑定 CID，不属于人口快照流程；
+  JointVote call 2、LegislationVote call 0 永久留洞。
 - 创建/授权规则：
   - `citizen-identity::population_data(scope)` 只有在四级人口完整推进到当前日期且没有
     维护故障时返回 `Some`；否则投票引擎返回 `PopulationDataNotReady` 并回滚建案。

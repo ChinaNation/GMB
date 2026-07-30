@@ -6,6 +6,7 @@ import '../wallet/wallet_manager.dart';
 import 'account_detail_page.dart';
 import 'app_theme.dart';
 import 'scan_page.dart';
+import 'widgets/wallet_qr_dialog.dart';
 
 /// Lv2 钱包详情：钱包(master)名 + 助记词备份 + 账户列表 + 添加账户。
 ///
@@ -530,6 +531,28 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   ],
                 ),
               ),
+              // 二维码入口：不进账户详情就能出示该账户的钱包码。
+              // 独立热区，点它不触发整行的 onTap。
+              Semantics(
+                button: true,
+                label: '显示钱包码',
+                child: IconButton(
+                  tooltip: '显示钱包码',
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => showWalletQrDialog(
+                    context,
+                    accountId: account.accountId,
+                    accountName: account.accountName,
+                    ss58Address: account.ss58Address,
+                  ),
+                  icon: const Icon(Icons.qr_code_rounded,
+                      size: 20, color: AppTheme.textTertiary),
+                ),
+              ),
+              const SizedBox(width: 4),
               const Icon(Icons.chevron_right,
                   size: 20, color: AppTheme.textTertiary),
             ],

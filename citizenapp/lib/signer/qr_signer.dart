@@ -36,6 +36,46 @@ class QrSignException implements Exception {
 typedef SignRequestEnvelope = QrEnvelope<SignRequestBody>;
 typedef SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 
+/// 注册局占号/换绑二维码中的完整授权模板。
+///
+/// 生成端把待绑定账户写成 32 字节零槽；签名端必须严格解码全部字段且确认无尾字节，
+/// 再把用户选择的账户原位填入。禁止恢复旧版 `bounded_cid ++ account_id` 末尾拼接。
+class CidAccountAuthorizationTemplate {
+  CidAccountAuthorizationTemplate._({
+    required Uint8List payload,
+    required this.genesisHash,
+    required this.cidNumber,
+    required this.expectedOldAccountId,
+    required this.expectedBindingRevision,
+    required this.expiresAt,
+    required int accountOffset,
+  })  : _payload = Uint8List.fromList(payload),
+        _accountOffset = accountOffset;
+
+  final Uint8List _payload;
+  final int _accountOffset;
+  final String genesisHash;
+  final String cidNumber;
+  final String? expectedOldAccountId;
+  final BigInt expectedBindingRevision;
+  final BigInt expiresAt;
+
+  /// 把所选账户填回授权结构的零槽，返回与 Runtime 逐字节一致的 SCALE。
+  ///
+  /// 换绑时新旧账户相同必须拒绝，不能生成可签名载荷。
+  Uint8List? materialize(Uint8List accountId) {
+    if (accountId.length != 32) return null;
+    final oldAccountId = expectedOldAccountId;
+    if (oldAccountId != null &&
+        oldAccountId == QrSigner._bytesToLowerHex(accountId)) {
+      return null;
+    }
+    final output = Uint8List.fromList(_payload);
+    output.setRange(_accountOffset, _accountOffset + 32, accountId);
+    return output;
+  }
+}
+
 class QrSigner {
   static const int defaultTtlSeconds = 90;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
@@ -233,17 +273,23 @@ class QrSigner {
       );
     }
     if (QrActions.isSelfAccountDomainAction(action)) {
-      // 占号/换绑:payload=append_bounded(cid),追加钱包自选账户32B 后按域 op 哈希;
-      // 与 citizenwallet signingBytesFor 及后端 verify_*_signature 逐字节对齐。
       if (selfAccountId == null || selfAccountId.length != 32) {
         return Uint8List(0);
       }
+      // 两种授权结构的账户槽位置不同：严格解析完整模板并原位填入所选账户。
+      // 任何零槽污染、revision 错误、尾字节或换绑新旧账户相同都 fail-closed。
+      final authorization = decodeCidAccountAuthorizationTemplate(
+        action: action,
+        payload: payload,
+      );
+      final exactPayload = authorization?.materialize(selfAccountId);
+      if (exactPayload == null) return Uint8List(0);
       final opTag = action == QrActions.citizenOccupy
           ? kOpSignCidOccupy
           : kOpSignCidAdminRebind;
       return signingMessage(
         opTag: opTag,
-        scalePayload: Uint8List.fromList([...payload, ...selfAccountId]),
+        scalePayload: exactPayload,
       );
     }
     if (action == QrActions.squareAccountAction) {
@@ -257,6 +303,118 @@ class QrSigner {
     }
     return payload;
   }
+
+  /// 严格解析注册局占号/换绑的完整授权模板。
+  ///
+  /// occupy:
+  /// `genesis_hash + bounded cid + account_id(32B 零槽) + revision=0 + expires`
+  ///
+  /// rebind:
+  /// `genesis_hash + bounded cid + expected_old_account_id`
+  /// `+ new_account_id(32B 零槽) + revision(nonzero) + expires`
+  static CidAccountAuthorizationTemplate?
+      decodeCidAccountAuthorizationTemplate({
+    required int action,
+    required Uint8List payload,
+  }) {
+    if (action == QrActions.citizenOccupy) {
+      return _decodeCidOccupyAuthorizationTemplate(payload);
+    }
+    if (action == QrActions.citizenRebind) {
+      return _decodeCidRebindAuthorizationTemplate(payload);
+    }
+    return null;
+  }
+
+  static CidAccountAuthorizationTemplate? _decodeCidOccupyAuthorizationTemplate(
+      Uint8List bytes) {
+    if (bytes.length < 32) return null;
+    var offset = 32;
+    final cidRead = _readCanonicalBoundedCid(bytes, offset);
+    if (cidRead == null) return null;
+    offset = cidRead.$2;
+    final accountOffset = offset;
+    if (!_hasZeroAccountSlot(bytes, accountOffset)) return null;
+    offset += 32;
+    if (offset + 16 != bytes.length) return null;
+    final revision = _readU64LittleEndian(bytes, offset);
+    offset += 8;
+    final expiresAt = _readU64LittleEndian(bytes, offset);
+    if (revision != BigInt.zero || expiresAt <= BigInt.zero) return null;
+    return CidAccountAuthorizationTemplate._(
+      payload: bytes,
+      genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
+      cidNumber: cidRead.$1,
+      expectedOldAccountId: null,
+      expectedBindingRevision: revision,
+      expiresAt: expiresAt,
+      accountOffset: accountOffset,
+    );
+  }
+
+  static CidAccountAuthorizationTemplate? _decodeCidRebindAuthorizationTemplate(
+      Uint8List bytes) {
+    if (bytes.length < 64) return null;
+    var offset = 32;
+    final cidRead = _readCanonicalBoundedCid(bytes, offset);
+    if (cidRead == null) return null;
+    offset = cidRead.$2;
+    if (offset + 32 > bytes.length) return null;
+    final expectedOldAccount = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final accountOffset = offset;
+    if (!_hasZeroAccountSlot(bytes, accountOffset)) return null;
+    offset += 32;
+    if (offset + 16 != bytes.length) return null;
+    final revision = _readU64LittleEndian(bytes, offset);
+    offset += 8;
+    final expiresAt = _readU64LittleEndian(bytes, offset);
+    if (revision <= BigInt.zero || expiresAt <= BigInt.zero) return null;
+    return CidAccountAuthorizationTemplate._(
+      payload: bytes,
+      genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
+      cidNumber: cidRead.$1,
+      expectedOldAccountId: _bytesToLowerHex(expectedOldAccount),
+      expectedBindingRevision: revision,
+      expiresAt: expiresAt,
+      accountOffset: accountOffset,
+    );
+  }
+
+  /// CID 上限只有 32 字节，因此其规范 SCALE Compact 长度只能使用单字节 mode 0。
+  static (String, int)? _readCanonicalBoundedCid(
+    Uint8List bytes,
+    int offset,
+  ) {
+    if (offset >= bytes.length || (bytes[offset] & 0x03) != 0) return null;
+    final length = bytes[offset] >> 2;
+    if (length == 0 || length > 32) return null;
+    final start = offset + 1;
+    final end = start + length;
+    if (end > bytes.length) return null;
+    final raw = bytes.sublist(start, end);
+    if (raw.any((byte) => byte < 0x21 || byte > 0x7e)) return null;
+    return (String.fromCharCodes(raw), end);
+  }
+
+  static bool _hasZeroAccountSlot(Uint8List bytes, int offset) {
+    if (offset + 32 > bytes.length) return false;
+    for (var index = offset; index < offset + 32; index++) {
+      if (bytes[index] != 0) return false;
+    }
+    return true;
+  }
+
+  static BigInt _readU64LittleEndian(Uint8List bytes, int offset) {
+    var value = BigInt.zero;
+    for (var index = 7; index >= 0; index--) {
+      value = (value << 8) | BigInt.from(bytes[offset + index]);
+    }
+    return value;
+  }
+
+  static String _bytesToLowerHex(List<int> bytes) =>
+      '0x${bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}';
 
   void _validateRequestId(String requestId) {
     if (!_idPattern.hasMatch(requestId)) {
@@ -285,7 +443,7 @@ class QrSigner {
 
   void _validateExpiry({required int expiresAt}) {
     final now = _now();
-    if (expiresAt < now) {
+    if (expiresAt <= now) {
       throw const QrSignException(QrSignErrorCode.expired, '交易签名请求已过期');
     }
   }

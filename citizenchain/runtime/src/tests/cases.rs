@@ -1164,6 +1164,7 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
             real_cid_number("RUNTIME-0001", "CTZN", "1")
                 .try_into()
                 .expect("cid number should fit");
+        let expires_at = cid_authorization_expires_at();
         // 占号先行:身份写入前置(占即绑用户钱包账户 + 用户占号签名)。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
@@ -1171,7 +1172,8 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
             actor_role_code.clone(),
             citizen_cid_number.clone(),
             account_id.clone(),
-            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id),
+            expires_at,
+            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id, expires_at,),
         ));
         let payload = build_voting_identity_payload(
             account_id.clone(),
@@ -1246,6 +1248,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
             real_cid_number("RUNTIME-0003", "CTZN", "1")
                 .try_into()
                 .expect("cid number should fit");
+        let expires_at = cid_authorization_expires_at();
         // 占号先行:身份写入前置(占即绑用户钱包账户 + 用户占号签名)。
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
@@ -1253,7 +1256,8 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
             actor_role_code.clone(),
             citizen_cid_number.clone(),
             account_id.clone(),
-            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id),
+            expires_at,
+            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id, expires_at,),
         ));
         let voting = build_voting_identity_payload(
             account_id.clone(),
@@ -1379,6 +1383,7 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_account_id() {
             .clone()
             .try_into()
             .expect("cid number should fit");
+        let expires_at = cid_authorization_expires_at();
 
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(registrar.clone()),
@@ -1386,7 +1391,8 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_account_id() {
             actor_role_code.clone(),
             citizen_cid_number.clone(),
             account_id.clone(),
-            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id),
+            expires_at,
+            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id, expires_at,),
         ));
         let payload = build_voting_identity_payload(
             account_id.clone(),

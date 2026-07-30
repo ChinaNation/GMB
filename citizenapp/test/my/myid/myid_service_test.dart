@@ -9,7 +9,6 @@ import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
-import 'package:citizenapp/my/myid/identity_rebind_revoker.dart';
 import 'package:citizenapp/my/myid/identity_synced_account_store.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
@@ -27,7 +26,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
-    // 换绑续跑意图存 SharedPreferences;每个用例从空白起,互不串扰。
+    // 身份同步标记存 SharedPreferences；每个用例从空白起，互不串扰。
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
@@ -64,7 +63,8 @@ void main() {
       final wallet = _FakeWalletManager(const _AliceWallet());
       final service = MyIdService(
         walletManager: wallet,
-        identityResolver: _FakeIdentityResolver(_unregisteredIdentity(_validAccountId)),
+        identityResolver:
+            _FakeIdentityResolver(_unregisteredIdentity(_validAccountId)),
         chainRpc: _FakeChainRpc(),
         divisionStore: _FakeDivisionStore(),
         badgeSnapshotStore: _FakeBadgeStore(),
@@ -80,7 +80,8 @@ void main() {
       final wallet = _FakeWalletManager(const _AliceWallet());
       final service = MyIdService(
         walletManager: wallet,
-        identityResolver: _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+        identityResolver:
+            _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
         chainRpc: _FakeChainRpc(),
         divisionStore: _FakeDivisionStore(),
         badgeSnapshotStore: _FakeBadgeStore(),
@@ -99,12 +100,14 @@ void main() {
           _FakeWalletManager(const _AliceWallet(), failFirstSubkeyRebind: true);
       final service = MyIdService(
         walletManager: wallet,
-        identityResolver: _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+        identityResolver:
+            _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
         chainRpc: _FakeChainRpc(),
         divisionStore: _FakeDivisionStore(),
         badgeSnapshotStore: _FakeBadgeStore(),
       );
-      await expectLater(service.ensureDeviceSubkeyBound(), throwsA(isA<Object>()));
+      await expectLater(
+          service.ensureDeviceSubkeyBound(), throwsA(isA<Object>()));
       expect(await IdentitySyncedAccountStore().read(), isNull);
 
       await service.ensureDeviceSubkeyBound();
@@ -327,7 +330,6 @@ void main() {
     final fakeWallet =
         _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]);
     final fakeContact = _FakeContactService();
-    final fakeRevoker = _FakeRebindRevoker();
     // 两个 fake 共用一条轨迹,用于断言本地重建各步的先后顺序。
     final trace = <String>[];
     fakeWallet.trace = trace;
@@ -341,7 +343,6 @@ void main() {
       identityResolver:
           _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
       contactService: fakeContact,
-      rebindRevoker: fakeRevoker,
     );
 
     await service.rebindCidTo(
@@ -365,8 +366,6 @@ void main() {
     // 顺序钉死:通讯录迁移要读旧账户本地密文,而重 wrap 会删旧账户 LDK wrap,
     // 倒过来迁移就读不出旧数据了。
     expect(trace, <String>['contact_migrate', 'ldk_rewrap']);
-    // 吊销旧账户云端隐私/鉴权数据(换绑止损)。
-    expect(fakeRevoker.revoked, [_validAccountId]);
     // 重建完成 → 「已同步账户」标记推进到新账户。
     expect(await IdentitySyncedAccountStore().read(), newAccount.accountId);
   });
@@ -385,7 +384,6 @@ void main() {
       failFirstSubkeyRebind: true,
     );
     final fakeContact = _FakeContactService();
-    final fakeRevoker = _FakeRebindRevoker();
     // 链上先 = 旧账户;稳态基线:已同步标记 = 旧账户。
     final resolver = _MutableResolver(_validAccountId);
     await IdentitySyncedAccountStore().write(_validAccountId);
@@ -397,7 +395,6 @@ void main() {
       identityRpc: _FakeIdentityRpc(),
       identityResolver: resolver,
       contactService: fakeContact,
-      rebindRevoker: fakeRevoker,
     );
 
     // 换绑链上成功,但设备子钥重绑首次失败 → 本地重建中断上抛。
@@ -417,11 +414,10 @@ void main() {
     await service.reconcileIdentityRebuild();
     expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
     expect(fakeContact.migrations.single.newAccountId, newAccount.accountId);
-    expect(fakeRevoker.revoked, [_validAccountId]);
     expect(await IdentitySyncedAccountStore().read(), newAccount.accountId);
   });
 
-  test('吊销网络失败不丢 outbox:同步标记已推进仍由后续对账独立重试', () async {
+  test('换绑 extrinsic finalized 但目标状态未确认时绝不迁移本地数据', () async {
     final newAccount = Account(
       masterId: _validAccountId,
       accountIndex: 5,
@@ -429,34 +425,34 @@ void main() {
       ss58Address: 'new-ss58',
       accountName: '账户5',
     );
-    final resolver = _MutableResolver(_validAccountId);
-    final revoker = _FakeRebindRevoker(failFirstRevoke: true);
-    await IdentitySyncedAccountStore().write(_validAccountId);
+    final fakeWallet =
+        _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]);
+    final fakeContact = _FakeContactService();
     final service = MyIdService(
-      walletManager:
-          _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]),
+      walletManager: fakeWallet,
       chainRpc: _FakeChainRpc(),
       divisionStore: _FakeDivisionStore(),
       badgeSnapshotStore: _FakeBadgeStore(),
-      identityRpc: _FakeIdentityRpc(),
-      identityResolver: resolver,
-      contactService: _FakeContactService(),
-      rebindRevoker: revoker,
+      identityRpc: _FakeIdentityRpc(
+        rebindError: StateError('finalized 目标绑定未生效'),
+      ),
+      identityResolver:
+          _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+      contactService: fakeContact,
     );
 
-    await service.rebindCidTo(
-      cidNumber: 'GD-CTZN1-8F3A2B',
-      newAccountId: newAccount.accountId,
+    await expectLater(
+      service.rebindCidTo(
+        cidNumber: 'GD-CTZN1-8F3A2B',
+        newAccountId: newAccount.accountId,
+      ),
+      throwsA(isA<StateError>()),
     );
-    // 链上和功能凭证迁移已经成功；安全清理首次网络失败时记录仍在，不能假装完成。
-    expect(await IdentitySyncedAccountStore().read(), newAccount.accountId);
-    expect(revoker.pending?.oldAccountId, _validAccountId);
-    expect(revoker.revoked, isEmpty);
 
-    resolver.setAccountId(newAccount.accountId);
-    await service.reconcileIdentityRebuild();
-    expect(revoker.revoked, [_validAccountId]);
-    expect(revoker.pending, isNull);
+    expect(fakeWallet.subkeyRebindTargets, isEmpty);
+    expect(fakeContact.migrations, isEmpty);
+    expect(fakeWallet.ldkRewraps, isEmpty);
+    expect(await IdentitySyncedAccountStore().read(), isNull);
   });
 
   test('换绑目标 == 当前身份账户时拒', () async {
@@ -745,54 +741,6 @@ class _MutableResolver extends IdentityAccountResolver {
   Future<ResolvedIdentity?> resolve() async => _registeredIdentity(_accountId);
 }
 
-/// 记录旧账户云端吊销调用的假 revoker(不触网 / 不触碰设备子钥)。
-class _FakeRebindRevoker extends IdentityRebindRevoker {
-  _FakeRebindRevoker({this.failFirstRevoke = false});
-
-  final bool failFirstRevoke;
-  int revokeCalls = 0;
-  final List<String> revoked = <String>[];
-  PendingRebindCleanup? pending;
-
-  @override
-  Future<void> stagePendingCleanup({
-    required String cidNumber,
-    required String oldAccountId,
-    required String newAccountId,
-    required String oldAccountSignature,
-  }) async {
-    pending = PendingRebindCleanup(
-      cidNumber: cidNumber,
-      oldAccountId: oldAccountId,
-      newAccountId: newAccountId,
-      oldAccountSignature: oldAccountSignature,
-    );
-  }
-
-  @override
-  Future<void> ensureCanStartRebind({
-    required String cidNumber,
-    required String oldAccountId,
-    required String newAccountId,
-  }) async {}
-
-  @override
-  Future<bool> retryPendingCleanup({
-    required String cidNumber,
-    required String currentAccountId,
-  }) async {
-    final record = pending;
-    if (record == null || record.newAccountId != currentAccountId) return false;
-    revokeCalls += 1;
-    if (failFirstRevoke && revokeCalls == 1) {
-      throw StateError('模拟吊销网络失败');
-    }
-    revoked.add(record.oldAccountId);
-    pending = null;
-    return true;
-  }
-}
-
 /// 造一个「已注册(匿名)身份账户」解析结果:accountId 绑了 CID(snapshot 非空)。
 ResolvedIdentity _registeredIdentity(String accountId) => ResolvedIdentity(
       accountId: accountId,
@@ -816,8 +764,9 @@ ResolvedIdentity _unregisteredIdentity(String accountId) => ResolvedIdentity(
 
 /// 记录占号 / 换绑调用参数的假 RPC(不上链),验证 service 编排把账户与 CID 传对。
 class _FakeIdentityRpc extends CitizenIdentityRpc {
-  _FakeIdentityRpc();
+  _FakeIdentityRpc({this.rebindError});
 
+  final Object? rebindError;
   String? occupiedCid;
   String? occupiedAccountId;
   String? reboundCid;
@@ -842,12 +791,12 @@ class _FakeIdentityRpc extends CitizenIdentityRpc {
     required String newAccountId,
     required String oldAccountId,
     required String newFromSs58Address,
-    Future<void> Function(String oldAccountSignature)? onOldAuthorizationReady,
   }) async {
+    final error = rebindError;
+    if (error != null) throw error;
     reboundCid = cidNumber;
     reboundNew = newAccountId;
     reboundOld = oldAccountId;
-    await onOldAuthorizationReady?.call('0x${'ab' * 64}');
     return (txHash: '0xtx', usedNonce: 0, blockHashHex: '0xblk');
   }
 }

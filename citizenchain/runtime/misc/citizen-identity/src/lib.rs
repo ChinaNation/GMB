@@ -26,6 +26,58 @@ pub type CidNumberBound = BoundedVec<u8, ConstU32<32>>;
 pub type AreaCodeBound = BoundedVec<u8, ConstU32<16>>;
 pub type RoleCodeBound = BoundedVec<u8, ConstU32<64>>;
 
+/// CID 首次绑定或换绑授权自签发起后允许提交上链的最长时间（Unix 秒）。
+pub const MAX_CID_AUTHORIZATION_LIFETIME_SECS: u64 = 600;
+
+/// CID 换绑离线授权的唯一 SCALE 载荷。
+///
+/// 字段顺序是公民、冷钱包、OnChina 与 runtime 的共同协议；绑定创世哈希、当前账户和
+/// 当前 revision，确保授权不能跨链、跨绑定轮次或在账户再次轮换后重放。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct CidRebindAuthorization<Hash, AccountId> {
+    pub genesis_hash: Hash,
+    pub cid_number: CidNumberBound,
+    pub expected_old_account_id: AccountId,
+    pub new_account_id: AccountId,
+    pub expected_binding_revision: u64,
+    /// Unix 秒；必须晚于当前链上时间，且不得超过当前时间 600 秒。
+    pub expires_at: u64,
+}
+
+/// 注册局首次占号时由新账户签署的唯一 SCALE 载荷。
+///
+/// `expected_binding_revision` 只能为 0；链上同时要求 CID 尚无登记、绑定和 revision，
+/// 因而公开过的首次绑定证明不能在吊销、换绑或其它链上再次使用。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct CidOccupyAuthorization<Hash, AccountId> {
+    pub genesis_hash: Hash,
+    pub cid_number: CidNumberBound,
+    pub account_id: AccountId,
+    pub expected_binding_revision: u64,
+    /// Unix 秒；必须晚于当前链上时间，且不得超过当前时间 600 秒。
+    pub expires_at: u64,
+}
+
 /// 自助占号(公民本人、无注册局)时写入 `CidRecord.registrar_cid_number` 的 sentinel。
 /// 区别于注册局代占(存注册局机构 CID);自助记录 registrar = `SELF`、居住地空。
 pub const SELF_OCCUPY_REGISTRAR: &[u8] = b"SELF";
@@ -179,8 +231,8 @@ pub enum CitizenIdentityLevel {
 
 /// 公民授权主体。
 ///
-/// 公民 CID 与账户必须同时匹配 `citizen-identity` 的有效双向绑定：CID 证明
-/// 公民身份和权益，账户证明本次操作的签名身份，任何一项都不能单独授权。
+/// 公民 CID 与账户必须同时匹配 `citizen-identity` 的有效双向绑定：CID 是唯一
+/// 身份主键并承载身份权益，当前账户只证明本次操作获得该 CID 控制者授权。
 /// 本结构只在读取时构造，不作为新的身份或权限 Storage。
 #[derive(
     Clone,
@@ -466,16 +518,16 @@ pub trait CitizenIdentityAuthority<AccountId, Signature> {
         action_code: u32,
     ) -> bool;
 
-    /// 校验用户对注册局占号 `(cid_number, account_id)` 的授权签名(op_tag `OP_SIGN_CID_OCCUPY`),
-    /// 证明所占匿名 CID 绑定的钱包账户受本人控制;与换绑签名域分离防重放。
+    /// 校验用户对注册局首次绑定 [`CidOccupyAuthorization`] 的授权签名
+    /// (op_tag `OP_SIGN_CID_OCCUPY`)，证明新账户受控。
     fn verify_occupy_signature(
         account_id: &AccountId,
         payload: &[u8],
         signature: &Signature,
     ) -> bool;
 
-    /// 校验注册局代匿名 CID 换绑时,新账户对 `(cid_number, new_account_id)` 的控制证明
-    /// (op_tag `OP_SIGN_CID_ADMIN_REBIND`);与占号域分离,防注册局重放占号签名成换绑。
+    /// 校验注册局代匿名或实名 CID 换绑时，新账户对 [`CidRebindAuthorization`] 的
+    /// 控制证明(op_tag `OP_SIGN_CID_ADMIN_REBIND`)；与占号域分离，防止跨动作重放。
     fn verify_admin_rebind_signature(
         account_id: &AccountId,
         payload: &[u8],
@@ -700,6 +752,11 @@ pub mod pallet {
     pub type CidByAccountId<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, CidNumberBound, OptionQuery>;
 
+    /// CID 当前账户绑定的单调修订号；首次绑定为 1，每次换绑或吊销严格加 1。
+    #[pallet::storage]
+    pub type BindingRevisionByCid<T: Config> =
+        StorageMap<_, Blake2_128Concat, CidNumberBound, u64, OptionQuery>;
+
     /// CID 占号登记表:发号全局唯一的链上真源(占号先行,墓碑不删除)。
     #[pallet::storage]
     pub type CidRegistry<T: Config> =
@@ -833,6 +890,7 @@ pub mod pallet {
                 CidRegistry::<T>::insert(cid_number, record);
                 AccountIdByCid::<T>::insert(cid_number, account_id);
                 CidByAccountId::<T>::insert(account_id, cid_number);
+                BindingRevisionByCid::<T>::insert(cid_number, 1);
             }
         }
     }
@@ -859,29 +917,32 @@ pub mod pallet {
         CitizenIdentityRevoked {
             account_id: T::AccountId,
             cid_number: CidNumberBound,
+            binding_revision: u64,
         },
         CidOccupied {
             cid_number: CidNumberBound,
             registrar_cid_number: CidNumberBound,
+            binding_revision: u64,
         },
         /// 公民自助占号(匿名):本人自签占号 + 占即绑账户,无注册局、无公民档。
         CidSelfOccupied {
             cid_number: CidNumberBound,
             account_id: T::AccountId,
+            binding_revision: u64,
         },
-        /// 匿名 CID 自助换绑:CID 从旧账户换绑到新账户(社交资产随 CID 不变)。
+        /// CID 从旧账户换绑到新账户；业务数据仍由永久 CID 寻址。
         CidAccountIdRebound {
             cid_number: CidNumberBound,
             old_account_id: T::AccountId,
             new_account_id: T::AccountId,
+            binding_revision: u64,
         },
         CidRevoked {
             cid_number: CidNumberBound,
+            binding_revision: u64,
         },
         /// 四级人口已经完整推进至该 UTC+8 日期。
-        PopulationDateReady {
-            eligibility_date: u32,
-        },
+        PopulationDateReady { eligibility_date: u32 },
         /// 日期推进发现计数或日期不变量损坏，人口读取随即 fail-closed。
         PopulationMaintenanceFaulted {
             eligibility_date: u32,
@@ -919,6 +980,18 @@ pub mod pallet {
         NotBoundToAnyCid,
         /// 自助换绑:该 CID 已升级投票/竞选公民,账户变更只能经注册局。
         CivicRebindRequiresRegistrar,
+        /// 换绑目标与当前绑定账户相同；绑定 revision 只记录真实变更。
+        RebindAccountIdUnchanged,
+        /// 调用声明的绑定 revision 不是该 CID 当前 revision。
+        BindingRevisionMismatch,
+        /// 绑定 revision 不存在，说明 CID 绑定状态不完整。
+        BindingRevisionMissing,
+        /// 绑定 revision 已达上限，禁止静默饱和后继续换绑或吊销。
+        BindingRevisionOverflow,
+        /// 换绑授权已过期，或 expires_at 不晚于当前链上时间。
+        CidAuthorizationExpired,
+        /// CID 首次绑定或换绑授权有效期超过 600 秒。
+        CidAuthorizationLifetimeTooLong,
         /// 自助换绑:旧绑定账户的授权签名无效。
         InvalidRebindSignature,
         /// 注册局代换绑:新账户的控制证明签名无效。
@@ -1177,6 +1250,9 @@ pub mod pallet {
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
             ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+            // 重复吊销必须在任何身份、人口或 revision 写入前拒绝，避免已撤销
+            // CID 再次推进绑定轮次。
+            Self::ensure_cid_occupied_active(&cid_number)?;
             let account = AccountIdByCid::<T>::get(&cid_number).ok_or(Error::<T>::CidNotFound)?;
             let old = VotingIdentityByCid::<T>::get(&cid_number)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
@@ -1198,16 +1274,19 @@ pub mod pallet {
                 4,
             )?;
 
+            // 在任何身份/人口 storage 写入前先验证 revision 可推进，避免失败留下半状态。
+            let binding_revision = Self::next_binding_revision(&cid_number)?;
             let mut revoked = old.clone();
             revoked.citizen_status = CitizenStatus::Revoked;
             revoked.updated_at = frame_system::Pallet::<T>::block_number();
             Self::replace_voting_identity(cid_number.clone(), revoked, Some(old))?;
             CandidateIdentityByCid::<T>::remove(&cid_number);
-            // 身份吊销联动登记表墓碑,保证发号真源与身份状态一致。
-            Self::tombstone_cid_record(&cid_number);
+            // 身份吊销联动登记表墓碑并推进绑定 revision，旧轮次授权随即永久失效。
+            Self::tombstone_cid_record(&cid_number, binding_revision);
             Self::deposit_event(Event::<T>::CitizenIdentityRevoked {
                 account_id: account,
                 cid_number,
+                binding_revision,
             });
             Ok(())
         }
@@ -1219,10 +1298,7 @@ pub mod pallet {
         /// 公钥)`,D2 锚定基;换绑授权来自当前双向绑定而非本值)。复用已退役的 call_index(5)。
         #[pallet::call_index(5)]
         #[pallet::weight(<T as Config>::WeightInfo::self_occupy_cid())]
-        pub fn self_occupy_cid(
-            origin: OriginFor<T>,
-            cid_number: CidNumberBound,
-        ) -> DispatchResult {
+        pub fn self_occupy_cid(origin: OriginFor<T>, cid_number: CidNumberBound) -> DispatchResult {
             let account_id = ensure_signed(origin)?;
             // 自助只出匿名身份,类型限 CTZN(公民)/ NATP(居民),用户自选。
             Self::ensure_valid_self_registrable_cid(&cid_number)?;
@@ -1231,7 +1307,7 @@ pub mod pallet {
             // 一账户一 CID + CID 未被他人绑(复用双向闭环校验)。
             Self::ensure_account_id_binding_available(&cid_number, &account_id)?;
             // 占号:SELF sentinel 作 registrar、居住地空(匿名去地域);
-            // 格式 + CTZN + 全局原子查重仲裁在 do_occupy_cid 内。
+            // 格式 + CTZN|NATP + 全局原子查重仲裁在 do_occupy_cid 内。
             let self_registrar = CidNumberBound::truncate_from(SELF_OCCUPY_REGISTRAR.to_vec());
             let empty_area = AreaCodeBound::default();
             Self::do_occupy_cid(
@@ -1242,37 +1318,54 @@ pub mod pallet {
                 &empty_area,
             )?;
             // 占即绑:写双向绑定(匿名 CID = 有绑定、无 VotingIdentity)。
-            Self::bind_account_id(&cid_number, &account_id);
+            let binding_revision = Self::bind_account_id(&cid_number, &account_id);
             Self::deposit_event(Event::<T>::CidSelfOccupied {
                 cid_number,
                 account_id,
+                binding_revision,
             });
             Ok(())
         }
 
-        /// 匿名 CID 自助换绑(轮换):把 CID 从当前绑定账户换绑到新账户,CID 与社交资产不变。
+        /// 匿名 CID 自助换绑(轮换):把 CID 从当前绑定账户换绑到新账户,CID 与业务数据不变。
         /// origin = 新账户(自签即证新账户受控 + 自付费);`old_account_signature` = 旧绑定账户
-        /// 对 `(cid_number, new_account_id)` 的 op-tag 授权签名(D2「当前绑定账户签名授权」)。
+        /// 对 [`CidRebindAuthorization`] 的 op-tag 授权签名。
         /// 旧账户从 `AccountIdByCid[cid]` 反查、不用传;已升级投票/竞选公民的 CID 只能经注册局
-        /// 换绑(q1)。CTZN 匿名 + NATP 均可自助换绑。新账户任意(能签即可),但不得已绑另一 CID。
+        /// 换绑。CTZN 匿名 + NATP 均可自助换绑。新账户任意(能签即可),但不得已绑另一 CID。
         #[pallet::call_index(9)]
         #[pallet::weight(<T as Config>::WeightInfo::self_rebind_cid_account_id())]
         pub fn self_rebind_cid_account_id(
             origin: OriginFor<T>,
             cid_number: CidNumberBound,
+            expected_binding_revision: u64,
+            expires_at: u64,
             old_account_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let new_account_id = ensure_signed(origin)?;
             // 旧账户 = 该 CID 当前绑定账户(不存在=号未占/已吊销 → 拒);旧账户是谁链上反查。
             let old_account_id =
                 AccountIdByCid::<T>::get(&cid_number).ok_or(Error::<T>::NotBoundToAnyCid)?;
+            Self::ensure_cid_occupied_active(&cid_number)?;
             // 匿名限定(q1):已升级投票/竞选公民只能经注册局换绑。
             ensure!(
                 !VotingIdentityByCid::<T>::contains_key(&cid_number),
                 Error::<T>::CivicRebindRequiresRegistrar
             );
-            // 旧账户对 (cid ‖ 新账户) 的授权签名(域 OP_SIGN_CID_REBIND,防重放)。
-            let payload = (cid_number.clone(), new_account_id.clone()).encode();
+            ensure!(
+                old_account_id != new_account_id,
+                Error::<T>::RebindAccountIdUnchanged
+            );
+            Self::ensure_expected_binding_revision(&cid_number, expected_binding_revision)?;
+            Self::ensure_cid_authorization_window(expires_at)?;
+            // 创世哈希 + 当前账户 + revision + 过期时间共同锁死本次授权，禁止跨链/跨轮次重放。
+            let payload = Self::rebind_authorization(
+                cid_number.clone(),
+                old_account_id.clone(),
+                new_account_id.clone(),
+                expected_binding_revision,
+                expires_at,
+            )
+            .encode();
             Self::ensure_rebind_signature(&old_account_id, &payload, &old_account_signature)?;
             // 新账户任意,但不得已绑另一个 CID(一账户一 CID)。
             if let Some(existing) = CidByAccountId::<T>::get(&new_account_id) {
@@ -1282,20 +1375,26 @@ pub mod pallet {
                 );
             }
             // 换绑:删旧反向索引、写新双向绑定。
-            Self::rebind_account_id(&cid_number, &old_account_id, &new_account_id);
+            let binding_revision = Self::rebind_account_id(
+                &cid_number,
+                &old_account_id,
+                &new_account_id,
+                expected_binding_revision,
+            )?;
             Self::deposit_event(Event::<T>::CidAccountIdRebound {
                 cid_number,
                 old_account_id,
                 new_account_id,
+                binding_revision,
             });
             Ok(())
         }
 
-        /// 注册局代匿名 CID 换绑:用户丢失旧钱包钥、到线下注册局把 CID 换绑到新账户,
-        /// CID 与社交资产不变(D4b)。origin = 注册局管理员(代办,不需旧账户签名);任一在册
-        /// 注册局可办(`can_manage_anonymous_cid`,全国号不辖区匹配);新账户对
-        /// `(cid_number, new_account_id)` 的签名(域 `OP_SIGN_CID_ADMIN_REBIND`)证新账户受控。
-        /// 匿名限定:已升级投票/竞选公民只能经对应注册局换绑(留后期)。费=机构付费。
+        /// 注册局代 CID 换绑:用户丢失旧钱包钥后，把永久 CID 换绑到新账户。
+        ///
+        /// 匿名 CID 由任一在册 CREG/FRG 办理；实名 CID 必须由本市 CREG 或对应省 FRG
+        /// 依其投票身份居住地作用域办理。新账户对 [`CidRebindAuthorization`] 使用
+        /// `OP_SIGN_CID_ADMIN_REBIND` 签名，证明新账户受控。费用由注册局机构承担。
         /// 复用删批量占号释放出的 `call_index(7)`。
         #[pallet::call_index(7)]
         #[pallet::weight(<T as Config>::WeightInfo::admin_rebind_cid_account_id())]
@@ -1305,34 +1404,50 @@ pub mod pallet {
             actor_role_code: RoleCodeBound,
             cid_number: CidNumberBound,
             new_account_id: T::AccountId,
+            expected_binding_revision: u64,
+            expires_at: u64,
             new_account_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
             // 旧账户 = 该 CID 当前绑定账户(不存在=号未占/已吊销 → 拒)。
             let old_account_id =
                 AccountIdByCid::<T>::get(&cid_number).ok_or(Error::<T>::NotBoundToAnyCid)?;
-            // 匿名限定:已升级投票/竞选公民只能经对应注册局换绑(留后期)。
+            Self::ensure_cid_occupied_active(&cid_number)?;
             ensure!(
-                !VotingIdentityByCid::<T>::contains_key(&cid_number),
-                Error::<T>::CivicRebindRequiresRegistrar
+                old_account_id != new_account_id,
+                Error::<T>::RebindAccountIdUnchanged
             );
-            // 鉴权:任一在册注册局持 citizen-identity 管理权即可,不做辖区匹配(全国号)。
-            ensure!(
-                T::CitizenIdentityAuthority::can_manage_anonymous_cid(
+            Self::ensure_expected_binding_revision(&cid_number, expected_binding_revision)?;
+            Self::ensure_cid_authorization_window(expires_at)?;
+            // 实名按居住地作用域，匿名按全国注册局权限；两条路径共用 action_code 7。
+            let authorized = match VotingIdentityByCid::<T>::get(&cid_number) {
+                Some(identity) => T::CitizenIdentityAuthority::can_manage_voting_identity(
+                    &registrar,
+                    actor_cid_number.as_slice(),
+                    actor_role_code.as_slice(),
+                    identity.residence_province_code.as_slice(),
+                    identity.residence_city_code.as_slice(),
+                    CitizenIdentityLevel::Voting,
+                    7,
+                ),
+                None => T::CitizenIdentityAuthority::can_manage_anonymous_cid(
                     &registrar,
                     actor_cid_number.as_slice(),
                     actor_role_code.as_slice(),
                     7,
                 ),
-                Error::<T>::UnauthorizedRegistrar
-            );
-            // 新账户控制证明:新账户对 (cid ‖ 新账户) 的签名(域 OP_SIGN_CID_ADMIN_REBIND,防重放)。
-            let payload = (cid_number.clone(), new_account_id.clone()).encode();
-            Self::ensure_admin_rebind_signature(
-                &new_account_id,
-                &payload,
-                &new_account_signature,
-            )?;
+            };
+            ensure!(authorized, Error::<T>::UnauthorizedRegistrar);
+            // 创世哈希 + 当前账户 + revision + 过期时间共同锁死新账户控制证明。
+            let payload = Self::rebind_authorization(
+                cid_number.clone(),
+                old_account_id.clone(),
+                new_account_id.clone(),
+                expected_binding_revision,
+                expires_at,
+            )
+            .encode();
+            Self::ensure_admin_rebind_signature(&new_account_id, &payload, &new_account_signature)?;
             // 新账户任意,但不得已绑另一个 CID(一账户一 CID)。
             if let Some(existing) = CidByAccountId::<T>::get(&new_account_id) {
                 ensure!(
@@ -1340,12 +1455,18 @@ pub mod pallet {
                     Error::<T>::AccountIdAlreadyBoundToAnotherCid
                 );
             }
-            // 换绑:删旧反向索引、写新双向绑定(old==new 幂等 no-op)。
-            Self::rebind_account_id(&cid_number, &old_account_id, &new_account_id);
+            // 换绑:删旧反向索引、写新双向绑定并单调推进 revision。
+            let binding_revision = Self::rebind_account_id(
+                &cid_number,
+                &old_account_id,
+                &new_account_id,
+                expected_binding_revision,
+            )?;
             Self::deposit_event(Event::<T>::CidAccountIdRebound {
                 cid_number,
                 old_account_id,
                 new_account_id,
+                binding_revision,
             });
             Ok(())
         }
@@ -1353,7 +1474,7 @@ pub mod pallet {
         /// 注册局占号(占即绑,匿名):管理员一笔冷签为用户占一个 CN 前缀的匿名身份 CID
         /// 并当场绑定用户钱包账户。类型限 CTZN(公民)/ NATP(居民);CID 为全国号、无省市
         /// 归属,任一在册注册局(CREG/FRG)均可办(`can_manage_anonymous_cid`,不做辖区匹配)。
-        /// 用户对 `(cid_number, account_id)` 的签名(域 `OP_SIGN_CID_OCCUPY`)证明账户受控;
+        /// 用户对 [`CidOccupyAuthorization`] 的签名(域 `OP_SIGN_CID_OCCUPY`)证明账户受控;
         /// commitment 链上算 `blake2_256(account_id 公钥)`(与自助占号同基);不写 VotingIdentity
         /// (匿名),居住/姓名等档案改由 onchina 链下 `citizens` 表选填保存。
         #[pallet::call_index(6)]
@@ -1364,6 +1485,7 @@ pub mod pallet {
             actor_role_code: RoleCodeBound,
             cid_number: CidNumberBound,
             account_id: T::AccountId,
+            expires_at: u64,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -1379,8 +1501,23 @@ pub mod pallet {
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
-            // 用户签名:对 (cid ‖ 账户) 的授权,证账户受控(域 OP_SIGN_CID_OCCUPY,防重放)。
-            let payload = (cid_number.clone(), account_id.clone()).encode();
+            // 注册局首次绑定只接受从未登记、从未绑定且 revision 不存在的 CID。
+            ensure!(
+                !CidRegistry::<T>::contains_key(&cid_number)
+                    && !AccountIdByCid::<T>::contains_key(&cid_number)
+                    && !BindingRevisionByCid::<T>::contains_key(&cid_number),
+                Error::<T>::CidAlreadyOccupied
+            );
+            Self::ensure_cid_authorization_window(expires_at)?;
+            // 创世哈希 + 固定 revision=0 + 过期时间共同锁死首次绑定证明。
+            let payload = CidOccupyAuthorization {
+                genesis_hash: frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::default()),
+                cid_number: cid_number.clone(),
+                account_id: account_id.clone(),
+                expected_binding_revision: 0,
+                expires_at,
+            }
+            .encode();
             Self::ensure_occupy_signature(&account_id, &payload, &citizen_signature)?;
             // 一账户一 CID + CID 未被他人绑(复用双向闭环校验)。
             Self::ensure_account_id_binding_available(&cid_number, &account_id)?;
@@ -1436,11 +1573,16 @@ pub mod pallet {
                 ),
             };
             ensure!(authorized, Error::<T>::UnauthorizedRegistrar);
+            // 在身份/人口 storage 发生任何写入前验证 revision 可推进。
+            let binding_revision = Self::next_binding_revision(&cid_number)?;
             if AccountIdByCid::<T>::contains_key(&cid_number) {
                 Self::revoke_bound_identity(&cid_number)?;
             }
-            Self::tombstone_cid_record(&cid_number);
-            Self::deposit_event(Event::<T>::CidRevoked { cid_number });
+            Self::tombstone_cid_record(&cid_number, binding_revision);
+            Self::deposit_event(Event::<T>::CidRevoked {
+                cid_number,
+                binding_revision,
+            });
             Ok(())
         }
     }
@@ -1483,16 +1625,19 @@ pub mod pallet {
             }
         }
 
-        /// 登记表墓碑:Active → Revoked;不存在或已吊销则不动(幂等)。
-        fn tombstone_cid_record(cid_number: &CidNumberBound) {
-            CidRegistry::<T>::mutate(cid_number, |rec| {
-                if let Some(rec) = rec {
-                    if rec.status == CidRecordStatus::Active {
-                        rec.status = CidRecordStatus::Revoked;
-                        rec.revoked_at = Some(frame_system::Pallet::<T>::block_number());
-                    }
+        /// 登记表墓碑:Active → Revoked，并严格推进绑定 revision。
+        ///
+        /// 调用方必须已完成 Active 状态及 revision 可推进的全部预检；本 helper
+        /// 在首个写入之后保持不可失败，确保身份、人口、登记表和 revision 原子落地。
+        fn tombstone_cid_record(cid_number: &CidNumberBound, binding_revision: u64) {
+            CidRegistry::<T>::mutate(cid_number, |record| {
+                if let Some(record) = record {
+                    debug_assert_eq!(record.status, CidRecordStatus::Active);
+                    record.status = CidRecordStatus::Revoked;
+                    record.revoked_at = Some(frame_system::Pallet::<T>::block_number());
                 }
             });
+            BindingRevisionByCid::<T>::insert(cid_number, binding_revision);
         }
 
         /// 占号核心:链上原子「验格式+查重+登记」。
@@ -1504,7 +1649,7 @@ pub mod pallet {
             residence_province_code: &AreaCodeBound,
             residence_city_code: &AreaCodeBound,
         ) -> DispatchResult {
-            // CID 号类型校验由各调用方负责:注册局 occupy = CTZN;自助 occupy = CTZN|NATP。
+            // CID 号类型校验由各调用方负责；注册局与自助入口均只允许 CTZN|NATP。
             match CidRegistry::<T>::get(cid_number) {
                 None => {
                     CidRegistry::<T>::insert(
@@ -1522,6 +1667,7 @@ pub mod pallet {
                     Self::deposit_event(Event::<T>::CidOccupied {
                         cid_number: cid_number.clone(),
                         registrar_cid_number: registrar_cid_number.clone(),
+                        binding_revision: 1,
                     });
                     Ok(())
                 }
@@ -1649,7 +1795,8 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 校验用户对注册局占号账户的授权签名(op_tag OP_SIGN_CID_OCCUPY)。
+        /// 校验用户对注册局首次绑定 [`CidOccupyAuthorization`] 的授权签名
+        /// (op_tag OP_SIGN_CID_OCCUPY)。
         fn ensure_occupy_signature(
             account_id: &T::AccountId,
             payload: &[u8],
@@ -1712,20 +1859,79 @@ pub mod pallet {
             Ok(())
         }
 
-        fn bind_account_id(cid_number: &CidNumberBound, account: &T::AccountId) {
+        fn bind_account_id(cid_number: &CidNumberBound, account: &T::AccountId) -> u64 {
             AccountIdByCid::<T>::insert(cid_number, account);
             CidByAccountId::<T>::insert(account, cid_number);
+            if let Some(binding_revision) = BindingRevisionByCid::<T>::get(cid_number) {
+                return binding_revision;
+            }
+            BindingRevisionByCid::<T>::insert(cid_number, 1);
+            1
         }
 
-        /// 换绑:删旧账户反向索引、把双向绑定改指向新账户(old==new 时为幂等 no-op)。
+        /// 换绑:删旧账户反向索引、写入新双向绑定并把 revision 严格推进一轮。
         fn rebind_account_id(
             cid_number: &CidNumberBound,
             old_account: &T::AccountId,
             new_account: &T::AccountId,
-        ) {
+            expected_binding_revision: u64,
+        ) -> Result<u64, DispatchError> {
+            let binding_revision = expected_binding_revision
+                .checked_add(1)
+                .ok_or(Error::<T>::BindingRevisionOverflow)?;
             CidByAccountId::<T>::remove(old_account);
             AccountIdByCid::<T>::insert(cid_number, new_account);
             CidByAccountId::<T>::insert(new_account, cid_number);
+            BindingRevisionByCid::<T>::insert(cid_number, binding_revision);
+            Ok(binding_revision)
+        }
+
+        /// 构造四端共用换绑载荷；字段声明顺序即 SCALE 协议顺序。
+        fn rebind_authorization(
+            cid_number: CidNumberBound,
+            expected_old_account_id: T::AccountId,
+            new_account_id: T::AccountId,
+            expected_binding_revision: u64,
+            expires_at: u64,
+        ) -> CidRebindAuthorization<T::Hash, T::AccountId> {
+            CidRebindAuthorization {
+                genesis_hash: frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::default()),
+                cid_number,
+                expected_old_account_id,
+                new_account_id,
+                expected_binding_revision,
+                expires_at,
+            }
+        }
+
+        fn ensure_expected_binding_revision(
+            cid_number: &CidNumberBound,
+            expected_binding_revision: u64,
+        ) -> DispatchResult {
+            let current = BindingRevisionByCid::<T>::get(cid_number)
+                .ok_or(Error::<T>::BindingRevisionMissing)?;
+            ensure!(
+                current == expected_binding_revision,
+                Error::<T>::BindingRevisionMismatch
+            );
+            Ok(())
+        }
+
+        fn ensure_cid_authorization_window(expires_at: u64) -> DispatchResult {
+            let now = <T::TimeProvider as frame_support::traits::UnixTime>::now().as_secs();
+            ensure!(expires_at > now, Error::<T>::CidAuthorizationExpired);
+            ensure!(
+                expires_at <= now.saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS),
+                Error::<T>::CidAuthorizationLifetimeTooLong
+            );
+            Ok(())
+        }
+
+        fn next_binding_revision(cid_number: &CidNumberBound) -> Result<u64, DispatchError> {
+            BindingRevisionByCid::<T>::get(cid_number)
+                .ok_or(Error::<T>::BindingRevisionMissing)?
+                .checked_add(1)
+                .ok_or(Error::<T>::BindingRevisionOverflow.into())
         }
 
         fn identity_from_payload(

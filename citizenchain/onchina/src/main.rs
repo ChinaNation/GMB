@@ -2530,8 +2530,17 @@ fn main() {
         let frontend_dist = std::env::var("ONCHINA_FRONTEND_DIST")
             .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/frontend/dist").to_string());
         let frontend_index = format!("{frontend_dist}/index.html");
-        let frontend_service = tower_http::services::ServeDir::new(&frontend_dist)
-            .not_found_service(tower_http::services::ServeFile::new(&frontend_index));
+        // ServeDir 只发 Last-Modified,不发 Cache-Control;浏览器会按 RFC 9111 启发式缓存
+        // index.html,而它是内容哈希的唯一索引——被缓存则客户端永远拿不到新的
+        // assets/index-<hash>.js 引用。缓存策略单源见 core::http_security::static_cache_control。
+        let frontend_service = Router::new()
+            .fallback_service(
+                tower_http::services::ServeDir::new(&frontend_dist)
+                    .not_found_service(tower_http::services::ServeFile::new(&frontend_index)),
+            )
+            .layer(middleware::from_fn(
+                core::http_security::static_cache_headers,
+            ));
         let app = Router::new()
             .merge(public_routes)
             .merge(auth_routes)
@@ -2732,7 +2741,10 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "admin no longer belongs to selected institution" => {
             "ONCHINA_LOGIN_NODE_BINDING_ADMIN_MISMATCH"
         }
-        "login persist failed" => "ONCHINA_LOGIN_PERSIST_FAILED",
+        "login state error" => "ONCHINA_LOGIN_STATE_ERROR",
+        _ if message.starts_with("authorization scope unavailable") => {
+            "ONCHINA_LOGIN_SCOPE_UNAVAILABLE"
+        }
         "challenge account_id mismatch" => "ONCHINA_BIND_ACCOUNT_ID_MISMATCH",
         "signature verify failed" => "ONCHINA_BIND_SIGNATURE_VERIFY_FAILED",
         "当前注册局缺少机构主账户绑定" => "ONCHINA_REGISTRY_MAIN_ACCOUNT_MISSING",

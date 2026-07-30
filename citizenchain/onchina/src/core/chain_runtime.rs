@@ -1131,31 +1131,6 @@ pub(crate) async fn institution_accounts_lookup(
     Ok(out)
 }
 
-/// 读链上 `CitizenIdentity::CidRegistry` 判占用:`true` = 已占号(含墓碑,号永不复用)。
-/// 占即绑后 commitment 链上算,onchina 发号只需判该号是否空闲,不再读记录字段。
-pub(crate) async fn cid_registry_lookup(cid_number: &str) -> Result<bool, String> {
-    let ws_url = super::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for cid registry failed: {e}"))?;
-    let storage = client
-        .storage()
-        .at_latest()
-        .await
-        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    let query = dynamic::storage(
-        "CitizenIdentity",
-        "CidRegistry",
-        vec![dynamic::Value::from_bytes(cid_number.as_bytes())],
-    );
-    let occupied = storage
-        .fetch(&query)
-        .await
-        .map_err(|e| format!("fetch cid registry failed: {e}"))?
-        .is_some();
-    Ok(occupied)
-}
-
 /// 链上公民竞选身份专属公开档案(投票身份为 None)。
 pub(crate) struct OnChainCandidate {
     pub(crate) family_name: Vec<u8>,

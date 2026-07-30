@@ -1,17 +1,21 @@
-# ADR-031 CID 全局唯一与链上占号体系(终稿 v3，节点永久守卫已落地)
+# ADR-031 CID 全局唯一与链上占号体系(现行 v4，节点永久守卫已落地)
 
 ## 标题
 
 CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行、墓碑不删、幂等续用;当前国家/省/市公权机构创世直铸(常量 296 + 模板派生 49,297 = 49,593),零交易;镇级公权机构、国家/省/市新增公权机构、私权机构与公民均走运行期注册/占号先行流程。
 
-> v1(2026-07-02)为批量交易上链方案;v2(2026-07-03)为扩大创世范围方案;v3(2026-07-04)按用户最终口径改为创世到国家/省/市,镇级和新增机构运行期注册。历史推演见 git 历史与 `memory/08-tasks/` 卡片。
+> v1(2026-07-02)为批量交易上链方案;v2(2026-07-03)为扩大创世范围方案;v3(2026-07-04)按用户最终口径改为创世到国家/省/市,镇级和新增机构运行期注册。v4(2026-07-29)以 CID 作为公民唯一身份主键，将钱包收敛为可换绑的签名鉴权账户，并用完整授权、防重放 revision 和 finalized 精确核验取代旧批量占号/短载荷/仅看进块方案。v4 是当前规范，历史推演只保留在 git 历史与任务卡的历史记录中。
 
 ## 一、铁则(用户已确认)
 
 1. **查询 ≠ 占号**:唯一性仲裁只能是链上交易执行时的原子「验格式 + 查重 + 登记」;链下 RPC 预查仅作快速失败优化(TOCTOU 竞态防不住并发)。
-2. **占号先行**:建档 = 本地生成号 → 占号交易 InBestBlock → 才落本地档案;占号即终身绑定。
+2. **占号先行**:建档 = 本地生成号 → 占号交易 finalized 且
+   `System.ExtrinsicSuccess` → 在同一 finalized 块精确核对 CID 状态、账户、绑定版本、
+   注册局和账户承诺 → 才落本地档案。CID 终身不变，钱包账户可以依法换绑。
 3. **墓碑不删除**:清档/关闭发吊销交易,链上状态 Active→Revoked/Closed,存储项永不删除、号码永不复用(对齐 ADR-021 行政区码墓碑)。
-4. **幂等续用**:占号携档案承诺哈希(建档稳定字段 blake2_256);落库失败重试识别「同注册局 + 同承诺」直接续用,孤号不产生。
+4. **幂等恢复**:网络提交前先持久化交易哈希与 finalized 锚点；断线后分批回扫并持久化游标，
+   只有扫到锚点且 nonce 仍可用时才重发完全相同的 extrinsic。链成功后先持久化 finalized
+   区块标记，再补本地投影；投影失败重试不得再次提交。
 5. **校验单源**:链上链下同一套 `primitives::cid`(码表/生成器/校验和/家族谓词),pallet 写入口全量接入。
 6. **当前国家/省/市公权机构零交易**:创世直铸,与 NRC/PRC/PRB/FRG/NJD 同一模式;镇级和新增机构只走注册局运行期注册。
 
@@ -36,14 +40,30 @@ storage CidRegistry: CidNumberBound → {
   status: Active | Revoked,   // 墓碑
   registered_at, revoked_at,
 }
-call occupy_cid(registrar_account, cid_number, commitment, province_code, city_code)
-call occupy_cids_batch(registrar_account, items ≤ 10_000)   // 公民批量建档,一次冷签占 N 号
-call revoke_cid(registrar_account, cid_number)               // Active→Revoked;有绑定身份则联动置 Revoked
+storage AccountIdByCid: CidNumberBound → AccountId32
+storage CidByAccountId: AccountId32 → CidNumberBound
+storage BindingRevisionByCid: CidNumberBound → u64
+
+call self_occupy_cid(...)                                    // call 5，公民 App 自助首次绑定
+call occupy_cid(actor_cid, actor_role, cid, account_id,
+                expires_at, citizen_signature)               // call 6，注册局代办首次绑定
+call admin_rebind_cid_account_id(actor_cid, actor_role, cid,
+                new_account_id, expected_binding_revision,
+                expires_at, new_account_signature)           // call 7，注册局代办换绑
+call revoke_cid(actor_cid, actor_role, cid_number)            // call 8，Active→Revoked
+call self_rebind_cid_account_id(...)                          // call 9，公民 App 自助换绑
 ```
 
-- 校验:`parse_cid_number_parts_bytes` + 机构码 == CTZN(复用卡1 单源)。
-- 授权:`CitizenIdentityAuthority` 省市 scope,标准 extrinsic 签名(签名分层铁律,零 op_tag)。
-- 幂等:已存在且「同注册局 + 同 commitment + Active」→ Ok;否则 `CidAlreadyOccupied`。
+- 校验:`parse_cid_number_parts_bytes` + 人主体类型规则(复用卡1 单源)；同一 CID 同时只能绑定一个
+  Active `account_id`，同一账户也只能反向绑定一个 CID。
+- 授权:匿名 CID 可由任一在册 CREG/FRG 办理；civic CID 只允许投票身份居住城市的 CREG
+  或对应省 FRG 办理。个人多签不属于注册局路径。
+- 用户授权:`CidOccupyAuthorization`/`CidRebindAuthorization` 必须逐字节绑定
+  `genesis_hash`、CID、预期旧/新账户、`expected_binding_revision` 和 `expires_at`；
+  `expires_at` 取同一 finalized 快照的 `Timestamp.Now + 300s`，链端上限 600 秒。
+- 防重放:首次绑定预期 revision=0，成功写 revision=1；每次换绑必须命中预期旧账户和
+  revision，成功后精确加一。旧钱包不参与注册局丢钥换绑签名。
+- 旧批量绑定调用已删除，call 7 已由 `admin_rebind_cid_account_id` 使用，不得恢复旧流程。
 - `register_voting_identity` 新前置:`CidRegistry[cid].status == Active`。
 - 机构侧写入时查重已存在(`Institutions` + sibling `cid_exists`),不另建表;运行期新设机构经 register/create 即占号。
 
@@ -55,7 +75,8 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 
 ### 3.3 费类
 
-- `occupy_cid`/`occupy_cids_batch`/`revoke_cid` → **Free**(公共登记服务,滥用由链上注册局授权门槛拦截);`configs/mod.rs` 穷尽 match 显式归类(编译期强制)。
+- `occupy_cid`/`admin_rebind_cid_account_id`/`revoke_cid` 走现行机构交易费路由；
+  自助入口按公民自付费规则。`configs/mod.rs` 穷尽 match 显式归类(编译期强制)。
 - 创世直铸走创世块 state 写入,**不产生交易、不产生任何手续费**。
 
 ### 3.4 节点永久守卫（2026-07-10 已落地）
@@ -126,16 +147,23 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
 
 ## 五、onchina 端
 
-- **组装+提交通路(卡2)**:onchina 现状零自动提交(全部=裸 call_data→冷签→钱包提交,且回写断链)。按 node/src/governance/signing.rs 骨架补「验签后组装 + accountNextIndex 实时 nonce + immortal era + system_dryRun 拒 Future/Stale + author_submitExtrinsic + 90s 后台 nonce 核对」;**QR 仍只签不提交**,冷钱包安全边界不变。
-- **事件回写闭环(卡2)**:indexer 补解析 `CidOccupied`/`CidRevoked`/机构注册事件 → 回写 citizens/subjects 的 `onchain_*` 列(修「无写入者」缺口)。
+- **组装+提交通路**:OnChina 以实时 nonce 重建并本地验签，`system_dryRun` 通过后用
+  submit-and-watch 跟踪目标 extrinsic；只有 finalized 且该 extrinsic 出现
+  `System.ExtrinsicSuccess` 才进入回写。提交前持久化 tx hash/锚点，恢复扫描每批最多
+  128 个 finalized 块并保存游标，禁止无界回扫与盲目重放。
+- **事件回写闭环**:目标 extrinsic 成功后，在同一 finalized block 读取并严格解码
+  `CidRegistry`、`AccountIdByCid`、`BindingRevisionByCid`；成功标记必须先于本地
+  `citizens/subjects` 投影保存。投影失败保留会话，下一次只补投影。
 - **公民建档时序(卡2)**:
 
 ```text
 录入档案 → 生成号(种子 + nonce 0..999 重试,治愈同名同生日碰撞死局) → [可选 RPC 预查]
-→ 管理员冷签 occupy_cid(单笔;批量建档合并 occupy_cids_batch 一次扫码)
-→ onchina 组装+dry-run+提交 → InBestBlock
-→ 成功:citizens 落库(含 tx_hash/块高);CidAlreadyOccupied:nonce+1 重发号
-→ 落库失败/重启恢复:按种子逐 nonce 查链,遇「本局+同 commitment」直接续用落库
+→ 用户钱包签完整首次绑定授权(创世/CID/revision=0/过期时间/自选账户)
+→ 管理员冷签 occupy_cid(单笔)
+→ OnChina 组装+dry-run+submit-and-watch → finalized + ExtrinsicSuccess
+→ 同 finalized 块核对 Active+目标账户+revision=1+办理注册局+blake2_256(account_id)
+→ 先保存 finalized 标记，再写 citizens 投影(含 tx_hash/块高)
+→ 断线按持久化游标分批恢复；投影失败只补投影，不重提
 清档 → revoke_cid(PasskeyColdSign)→ 链上墓碑 + 本地清档
 ```
 
@@ -154,7 +182,7 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
 ## 七、影响
 
 - runtime breaking,重新创世,零兼容零残留。
-- 公民建档依赖链活性(fail-closed),每单一次管理员冷签(批量入口摊薄);链上可枚举每省建档量与全国机构册(号内无姓名生日)。
+- 公民建档依赖链活性(fail-closed),每单一次用户账户控制签名和一次管理员冷签；链上不保存姓名生日等档案全文。
 - CitizenApp/CitizenWallet:公民确认签名(ACTION_CITIZEN_IDENTITY)与扩展尾规则不变;链交易提交动作从钱包端移到 onchina 后端。
 - 节点首启复制官方创世状态包并等待 RPC ready;GenesisBuilder 本地物化仅作开发/排障兜底。
 

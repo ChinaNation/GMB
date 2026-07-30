@@ -172,7 +172,9 @@ function translateErrorCode(code: string): string | null {
     ONCHINA_LOGIN_NODE_BINDING_REQUEST_INVALID: '节点机构绑定请求不完整，请重新扫码登录',
     ONCHINA_LOGIN_NODE_BINDING_CANDIDATE_NOT_FOUND: '所选机构不在本次登录候选中，请重新扫码登录',
     ONCHINA_LOGIN_NODE_BINDING_ADMIN_MISMATCH: '当前管理员已不属于所选机构，无法绑定本节点',
-    ONCHINA_LOGIN_PERSIST_FAILED: '登录会话保存失败，请稍后重试',
+    ONCHINA_LOGIN_STATE_ERROR: '登录状态读写失败，请稍后重试',
+    ONCHINA_LOGIN_SCOPE_UNAVAILABLE:
+      '无法确定该管理员的行政作用域，登录被拒绝。重试无效，请核对该机构的 CID 与省市编码',
     ONCHINA_BIND_SIGNATURE_VERIFY_FAILED: '签名验签失败，请重新扫码签名',
     ONCHINA_REGISTRY_MAIN_ACCOUNT_MISSING: '当前注册局缺少机构主账户绑定，请重新登录绑定本节点或检查链上投影',
   };
@@ -245,7 +247,7 @@ const KNOWN_ENGLISH_MESSAGES: Record<string, string> = {
   'binding_challenge_id and candidate_id are required': '节点机构绑定请求不完整，请重新扫码登录',
   'selected institution candidate not found': '所选机构不在本次登录候选中，请重新扫码登录',
   'admin no longer belongs to selected institution': '当前管理员已不属于所选机构，无法绑定本节点',
-  'login persist failed': '登录会话保存失败，请稍后重试',
+  'login state error': '登录状态读写失败，请稍后重试',
   'build login qr signature failed': '登录二维码签发失败，请检查节点平台配置',
   'binding not vote eligible': '该公民不具备投票资格',
   'binding not found': '未找到公民档案',

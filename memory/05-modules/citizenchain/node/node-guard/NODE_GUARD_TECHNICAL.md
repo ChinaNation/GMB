@@ -180,7 +180,7 @@ PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取�
 节点逐块强制：
 
 - 公民 CID 不得删除或换注册局、承诺、居住省市、登记高度，只允许 `Active → Revoked`，吊销后逐字冻结；
-- 公民投票身份必须永久以 CID 为主键，`VotingIdentityByCid` 不得删除；`WalletAccountByCid` 与 `CidByWalletAccount` 只表达当前签名钱包并必须双向闭环；
+- 公民投票身份必须永久以 CID 为主键，`VotingIdentityByCid` 不得删除；`AccountIdByCid` 与 `CidByAccountId` 只表达当前有效签名钱包账户并必须双向闭环；
 - 公私权 CID 不得同时占用；普通机构可以依法修改身份字段或删除，删除时必须同步清除其账户和索引；
 - block#0 精确机构不得删除、跨公私权命名空间复制，且机构码、创建高度和镇码不得替换；名称和法定代表人仍可依法更新；
 - 固定治理机构和国家单例只允许约定创世 CID，运行期不得新造同类身份；
@@ -192,14 +192,14 @@ PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取�
 
 - runtime 身份登记回调只建立本块待发队列，实际铸发在同块 `on_finalize` 完成；
 - 节点从 `primitives::citizen_const` 编译期常量、父状态累计人数和连续队列独立推导每笔金额；
-- 每笔必须对应首次出现的 `VotingIdentityByCid`，CID 哈希、`WalletAccountByCid` 和 `CidByWalletAccount` 必须闭环；
+- 每笔必须对应首次出现的 `VotingIdentityByCid`，CID 哈希、`AccountIdByCid` 和 `CidByAccountId` 必须闭环；
 - CID 哈希和账户同时做永久与本块临时防重，禁止同块重复、跨块重复、同一账户或同一 CID 重领以及超过总人数上限；
 - finalize 前不得提前推进永久累计/防重状态，finalize 后必须精确推进并清空全部临时 key；
 - 公民奖励和 PoW 奖励进入同一 `FinalizeIssuancePlan`；账户 free balance、账户其他字段及
   `Balances::TotalIssuance` 必须与汇总计划完全一致，未登记账户的 finalize 变化直接拒绝；
 - 事件与 metadata 只供审计，不参与节点判定。
 
-2026-07-21 公民 CID 主键收口验收：节点逐块和完整状态同时校验 `VotingIdentityByCid`、`WalletAccountByCid`、`CidByWalletAccount`，公民发行 8 项与 CID 生命周期 3 项测试通过；Rust 1.94.0 固定工具链 release Node 构建及 `citizenchain-fresh --tmp` 启动通过。block #0 为 `0x45144d74a7af61bb25cc08a803a19af1cdc946b007d22c774ce3acdeeebd7db4`，state root 为 `0xe916b283c7cd017aa87d2bfda2b835298195d2cbfc53c19536d0fddeae9874ea`；验收节点已停止。
+2026-07-21 公民 CID 主键收口验收：节点逐块和完整状态同时校验 `VotingIdentityByCid`、当前统一命名的 `AccountIdByCid`、`CidByAccountId`，公民发行 8 项与 CID 生命周期 3 项测试通过；Rust 1.94.0 固定工具链 release Node 构建及 `citizenchain-fresh --tmp` 启动通过。block #0 为 `0x45144d74a7af61bb25cc08a803a19af1cdc946b007d22c774ce3acdeeebd7db4`，state root 为 `0xe916b283c7cd017aa87d2bfda2b835298195d2cbfc53c19536d0fddeae9874ea`；验收节点已停止。
 
 ## 8.4 当前策略：省储行创立质押与固定利息
 

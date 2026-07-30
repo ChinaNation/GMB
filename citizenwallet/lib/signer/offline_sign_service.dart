@@ -94,11 +94,15 @@ class OfflineSignService {
       );
     }
 
-    // 注册局占号/换绑域签名:d=append_bounded(cid),按 body.action 区分(两者 d 同构、
-    // 不能靠解码区分),钱包扫码自填本账户。仅展示 CID,绿色态放行。
+    // 注册局首次绑定/换绑域签名：严格解析完整授权模板，外层 e 必须等于模板
+    // expires_at；账户槽只能由当前所选账户原位替换。
     if (QrActions.isSelfAccountDomainAction(body.action)) {
-      final cid = PayloadDecoder.readBoundedCid(body.payloadBytes);
-      if (cid == null) {
+      final isOccupy = body.action == QrActions.citizenOccupy;
+      final authorization = isOccupy
+          ? PayloadDecoder.readCidOccupyAuthorizationTemplate(body.payloadBytes)
+          : PayloadDecoder.readCidRebindAuthorizationTemplate(
+              body.payloadBytes);
+      if (authorization == null) {
         return OfflineSignVerification(
           decoded: null,
           status: SignDecisionStatus.reject,
@@ -106,15 +110,41 @@ class OfflineSignService {
           rejectReason: '占号/换绑签名载荷无法解码，已拒绝签名',
         );
       }
-      final isOccupy = body.action == QrActions.citizenOccupy;
+      if (request.expiresAt != authorization.expiresAt) {
+        return OfflineSignVerification(
+          decoded: null,
+          status: SignDecisionStatus.reject,
+          actionLabel: qrActionLabel,
+          rejectReason: '二维码过期时间与授权载荷不一致，已拒绝签名',
+        );
+      }
+      final fields = <String, String>{
+        'genesis_hash': authorization.genesisHash,
+        'cid_number': authorization.cidNumber,
+        if (authorization.expectedOldAccountId != null)
+          'expected_old_account_id': authorization.expectedOldAccountId!,
+        'expected_binding_revision':
+            authorization.expectedBindingRevision.toString(),
+        'expires_at': authorization.expiresAt.toString(),
+      };
       final decodedDomain = DecodedPayload(
         action: isOccupy ? 'citizen_occupy' : 'citizen_rebind',
         summary: isOccupy
-            ? '注册局占号绑定,把 CID $cid 绑定到你的账户'
-            : '注册局换绑,把 CID $cid 绑定到你的新账户',
-        fields: {'cid_number': cid},
-        reviewFields: {'cid_number': cid},
+            ? '注册局首次绑定,把 CID ${authorization.cidNumber} 绑定到你的账户'
+            : '注册局换绑,把 CID ${authorization.cidNumber} 绑定到你的新账户',
+        fields: fields,
+        reviewFields: fields,
       );
+      for (final fieldKey in decodedDomain.reviewFields.keys) {
+        if (!hasFieldLabel(fieldKey)) {
+          return OfflineSignVerification(
+            decoded: decodedDomain,
+            status: SignDecisionStatus.reject,
+            actionLabel: qrActionLabel,
+            rejectReason: '签名字段缺少中文名称，已拒绝签名',
+          );
+        }
+      }
       return OfflineSignVerification(
         decoded: decodedDomain,
         status: SignDecisionStatus.normal,
@@ -219,7 +249,7 @@ class OfflineSignService {
       );
     }
 
-    // 占号/换绑:b.u 留空,账户由用户自选(传入的 accountId 即选定绑定账户),跳过 b.u 相等校验。
+    // 首次绑定/换绑:b.u 留空,账户由用户自选并填入授权模板的零槽,跳过 b.u 相等校验。
     // 其余动作:当前 sr25519 的 AccountId32 与 signer public key 字节相同,只允许完全相等,不做归一化。
     if (!QrActions.isSelfAccountDomainAction(body.action) &&
         account.accountId != body.signerPublicKeyHex) {
@@ -280,13 +310,14 @@ class OfflineSignService {
       request: request,
       signatureHex: '0x${_toHex(signature)}',
       // 占号/换绑:请求 b.u 空,响应 b.u 用钱包自选账户带回,供 OnChina 取 account_id。
-      signerPublicKeyHexOverride: QrActions.isSelfAccountDomainAction(body.action)
-          ? account.accountId
-          : null,
+      signerPublicKeyHexOverride:
+          QrActions.isSelfAccountDomainAction(body.action)
+              ? account.accountId
+              : null,
     );
   }
 
-  /// 把规范 AccountId 文本(0x + 64 hex)转成 32 字节,占号/换绑签名时追加进 payload。
+  /// 把规范 AccountId 文本(0x + 64 hex)转成 32 字节,供授权模板原位填槽。
   Uint8List _accountIdBytes(String accountIdHex) {
     final hex = accountIdHex.startsWith('0x')
         ? accountIdHex.substring(2)

@@ -90,11 +90,16 @@ class SignRequestBody implements QrBody {
     required String signerPublicKeyHex,
     required String payloadHex,
   }) {
-    final signerPublicKeyBytes = _strictHexBytes(
-      signerPublicKeyHex,
-      field: 'signer_public_key',
-      expectedBytes: 32,
-    );
+    // 注册局占号/换绑请求按协议把 u 留空，由离线钱包选择账户后原位填授权模板零槽。
+    // 测试/本地构造入口必须与 fromJson 遵守同一规则，不能强迫伪造 32 字节账户。
+    final signerPublicKeyBytes = signerPublicKeyHex.isEmpty &&
+            QrActions.isSelfAccountDomainAction(action)
+        ? Uint8List(0)
+        : _strictHexBytes(
+            signerPublicKeyHex,
+            field: 'signer_public_key',
+            expectedBytes: 32,
+          );
     return SignRequestBody(
       action: action,
       signerPublicKey: _b64NoPad(signerPublicKeyBytes),

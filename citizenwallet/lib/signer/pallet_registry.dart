@@ -55,18 +55,22 @@ class PalletRegistry {
   /// `revoke_identity(actor_cid_number, cid_number)`。
   static const int revokeIdentityCall = 4;
 
-  // call_index 5 永久留洞：人口快照仅由 votingengine 内联生成。
+  /// `self_occupy_cid(cid_number, expires_at, citizen_signature)`。
+  /// 在线公民 App 自助首次绑定入口；冷钱包当前不登记 decoder、不签该在线调用。
+  static const int selfOccupyCidCall = 5;
 
-  /// `occupy_cid(actor_cid_number, actor_role_code, cid_number, account_id, occupy_signature)`
-  /// — 注册局「占即绑」:占号即绑定公民钱包账户(注册局签名)。
+  /// `occupy_cid(actor_cid_number, actor_role_code, cid_number, account_id, expires_at, citizen_signature)`
+  /// — 注册局代办「占即绑」；内层 citizen_signature 由用户选择的新账户签名，
+  /// 外层 extrinsic 才由注册局管理员账户签名。
   static const int occupyCidCall = 6;
 
-  /// `admin_rebind_cid_account_id(actor_cid_number, actor_role_code, cid_number, new_account_id, rebind_signature)`
-  /// — 注册局代匿名 CID 换绑钱包账户(注册局签名)。链上 call 7 由已删的 occupy_cids_batch 顶替。
+  /// `admin_rebind_cid_account_id(actor_cid_number, actor_role_code, cid_number, new_account_id,
+  /// expected_binding_revision, expires_at, new_account_signature)`
+  /// — 注册局按匿名/实名辖区规则为 CID 换绑钱包账户。链上 call 7 由已删的批量占号顶替。
   static const int adminRebindCidAccountIdCall = 7;
 
   /// `revoke_cid(actor_cid_number, cid_number)`
-  /// — 注册局吊销 CID 号(墓碑,永不复用;注册局签名)。
+  /// — 注册局吊销 CID 号(墓碑,永不复用；外层 extrinsic 由注册局管理员签名)。
   static const int revokeCidCall = 8;
 
   // ---- InternalVote sub-pallet (20) · 内部投票管理员一人一票 ----

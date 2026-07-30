@@ -76,13 +76,14 @@ pub(crate) fn action_onchina_admin() -> u16 {
     *ACTION_ONCHINA_ADMIN_CODE
 }
 
-/// 注册局代办占号(占即绑)的公民域签名(非链交易,b.d=cid_number 裸字节、b.u 留空),
-/// 公民钱包自填本账户对 `signing_message(OP_SIGN_CID_OCCUPY, scaleString(cid)++account)` 签名。
+/// 注册局代办首次绑定的公民域签名。b.d 是含零 account_id 槽的
+/// CidOccupyAuthorization 模板，公民钱包替换该槽后按 OP_SIGN_CID_OCCUPY 签名。
 pub(crate) fn action_occupy() -> u16 {
     *ACTION_CITIZEN_OCCUPY_CODE
 }
 
-/// 注册局代办换绑钱包的新账户域签名(非链交易,同上,域 OP_SIGN_CID_ADMIN_REBIND)。
+/// 注册局代办换绑钱包的新账户域签名。b.d 是含零 new_account_id 槽的
+/// CidRebindAuthorization 模板，域为 OP_SIGN_CID_ADMIN_REBIND。
 pub(crate) fn action_rebind() -> u16 {
     *ACTION_CITIZEN_REBIND_CODE
 }
@@ -460,13 +461,17 @@ mod tests {
     }
 
     #[test]
-    fn domain_sign_request_leaves_account_empty_and_carries_bounded_cid() {
-        // 占号域签名 QR:b.u 留空(钱包自填本账户)、b.d=append_bounded(cid)、b.a=占号动作码。
-        let cid = "CN220-CTZN2-198805200-2026";
+    fn domain_sign_request_leaves_account_empty_and_carries_exact_authorization_template() {
+        // b.u 留空；b.d 必须原样携带完整授权模板，构造器不得重排或补写业务字段。
+        let mut authorization_template = vec![0xaau8; 32];
+        authorization_template.extend_from_slice(b"\x68CN220-CTZN2-198805200-2026");
+        authorization_template.extend_from_slice(&[0u8; 32]);
+        authorization_template.extend_from_slice(&0u64.to_le_bytes());
+        authorization_template.extend_from_slice(&1_800_000_000u64.to_le_bytes());
         let json = build_domain_sign_request_bytes(
             "citizen-occupy-req-1",
             1_800_000_000,
-            cid,
+            &authorization_template,
             action_occupy(),
         )
         .expect("域签名请求应生成");
@@ -478,9 +483,13 @@ mod tests {
             value["b"]["a"].as_u64().expect("动作码"),
             u64::from(action_occupy())
         );
-        // b.d = Compact(26)=0x68 ++ cid;钱包 signing_message(0x12, d ++ 本账户32) 与后端对齐。
-        // golden 钉死 URL_SAFE_NO_PAD(append_bounded(cid)):偏离即冷热签名破坏。
-        assert_eq!(value["b"]["d"], "aENOMjIwLUNUWk4yLTE5ODgwNTIwMC0yMDI2");
+        let encoded_payload = value["b"]["d"].as_str().expect("b.d 应是字符串");
+        assert_eq!(
+            URL_SAFE_NO_PAD
+                .decode(encoded_payload)
+                .expect("b.d 应可解码"),
+            authorization_template,
+        );
     }
 
     #[test]

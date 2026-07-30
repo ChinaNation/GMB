@@ -31,8 +31,7 @@
     - citizen_status
     - residence
 
-# 注册局代办占号(占即绑)—— 公民钱包扫码产出内层域签名(OP_SIGN_CID_OCCUPY=0x12)。
-# QR 只携 cid_number,account_id 由钱包扫码时自填本账户;非链调用,占用小号段。
+# 注册局代办首次绑定——公民钱包解析完整授权模板，把自选 account_id 填入零槽后签名。
 - action_key: citizen_occupy
   action_code: 10
   action_label_zh: 注册局占号绑定确认
@@ -44,9 +43,12 @@
   hash_only_allowed: false
   signing_category: citizen_occupy
   required_fields:
+    - genesis_hash
     - cid_number
+    - expected_binding_revision
+    - expires_at
 
-# 注册局代办换绑钱包 —— 新钱包扫码产出内层域签名(OP_SIGN_CID_ADMIN_REBIND=0x1F)。
+# 注册局代办换绑钱包——新钱包解析锁定旧账户/revision/过期时间的完整授权模板。
 - action_key: citizen_rebind
   action_code: 11
   action_label_zh: 注册局换绑账户确认
@@ -58,7 +60,11 @@
   hash_only_allowed: false
   signing_category: citizen_rebind
   required_fields:
+    - genesis_hash
     - cid_number
+    - expected_old_account_id
+    - expected_binding_revision
+    - expires_at
 
 - action_key: onchina_admin_action
   action_code: 3
@@ -915,8 +921,10 @@
     - actor_role_code
     - cid_number
     - account_id
+    - expected_binding_revision
+    - expires_at
 
-# 链上 call 7 由已删除的 occupy_cids_batch 改为 admin_rebind_cid_account_id(占即绑换绑,④b)。
+# 链上 call 7 已由注册局换绑独占；已删除的旧批量绑定调用不得恢复。
 - action_key: admin_rebind_cid_account_id
   action_code: 0x0a07
   action_label_zh: 注册局换绑CID钱包账户
@@ -931,7 +939,9 @@
     - actor_cid_number
     - actor_role_code
     - cid_number
-    - account_id
+    - new_account_id
+    - expected_binding_revision
+    - expires_at
 
 - action_key: revoke_cid
   action_code: 0x0a08

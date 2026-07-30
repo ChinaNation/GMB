@@ -1,13 +1,23 @@
 # CID 重构审计遗留项(部署 + 跨层洞 + 文档回写)
 
-状态:open(2026-07-28 全面审计产出;6 项实缺陷已当场修复并入门禁,本卡只收**需决策或独立执行**的遗留)
+状态:open(2026-07-29 按用户最终 CID 身份契约重新打开全面审计；旧“已完成”结论须逐项复验，当前执行第 1 步绑定协议改造)
 来源:`done/20260728-cloudflare-cid-identity-primary-key.md` 的「全面审计 + 修复」一节
 所属模块:citizenapp(cloudflare worker + Flutter)/ citizenchain(square-post)/ 文档
 
+## 2026-07-29 复审裁定
+
+- 旧换绑签名只覆盖 `(cid_number, new_account_id)`，op-tag 只提供域隔离，不能防重放；改为 CID 单调绑定版本并绑定创世哈希、预期旧/新账户和过期时间。
+- 旧“新账户会话携旧账户换绑授权再清理”的方案被用户明确废弃。链上 finalized 换绑本身就是 CID 控制权转移的唯一授权事实；旧账户级材料必须按链上绑定版本自动失效和异步清理。
+- 订阅关系归 CID，换绑后由新绑定账户继续付款属于正确产品规则，不得改成暂停或重新授权。
+- 个人多签仍以登记的管理员 `account_id` 为签名人，不得把个人多签管理员、管理员快照或个人投票票据改成 CID。
+- 当前冻结创世资产与最新 runtime 不一致；本卡所有问题修复并完成真实验收前禁止创世、推送或部署。
+
 ## 处理进度(2026-07-28)
 - **#5 unified-protocols.md 回写 ✅ 已完成**:广场/资料/关注端点(cid 路由 + entries)、D1 全表字段(15+ 表 cid 归属 + 保留表说明)、chat HTTP/DO/D1/proto/验签规则(recipient_cid_number、(cid,device_id) 验签、删 requester、profile R2 key→cid)全部改到位;`:498`/`:1075`/`:1079` 把已修缺陷写成规范的三处已订正。**其余 05-modules 下 CHAT_TECHNICAL/USER_TECHNICAL/PROFILE_TECHNICAL、subscription-part1-tech.md 仍待回写**(下同,未做)。
-- **#1 换绑吊销时序 ✅ 已完成**:新账户会话代吊销、旧账户换绑授权验签、安全
-  outbox 重试、路由资源登记、CID 级 DO/nonce 保护均已落地并通过自动与本地运行态验收。
+- **#1 换绑后旧凭证失效协议 ♻️ 已按 2026-07-29 定稿重做**:旧账户签名 outbox、
+  新账户代调用吊销 endpoint 和第二授权协议全部废弃；链上 finalized 绑定版本是唯一
+  控制权转移事实。客户端不得保存旧签名清理任务，Worker HTTP 路由已删除，只保留由
+  finalized 绑定版本消费者调用的内部幂等账户凭证清理 helper。
 - **#2 链上订阅账户键 ✅ 已完成**:SquarePost 帖子、订阅、续费索引、创作者套餐和
   跨端读写均已直接使用 `cid_number`；无迁移、无旧键、无兼容。P0 续费时序修复和
   双节点 +40 天换绑续费验收已完成，详见
@@ -57,48 +67,21 @@
 
 ## P1 — 需产品/架构决策
 
-### 2. 换绑吊销链路时序死锁(止损函数永不执行)
-`revokeRebindOldAccount` 设计正确(只删账户级鉴权材料、不碰随 cid 迁移的数据),但**触发时机错**:`myid_service` 在链上 `self_rebind_cid_account_id` **finalize 之后**才用**旧账户**建会话调用它,而此时:
-- `auth/service.ts` 登录读链 → 旧账户已 `cid_not_bound` → 403;
-- 设备子钥行的 `account_id` 已被重绑改成新账户 → `device_not_registered` → 401;
-- `request_guard` 每请求链上绑定复查 → `cid_binding_changed` → 401。
-三重拒,且客户端 `catch` 静默吞掉。**真实敞口有限**(guard 的实时复查本身已 fail-closed 挡住旧会话),但旧 `chat_keypackages` 行等残留不被清,且一个明确声明的安全控制从不执行。
-- **实施时补查出的第 4 重阻断**:`POST /v1/square/rebind/revoke` 原先未登记到
-  `limits/catalog.ts` 路由资源白名单，真实 Worker 在任何 handler 之前直接
-  `route_not_found`(404)。现已登记为 `api_json_small`，入口恢复默认拒和请求体上限门禁。
-- **已确认目标**:链上换绑 finalized、设备子钥切到新账户后，由**新账户会话**
-  调用吊销端点；请求携带 `old_account_id` 与旧账户已经为本次换绑签出的
-  `old_account_signature`。Worker 必须按
-  `signing_message(OP_SIGN_CID_REBIND, SCALE(cid_number, new_account_id))`
-  验证旧账户签名，并同时要求会话账户就是当前 CID 的链上绑定账户。禁止以
-  “`CidByAccountId[old_account_id]` 当前为空”作为授权证据，否则任意合法会话均可提交
-  一个未绑定账户实施越权清理。
-- **可靠重试**:客户端在提交换绑交易前持久化待清理记录
-  `(cid_number, old_account_id, new_account_id, old_account_signature)`；finalized 后用新账户
-  会话清理，成功才删记录。失败不得静默遗忘；App 启动/身份对账继续重试，未完成前禁止
-  再次换绑，避免 A→B→C 连续换绑导致授权目标错位。
-- **严格清理边界**:只删旧账户的 `chat_keypackages`、`chat_devices`、
-  同一 CID 下旧账户的 `square_login_challenges`、`square_device_subkeys`、旧账户会话
-  与身份缓存。不得调用
-  `closeChatRealtime`（DO 按 CID 命名，会踢新账户），也不得删除
-  `chat_device_binding_nonces`（该表按 CID 归属，删除会破坏新账户设备绑定）。
-- **验证门禁**:覆盖新账户可代吊销、错误/他人签名拒绝、CID/新账户不匹配拒绝、旧会话
-  仍被 guard 拒绝、重复调用幂等、CID 数据/实时 DO/绑定 nonce 不受影响，以及客户端
-  崩溃重启后可继续清理。
-- **完成记录(2026-07-28)**:
-  - Flutter：旧换绑签名在 extrinsic 提交前写入 SharedPreferences 安全 outbox；设备子钥
-    切新后只为新账户建会话；Worker 成功才清 outbox。功能同步标记即使已推进，身份对账
-    仍独立重试；损坏 outbox fail-closed，不同换绑三元组不得覆盖。
-  - Worker：按 session 的 `cid_number + account_id` 重建 `OP_SIGN_CID_REBIND=0x11`
-    摘要，以 `old_account_id` 验签；只删旧账户级 Chat/登录/设备材料和会话缓存。
-  - 清理边界：换绑路径已彻底移除 `closeChatRealtime` 与
-    `chat_device_binding_nonces` 删除；整身份注销路径保持原有 CID 全量清理。
-  - 自动验收：Worker 31 文件 192 测试全通过、TypeScript typecheck 通过；Flutter
-    换绑/RPC 定向 27 测试通过、定向 analyze 零问题。
-  - 真实本地验收：独立临时 D1 成功执行 56 条基线命令并确认 5 张目标表真实存在；
-    Wrangler 本地 Worker `/health` 返回 200，真实 HTTP
-    `POST /v1/square/rebind/revoke` 无会话返回 `missing_session`(401)，不再是白名单
-    `route_not_found`(404)。临时验收状态已删除，未触碰现有开发/正式数据。
+### 2. 换绑后旧账户凭证失效（2026-07-29 现行裁定）
+
+- 链上 finalized 的 `AccountIdByCid + CidByAccountId + BindingRevisionByCid` 是 CID
+  控制权转移的唯一授权事实。旧账户不再拥有 CID 后，登录与每请求绑定复查立即
+  fail-closed；客户端不得再提交第二份旧账户签名证明。
+- CitizenApp 已删除旧账户换绑授权 outbox、启动重试和客户端换绑后吊销调用；
+  Worker 不提供对应 HTTP endpoint、路由资源登记或外部请求模型，不得恢复。
+- Worker 只保留内部 `purgeFinalizedOldAccountCredentials` 幂等 helper，输入来自可信
+  finalized 绑定版本消费者。它只删除同一 CID 下旧 `account_id` 的
+  `chat_keypackages`、`chat_devices`、`square_login_challenges`、
+  `square_device_subkeys`、旧会话和账户身份缓存。
+- `ChatRealtimeObject`、`chat_device_binding_nonces`、通讯录、动态、文章、粉丝、
+  关注、媒体和会员均按 CID 归属，换绑时不得整体关闭、删除或迁移。
+- 连续 A→B→C 换绑由链上单调 revision 串行化；每笔授权都绑定创世哈希、预期旧/新账户、
+  预期 revision 和过期时间，旧授权不能跨链、跨版本或跨目标重放。
 
 ### 3. 链上订阅账户键问题（已按 CID 终态解决）
 

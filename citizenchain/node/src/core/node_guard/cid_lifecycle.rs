@@ -153,6 +153,9 @@ pub enum GuardError {
     CitizenIdentityWithoutCid,
     CitizenAccountIdBindingMissing,
     CitizenAccountIdBindingMismatch,
+    CitizenBindingRevisionMissing,
+    CitizenBindingRevisionInvalid,
+    CitizenBindingRevisionTransitionInvalid,
     GenesisInstitutionDeleted,
     GenesisInstitutionChanged,
     InstitutionIdentityChanged,
@@ -226,6 +229,14 @@ pub mod storage_key {
         map_account(CITIZEN_IDENTITY_PALLET, b"CidByAccountId", account)
     }
 
+    pub fn binding_revision_by_cid_prefix() -> Vec<u8> {
+        storage_prefix(CITIZEN_IDENTITY_PALLET, b"BindingRevisionByCid")
+    }
+
+    pub fn binding_revision_by_cid(cid: &[u8]) -> Vec<u8> {
+        map_vec(CITIZEN_IDENTITY_PALLET, b"BindingRevisionByCid", cid)
+    }
+
     pub fn institution_prefix(namespace: Namespace) -> Vec<u8> {
         storage_prefix(namespace.pallet(), b"Institutions")
     }
@@ -257,6 +268,7 @@ pub mod storage_key {
             voting_identity_prefix(),
             account_id_by_cid_prefix(),
             cid_by_account_id_prefix(),
+            binding_revision_by_cid_prefix(),
             institution_prefix(Namespace::Public),
             institution_prefix(Namespace::Private),
             institution_account_prefix(Namespace::Public),
@@ -638,6 +650,12 @@ where
     if reverse_cid != cid {
         return Err(GuardError::CitizenAccountIdBindingMismatch);
     }
+    let revision_raw = read(&storage_key::binding_revision_by_cid(cid))
+        .ok_or(GuardError::CitizenBindingRevisionMissing)?;
+    let revision: u64 = decode_exact(&revision_raw, "BindingRevisionByCid")?;
+    if revision == 0 {
+        return Err(GuardError::CitizenBindingRevisionInvalid);
+    }
     Ok(())
 }
 
@@ -654,15 +672,30 @@ where
     FPost: Fn(&[u8]) -> Option<Vec<u8>>,
 {
     let citizen_prefix = storage_key::citizen_registry_prefix();
+    let mut required_revision_changes = BTreeSet::<Vec<u8>>::new();
+    let mut touched_citizens = BTreeSet::<Vec<u8>>::new();
     for key in delta.keys().filter(|key| key.starts_with(&citizen_prefix)) {
         let cid = parse_vec_map_key(key, &citizen_prefix, "CidRegistry")?;
-        check_citizen_transition(block, &cid, parent(key), post(key))?;
+        let before = parent(key);
+        let after = post(key);
+        check_citizen_transition(block, &cid, before.clone(), after.clone())?;
+        touched_citizens.insert(cid.clone());
+        if let (Some(before), Some(after)) = (before, after) {
+            let before: CitizenCidRecord = decode_exact(&before, "CidRegistry")?;
+            let after: CitizenCidRecord = decode_exact(&after, "CidRegistry")?;
+            if before.status == CitizenCidStatus::Active
+                && after.status == CitizenCidStatus::Revoked
+            {
+                required_revision_changes.insert(cid);
+            }
+        }
     }
 
     let identity_prefix = storage_key::voting_identity_prefix();
     let forward_prefix = storage_key::account_id_by_cid_prefix();
     let reverse_prefix = storage_key::cid_by_account_id_prefix();
-    let mut touched_citizens = BTreeSet::<Vec<u8>>::new();
+    let revision_prefix = storage_key::binding_revision_by_cid_prefix();
+    let mut forward_touched = BTreeSet::<Vec<u8>>::new();
     for key in delta.keys() {
         if key.starts_with(&identity_prefix) {
             let cid = parse_vec_map_key(key, &identity_prefix, "VotingIdentityByCid")?;
@@ -673,6 +706,12 @@ where
         }
         if key.starts_with(&forward_prefix) {
             let cid = parse_vec_map_key(key, &forward_prefix, "AccountIdByCid")?;
+            // 净值变化必须同步推进 revision；仅触及但净值相同还可能是合法的
+            // self_occupy 幂等重试，也可能是同块 A→B→A，需结合 revision delta 判定。
+            if parent(key) != post(key) {
+                required_revision_changes.insert(cid.clone());
+            }
+            forward_touched.insert(cid.clone());
             touched_citizens.insert(cid);
         }
         if key.starts_with(&reverse_prefix) {
@@ -696,6 +735,34 @@ where
                 touched_citizens.insert(cid);
             }
         }
+    }
+    for key in delta.keys().filter(|key| key.starts_with(&revision_prefix)) {
+        let cid = parse_vec_map_key(key, &revision_prefix, "BindingRevisionByCid")?;
+        let after_raw = post(key).ok_or(GuardError::CitizenBindingRevisionMissing)?;
+        let after: u64 = decode_exact(&after_raw, "BindingRevisionByCid")?;
+        let valid = match parent(key) {
+            None => {
+                after == 1
+                    && parent(&storage_key::account_id_by_cid(&cid)).is_none()
+                    && post(&storage_key::account_id_by_cid(&cid)).is_some()
+            }
+            Some(before_raw) => {
+                let before: u64 = decode_exact(&before_raw, "BindingRevisionByCid")?;
+                // NodeGuard 只观察块前/块后：同块可合法发生 A→B→C 或换绑后吊销，
+                // 也可发生 A→B→A；因此要求严格单调并有 forward 触及或吊销证据。
+                // 每次调用恰好 +1 由 runtime 单测锁定。
+                after > before
+                    && (forward_touched.contains(&cid) || required_revision_changes.contains(&cid))
+            }
+        };
+        if !valid {
+            return Err(GuardError::CitizenBindingRevisionTransitionInvalid);
+        }
+        required_revision_changes.remove(&cid);
+        touched_citizens.insert(cid);
+    }
+    if !required_revision_changes.is_empty() {
+        return Err(GuardError::CitizenBindingRevisionTransitionInvalid);
     }
     for cid in touched_citizens {
         validate_citizen_identity_binding(&cid, &post)?;
@@ -857,6 +924,9 @@ where
         let cid = parse_vec_map_key(key, &citizen_prefix, "CidRegistry")?;
         let record: CitizenCidRecord = decode_exact(&raw, "CidRegistry")?;
         validate_citizen_record(&cid, &record, None)?;
+        // 每个 Active/Revoked CID 都必须存在唯一账户正反绑定和非零 revision；
+        // 仅有登记表记录的半状态同样拒绝。
+        validate_citizen_identity_binding(&cid, read)?;
     }
 
     let identity_prefix = storage_key::voting_identity_prefix();
@@ -883,6 +953,17 @@ where
         let forward: [u8; 32] = decode_exact(&forward_raw, "AccountIdByCid")?;
         if forward != account {
             return Err(GuardError::CitizenAccountIdBindingMismatch);
+        }
+        validate_citizen_identity_binding(&cid, read)?;
+    }
+
+    let revision_prefix = storage_key::binding_revision_by_cid_prefix();
+    for key in keys.iter().filter(|key| key.starts_with(&revision_prefix)) {
+        let Some(raw) = read(key) else { continue };
+        let cid = parse_vec_map_key(key, &revision_prefix, "BindingRevisionByCid")?;
+        let revision: u64 = decode_exact(&raw, "BindingRevisionByCid")?;
+        if revision == 0 {
+            return Err(GuardError::CitizenBindingRevisionInvalid);
         }
         validate_citizen_identity_binding(&cid, read)?;
     }
@@ -1183,6 +1264,7 @@ mod tests {
                 storage_key::cid_by_account_id(&account),
                 cid.to_vec().encode(),
             ),
+            (storage_key::binding_revision_by_cid(cid), 1u64.encode()),
         ])
     }
 
@@ -1208,6 +1290,7 @@ mod tests {
                 storage_key::cid_by_account_id(&account),
                 cid.to_vec().encode(),
             ),
+            (storage_key::binding_revision_by_cid(cid), 1u64.encode()),
         ])
     }
 
@@ -1338,6 +1421,28 @@ mod tests {
             ),
             Err(GuardError::CitizenAccountIdBindingMissing)
         );
+
+        let revision_key = storage_key::binding_revision_by_cid(&cid);
+        let mut missing_revision = post.clone();
+        missing_revision.remove(&revision_key);
+        assert_eq!(
+            validate_citizen_identity_binding(&cid, &|key| missing_revision.get(key).cloned()),
+            Err(GuardError::CitizenBindingRevisionMissing)
+        );
+
+        let mut missing_reverse = post.clone();
+        missing_reverse.remove(&storage_key::cid_by_account_id(&account));
+        assert_eq!(
+            validate_citizen_identity_binding(&cid, &|key| missing_reverse.get(key).cloned()),
+            Err(GuardError::CitizenAccountIdBindingMissing)
+        );
+
+        let mut zero_revision = post.clone();
+        zero_revision.insert(revision_key, 0u64.encode());
+        assert_eq!(
+            validate_citizen_identity_binding(&cid, &|key| zero_revision.get(key).cloned()),
+            Err(GuardError::CitizenBindingRevisionInvalid)
+        );
     }
 
     #[test]
@@ -1365,9 +1470,48 @@ mod tests {
             Ok(())
         );
 
+        // 只有登记表、没有账户闭环和 revision 的半状态必须在增量路径 fail-closed。
+        let registry_key = storage_key::citizen_registry(&cid);
+        let registry_only_delta =
+            BTreeMap::from([(registry_key.clone(), post.get(&registry_key).cloned())]);
+        let registry_only_state = BTreeMap::from([(
+            registry_key.clone(),
+            post.get(&registry_key).cloned().expect("registry record"),
+        )]);
+        assert_eq!(
+            check_transition(
+                1,
+                &registry_only_delta,
+                |_| None,
+                |key| registry_only_state.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenAccountIdBindingMissing)
+        );
+
         // 绑定闭环校验(增量与全量路径共用的咽喉):匿名 CID 无投票身份也放行。
         assert_eq!(
             validate_citizen_identity_binding(&cid, &|key| post.get(key).cloned()),
+            Ok(())
+        );
+
+        // 同账户 + 同 CID 的 self_occupy 幂等重试会触及正反绑定但不推进
+        // revision；块前/块后值完全相同，NodeGuard 必须放行。
+        let idempotent_delta = BTreeMap::from([
+            (storage_key::account_id_by_cid(&cid), Some(account.encode())),
+            (
+                storage_key::cid_by_account_id(&account),
+                Some(cid.to_vec().encode()),
+            ),
+        ]);
+        assert_eq!(
+            check_transition(
+                2,
+                &idempotent_delta,
+                |key| post.get(key).cloned(),
+                |key| post.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
             Ok(())
         );
 
@@ -1376,6 +1520,7 @@ mod tests {
         let new_account = [10u8; 32];
         let mut rebound = anonymous_citizen_state(&cid, new_account);
         rebound.remove(&storage_key::cid_by_account_id(&account));
+        rebound.insert(storage_key::binding_revision_by_cid(&cid), 2u64.encode());
         let rebind_delta = BTreeMap::from([
             (
                 storage_key::account_id_by_cid(&cid),
@@ -1385,6 +1530,10 @@ mod tests {
             (
                 storage_key::cid_by_account_id(&new_account),
                 Some(cid.to_vec().encode()),
+            ),
+            (
+                storage_key::binding_revision_by_cid(&cid),
+                Some(2u64.encode()),
             ),
         ]);
         assert_eq!(
@@ -1396,6 +1545,98 @@ mod tests {
                 &GenesisReference::default(),
             ),
             Ok(())
+        );
+
+        // 同块连续 A→B→C 在块级 delta 中只呈现 A→C、revision 1→3，必须放行。
+        let final_account = [11u8; 32];
+        let mut multi_rebound = anonymous_citizen_state(&cid, final_account);
+        multi_rebound.remove(&storage_key::cid_by_account_id(&account));
+        multi_rebound.insert(storage_key::binding_revision_by_cid(&cid), 3u64.encode());
+        let multi_rebind_delta = BTreeMap::from([
+            (
+                storage_key::account_id_by_cid(&cid),
+                Some(final_account.encode()),
+            ),
+            (storage_key::cid_by_account_id(&account), None),
+            (
+                storage_key::cid_by_account_id(&final_account),
+                Some(cid.to_vec().encode()),
+            ),
+            (
+                storage_key::binding_revision_by_cid(&cid),
+                Some(3u64.encode()),
+            ),
+        ]);
+        assert_eq!(
+            check_transition(
+                2,
+                &multi_rebind_delta,
+                |key| post.get(key).cloned(),
+                |key| multi_rebound.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
+        );
+
+        // 同块连续 A→B→A 的最终绑定值与父状态相同，但 forward key 确实被触碰且
+        // revision 1→3；不能把这种合法的两次换绑误判成 revision-only。
+        let mut round_trip = post.clone();
+        round_trip.insert(storage_key::binding_revision_by_cid(&cid), 3u64.encode());
+        let round_trip_delta = BTreeMap::from([
+            (storage_key::account_id_by_cid(&cid), Some(account.encode())),
+            (
+                storage_key::cid_by_account_id(&account),
+                Some(cid.to_vec().encode()),
+            ),
+            (storage_key::cid_by_account_id(&new_account), None),
+            (
+                storage_key::binding_revision_by_cid(&cid),
+                Some(3u64.encode()),
+            ),
+        ]);
+        assert_eq!(
+            check_transition(
+                2,
+                &round_trip_delta,
+                |key| post.get(key).cloned(),
+                |key| round_trip.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
+        );
+
+        // 只换双向账户而不推进 revision 必须 fail-closed。
+        let mut stale_revision_delta = rebind_delta.clone();
+        stale_revision_delta.remove(&storage_key::binding_revision_by_cid(&cid));
+        let mut stale_revision_state = rebound.clone();
+        stale_revision_state.insert(storage_key::binding_revision_by_cid(&cid), 1u64.encode());
+        assert_eq!(
+            check_transition(
+                2,
+                &stale_revision_delta,
+                |key| post.get(key).cloned(),
+                |key| stale_revision_state.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenBindingRevisionTransitionInvalid)
+        );
+
+        // 无换绑/吊销却单独推进 revision 同样拒绝。
+        let revision_only = BTreeMap::from([(
+            storage_key::binding_revision_by_cid(&cid),
+            Some(2u64.encode()),
+        )]);
+        let mut revision_only_state = post.clone();
+        revision_only_state.insert(storage_key::binding_revision_by_cid(&cid), 2u64.encode());
+        assert_eq!(
+            check_transition(
+                2,
+                &revision_only,
+                |key| post.get(key).cloned(),
+                |key| revision_only_state.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenBindingRevisionTransitionInvalid)
         );
     }
 }

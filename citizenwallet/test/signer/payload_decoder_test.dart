@@ -802,9 +802,99 @@ void main() {
       expect(revoke?.fields['actor_cid_number'], registryActorCid);
     });
 
+    test('严格解码首次绑定/换绑授权模板并原位填入账户', () {
+      const cid = 'CTZN-430100-0001';
+      final occupyTemplate = Uint8List.fromList([
+        ...List<int>.filled(32, 0x44),
+        ...compactVec(cid),
+        ...List<int>.filled(32, 0),
+        ...u64Le(0),
+        ...u64Le(1800000000),
+      ]);
+      final occupy =
+          PayloadDecoder.readCidOccupyAuthorizationTemplate(occupyTemplate);
+      expect(occupy?.cidNumber, cid);
+      expect(occupy?.expectedBindingRevision, 0);
+      expect(occupy?.expiresAt, 1800000000);
+      final selectedAccount = Uint8List.fromList(List<int>.filled(32, 0xaa));
+      final materialized = occupy?.materialize(selectedAccount);
+      expect(materialized, isNotNull);
+      expect(
+        materialized!.sublist(
+            32 + compactVec(cid).length, 32 + compactVec(cid).length + 32),
+        selectedAccount,
+      );
+
+      final rebindTemplate = Uint8List.fromList([
+        ...List<int>.filled(32, 0x44),
+        ...compactVec(cid),
+        ...List<int>.filled(32, 0x55),
+        ...List<int>.filled(32, 0),
+        ...u64Le(7),
+        ...u64Le(1800000000),
+      ]);
+      final rebind =
+          PayloadDecoder.readCidRebindAuthorizationTemplate(rebindTemplate);
+      expect(rebind?.expectedOldAccountId, '0x${'55' * 32}');
+      expect(rebind?.expectedBindingRevision, 7);
+      expect(rebind?.materialize(selectedAccount), isNotNull);
+      expect(
+        rebind?.materialize(Uint8List.fromList(List<int>.filled(32, 0x55))),
+        isNull,
+      );
+
+      // 非零账户槽、尾字节和错误 revision 都必须 fail-closed。
+      final nonZeroSlot = Uint8List.fromList(occupyTemplate)
+        ..[32 + compactVec(cid).length] = 1;
+      expect(
+        PayloadDecoder.readCidOccupyAuthorizationTemplate(nonZeroSlot),
+        isNull,
+      );
+      expect(
+        PayloadDecoder.readCidOccupyAuthorizationTemplate(
+            Uint8List.fromList([...occupyTemplate, 0xff])),
+        isNull,
+      );
+      final zeroRevisionRebind = Uint8List.fromList(rebindTemplate);
+      final revisionOffset = 32 + compactVec(cid).length + 32 + 32;
+      zeroRevisionRebind.setRange(
+          revisionOffset, revisionOffset + 8, List<int>.filled(8, 0));
+      expect(
+        PayloadDecoder.readCidRebindAuthorizationTemplate(zeroRevisionRebind),
+        isNull,
+      );
+
+      // CID 最大 32 字节，只允许单字节 Compact(mode 0)；等值的 mode 1
+      // 非规范编码也必须拒绝，避免同一授权语义出现多种可签字节。
+      final nonCanonicalCompact = Uint8List.fromList([
+        ...occupyTemplate.sublist(0, 32),
+        (cid.length << 2) | 1,
+        0,
+        ...occupyTemplate.sublist(33),
+      ]);
+      expect(
+        PayloadDecoder.readCidOccupyAuthorizationTemplate(
+          nonCanonicalCompact,
+        ),
+        isNull,
+      );
+      final nonCanonicalRebindCompact = Uint8List.fromList([
+        ...rebindTemplate.sublist(0, 32),
+        (cid.length << 2) | 1,
+        0,
+        ...rebindTemplate.sublist(33),
+      ]);
+      expect(
+        PayloadDecoder.readCidRebindAuthorizationTemplate(
+          nonCanonicalRebindCompact,
+        ),
+        isNull,
+      );
+    });
+
     test('decodes occupy_cid raw call data (pallet=10 call=6, 占即绑)', () {
       // 占即绑,逐字节对齐 onchina encode_occupy_cid_call:
-      // [10][6] actor_cid actor_role cid account_id[32] occupy_signature:Vec(64B)。
+      // [10][6] actor_cid actor_role cid account_id[32] expires_at:u64 occupy_signature:Vec(64B)。
       final accountId = List<int>.filled(32, 0xbb);
       final signature = List<int>.filled(64, 0xcc);
       final callData = [
@@ -814,6 +904,7 @@ void main() {
         ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
         ...accountId,
+        ...u64Le(1800000000),
         ...compactU32(64),
         ...signature,
       ];
@@ -825,6 +916,8 @@ void main() {
       expect(decoded.fields['actor_cid_number'], registryActorCid);
       expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
       expect(decoded.fields['account_id'], '0x${hexLower(accountId)}');
+      expect(decoded.fields['expected_binding_revision'], '0');
+      expect(decoded.fields['expires_at'], '1800000000');
       expect(decoded.reviewFields['account_id'], '0x${hexLower(accountId)}');
       expect(decoded.summary, contains('CTZN-430100-0001'));
     });
@@ -839,6 +932,7 @@ void main() {
         ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
         ...accountId,
+        ...u64Le(1800000000),
         ...compactU32(64),
         ...signature,
       ];
@@ -887,10 +981,11 @@ void main() {
       expect(decoded.reviewFields['cid_number'], 'CTZN-430100-0001');
     });
 
-    test('decodes admin_rebind_cid_account_id (call 7) and rejects self_occupy call 5',
+    test(
+        'decodes admin_rebind_cid_account_id (call 7) and rejects self_occupy call 5',
         () {
-      // 链上 call 7 = admin_rebind_cid_account_id(顶替已删的 occupy_cids_batch),
-      // 布局与 occupy_cid 同构:actor_cid actor_role cid new_account_id[32] rebind_signature:Vec。
+      // 链上 call 7 = admin_rebind_cid_account_id；已删除的旧批量绑定调用不得恢复。
+      // 布局:actor_cid actor_role cid new_account_id[32] revision:u64 expires:u64 signature:Vec。
       final accountId = List<int>.filled(32, 0x11);
       final signature = List<int>.filled(64, 0xdd);
       final rebindCall = [
@@ -900,6 +995,8 @@ void main() {
         ...compactVec('REGISTRAR'),
         ...compactVec('CTZN-430100-0001'),
         ...accountId,
+        ...u64Le(7),
+        ...u64Le(1800000000),
         ...compactU32(64),
         ...signature,
       ];
@@ -907,7 +1004,9 @@ void main() {
       expect(decoded?.action, 'admin_rebind_cid_account_id');
       expect(decoded?.fields['actor_cid_number'], registryActorCid);
       expect(decoded?.fields['cid_number'], 'CTZN-430100-0001');
-      expect(decoded?.fields['account_id'], '0x${hexLower(accountId)}');
+      expect(decoded?.fields['new_account_id'], '0x${hexLower(accountId)}');
+      expect(decoded?.fields['expected_binding_revision'], '7');
+      expect(decoded?.fields['expires_at'], '1800000000');
 
       // CitizenIdentity call 5 = self_occupy_cid(自助路径),不在注册局冷签 decoder 覆盖内,须拒。
       final snapshotCall = [

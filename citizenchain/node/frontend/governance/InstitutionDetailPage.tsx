@@ -172,7 +172,7 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
       {/* 机构信息卡片 */}
       <div className="institution-detail-grid">
         <div className="metric-card">
-          <div className="metric-label">机构类型 /身份ID <code className="metric-label-id">{detail.cidNumber}</code></div>
+          <div className="metric-label">机构类型 /身份CID号 <code className="metric-label-id">{detail.cidNumber}</code></div>
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">

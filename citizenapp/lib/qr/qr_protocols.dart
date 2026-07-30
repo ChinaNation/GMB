@@ -114,8 +114,8 @@ class QrActions {
 
   static bool isChainAction(int action) => action >= 0x0100;
 
-  /// 注册局代办占号/换绑域签名:b.u 留空、d=append_bounded(cid),
-  /// 钱包扫码自填本账户再 signingMessage(op_tag, d ++ 本账户32)。
+  /// 注册局代办占号/换绑域签名：b.u 留空，d 是含账户零槽的完整 Runtime 授权模板；
+  /// 钱包严格解码后把所选账户原位填入，再对完整授权结构做域分离签名。
   static bool isSelfAccountDomainAction(int action) =>
       action == citizenOccupy || action == citizenRebind;
 

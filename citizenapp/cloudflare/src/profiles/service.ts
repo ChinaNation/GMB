@@ -58,7 +58,7 @@ export async function getUserProfileRoute(
 
 /// GET 与 PUT 共用同一份主页响应装配：profile 文档 + 计数 + 认证 + is_following。
 /// 身份主键 = 目标 cid_number;profile/计数/关注/会员全按 cid;链上身份/当前绑定账户 account_id
-/// 由 fetchChainIdentityStateByCidCached(WalletAccountByCid)读出用于展示。
+/// 由 fetchChainIdentityStateByCidCached(AccountIdByCid)读出用于展示。
 async function buildProfileResponse(
   env: Env,
   targetCidNumber: string,

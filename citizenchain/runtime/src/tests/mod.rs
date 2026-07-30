@@ -96,13 +96,20 @@ fn sign_citizen_identity_payload(
         .expect("citizen identity signature fits")
 }
 
-/// 注册局占号(占即绑)时,用户对 `(cid_number, account_id)` 的授权签名(域 OP_SIGN_CID_OCCUPY)。
+/// 注册局首次占号时，新账户签署绑定创世哈希、固定 revision=0 和过期时间的唯一载荷。
 fn sign_cid_occupy(
     signer_pair: &sr25519::Pair,
     cid_number: &citizen_identity::CidNumberBound,
     account_id: &AccountId,
+    expires_at: u64,
 ) -> citizen_identity::pallet::SignatureOf<Runtime> {
-    let payload = codec::Encode::encode(&(cid_number.clone(), account_id.clone()));
+    let payload = codec::Encode::encode(&citizen_identity::CidOccupyAuthorization {
+        genesis_hash: System::block_hash(0),
+        cid_number: cid_number.clone(),
+        account_id: account_id.clone(),
+        expected_binding_revision: 0,
+        expires_at,
+    });
     let msg = primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_OCCUPY, &payload);
     signer_pair
         .sign(&msg)
@@ -110,6 +117,11 @@ fn sign_cid_occupy(
         .to_vec()
         .try_into()
         .expect("cid occupy signature fits")
+}
+
+/// runtime 集成夹具按链上 Timestamp.Now 签发 300 秒首次绑定授权。
+fn cid_authorization_expires_at() -> u64 {
+    Timestamp::get().saturating_div(1_000).saturating_add(300)
 }
 
 fn setup_frg_citizen_identity_admin(

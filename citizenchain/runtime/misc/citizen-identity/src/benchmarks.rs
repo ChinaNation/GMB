@@ -7,18 +7,19 @@
 
 use alloc::{format, vec};
 
+use codec::Encode;
 use frame_benchmarking::v2::*;
 use frame_support::weights::Weight;
 use frame_system::RawOrigin;
 
 use crate::{
     pallet::{
-        AccountIdByCid, CidRegistry, Config, PopulationMaintenanceFault, PopulationReadyDate,
-        VotingIdentityByCid,
+        AccountIdByCid, BindingRevisionByCid, CidByAccountId, CidRegistry, Config,
+        PopulationMaintenanceFault, PopulationReadyDate, VotingIdentityByCid,
     },
     AreaCodeBound, Call, CandidateIdentityPayload, CidNumberBound, CidRecord, CidRecordStatus,
     CitizenIdentityAuthority, CitizenSex, CitizenStatus, FamilyName, GivenName, Pallet,
-    RoleCodeBound, VotingIdentityPayload,
+    RoleCodeBound, VotingIdentityPayload, MAX_CID_AUTHORIZATION_LIFETIME_SECS,
 };
 
 const BENCHMARK_TIMESTAMP_MILLIS: u64 = 1_800_000_000_000;
@@ -113,24 +114,23 @@ fn candidate_payload<T: Config>(
 fn seed_occupied<T: Config>(
     actor_cid_number: &CidNumberBound,
     cid_number: &CidNumberBound,
-    province: &AreaCodeBound,
-    city: &AreaCodeBound,
-    tag: u32,
+    account_id: &T::AccountId,
 ) {
-    let mut commitment = [0u8; 32];
-    commitment[..4].copy_from_slice(&tag.to_le_bytes());
     CidRegistry::<T>::insert(
         cid_number,
         CidRecord {
             registrar_cid_number: actor_cid_number.clone(),
-            commitment,
-            residence_province_code: province.clone(),
-            residence_city_code: city.clone(),
+            commitment: sp_io::hashing::blake2_256(&account_id.encode()),
+            residence_province_code: AreaCodeBound::default(),
+            residence_city_code: AreaCodeBound::default(),
             status: CidRecordStatus::Active,
             registered_at: frame_system::Pallet::<T>::block_number(),
             revoked_at: None,
         },
     );
+    AccountIdByCid::<T>::insert(cid_number, account_id);
+    CidByAccountId::<T>::insert(account_id, cid_number);
+    BindingRevisionByCid::<T>::insert(cid_number, 1);
 }
 
 fn setup_registration<T: Config>(
@@ -140,9 +140,10 @@ fn setup_registration<T: Config>(
 ) -> (Authority<T::AccountId>, VotingIdentityPayload<T::AccountId>) {
     let authority = authority::<T>();
     let cid_number = citizen_cid(tag);
-    seed_occupied::<T>(&authority.1, &cid_number, &authority.3, &authority.4, tag);
+    let account_id = account("citizen", tag, 0);
+    seed_occupied::<T>(&authority.1, &cid_number, &account_id);
     let payload = voting_payload::<T>(
-        account("citizen", tag, 0),
+        account_id,
         cid_number,
         authority.3.clone(),
         authority.4.clone(),
@@ -302,9 +303,13 @@ mod benchmarks {
 
     #[benchmark]
     fn occupy_cid() {
+        set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         let authority = authority::<T>();
         let account_id: T::AccountId = whitelisted_caller();
         let cid_number = citizen_cid(6);
+        let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
+            .as_secs()
+            .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);
         let signature = signature::<T>();
 
         #[extrinsic_call]
@@ -314,11 +319,13 @@ mod benchmarks {
             authority.2,
             cid_number.clone(),
             account_id.clone(),
+            expires_at,
             signature,
         );
 
         assert!(CidRegistry::<T>::contains_key(&cid_number));
         assert_eq!(AccountIdByCid::<T>::get(&cid_number), Some(account_id));
+        assert_eq!(BindingRevisionByCid::<T>::get(&cid_number), Some(1));
     }
 
     #[benchmark]
@@ -335,39 +342,44 @@ mod benchmarks {
 
     #[benchmark]
     fn self_rebind_cid_account_id() {
+        set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         // 先自助占号建匿名 CID(旧账户绑定),再换绑到新账户。
         let old_account_id: T::AccountId = account("rebind_old", 0, 0);
         let new_account_id: T::AccountId = whitelisted_caller();
         let cid_number = citizen_cid(8);
-        Pallet::<T>::self_occupy_cid(
-            RawOrigin::Signed(old_account_id).into(),
-            cid_number.clone(),
-        )
-        .expect("self occupy sets up the binding");
+        Pallet::<T>::self_occupy_cid(RawOrigin::Signed(old_account_id).into(), cid_number.clone())
+            .expect("self occupy sets up the binding");
+        let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
+            .as_secs()
+            .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);
         let signature = signature::<T>();
 
         #[extrinsic_call]
         _(
             RawOrigin::Signed(new_account_id.clone()),
             cid_number.clone(),
+            1,
+            expires_at,
             signature,
         );
 
         assert_eq!(AccountIdByCid::<T>::get(&cid_number), Some(new_account_id));
+        assert_eq!(BindingRevisionByCid::<T>::get(&cid_number), Some(2));
     }
 
     #[benchmark]
     fn admin_rebind_cid_account_id() {
+        set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         // 先自助占号建匿名 CID(旧账户绑定),再由注册局代换绑到新账户。
         let authority = authority::<T>();
         let old_account_id: T::AccountId = account("admin_rebind_old", 0, 0);
         let new_account_id: T::AccountId = whitelisted_caller();
         let cid_number = citizen_cid(9);
-        Pallet::<T>::self_occupy_cid(
-            RawOrigin::Signed(old_account_id).into(),
-            cid_number.clone(),
-        )
-        .expect("self occupy sets up the binding");
+        Pallet::<T>::self_occupy_cid(RawOrigin::Signed(old_account_id).into(), cid_number.clone())
+            .expect("self occupy sets up the binding");
+        let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
+            .as_secs()
+            .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);
         let signature = signature::<T>();
 
         #[extrinsic_call]
@@ -377,10 +389,13 @@ mod benchmarks {
             authority.2,
             cid_number.clone(),
             new_account_id.clone(),
+            1,
+            expires_at,
             signature,
         );
 
         assert_eq!(AccountIdByCid::<T>::get(&cid_number), Some(new_account_id));
+        assert_eq!(BindingRevisionByCid::<T>::get(&cid_number), Some(2));
     }
 
     #[benchmark]

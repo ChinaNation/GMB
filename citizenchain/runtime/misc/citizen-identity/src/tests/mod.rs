@@ -32,6 +32,51 @@ fn cid_record_scale_contract_matches_node_guard() {
             .encode()
     );
 }
+
+/// 四端共同签名协议的字段声明顺序就是 SCALE 顺序；任何重排都必须让本测试失败。
+#[test]
+fn cid_authorization_scale_contract_keeps_canonical_field_order() {
+    use codec::Encode;
+
+    let genesis_hash = sp_core::H256::repeat_byte(0x11);
+    let cid_number: CidNumberBound = b"CID-AUTH".to_vec().try_into().expect("authorization CID");
+    let old_account_id = [0x22u8; 32];
+    let new_account_id = [0x33u8; 32];
+
+    let rebind = CidRebindAuthorization {
+        genesis_hash,
+        cid_number: cid_number.clone(),
+        expected_old_account_id: old_account_id,
+        new_account_id,
+        expected_binding_revision: 7,
+        expires_at: 8,
+    };
+    assert_eq!(
+        rebind.encode(),
+        (
+            genesis_hash,
+            cid_number.clone(),
+            old_account_id,
+            new_account_id,
+            7u64,
+            8u64,
+        )
+            .encode()
+    );
+
+    let occupy = CidOccupyAuthorization {
+        genesis_hash,
+        cid_number: cid_number.clone(),
+        account_id: new_account_id,
+        expected_binding_revision: 0,
+        expires_at: 9,
+    };
+    assert_eq!(
+        occupy.encode(),
+        (genesis_hash, cid_number, new_account_id, 0u64, 9u64).encode()
+    );
+}
+
 use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, traits::Hooks};
 use frame_system as system;
 use sp_runtime::{traits::IdentityLookup, BuildStorage};
@@ -88,6 +133,10 @@ std::thread_local! {
     static TEST_TIME_SECS: core::cell::Cell<u64> = const { core::cell::Cell::new(1_782_950_400) };
 }
 
+fn test_time_secs() -> u64 {
+    TEST_TIME_SECS.with(core::cell::Cell::get)
+}
+
 fn set_day_offset(days: i64) {
     TEST_TIME_SECS.with(|value| {
         let delta = days.unsigned_abs().saturating_mul(86_400);
@@ -127,11 +176,11 @@ impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIde
     }
 
     fn verify_rebind_signature(
-        _account_id: &u64,
-        _payload: &[u8],
+        account_id: &u64,
+        payload: &[u8],
         signature: &pallet::SignatureOf<Test>,
     ) -> bool {
-        signature.as_slice() == b"valid"
+        signature.as_slice() == rebind_signature_bytes(account_id, payload)
     }
 
     fn can_manage_anonymous_cid(
@@ -147,19 +196,19 @@ impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIde
     }
 
     fn verify_occupy_signature(
-        _account_id: &u64,
-        _payload: &[u8],
+        account_id: &u64,
+        payload: &[u8],
         signature: &pallet::SignatureOf<Test>,
     ) -> bool {
-        signature.as_slice() == b"valid"
+        signature.as_slice() == rebind_signature_bytes(account_id, payload)
     }
 
     fn verify_admin_rebind_signature(
-        _account_id: &u64,
-        _payload: &[u8],
+        account_id: &u64,
+        payload: &[u8],
         signature: &pallet::SignatureOf<Test>,
     ) -> bool {
-        signature.as_slice() == b"valid"
+        signature.as_slice() == rebind_signature_bytes(account_id, payload)
     }
 }
 
@@ -272,6 +321,7 @@ fn genesis_cid_binding_writes_active_registry_and_bidirectional_indexes() {
             assert_eq!(record.revoked_at, None);
             assert_eq!(AccountIdByCid::<Test>::get(&cid_number), Some(42));
             assert_eq!(CidByAccountId::<Test>::get(42), Some(cid_number.clone()));
+            assert_eq!(BindingRevisionByCid::<Test>::get(&cid_number), Some(1));
             assert!(!VotingIdentityByCid::<Test>::contains_key(&cid_number));
             assert!(!CandidateIdentityByCid::<Test>::contains_key(&cid_number));
         },
@@ -292,11 +342,7 @@ fn genesis_cid_binding_rejects_duplicate_cid() {
 #[test]
 #[should_panic(expected = "创世 CID 必须是合法的 CTZN 或 NATP 人主体号码")]
 fn genesis_cid_binding_rejects_invalid_cid_number() {
-    let _ = new_test_ext_with_cid_bindings(vec![(
-        cid(b"not-a-cid"),
-        42,
-        registrar_cid_number(),
-    )]);
+    let _ = new_test_ext_with_cid_bindings(vec![(cid(b"not-a-cid"), 42, registrar_cid_number())]);
 }
 
 #[test]
@@ -320,13 +366,16 @@ fn occupy_tag(tag: &str) {
 
 /// 注册局占号并绑定指定账户(多占测试须给不同账户,一账户一 CID)。
 fn occupy_tag_as(tag: &str, account: u64) {
+    let cid_bytes = citizen_cid_number(tag);
+    let expires_at = rebind_expires_at();
     assert_ok!(CitizenIdentity::occupy_cid(
         RuntimeOrigin::signed(100),
         registrar_cid_number(),
         registrar_role_code(),
-        cid(&citizen_cid_number(tag)),
+        cid(&cid_bytes),
         account,
-        valid_signature(),
+        expires_at,
+        occupy_signature(account, &cid_bytes, expires_at),
     ));
 }
 
@@ -350,6 +399,74 @@ fn public_cid_number(tag: &str) -> alloc::vec::Vec<u8> {
 
 fn valid_signature() -> pallet::SignatureOf<Test> {
     b"valid".to_vec().try_into().expect("signature should fit")
+}
+
+fn rebind_signature_bytes(account_id: &u64, payload: &[u8]) -> [u8; 32] {
+    let mut material = account_id.encode();
+    material.extend_from_slice(payload);
+    sp_io::hashing::blake2_256(&material)
+}
+
+fn rebind_authorization(
+    cid_number: &[u8],
+    old_account_id: u64,
+    new_account_id: u64,
+    expected_binding_revision: u64,
+    expires_at: u64,
+) -> CidRebindAuthorization<<Test as frame_system::Config>::Hash, u64> {
+    CidRebindAuthorization {
+        genesis_hash: System::block_hash(0),
+        cid_number: cid(cid_number),
+        expected_old_account_id: old_account_id,
+        new_account_id,
+        expected_binding_revision,
+        expires_at,
+    }
+}
+
+fn rebind_signature(
+    signer_account_id: u64,
+    cid_number: &[u8],
+    old_account_id: u64,
+    new_account_id: u64,
+    expected_binding_revision: u64,
+    expires_at: u64,
+) -> pallet::SignatureOf<Test> {
+    let payload = rebind_authorization(
+        cid_number,
+        old_account_id,
+        new_account_id,
+        expected_binding_revision,
+        expires_at,
+    )
+    .encode();
+    rebind_signature_bytes(&signer_account_id, &payload)
+        .to_vec()
+        .try_into()
+        .expect("rebind signature should fit")
+}
+
+fn occupy_signature(
+    account_id: u64,
+    cid_number: &[u8],
+    expires_at: u64,
+) -> pallet::SignatureOf<Test> {
+    let payload = CidOccupyAuthorization {
+        genesis_hash: System::block_hash(0),
+        cid_number: cid(cid_number),
+        account_id,
+        expected_binding_revision: 0,
+        expires_at,
+    }
+    .encode();
+    rebind_signature_bytes(&account_id, &payload)
+        .to_vec()
+        .try_into()
+        .expect("occupy signature should fit")
+}
+
+fn rebind_expires_at() -> u64 {
+    test_time_secs() + MAX_CID_AUTHORIZATION_LIFETIME_SECS
 }
 
 fn voting_payload(account_id: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
@@ -428,7 +545,10 @@ fn self_occupy_cid_binds_account_and_stays_anonymous() {
         assert_eq!(CidByAccountId::<Test>::get(1), Some(cid(&cid_bytes)));
         // 登记记录:SELF registrar + 空居住地 + Active + commitment = blake2_256(account_id)。
         let rec = CidRegistry::<Test>::get(cid(&cid_bytes)).expect("record");
-        assert_eq!(rec.registrar_cid_number.to_vec(), SELF_OCCUPY_REGISTRAR.to_vec());
+        assert_eq!(
+            rec.registrar_cid_number.to_vec(),
+            SELF_OCCUPY_REGISTRAR.to_vec()
+        );
         assert!(rec.residence_province_code.is_empty());
         assert!(rec.residence_city_code.is_empty());
         assert_eq!(rec.status, CidRecordStatus::Active);
@@ -564,16 +684,20 @@ fn self_rebind_cid_account_id_moves_binding_to_new_account_id() {
             RuntimeOrigin::signed(1),
             cid(&cid_bytes),
         ));
+        let expires_at = rebind_expires_at();
         // 新账户 2 作 origin(证新账户受控),旧账户 1 授权签名。
         assert_ok!(CitizenIdentity::self_rebind_cid_account_id(
             RuntimeOrigin::signed(2),
             cid(&cid_bytes),
-            valid_signature(),
+            1,
+            expires_at,
+            rebind_signature(1, &cid_bytes, 1, 2, 1, expires_at),
         ));
         // 换绑后:cid 绑新账户 2,旧账户 1 反向索引清除。
         assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(2));
         assert_eq!(CidByAccountId::<Test>::get(2), Some(cid(&cid_bytes)));
         assert_eq!(CidByAccountId::<Test>::get(1), None);
+        assert_eq!(BindingRevisionByCid::<Test>::get(cid(&cid_bytes)), Some(2));
     });
 }
 
@@ -584,6 +708,8 @@ fn self_rebind_cid_account_id_rejects_unoccupied_cid() {
             CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&citizen_cid_number("rebind_none")),
+                1,
+                rebind_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::NotBoundToAnyCid
@@ -599,12 +725,14 @@ fn self_rebind_cid_account_id_rejects_invalid_old_signature() {
             RuntimeOrigin::signed(1),
             cid(&cid_bytes),
         ));
-        let bad_sig: pallet::SignatureOf<Test> =
-            b"nope".to_vec().try_into().expect("sig fits");
+        let bad_sig: pallet::SignatureOf<Test> = b"nope".to_vec().try_into().expect("sig fits");
+        let expires_at = rebind_expires_at();
         assert_noop!(
             CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&cid_bytes),
+                1,
+                expires_at,
                 bad_sig,
             ),
             Error::<Test>::InvalidRebindSignature
@@ -626,11 +754,14 @@ fn self_rebind_cid_account_id_rejects_new_account_bound_to_another_cid() {
             RuntimeOrigin::signed(2),
             cid(&cid_b),
         ));
+        let expires_at = rebind_expires_at();
         assert_noop!(
             CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&cid_a),
-                valid_signature(),
+                1,
+                expires_at,
+                rebind_signature(1, &cid_a, 1, 2, 1, expires_at),
             ),
             Error::<Test>::AccountIdAlreadyBoundToAnotherCid
         );
@@ -653,9 +784,116 @@ fn self_rebind_cid_account_id_rejects_civic_cid() {
             CitizenIdentity::self_rebind_cid_account_id(
                 RuntimeOrigin::signed(2),
                 cid(&citizen_cid_number("0001")),
+                1,
+                rebind_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::CivicRebindRequiresRegistrar
+        );
+    });
+}
+
+#[test]
+fn self_rebind_rejects_wrong_revision_expiry_same_account_and_cross_chain_signature() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("rebind-guards");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        let expires_at = rebind_expires_at();
+        let signature = rebind_signature(1, &cid_bytes, 1, 2, 1, expires_at);
+
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account_id(
+                RuntimeOrigin::signed(2),
+                cid(&cid_bytes),
+                2,
+                expires_at,
+                signature.clone(),
+            ),
+            Error::<Test>::BindingRevisionMismatch
+        );
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account_id(
+                RuntimeOrigin::signed(2),
+                cid(&cid_bytes),
+                1,
+                test_time_secs(),
+                signature.clone(),
+            ),
+            Error::<Test>::CidAuthorizationExpired
+        );
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account_id(
+                RuntimeOrigin::signed(2),
+                cid(&cid_bytes),
+                1,
+                test_time_secs() + MAX_CID_AUTHORIZATION_LIFETIME_SECS + 1,
+                signature.clone(),
+            ),
+            Error::<Test>::CidAuthorizationLifetimeTooLong
+        );
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account_id(
+                RuntimeOrigin::signed(1),
+                cid(&cid_bytes),
+                1,
+                expires_at,
+                rebind_signature(1, &cid_bytes, 1, 1, 1, expires_at),
+            ),
+            Error::<Test>::RebindAccountIdUnchanged
+        );
+
+        frame_system::BlockHash::<Test>::insert(0, sp_core::H256::repeat_byte(9));
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account_id(
+                RuntimeOrigin::signed(2),
+                cid(&cid_bytes),
+                1,
+                expires_at,
+                signature,
+            ),
+            Error::<Test>::InvalidRebindSignature
+        );
+    });
+}
+
+#[test]
+fn self_rebind_rejects_a_historical_authorization_after_two_later_rotations() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("rebind-replay");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        let expires_at = rebind_expires_at();
+        let historical = rebind_signature(1, &cid_bytes, 1, 2, 1, expires_at);
+        assert_ok!(CitizenIdentity::self_rebind_cid_account_id(
+            RuntimeOrigin::signed(2),
+            cid(&cid_bytes),
+            1,
+            expires_at,
+            historical.clone(),
+        ));
+        assert_ok!(CitizenIdentity::self_rebind_cid_account_id(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+            2,
+            expires_at,
+            rebind_signature(2, &cid_bytes, 2, 1, 2, expires_at),
+        ));
+        assert_eq!(BindingRevisionByCid::<Test>::get(cid(&cid_bytes)), Some(3));
+
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account_id(
+                RuntimeOrigin::signed(2),
+                cid(&cid_bytes),
+                1,
+                expires_at,
+                historical,
+            ),
+            Error::<Test>::BindingRevisionMismatch
         );
     });
 }
@@ -665,23 +903,22 @@ fn admin_rebind_cid_account_id_moves_binding_to_new_account_id() {
     new_test_ext().execute_with(|| {
         // 注册局占号绑账户 1(匿名),用户丢钥后由注册局代换绑到账户 2。
         occupy_tag_as("adm1", 1);
+        let cid_bytes = citizen_cid_number("adm1");
+        let expires_at = rebind_expires_at();
         assert_ok!(CitizenIdentity::admin_rebind_cid_account_id(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            cid(&citizen_cid_number("adm1")),
+            cid(&cid_bytes),
             2,
-            valid_signature(),
+            1,
+            expires_at,
+            rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at),
         ));
-        assert_eq!(
-            AccountIdByCid::<Test>::get(cid(&citizen_cid_number("adm1"))),
-            Some(2)
-        );
-        assert_eq!(
-            CidByAccountId::<Test>::get(2),
-            Some(cid(&citizen_cid_number("adm1")))
-        );
+        assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(2));
+        assert_eq!(CidByAccountId::<Test>::get(2), Some(cid(&cid_bytes)));
         assert_eq!(CidByAccountId::<Test>::get(1), None);
+        assert_eq!(BindingRevisionByCid::<Test>::get(cid(&cid_bytes)), Some(2));
     });
 }
 
@@ -695,6 +932,8 @@ fn admin_rebind_cid_account_id_rejects_unoccupied_cid() {
                 registrar_role_code(),
                 cid(&citizen_cid_number("adm_none")),
                 2,
+                1,
+                rebind_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::NotBoundToAnyCid
@@ -703,27 +942,36 @@ fn admin_rebind_cid_account_id_rejects_unoccupied_cid() {
 }
 
 #[test]
-fn admin_rebind_cid_account_id_rejects_civic_cid() {
+fn admin_rebind_cid_account_id_rebinds_civic_cid_with_scoped_registrar() {
     new_test_ext().execute_with(|| {
-        // civic(有投票身份)换绑只能经对应注册局的 civic 流程(留后期),此入口拒。
+        let cid_bytes = citizen_cid_number("0001");
         occupy_tag("0001");
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            voting_payload(1, &citizen_cid_number("0001")),
+            voting_payload(1, &cid_bytes),
             valid_signature(),
         ));
-        assert_noop!(
-            CitizenIdentity::admin_rebind_cid_account_id(
-                RuntimeOrigin::signed(100),
-                registrar_cid_number(),
-                registrar_role_code(),
-                cid(&citizen_cid_number("0001")),
-                2,
-                valid_signature(),
-            ),
-            Error::<Test>::CivicRebindRequiresRegistrar
+        let expires_at = rebind_expires_at();
+        assert_ok!(CitizenIdentity::admin_rebind_cid_account_id(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&cid_bytes),
+            2,
+            1,
+            expires_at,
+            rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at),
+        ));
+        assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(2));
+        assert!(VotingIdentityByCid::<Test>::contains_key(cid(&cid_bytes)));
+        assert!(CitizenIdentity::citizen_subject(&1).is_none());
+        assert_eq!(
+            CitizenIdentity::citizen_subject(&2)
+                .expect("实名 CID 应由新钱包继续使用")
+                .cid_number,
+            cid(&cid_bytes)
         );
     });
 }
@@ -732,14 +980,18 @@ fn admin_rebind_cid_account_id_rejects_civic_cid() {
 fn admin_rebind_cid_account_id_rejects_unauthorized_registrar() {
     new_test_ext().execute_with(|| {
         occupy_tag_as("adm3", 1);
+        let cid_bytes = citizen_cid_number("adm3");
+        let expires_at = rebind_expires_at();
         assert_noop!(
             CitizenIdentity::admin_rebind_cid_account_id(
                 RuntimeOrigin::signed(999),
                 registrar_cid_number(),
                 registrar_role_code(),
-                cid(&citizen_cid_number("adm3")),
+                cid(&cid_bytes),
                 2,
-                valid_signature(),
+                1,
+                expires_at,
+                rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at),
             ),
             Error::<Test>::UnauthorizedRegistrar
         );
@@ -758,10 +1010,79 @@ fn admin_rebind_cid_account_id_rejects_invalid_new_signature() {
                 registrar_role_code(),
                 cid(&citizen_cid_number("adm2")),
                 2,
+                1,
+                rebind_expires_at(),
                 bad_sig,
             ),
             Error::<Test>::InvalidAdminRebindSignature
         );
+    });
+}
+
+#[test]
+fn admin_rebind_rejects_stale_expired_same_account_and_cross_chain_authorizations() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("adm-guards");
+        occupy_tag_as("adm-guards", 1);
+        let expires_at = rebind_expires_at();
+        let signature = rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at);
+
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account_id(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                2,
+                2,
+                expires_at,
+                signature.clone(),
+            ),
+            Error::<Test>::BindingRevisionMismatch
+        );
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account_id(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                2,
+                1,
+                test_time_secs(),
+                signature.clone(),
+            ),
+            Error::<Test>::CidAuthorizationExpired
+        );
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account_id(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                1,
+                1,
+                expires_at,
+                rebind_signature(1, &cid_bytes, 1, 1, 1, expires_at),
+            ),
+            Error::<Test>::RebindAccountIdUnchanged
+        );
+
+        frame_system::BlockHash::<Test>::insert(0, sp_core::H256::repeat_byte(6));
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account_id(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                2,
+                1,
+                expires_at,
+                signature,
+            ),
+            Error::<Test>::InvalidAdminRebindSignature
+        );
+        assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(1));
+        assert_eq!(BindingRevisionByCid::<Test>::get(cid(&cid_bytes)), Some(1));
     });
 }
 
@@ -771,14 +1092,18 @@ fn admin_rebind_cid_account_id_rejects_new_account_bound_to_another_cid() {
         // adm4a 绑账户 1、adm4b 绑账户 2;把 adm4a 换绑到已绑 adm4b 的账户 2 → 拒。
         occupy_tag_as("adm4a", 1);
         occupy_tag_as("adm4b", 2);
+        let cid_bytes = citizen_cid_number("adm4a");
+        let expires_at = rebind_expires_at();
         assert_noop!(
             CitizenIdentity::admin_rebind_cid_account_id(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                cid(&citizen_cid_number("adm4a")),
+                cid(&cid_bytes),
                 2,
-                valid_signature(),
+                1,
+                expires_at,
+                rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at),
             ),
             Error::<Test>::AccountIdAlreadyBoundToAnotherCid
         );
@@ -1020,8 +1345,93 @@ fn revoke_identity_marks_status_and_removes_effective_population() {
         assert!(!CandidateIdentityByCid::<Test>::contains_key(cid(
             &citizen_cid_number("REVOKE")
         )));
+        assert_eq!(
+            BindingRevisionByCid::<Test>::get(cid(&citizen_cid_number("REVOKE"))),
+            Some(2)
+        );
         assert_eq!(CountryVotingCount::<Test>::get(), 0);
         assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_none());
+
+        let cid_number = cid(&citizen_cid_number("REVOKE"));
+        let identity_before = VotingIdentityByCid::<Test>::get(&cid_number);
+        let record_before = CidRegistry::<Test>::get(&cid_number);
+        let revision_before = BindingRevisionByCid::<Test>::get(&cid_number);
+        assert_noop!(
+            CitizenIdentity::revoke_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid_number.clone(),
+            ),
+            Error::<Test>::CidAlreadyRevoked
+        );
+        assert_eq!(
+            VotingIdentityByCid::<Test>::get(&cid_number),
+            identity_before
+        );
+        assert_eq!(CidRegistry::<Test>::get(&cid_number), record_before);
+        assert_eq!(
+            BindingRevisionByCid::<Test>::get(&cid_number),
+            revision_before
+        );
+        assert_eq!(CountryVotingCount::<Test>::get(), 0);
+    });
+}
+
+#[test]
+fn revoke_identity_revision_preflight_failures_leave_state_unchanged() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("REVOKE-REV");
+        occupy_tag("REVOKE-REV");
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            voting_payload(1, &cid_bytes),
+            valid_signature(),
+        ));
+        let cid_number = cid(&cid_bytes);
+        let identity_before = VotingIdentityByCid::<Test>::get(&cid_number);
+        let record_before = CidRegistry::<Test>::get(&cid_number);
+        let population_before = CountryVotingCount::<Test>::get();
+
+        BindingRevisionByCid::<Test>::remove(&cid_number);
+        assert_noop!(
+            CitizenIdentity::revoke_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid_number.clone(),
+            ),
+            Error::<Test>::BindingRevisionMissing
+        );
+        assert_eq!(
+            VotingIdentityByCid::<Test>::get(&cid_number),
+            identity_before
+        );
+        assert_eq!(CidRegistry::<Test>::get(&cid_number), record_before);
+        assert_eq!(CountryVotingCount::<Test>::get(), population_before);
+
+        BindingRevisionByCid::<Test>::insert(&cid_number, u64::MAX);
+        assert_noop!(
+            CitizenIdentity::revoke_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid_number.clone(),
+            ),
+            Error::<Test>::BindingRevisionOverflow
+        );
+        assert_eq!(
+            VotingIdentityByCid::<Test>::get(&cid_number),
+            identity_before
+        );
+        assert_eq!(CidRegistry::<Test>::get(&cid_number), record_before);
+        assert_eq!(CountryVotingCount::<Test>::get(), population_before);
+        assert_eq!(
+            BindingRevisionByCid::<Test>::get(&cid_number),
+            Some(u64::MAX)
+        );
     });
 }
 
@@ -1549,17 +1959,20 @@ fn occupy_cid_binds_account_and_stays_anonymous() {
     use codec::Encode;
     new_test_ext().execute_with(|| {
         let cid_bytes = citizen_cid_number("OCC-BIND");
+        let expires_at = rebind_expires_at();
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
             cid(&cid_bytes),
             7,
-            valid_signature(),
+            expires_at,
+            occupy_signature(7, &cid_bytes, expires_at),
         ));
         // 占即绑:双向绑定成立。
         assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(7));
         assert_eq!(CidByAccountId::<Test>::get(7), Some(cid(&cid_bytes)));
+        assert_eq!(BindingRevisionByCid::<Test>::get(cid(&cid_bytes)), Some(1));
         // 登记记录:注册局 registrar + 空居住地(全国号)+ Active + commitment=blake2_256(账户)。
         let rec = CidRegistry::<Test>::get(cid(&cid_bytes)).expect("record");
         assert_eq!(rec.registrar_cid_number, registrar_cid_number());
@@ -1589,35 +2002,51 @@ fn occupy_cid_accepts_resident_natp_type() {
         )
         .expect("natp cid should generate")
         .into_bytes();
+        let expires_at = rebind_expires_at();
         assert_ok!(CitizenIdentity::occupy_cid(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
             cid(&natp),
             8,
-            valid_signature(),
+            expires_at,
+            occupy_signature(8, &natp, expires_at),
         ));
         assert_eq!(CidByAccountId::<Test>::get(8), Some(cid(&natp)));
     });
 }
 
 #[test]
-fn occupy_cid_is_idempotent_for_same_registrar_and_account_id() {
+fn occupy_cid_rejects_replay_after_first_binding() {
     new_test_ext().execute_with(|| {
         occupy_tag_as("OCC-1", 1);
-        // 同注册局 + 同账户重复提交:commitment=blake2_256(账户) 同值,幂等放行。
-        occupy_tag_as("OCC-1", 1);
-        // 另一账户抢占同 CID:一账户一 CID 双向绑定拦截。
+        let cid_bytes = citizen_cid_number("OCC-1");
+        let expires_at = rebind_expires_at();
+        // 首次绑定证明公开后不得再次提交，哪怕注册局、CID 与账户完全相同。
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                cid(&citizen_cid_number("OCC-1")),
-                2,
-                valid_signature(),
+                cid(&cid_bytes),
+                1,
+                expires_at,
+                occupy_signature(1, &cid_bytes, expires_at),
             ),
-            Error::<Test>::CidAccountIdBindingMismatch
+            Error::<Test>::CidAlreadyOccupied
+        );
+        // 另一账户抢占同 CID 同样由“只允许 revision=0 首次绑定”拒绝。
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                2,
+                expires_at,
+                occupy_signature(2, &cid_bytes, expires_at),
+            ),
+            Error::<Test>::CidAlreadyOccupied
         );
     });
 }
@@ -1625,14 +2054,64 @@ fn occupy_cid_is_idempotent_for_same_registrar_and_account_id() {
 #[test]
 fn occupy_cid_rejects_invalid_signature() {
     new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("BAD-SIG");
         assert_noop!(
             CitizenIdentity::occupy_cid(
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                cid(&citizen_cid_number("BAD-SIG")),
+                cid(&cid_bytes),
                 1,
+                rebind_expires_at(),
                 b"nope".to_vec().try_into().expect("signature should fit"),
+            ),
+            Error::<Test>::InvalidOccupySignature
+        );
+    });
+}
+
+#[test]
+fn occupy_cid_rejects_expired_overlong_and_cross_chain_authorizations() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("OCC-GUARDS");
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                1,
+                test_time_secs(),
+                occupy_signature(1, &cid_bytes, test_time_secs()),
+            ),
+            Error::<Test>::CidAuthorizationExpired
+        );
+        let overlong = test_time_secs() + MAX_CID_AUTHORIZATION_LIFETIME_SECS + 1;
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                1,
+                overlong,
+                occupy_signature(1, &cid_bytes, overlong),
+            ),
+            Error::<Test>::CidAuthorizationLifetimeTooLong
+        );
+
+        let expires_at = rebind_expires_at();
+        let signature = occupy_signature(1, &cid_bytes, expires_at);
+        frame_system::BlockHash::<Test>::insert(0, sp_core::H256::repeat_byte(7));
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid(&cid_bytes),
+                1,
+                expires_at,
+                signature,
             ),
             Error::<Test>::InvalidOccupySignature
         );
@@ -1650,6 +2129,7 @@ fn occupy_cid_rejects_unauthorized_registrar_and_bad_number() {
                 registrar_role_code(),
                 cid(&citizen_cid_number("OCC-2")),
                 1,
+                rebind_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::UnauthorizedRegistrar
@@ -1662,6 +2142,7 @@ fn occupy_cid_rejects_unauthorized_registrar_and_bad_number() {
                 registrar_role_code(),
                 cid(&public_cid_number("OCC-2")),
                 1,
+                rebind_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::InvalidCitizenCode
@@ -1708,6 +2189,10 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
         let rec = CidRegistry::<Test>::get(cid(&citizen_cid_number("RV-1"))).expect("record kept");
         assert_eq!(rec.status, CidRecordStatus::Revoked);
         assert_eq!(
+            BindingRevisionByCid::<Test>::get(cid(&citizen_cid_number("RV-1"))),
+            Some(2)
+        );
+        assert_eq!(
             VotingIdentityByCid::<Test>::get(cid(&citizen_cid_number("RV-1")))
                 .expect("identity kept")
                 .citizen_status,
@@ -1733,6 +2218,7 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
                 registrar_role_code(),
                 cid(&citizen_cid_number("RV-1")),
                 1,
+                rebind_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::CidAlreadyOccupied
@@ -1749,6 +2235,114 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
             ),
             Error::<Test>::CidAlreadyRevoked
         );
+    });
+}
+
+#[test]
+fn revoke_cid_revision_preflight_failures_leave_state_unchanged() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("RV-REV");
+        occupy_tag("RV-REV");
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            voting_payload(1, &cid_bytes),
+            valid_signature(),
+        ));
+        let cid_number = cid(&cid_bytes);
+        let identity_before = VotingIdentityByCid::<Test>::get(&cid_number);
+        let record_before = CidRegistry::<Test>::get(&cid_number);
+        let population_before = CountryVotingCount::<Test>::get();
+
+        BindingRevisionByCid::<Test>::remove(&cid_number);
+        assert_noop!(
+            CitizenIdentity::revoke_cid(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid_number.clone(),
+            ),
+            Error::<Test>::BindingRevisionMissing
+        );
+        assert_eq!(
+            VotingIdentityByCid::<Test>::get(&cid_number),
+            identity_before
+        );
+        assert_eq!(CidRegistry::<Test>::get(&cid_number), record_before);
+        assert_eq!(CountryVotingCount::<Test>::get(), population_before);
+
+        BindingRevisionByCid::<Test>::insert(&cid_number, u64::MAX);
+        assert_noop!(
+            CitizenIdentity::revoke_cid(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid_number.clone(),
+            ),
+            Error::<Test>::BindingRevisionOverflow
+        );
+        assert_eq!(
+            VotingIdentityByCid::<Test>::get(&cid_number),
+            identity_before
+        );
+        assert_eq!(CidRegistry::<Test>::get(&cid_number), record_before);
+        assert_eq!(CountryVotingCount::<Test>::get(), population_before);
+        assert_eq!(
+            BindingRevisionByCid::<Test>::get(&cid_number),
+            Some(u64::MAX)
+        );
+    });
+}
+
+#[test]
+fn revoked_cid_rejects_self_and_admin_rebind_without_state_changes() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("RV-REBIND");
+        occupy_tag_as("RV-REBIND", 1);
+        let expires_at = rebind_expires_at();
+        let old_self_authorization = rebind_signature(1, &cid_bytes, 1, 2, 1, expires_at);
+        let old_admin_authorization = rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at);
+
+        assert_ok!(CitizenIdentity::revoke_cid(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&cid_bytes),
+        ));
+        let cid_number = cid(&cid_bytes);
+        let record_before = CidRegistry::<Test>::get(&cid_number);
+        assert_eq!(BindingRevisionByCid::<Test>::get(&cid_number), Some(2));
+
+        assert_noop!(
+            CitizenIdentity::self_rebind_cid_account_id(
+                RuntimeOrigin::signed(2),
+                cid_number.clone(),
+                1,
+                expires_at,
+                old_self_authorization,
+            ),
+            Error::<Test>::CidAlreadyRevoked
+        );
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account_id(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                cid_number.clone(),
+                2,
+                1,
+                expires_at,
+                old_admin_authorization,
+            ),
+            Error::<Test>::CidAlreadyRevoked
+        );
+
+        assert_eq!(CidRegistry::<Test>::get(&cid_number), record_before);
+        assert_eq!(AccountIdByCid::<Test>::get(&cid_number), Some(1));
+        assert_eq!(CidByAccountId::<Test>::get(1), Some(cid_number.clone()));
+        assert_eq!(CidByAccountId::<Test>::get(2), None);
+        assert_eq!(BindingRevisionByCid::<Test>::get(&cid_number), Some(2));
     });
 }
 

@@ -86,12 +86,23 @@ void main() {
     // (对空 u 抛 FormatException)导致整页崩溃。
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     const cid = 'CN220-CTZN2-198805200-2026';
-    final boundedCid = <int>[cid.length << 2, ...cid.codeUnits]; // Compact(len)+cid
-    final payloadB64 = base64Url.encode(boundedCid).replaceAll('=', '');
+    final expiresAt = now + 90;
+    final u64Expiry =
+        List<int>.generate(8, (index) => (expiresAt >> (index * 8)) & 0xff);
+    final authorizationTemplate = <int>[
+      ...List<int>.filled(32, 0x44),
+      cid.length << 2,
+      ...cid.codeUnits,
+      ...List<int>.filled(32, 0),
+      ...List<int>.filled(8, 0), // expected_binding_revision=0
+      ...u64Expiry,
+    ];
+    final payloadB64 =
+        base64Url.encode(authorizationTemplate).replaceAll('=', '');
     final request = QrEnvelope<SignRequestBody>(
       kind: QrKind.signRequest,
       id: 'offline-req-occupy-0001',
-      expiresAt: now + 90,
+      expiresAt: expiresAt,
       body: SignRequestBody(
         action: QrActions.citizenOccupy,
         signerPublicKey: '', // 占号:b.u 留空,钱包自填本账户

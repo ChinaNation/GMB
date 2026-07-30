@@ -530,7 +530,7 @@ export function CitizenDetailPage({
             type="info"
             showIcon
             style={{ marginBottom: 12 }}
-            message="匿名 CID 换绑:填岗位码 → 新钱包本人扫码换绑 → 管理员冷签上链。已具投票身份的 CID 换绑由链上拒绝,请走正式流程。"
+            message="CID 换绑:匿名 CID 可由任一在册 CREG/FRG 办理；实名 CID 仅本市 CREG/对应省 FRG。新钱包本人签名，不要求旧钱包；授权锁定创世哈希、当前账户、绑定版本和过期时间。"
           />
           <Space wrap>
             <Input

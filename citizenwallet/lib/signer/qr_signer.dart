@@ -10,6 +10,8 @@ import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/bodies/sign_request_body.dart';
 import 'package:citizenwallet/qr/bodies/sign_response_body.dart';
 
+import 'payload_decoder.dart';
+
 enum QrSignErrorCode {
   invalidFormat,
   invalidField,
@@ -159,18 +161,20 @@ class QrSigner {
       return _gmbSigningMessage(_opSignCitizenIdentity, payload);
     }
     if (QrActions.isSelfAccountDomainAction(body.action)) {
-      // 占号/换绑:payload=append_bounded(cid),追加钱包自选账户32B 后按域 op 哈希;
-      // 与后端 verify_occupy_signature / verify_admin_rebind_signature 逐字节对齐。
       if (selfAccountId == null || selfAccountId.length != 32) {
         return Uint8List(0);
       }
+      // 两种授权结构的账户槽位置不同，必须严格解析模板并原位替换；
+      // 禁止恢复旧版 `payload ++ account_id` 拼接。
+      final authorization = body.action == QrActions.citizenOccupy
+          ? PayloadDecoder.readCidOccupyAuthorizationTemplate(payload)
+          : PayloadDecoder.readCidRebindAuthorizationTemplate(payload);
+      final exactPayload = authorization?.materialize(selfAccountId);
+      if (exactPayload == null) return Uint8List(0);
       final opTag = body.action == QrActions.citizenOccupy
           ? _opSignCidOccupy
           : _opSignCidAdminRebind;
-      return _gmbSigningMessage(
-        opTag,
-        Uint8List.fromList([...payload, ...selfAccountId]),
-      );
+      return _gmbSigningMessage(opTag, exactPayload);
     }
     if (QrActions.isChainAction(body.action) && payload.length > 256) {
       final digest = Blake2bDigest(digestSize: 32)

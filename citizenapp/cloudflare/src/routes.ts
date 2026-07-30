@@ -8,7 +8,6 @@ import { chainBootstrapRoute } from "./chain/bootstrap";
 import { constitutionRoute } from "./chain/constitution";
 import { relaySignedExtrinsicRoute } from "./chain/extrinsic_relay";
 import { deleteContactRoute, listContactsRoute, putContactRoute } from "./contacts/service";
-import { rebindRevokeRoute } from "./rebind/service";
 import {
   consumeChatKeyPackage,
   fetchChatKeyPackages,
@@ -147,9 +146,6 @@ export async function routeRequest(
   }
   if (request.method === "DELETE" && path.startsWith("/v1/square/contacts/")) {
     return deleteContactRoute(request, env, path.slice("/v1/square/contacts/".length));
-  }
-  if (request.method === "POST" && path === "/v1/square/rebind/revoke") {
-    return rebindRevokeRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/uploads/prepare") {
     return prepareUpload(request, env);

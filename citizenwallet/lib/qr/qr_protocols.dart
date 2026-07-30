@@ -88,7 +88,8 @@ class QrActions {
   static int get updateCandidateIdentity => _code('update_candidate_identity');
   static int get revokeIdentity => _code('revoke_identity');
   static int get occupyCid => _code('occupy_cid');
-  static int get adminRebindCidAccountId => _code('admin_rebind_cid_account_id');
+  static int get adminRebindCidAccountId =>
+      _code('admin_rebind_cid_account_id');
   static int get revokeCid => _code('revoke_cid');
   static int get proposeRuntimeUpgrade => _code('propose_runtime_upgrade');
   static int get developerDirectUpgrade => _code('developer_direct_upgrade');
@@ -177,8 +178,8 @@ class QrActions {
 
   static bool isChainAction(int action) => action >= 0x0100;
 
-  /// 注册局代办占号/换绑的域签名:b.u 留空、d=append_bounded(cid),
-  /// 钱包扫码自填本账户再 signing_message(op_tag, d ++ 本账户32)。
+  /// 注册局首次绑定/换绑的域签名：b.u 留空，d 是带零账户槽的完整授权模板；
+  /// 钱包严格解析后原位填入本账户，再按对应 op_tag 签名。
   static bool isSelfAccountDomainAction(int action) =>
       action == citizenOccupy || action == citizenRebind;
 

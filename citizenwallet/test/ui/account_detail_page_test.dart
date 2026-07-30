@@ -6,6 +6,7 @@ import 'package:citizenwallet/qr/bodies/wallet_code_body.dart';
 import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/ui/account_detail_page.dart';
+import 'package:citizenwallet/ui/widgets/wallet_qr_dialog.dart';
 import 'package:citizenwallet/wallet/wallet_manager.dart';
 
 void main() {

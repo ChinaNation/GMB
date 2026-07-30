@@ -14,6 +14,7 @@ use crate::auth::model::AdminUser;
 use crate::auth::security_model::{AdminActionChallenge, AdminSecurityGrant};
 use crate::core::db::postgres_error_text;
 use crate::Db;
+use primitives::cid::number::cid_scope_codes;
 
 fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     let id: i64 = row.get(0);
@@ -322,6 +323,13 @@ pub(crate) fn hydrate_candidate_institution_metadata_conn(
     Ok(changed)
 }
 
+/// 授权作用域无法确定时的错误前缀。
+///
+/// 用于把「业务前置条件不满足」与「数据库故障」分开:前者重试永远不会成功,必须给出
+/// 可操作原因,不能报成「保存失败,请稍后重试」。识别方在
+/// `auth::login::onchain_gate`,与 `qr_login` 的 `http:<kind>:` 前缀约定同源。
+pub(crate) const SCOPE_ERROR_PREFIX: &str = "scope:";
+
 /// 从授权真源派生候选的行政作用域。
 ///
 /// FRG 的机构 CID 行政区只是登记地址，绝不能覆盖省管理员岗位；其省作用域仅由
@@ -340,11 +348,33 @@ fn authorization_scope_from_identity_conn(
     let institution_scope = if crate::core::chain_runtime::is_tier1_registry(institution_code) {
         None
     } else {
-        let Some((_, _, _, province_code, city_code, town_code)) =
-            resolve_binding_candidate_metadata_conn(conn, institution_cid_number)?
-        else {
-            return Err("binding institution metadata not found".to_string());
-        };
+        // 作用域优先取本地投影,投影缺失时从机构 CID 兜底派生。
+        //
+        // 投影只是缓存,机构 CID 才是不可漂移的单源(`china-code-immutable` / ADR-021),
+        // 因此缺投影绝不能阻断登录——私权机构本地无投影(`genesis_projection` 的私权回填
+        // 尚未实现),旧实现在这里直接 Err 导致所有私权机构管理员登不进控制台。
+        //
+        // 保留投影优先而非无条件走 CID:`cid_scope_codes` 只解出 R5 = 省2 + 市3,
+        // **不含镇码**。镇级机构(`T***`,14 种 `AdminLevel::Town`)的镇码只存在于投影里,
+        // 无条件改走 CID 会让镇级管理员 `scope_town_name` 恒为 None,
+        // 进而在 `scope::rules` 的 TOWN 分支 fail-closed 成空可见范围。
+        let (province_code, city_code, town_code) =
+            match resolve_binding_candidate_metadata_conn(conn, institution_cid_number)? {
+                Some((_, _, _, province_code, city_code, town_code)) => {
+                    (province_code, city_code, town_code)
+                }
+                None => {
+                    let (province, city) = cid_scope_codes(institution_cid_number.as_bytes())
+                        .map_err(|error| {
+                            format!("{SCOPE_ERROR_PREFIX}institution cid scope invalid: {error}")
+                        })?;
+                    (
+                        String::from_utf8_lossy(&province).into_owned(),
+                        String::from_utf8_lossy(&city).into_owned(),
+                        String::new(),
+                    )
+                }
+            };
         let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
             province_code.as_str(),
             Some(city_code.as_str()),
@@ -369,13 +399,18 @@ fn authorization_scope_from_sources(
     institution_scope: Option<AdminScope>,
 ) -> Result<AdminScope, String> {
     if crate::core::chain_runtime::is_tier1_registry(institution_code) {
-        let province_code = frg_province_code
-            .ok_or_else(|| "FRG authorization requires frg_province_code".to_string())?;
+        let province_code = frg_province_code.ok_or_else(|| {
+            format!("{SCOPE_ERROR_PREFIX}FRG authorization requires frg_province_code")
+        })?;
         let province_name = crate::core::chain_runtime::chain_province_name_by_code(province_code)
-            .ok_or_else(|| "FRG authorization province code is unknown".to_string())?;
+            .ok_or_else(|| {
+                format!("{SCOPE_ERROR_PREFIX}FRG authorization province code is unknown")
+            })?;
         return Ok((Some(province_name), None, None));
     }
-    institution_scope.ok_or_else(|| "binding institution scope is required".to_string())
+    institution_scope.ok_or_else(|| {
+        format!("{SCOPE_ERROR_PREFIX}binding institution scope is required")
+    })
 }
 
 pub(crate) fn derive_candidate_authorization_scope_conn(
@@ -1071,7 +1106,7 @@ pub(crate) fn get_qr_login_result_conn(
 // 仓储契约测试使用断言式解包定位不满足的前置条件，不影响生产错误处理。
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
-    use super::authorization_scope_from_sources;
+    use super::{authorization_scope_from_sources, cid_scope_codes, SCOPE_ERROR_PREFIX};
 
     #[test]
     fn frg_role_province_cannot_be_overwritten_by_institution_location() {
@@ -1088,7 +1123,55 @@ mod tests {
         let result = authorization_scope_from_sources("FRG", None, None);
         assert_eq!(
             result.unwrap_err(),
-            "FRG authorization requires frg_province_code"
+            format!("{SCOPE_ERROR_PREFIX}FRG authorization requires frg_province_code")
         );
+    }
+
+    /// 作用域类错误必须带 `scope:` 前缀,否则会被当成数据库故障、报成
+    /// 「请稍后重试」——而这类错误重试永远不会成功。
+    #[test]
+    fn scope_errors_are_prefixed_for_classification() {
+        for result in [
+            authorization_scope_from_sources("FRG", None, None),
+            authorization_scope_from_sources("FRG", Some(*b"??"), None),
+            authorization_scope_from_sources("SFGY", None, None),
+        ] {
+            let message = result.expect_err("这些前置条件都不满足,必须失败");
+            assert!(
+                message.starts_with(SCOPE_ERROR_PREFIX),
+                "作用域错误缺少 scope: 前缀,会被误判成数据库故障: {message}"
+            );
+        }
+    }
+
+    /// 非 Tier1 机构给出作用域后即通过,不再要求本地投影命中。
+    #[test]
+    fn non_tier1_accepts_scope_derived_without_projection() {
+        let derived_from_cid = Some((
+            Some("贵州省".to_string()),
+            Some("绥阳市".to_string()),
+            None,
+        ));
+        let scope = authorization_scope_from_sources("SFGY", None, derived_from_cid)
+            .expect("私权机构作用域可由机构 CID 派生");
+        assert_eq!(
+            scope,
+            (Some("贵州省".to_string()), Some("绥阳市".to_string()), None)
+        );
+    }
+
+    /// 机构 CID 的 R5 = 省2 + 市3,私权机构也能解出——这是缺投影时的兜底真源。
+    #[test]
+    fn private_institution_cid_yields_province_and_city() {
+        let (province, city) = cid_scope_codes(b"GZ018-SFGYR-201206100-2026")
+            .expect("私权机构 CID 必须能解出省市码");
+        assert_eq!(&province, b"GZ");
+        assert_eq!(&city, b"018");
+    }
+
+    /// 自然人 CID 去地域化,传进来必须 fail-closed,不得把号段误读成区划码。
+    #[test]
+    fn person_cid_scope_is_rejected() {
+        assert!(cid_scope_codes(b"CN001-CTZN-000000001-2026").is_err());
     }
 }

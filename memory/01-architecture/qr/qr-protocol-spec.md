@@ -85,7 +85,7 @@
 |---|---|---|---|
 | `a` | int | 是 | 业务动作码,见 `qr-action-registry.md` |
 | `g` | int | 是 | 签名算法码,当前只允许 `1 = sr25519` |
-| `u` | string | 是 | 压缩传输键；内部唯一语义名为 `signer_public_key`，值是期望签名者 32 字节公钥的 base64url 无填充编码 |
+| `u` | string | 是 | 压缩传输键；内部唯一语义名为 `signer_public_key`，通常是期望签名者 32 字节公钥的 base64url 无填充编码；仅 `citizen_occupy/citizen_rebind` 必须为空字符串，由钱包在 `d` 的账户零槽原位填入所选账户 |
 | `d` | string | 是 | `review_payload` 原始字节,base64url 无填充;除 Runtime 升级 hash-only 外,必须可被扫码端完整解码和中文展示 |
 
 `review_payload` 与签名字节必须分离:
@@ -102,9 +102,15 @@
 | 普通链交易 | `a = (pallet_index << 8) | call_index` | `d` 必须是生成方用当前 runtime 类型构造的完整 `SignedPayload` 原始三元组 SCALE 字节;长度 ≤256B 签原文,>256B 签 `blake2_256(review_payload)` |
 | 登录 | `a = 1` | 签 payload 原文 |
 | 公民链上身份确认 | `a = 2` | `d` 必须是 `VotingIdentityPayload` SCALE bytes,签 `blake2_256(GMB || 0x10 || d)` |
+| 注册局首次绑定 | `a = 10 citizen_occupy` | `d = genesis_hash + bounded cid + 32B 零 account_id 槽 + revision=0(u64 LE) + expires_at(u64 LE)`；钱包严格解码且确认无尾字节后原位填入账户，签 `blake2_256(GMB || 0x12 || 完整授权)` |
+| 注册局换绑 | `a = 11 citizen_rebind` | `d = genesis_hash + bounded cid + expected_old_account_id + 32B 零 new_account_id 槽 + nonzero revision(u64 LE) + expires_at(u64 LE)`；钱包拒绝新旧账户相同，原位填入新账户后签 `blake2_256(GMB || 0x1f || 完整授权)` |
 | OnChina 管理员治理文本载荷 | `a = 3` | 签 payload 原文 |
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
 | Runtime 升级哈希签名 | `a = 7` 或已登记 RuntimeUpgrade hash-only action | `d` 允许是 32B signing bytes,签该 32B;这是 QR_V1 唯一 hash-only 例外 |
+
+`citizen_occupy/citizen_rebind` 的外层 `e` 必须与内层 `expires_at` 完全相等。账户零槽
+非零、CID 非规范 SCALE、revision 不符合上述约束、载荷截断或存在尾字节时，CitizenApp
+与 CitizenWallet 都必须拒签；不得恢复旧版 `bounded_cid ++ account_id` 末尾拼接。
 
 OnChina 登录生成 `a=1` 前必须先扫描 `k=5 wallet_code` 钱包码，取 `b.account_id`
 作为唯一目标账户，再按 `account_id → CidByAccountId → CidRegistry Active →

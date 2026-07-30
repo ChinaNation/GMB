@@ -2,10 +2,11 @@
 //
 // 逐字节钉死 pallet/call 前缀、CidNumberBound(BoundedVec<u8>)与 SignatureOf
 // (BoundedVec<u8>)编码,以及旧账户换绑授权摘要 signing_message(0x11, ...),
-// 防与链端 `self_occupy_cid` / `self_rebind_cid_account` 漂移。
+// 防与链端 `self_occupy_cid` / `self_rebind_cid_account_id` 漂移。
 
 import 'dart:typed_data';
 
+import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
 import 'package:citizenapp/signer/signing.dart'
     show kOpSignCidRebind, signingMessage;
@@ -38,63 +39,319 @@ void main() {
     });
   });
 
-  group('self_rebind_cid_account call data', () {
+  group('self_rebind_cid_account_id call data', () {
     final sig = Uint8List(64)..fillRange(0, 64, 0xAB);
+    final revision = BigInt.from(0x01020304);
+    final expiresAt = BigInt.from(0x11121314);
 
-    test('布局 [10,9, BoundedVec(cid), BoundedVec(sig=64B)]', () {
-      final call = CitizenIdentityRpc.buildSelfRebindCidAccountCall(cid, sig);
+    test('布局 [10,9,cid,revision:u64LE,expires:u64LE,sig]', () {
+      final call = CitizenIdentityRpc.buildSelfRebindCidAccountCall(
+        cidNumber: cid,
+        expectedBindingRevision: revision,
+        expiresAt: expiresAt,
+        oldAccountSignature: sig,
+      );
       expect(call.sublist(0, 2), <int>[10, 9]);
       expect(call[2], compactCid);
       expect(call.sublist(3, 3 + 26), cidBytes);
+      const revisionStart = 3 + 26;
+      expect(
+        call.sublist(revisionStart, revisionStart + 8),
+        <int>[0x04, 0x03, 0x02, 0x01, 0, 0, 0, 0],
+      );
+      const expiresStart = revisionStart + 8;
+      expect(
+        call.sublist(expiresStart, expiresStart + 8),
+        <int>[0x14, 0x13, 0x12, 0x11, 0, 0, 0, 0],
+      );
       // sig 段:BoundedVec<u8> ⇒ compact(64) 两字节 [0x01,0x01] ++ 64 字节。
-      const sigStart = 3 + 26;
+      const sigStart = expiresStart + 8;
       expect(call.sublist(sigStart, sigStart + 2), <int>[0x01, 0x01]);
       expect(call.sublist(sigStart + 2), sig);
-      expect(call.length, sigStart + 2 + 64); // 95
+      expect(call.length, sigStart + 2 + 64); // 111
     });
 
-    test('非 64 字节签名被拒', () {
+    test('非 64 字节签名或越界 u64 被拒', () {
       expect(
         () => CitizenIdentityRpc.buildSelfRebindCidAccountCall(
-            cid, Uint8List(63)),
+          cidNumber: cid,
+          expectedBindingRevision: revision,
+          expiresAt: expiresAt,
+          oldAccountSignature: Uint8List(63),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => CitizenIdentityRpc.buildSelfRebindCidAccountCall(
+          cidNumber: cid,
+          expectedBindingRevision: BigInt.one << 64,
+          expiresAt: expiresAt,
+          oldAccountSignature: sig,
+        ),
         throwsArgumentError,
       );
     });
   });
 
   group('rebind 旧账户授权摘要', () {
+    final genesisHash = Uint8List.fromList(List<int>.filled(32, 0x22));
+    const oldAccount =
+        '0x3333333333333333333333333333333333333333333333333333333333333333';
     const newAccount =
         '0x1111111111111111111111111111111111111111111111111111111111111111';
+    final oldAccountBytes = Uint8List.fromList(List<int>.filled(32, 0x33));
     final newAccountBytes = Uint8List.fromList(
       List<int>.filled(32, 0x11),
     );
+    final revision = BigInt.from(0x01020304);
+    final expiresAt = BigInt.from(0x11121314);
 
-    test('op_tag = 0x11 且摘要 = signing_message(0x11, compact(cid)++cid++new32)', () {
+    test('op=0x11 且字段逐字节对齐 CidRebindAuthorization SCALE', () {
       final digest = CitizenIdentityRpc.buildRebindSigningDigest(
+        genesisHash: genesisHash,
         cidNumber: cid,
+        expectedOldAccountId: oldAccount,
         newAccountId: newAccount,
+        expectedBindingRevision: revision,
+        expiresAt: expiresAt,
       );
       expect(kOpSignCidRebind, 0x11);
       expect(digest.length, 32);
 
       final payload = <int>[
+        ...genesisHash,
         compactCid,
         ...cidBytes,
+        ...oldAccountBytes,
         ...newAccountBytes,
+        0x04,
+        0x03,
+        0x02,
+        0x01,
+        0,
+        0,
+        0,
+        0,
+        0x14,
+        0x13,
+        0x12,
+        0x11,
+        0,
+        0,
+        0,
+        0,
       ];
       final expected =
           signingMessage(opTag: kOpSignCidRebind, scalePayload: payload);
       expect(digest, expected);
+      expect(
+        digest.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join(),
+        '15c430a70f07e25fee7b6023f6a24759994360cf07138da8f87a5aa5365cbf32',
+      );
+    });
+
+    test('创世/旧账户/revision/expiry 任一变化都不能重放旧摘要', () {
+      Uint8List digest({
+        Uint8List? genesis,
+        String? old,
+        BigInt? revisionValue,
+        BigInt? expiresValue,
+      }) =>
+          CitizenIdentityRpc.buildRebindSigningDigest(
+            genesisHash: genesis ?? genesisHash,
+            cidNumber: cid,
+            expectedOldAccountId: old ?? oldAccount,
+            newAccountId: newAccount,
+            expectedBindingRevision: revisionValue ?? revision,
+            expiresAt: expiresValue ?? expiresAt,
+          );
+
+      final baseline = digest();
+      expect(digest(genesis: Uint8List(32)..[0] = 1), isNot(baseline));
+      expect(digest(old: '0x${'44' * 32}'), isNot(baseline));
+      expect(digest(revisionValue: revision + BigInt.one), isNot(baseline));
+      expect(digest(expiresValue: expiresAt + BigInt.one), isNot(baseline));
     });
 
     test('非法 newAccountId 文本被拒', () {
       expect(
         () => CitizenIdentityRpc.buildRebindSigningDigest(
+          genesisHash: genesisHash,
           cidNumber: cid,
+          expectedOldAccountId: oldAccount,
           newAccountId: 'not-hex',
+          expectedBindingRevision: revision,
+          expiresAt: expiresAt,
         ),
         throwsArgumentError,
       );
     });
   });
+
+  test('换绑上下文在同一 finalized 块读取旧账户/revision/链上时间', () async {
+    final rpc = _RebindContextChainRpc();
+    final context = await CitizenIdentityRpc(chainRpc: rpc)
+        .fetchSelfRebindAuthorizationContext(cid);
+
+    expect(context.genesisHash, Uint8List.fromList(List<int>.filled(32, 0x22)));
+    expect(context.expectedOldAccountId, '0x${'33' * 32}');
+    expect(context.expectedBindingRevision, BigInt.from(7));
+    expect(context.expiresAt, BigInt.from(1700000300));
+    expect(rpc.readBlockHashes, List<String>.filled(3, '0x${'55' * 32}'));
+    expect(rpc.storageKeys.toSet().length, 3);
+  });
+
+  test('revision=u64::MAX 在生成签名前 fail-closed', () async {
+    final rpc = _RebindContextChainRpc(
+      revision: (BigInt.one << 64) - BigInt.one,
+    );
+    await expectLater(
+      CitizenIdentityRpc(chainRpc: rpc)
+          .fetchSelfRebindAuthorizationContext(cid),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  group('finalized 目标绑定后置核验', () {
+    const newAccount =
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
+    const blockHash =
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    test('账户与 revision 精确命中才通过', () async {
+      final rpc = _FinalizedBindingChainRpc(
+        accountByte: 0x11,
+        revision: 8,
+      );
+      await expectLater(
+        CitizenIdentityRpc(chainRpc: rpc).verifyFinalizedBindingState(
+          cidNumber: cid,
+          expectedAccountId: newAccount,
+          expectedBindingRevision: BigInt.from(8),
+          finalizedBlockHashHex: blockHash,
+        ),
+        completes,
+      );
+      expect(rpc.readBlockHashes, <String>[blockHash, blockHash]);
+    });
+
+    test('extrinsic 已 finalized 但绑定仍是旧账户/旧 revision 时拒绝', () async {
+      final rpc = _FinalizedBindingChainRpc(
+        accountByte: 0x33,
+        revision: 7,
+      );
+      await expectLater(
+        CitizenIdentityRpc(chainRpc: rpc).verifyFinalizedBindingState(
+          cidNumber: cid,
+          expectedAccountId: newAccount,
+          expectedBindingRevision: BigInt.from(8),
+          finalizedBlockHashHex: blockHash,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('目标账户已变但 revision 没有精确推进时拒绝', () async {
+      final rpc = _FinalizedBindingChainRpc(
+        accountByte: 0x11,
+        revision: 7,
+      );
+      await expectLater(
+        CitizenIdentityRpc(chainRpc: rpc).verifyFinalizedBindingState(
+          cidNumber: cid,
+          expectedAccountId: newAccount,
+          expectedBindingRevision: BigInt.from(8),
+          finalizedBlockHashHex: blockHash,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('首次占号只接受目标账户 + revision=1', () async {
+      final rpc = _FinalizedBindingChainRpc(
+        accountByte: 0x11,
+        revision: 1,
+      );
+      await expectLater(
+        CitizenIdentityRpc(chainRpc: rpc).verifyFinalizedBindingState(
+          cidNumber: cid,
+          expectedAccountId: newAccount,
+          expectedBindingRevision: BigInt.one,
+          finalizedBlockHashHex: blockHash,
+        ),
+        completes,
+      );
+    });
+  });
+}
+
+class _RebindContextChainRpc extends ChainRpc {
+  _RebindContextChainRpc({BigInt? revision})
+      : revision = revision ?? BigInt.from(7);
+
+  final BigInt revision;
+  int _readIndex = 0;
+  final List<String> readBlockHashes = <String>[];
+  final List<String> storageKeys = <String>[];
+
+  @override
+  Future<({Uint8List blockHash, int blockNumber})>
+      fetchFinalizedBlock() async => (
+            blockHash: Uint8List.fromList(List<int>.filled(32, 0x55)),
+            blockNumber: 88,
+          );
+
+  @override
+  Future<Uint8List> fetchGenesisHash() async =>
+      Uint8List.fromList(List<int>.filled(32, 0x22));
+
+  @override
+  Future<Uint8List?> fetchStorageAtBlock(
+    String storageKeyHex,
+    String blockHashHex,
+  ) async {
+    storageKeys.add(storageKeyHex);
+    readBlockHashes.add(blockHashHex);
+    return switch (_readIndex++) {
+      0 => Uint8List.fromList(List<int>.filled(32, 0x33)),
+      1 => _u64(revision),
+      2 => _u64(BigInt.from(1700000000000)),
+      _ => throw StateError('unexpected storage read'),
+    };
+  }
+
+  static Uint8List _u64(BigInt value) {
+    final result = Uint8List(8);
+    var remaining = value;
+    for (var index = 0; index < result.length; index++) {
+      result[index] = (remaining & BigInt.from(0xff)).toInt();
+      remaining >>= 8;
+    }
+    return result;
+  }
+}
+
+class _FinalizedBindingChainRpc extends ChainRpc {
+  _FinalizedBindingChainRpc({
+    required this.accountByte,
+    required this.revision,
+  });
+
+  final int accountByte;
+  final int revision;
+  int _readIndex = 0;
+  final List<String> readBlockHashes = <String>[];
+
+  @override
+  Future<Uint8List?> fetchStorageAtBlock(
+    String storageKeyHex,
+    String blockHashHex,
+  ) async {
+    readBlockHashes.add(blockHashHex);
+    return switch (_readIndex++) {
+      0 => Uint8List.fromList(List<int>.filled(32, accountByte)),
+      1 => _RebindContextChainRpc._u64(BigInt.from(revision)),
+      _ => throw StateError('unexpected storage read: $storageKeyHex'),
+    };
+  }
 }

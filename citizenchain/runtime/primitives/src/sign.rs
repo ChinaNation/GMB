@@ -50,10 +50,11 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 
 /// 公民档案上链确认。
 pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
-/// 匿名 CID 自助换绑:旧绑定账户对 `(cid_number, new_account_id)` 的授权签名(哈希域)。
+/// 匿名 CID 自助换绑：旧绑定账户签署含创世哈希、旧/新账户、binding revision 和
+/// Unix 秒过期时间的 `CidRebindAuthorization`（哈希域）。
 pub const OP_SIGN_CID_REBIND: u8 = 0x11;
-/// 注册局占号(占即绑):用户对 `(cid_number, account_id)` 的授权签名,证明所占匿名
-/// CID 绑定的钱包账户受本人控制(哈希域,与换绑域分离防重放)。
+/// 注册局首次占号(占即绑)：新账户签署含创世哈希、固定 revision=0 和 Unix 秒过期时间
+/// 的 `CidOccupyAuthorization`，证明账户受控（哈希域）。
 pub const OP_SIGN_CID_OCCUPY: u8 = 0x12;
 /// CID 机构登记(历史 op_tag,已无独立凭证构造入口;仅作为四端 `SIGN_OP_TAGS` 金标
 /// 注册表成员保留,删除会扰动四端字节契约与金标向量)。
@@ -86,8 +87,8 @@ pub const OP_SIGN_SQUARE_DEVICE_BIND: u8 = 0x1C;
 pub const OP_SIGN_SQUARE_ACTION: u8 = 0x1D;
 /// GRANDPA 验证密钥正常更换与紧急恢复的持钥证明。
 pub const OP_SIGN_GRANDPA_KEY_CHANGE: u8 = 0x1E;
-/// 注册局代匿名 CID 换绑:新账户对 `(cid_number, new_account_id)` 的控制证明(哈希域)。
-/// 与占号域 `OP_SIGN_CID_OCCUPY` 分离,防注册局把占号阶段截获的签名重放成换绑。
+/// 注册局代匿名或实名 CID 换绑：新账户签署 `CidRebindAuthorization` 控制证明。
+/// 与首次占号域分离，且载荷自带创世哈希、当前 revision 与过期时间。
 pub const OP_SIGN_CID_ADMIN_REBIND: u8 = 0x1F;
 
 /// 二进制前缀域(0x18/0x19)统一前缀长度:`GMB`(3B) + op_tag(1B) = 4 字节。

@@ -95,4 +95,37 @@ void main() {
 
     expect(find.text(kDevPhrase), findsOneWidget);
   });
+
+  testWidgets('账户列表每行有钱包码入口，点它出钱包码且不进账户详情', (tester) async {
+    // 真实导入一个钱包，账户0 落库后账户列表才有行可点。
+    late Wallet wallet;
+    await tester.runAsync(() async {
+      final created = await WalletManager().importWallet(kDevPhrase);
+      wallet = created.wallet;
+    });
+
+    await tester.runAsync(() async {
+      await tester
+          .pumpWidget(MaterialApp(home: WalletDetailPage(wallet: wallet)));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    // 二维码入口在每个账户行上，与右箭头并存。
+    final qrEntry = find.byTooltip('显示钱包码');
+    expect(qrEntry, findsWidgets);
+    expect(find.byIcon(Icons.chevron_right), findsWidgets);
+
+    await tester.tap(qrEntry.first);
+    await tester.pumpAndSettle();
+
+    // 弹出的是钱包码（与账户详情里同一份文案），且没有跳进账户详情。
+    expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
+    expect(find.text('账户详情'), findsNothing);
+    expect(find.textContaining('分钟内有效'), findsNothing);
+
+    await tester.tap(find.text('关闭'));
+    await tester.pumpAndSettle();
+    expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsNothing);
+  });
 }

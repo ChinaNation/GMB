@@ -522,9 +522,15 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 广场入口仍为 `lib/8964/square_tab_page.dart`，该入口直接挂载 `lib/8964/pages/square_home_page.dart`。
 - `lib/8964/` 是广场功能的唯一代码目录；公民 Tab 内旧“广场”子 tab 已改为“提案”，代码迁移到 `lib/citizen/all/`。
 - 当前代码已提供推荐、关注、竞选三分类前端壳、发布页和详情页；目标状态为用户图文/视频动态广场，不承载个人多签、机构账户或提案列表逻辑。
-- 广场用户身份统一使用链账户 `account_id`；会员身份、关注关系、推荐信号、发布草稿和上传任务都绑定 `account_id`。
+- 广场用户身份统一使用 `cid_number`；会员、关注关系、推荐信号、发布草稿和上传任务都归属
+  CID。`account_id` 只表示当前绑定签名钱包或某笔不可变链上事实的签名者。
 - 会员体系为三档（ADR-036，**会员与身份彻底解耦**）：自由会员 `freedom`、民主会员 `democracy`、薪火会员 `spark`。`membership_level` 是纯付费订阅轴，任意身份可订阅任意会员档；发帖分类权限按链上身份，Cloudflare 用量额度按平台会员档，两个权限轴互不替代。平台价格唯一真源为 finalized `SquarePost::PlatformPrice`，付款统一使用链上公民币；CitizenApp 保留三张会员卡，在 App 内完成订阅、取消和换档的一次热钱包签名，不打开外部支付页面。权益口径为未陈旧 finalized 链时钟下仍未到 `paid_until` 的 `Active` 或 `Cancelled`；`Terminated`、过期、缺失或陈旧镜像全部拒绝。
-- 会员页三张套餐卡及权益字段是 App 内置静态界面，进入页面第一帧直接渲染，不等待会话、Cloudflare 或轻节点。按 `account_id` 持久化 finalized 订阅展示快照与三档链上价格：订阅态缓存 5 分钟、价格缓存 30 分钟，有效期内不重复链读，过期后只在后台更新动态字段；首次无缓存时价格显示占位且订阅按钮禁用。手动刷新以及订阅、换档、取消等动权操作必须绕过展示缓存重新核验 finalized 状态和价格；Cloudflare 回执镜像重试不得阻塞页面链读。
+- 会员页三张套餐卡及权益字段是 App 内置静态界面，进入页面第一帧直接渲染，不等待会话、
+  Cloudflare 或轻节点。按 `cid_number` 持久化 finalized 订阅展示快照；三档链上价格是平台级
+  公共缓存：订阅态缓存 5 分钟、价格缓存 30 分钟，有效期内不重复链读，过期后只在后台
+  更新动态字段。首次无缓存时价格显示占位且订阅按钮禁用。手动刷新以及订阅、换档、取消等
+  动权操作必须绕过展示缓存重新核验 finalized 状态和价格；Cloudflare 回执镜像重试不得
+  阻塞页面链读。
 - 认证用户必须同时满足钱包反查永久 CID、CID Active、CID↔钱包双向绑定一致和 `VotingIdentityByCid` 完整有效；任一条件缺失都是未认证。身份认证与会员档位彼此独立（ADR-036）。普通动态 / 普通文章三档会员都可发布但额度不同；竞选动态 / 竞选文章按完整 `CandidateIdentityByCid` 派生的竞选身份（`candidate`）校验，与会员档无关。当前 runtime 的 `campaign` 链上发布仍按有效投票身份拦截（voting+）；App 业务侧（compose / SquarePublishService / Worker `prepareUpload`·`confirm`）按更严的竞选身份 `candidate` 校验；若未来要求链上也强制 Candidate 身份，必须按 runtime 二次确认规则单独修改。
 - 广场默认分类为推荐；用户可切换关注、竞选，后续可按产品需要增加最新分类。推荐流初期只做可解释规则，不做黑盒模型。
 - 广场媒体内容不存链上，不改造 CitizenChain 全节点存储媒体；`manifest.json` 存 Cloudflare R2，图片/首图经 Worker 有界校验后由服务端写 Cloudflare Images，视频全部使用绑定精确字节和最长时长的 Cloudflare Stream TUS，经签名 Images delivery / Stream playback URL 访问。
@@ -533,6 +539,19 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 广场用户业务以 `cid_number` 为唯一稳定主键：帖子归属/计数、平台订阅、续费索引、
   创作者套餐和创作者订阅关系均直接使用 CID。`account_id` 只用于当前链交易签名、首次扣款、
   自动续费时由 CID 解析出的当前付款/收款账户及不可变审计；换绑后不得读取或扣取历史账户。
+- CID 自助换绑必须在同一 finalized 区块读取 `AccountIdByCid`、
+  `BindingRevisionByCid` 与 `Timestamp.Now`，并读取 block 0 创世哈希。旧账户签名载荷固定为
+  `genesis_hash + cid_number + expected_old_account_id + new_account_id`
+  `+ expected_binding_revision + expires_at` 的 SCALE 编码；call 9 同步携带 revision 与
+  Unix 秒过期时间。`signAndSubmitInBlock(waitForFinalized: true)` 只证明交易进入
+  finalized 区块，不证明 dispatch 成功；CitizenApp 必须在回执的精确区块哈希读取
+  `AccountIdByCid` 与 `BindingRevisionByCid`，首次占号只接受目标账户且 revision=1，
+  换绑只接受新账户且 revision 精确等于签名前 revision+1，核验通过前不得迁移 MyId
+  本地数据或广播身份变化。CitizenApp 不保存旧账户签名清理 outbox，也不存在客户端
+  换绑后吊销 API；finalized 后新账户即取得 CID 控制权，旧账户云端凭证只能由
+  finalized 绑定版本事件驱动撤销。Worker 的
+  `purgeFinalizedOldAccountCredentials` 仅是供该事件消费者复用的内部幂等 helper，不构成
+  客户端授权接口。
 - App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
 - 本人已发布内容以 `SquareLocalPostEntity` / `SquarePostStore` 保存规范 manifest 原始字节和
   不可变发布锚，归属主键为 `cid_number`，不保存媒体文件或公共 feed。发布确认成功后立即
@@ -813,6 +832,10 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 唯一协议：`QR_V1`
 - CitizenApp 不承担 OnChina 管理员扫码登录职责；登录签名请求由 OnChina 页面生成,CitizenWallet 公民钱包签名。
 - 链上转账/投票签名使用 `k=1` 请求和 `k=2` 响应；业务动作由 `b.a` 区分。
+- 注册局占号/换绑请求的 `b.u` 留空，`b.d` 必须是含创世哈希、CID、账户零槽、
+  revision 和 `expires_at` 的完整授权模板；CitizenApp 与 CitizenWallet 均严格核对零槽、
+  无尾字节和外层 `e == expires_at`，再把所选账户原位填入。换绑新旧账户相同必须拒绝，
+  确认页必须完整展示创世哈希、CID、当前账户、绑定版本、过期时间和所选账户。
 - `k=3 user_contact` body 严格为
   `cid_number + ss58_address + display_name`；`display_name` 只作公开展示，
   不参与授权或私人备注。`k=4 user_transfer` 是临时收款码。

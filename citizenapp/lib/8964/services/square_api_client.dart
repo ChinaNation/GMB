@@ -499,31 +499,6 @@ class SquareApiClient
     _sessions.remove(accountId);
   }
 
-  /// 注销身份：当前绑定 account_id 只完成授权，Worker 按 session.cid_number
-  /// 硬删除该 CID 在 Cloudflare 的全部可清除数据（链上数据不受影响）。
-  /// 换绑吊销:由**当前新账户**会话 [session] 代删 [oldAccountId] 的账户级鉴权材料。
-  ///
-  /// [oldAccountSignature] 是旧账户已经为本次
-  /// `signing_message(OP_SIGN_CID_REBIND, SCALE(cid_number, new_account_id))`
-  /// 签出的授权；Worker 会把它与会话 CID/新账户精确绑定验签，不能仅凭“旧账户已解绑”
-  /// 删除任意账户。调用幂等，同一授权可在网络失败或 App 重启后安全重试。
-  Future<void> revokeRebindOldAccount({
-    required SquareSession session,
-    required String oldAccountId,
-    required String oldAccountSignature,
-  }) async {
-    await _postJson(
-      '/v1/square/rebind/revoke',
-      <String, dynamic>{
-        'old_account_id': oldAccountId,
-        'old_account_signature': oldAccountSignature,
-      },
-      session: session,
-    );
-    // Worker 已使旧账户全部会话失效；同步清除内存缓存，禁止后续误复用旧 token。
-    clearSession(oldAccountId);
-  }
-
   Future<void> deleteAccount({
     required String accountId,
     required SquareActionSigner signAction,

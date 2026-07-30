@@ -1,12 +1,54 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(功能开发完成;S5 创世身份代码完成,待正式创世资产重生与后置真实验收)
+状态:open(2026-07-29 第 1 步“绑定权限、版本与防重放”已完成并通过真实运行态验收；未创世，等待用户确认第 2 步“CID 控制权转移与三层密钥接管”技术方案)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
 citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
 - 承接并**重塑** `20260727-citizenwallet-modelb-index-derivation.md` 的 Step 2(原「citizenapp 保留种子/助记词、单热钱包」决策被本卡**推翻**)
 - Step 1(citizenwallet 无根多账户)已完成,本卡把同一无根 `//index` 模型搬到 citizenapp
 - ADR-026 统一签名 [[unified-signing-protocol-adr026]];CID 格式 [[cid-code-table-level-final]] / [[china-code-immutable]](本卡改公民 CID 前缀 → 需同步)
+
+## 2026-07-29 用户最终身份契约（覆盖本卡全部旧决定）
+
+- 公民 App 用户身份唯一主键是永久 `cid_number`；当前绑定 `account_id` 只负责签名、鉴权和付款。
+- 一个 CID 同时只允许一个有效钱包账户，一个钱包账户同时不得绑定多个 CID。
+- 非投票、非竞选 CID 可在公民 App 自主绑定/换绑，也可经注册局绑定/换绑。
+- 投票公民和竞选公民只能经注册局绑定/换绑；CID 一旦升级为投票公民，永久禁止退回自主换绑路径。
+- 自主换绑由旧账户授权、新账户提交；注册局换绑由新账户证明控制权，不要求旧账户签名。
+- 链上 finalized 换绑即代表 CID 全部控制权转移到新钱包；本地密钥接管、会话撤销和缓存清理只是该链上事实的派生动作，不得另造第二套旧账户清理授权。
+- 绑定防重放以 CID 为键，使用单调 `binding_revision`，签名同时绑定创世哈希、预期旧/新账户和过期时间。
+- 数据按三层实现：CID 永久业务数据、CID 稳定数据根、当前钱包账户派生包装密钥；新包装验证成功后才删除旧包装。
+- 订阅关系归 CID，续费和收款每次使用 CID 当前绑定账户；换绑后直接由新账户付款。
+- 个人多签不属于 CID 身份换绑：其 `admins` 继续是明确登记的 `account_id` 签名账户集合，CID 换绑不得修改个人多签管理员或投票快照。
+- 账户原生余额不随 CID 换绑迁移。
+- 全部修复、测试和真实运行态验收通过后才生成唯一正式创世；随后按“WASM CI → 其他软件 CI → 部署”顺序推进，每次远端推送和生产操作另行确认。
+
+### 分步实施门禁
+
+1. 链上绑定权限、绑定版本、防重放与跨端签名协议。
+2. CID 控制权转移与三层密钥接管。
+3. CitizenApp 本地数据、Chat、MLS、草稿、通讯录全面改为 CID 分区。
+4. Cloudflare 会话、设备、WebSocket、KeyPackage 和联系人账户更新。
+5. OnChina 全链 CID 查询、注册局办理、finalized 投影。
+6. 投票、候选人、奖励资格和 NodeGuard 统一保护 CID。
+7. 全仓命名、注释、文档、测试和残留终审。
+8. 真实整系统验收、正式创世和冻结。
+9. 获得逐次远端许可后依次执行 WASM CI、其他软件 CI 和部署。
+
+每一步必须先提交技术方案并得到用户确认；执行完成后更新文档、完善中文注释和测试、清理本步残留，再输出下一步技术方案。遇到无法从代码、文档或真实运行结果确定的问题必须停止并沟通。
+
+### 第 1 步完成记录（2026-07-29）
+
+- 链上绑定权限已收敛：非投票/竞选 CID 允许自主或注册局办理；投票、竞选以及
+  曾成为投票公民的 CID 永久只允许注册局办理；个人多签 `admins` 未改动。
+- `BindingRevisionByCid`、创世哈希、预期账户、过期时间和 finalized 状态已成为
+  四端一致的绑定防重放与控制权转移契约；初绑版本为 1，换绑/撤销单调递增。
+- CitizenApp、CitizenWallet、OnChina 与链端的 SCALE 载荷、调用参数、finalized
+  两阶段恢复和失败关闭行为已统一；旧账户二次清理授权与旧接口残留已删除。
+- 链端目标测试、完整 `citizenchain` 测试、真实 benchmark 权重生成、release WASM
+  重建、CitizenApp/Worker、CitizenWallet、OnChina 测试与静态检查均通过。
+- 已用全新临时双节点、真实 OnChina HTTP 服务和临时 PostgreSQL 完成运行态验收；
+  临时服务、数据与 Rust 增量产物已清理。未生成或冻结正式创世，未提交、推送或触发 CI。
 
 ## 背景漏洞(用户 req 4)
 当前身份唯一主键 = 钱包账户,私钥热存本机;私钥泄漏 = 必须换身份 = 丢失全部动态/文章/粉丝等社交资产。
@@ -45,7 +87,11 @@ citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本�
 - **S1 链**:公民 CID 号段方案(CN 前缀 + 位3-5 承载号码高位 + N9 = 12 位/年;primitives/cid 生成+校验 + node 共识守卫)+ 金标向量。**✅ 完成(2026-07-27,全工作区绿)**。
 - **S2 链**:`self_occupy_cid`(自助+自付费+占即绑+匿名)+ op_tag + 测试。**✅ 完成(2026-07-27,全工作区绿)**。
 - **S3 链**:`self_rebind_cid_account_id`(自助轮换,origin=新账户+旧账户签名,OP_SIGN_CID_REBIND)+ 测试。**✅ 完成(2026-07-27,全工作区绿)**。
-- **S4+S6 合并(注册局流程,链+onchina+双钱包+前端四端)—— 完成 ✅(2026-07-28)**:occupy 占即绑、档案选填(D4a)、register 纯升级、`admin_rebind_cid_account_id`(D4b)、CTZN|NATP、R5-split 单源化、审计归属办理局、qr-protocol 契约、citizenwallet/citizenapp occupy 域签名(冷热逐字节一致)、onchina 前端两次扫码 UI。**自包含交接卡:`20260727-registrar-cid-flow-s4s6.md`**(④a-c + ⑤-1..⑤-5 全绿)。剩:跨注册局换绑(后期)。
+- **S4+S6 合并(注册局流程,链+OnChina+双钱包+前端四端)**：occupy 占即绑、
+  `admin_rebind_cid_account_id`、CTZN|NATP、QR 完整授权模板、冷热钱包原位填账户槽、
+  OnChina 两次扫码与 finalized 两阶段恢复均归自包含交接卡
+  `20260727-registrar-cid-flow-s4s6.md`。匿名 CID 任一在册 CREG/FRG 可办，civic CID
+  由同市 CREG/对应省 FRG 办理；跨注册局链上换绑不是后期项。
 - **S5 链**:创世身份代码 **✅ 完成**；正式 chainspec、CitizenApp 轻链资产、公权
   机构快照和 Cloudflare 创世哈希的同源重生仍待执行。冷热链一致性与真机业务闭环
   属重生后的测试，不得与发布资产生成混为同一步。
@@ -237,7 +283,12 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 
 ## S8.3 审计整改(2026-07-28,完成 ✅)—— 3 审计 agent(换绑安全/门控/命名注释)发现 2 CRITICAL+4 HIGH,全修
 **client 分块 892 绿(块A 282/块B 610)+ worker vitest 179 绿 + 双端 analyze/tsc clean + 0 残留。**
-- **C1(CRITICAL)换绑不吊销旧账户云端**:换绑后旧私钥泄漏者可重注册设备子钥→建旧会话→拉旧通讯录密文解密(migrate 只删本地)。**修(跨仓)**:新 `POST /v1/square/rebind/revoke`(`cloudflare/src/rebind/service.ts`+`purge.ts::revokeRebindOldAccount` 外科式删旧账户 square_contacts/chat_*/device_subkeys/login_challenges/sessions,**不删** posts/memberships/follows=随 CID 迁移永不丢失);鉴权=旧账户 P-256 会话(静默/防枚举/只吊销自己);客户端 `IdentityRebindRevoker`(旧设备子钥静默建旧会话+调端点)接入 `_doRunRebindMigration` best-effort。worker 测试+revoker 测试+集成断言。
+- **C1(CRITICAL)换绑后旧账户云端凭证失效**：2026-07-29 最终方案以 finalized
+  `AccountIdByCid + CidByAccountId + BindingRevisionByCid` 作为唯一控制权转移事实。
+  客户端旧账户签名 outbox、换绑后吊销 API 和专用 revoker 已删除，不得恢复第二授权协议。
+  Worker 只允许可信 finalized 绑定版本消费者调用内部幂等
+  `purgeFinalizedOldAccountCredentials`，删除旧账户级登录/设备/Chat 凭证；动态、文章、
+  粉丝、关注、通讯录、会员和实时对象继续归 CID，不删除、不迁移。
 - **C2(CRITICAL)Finalized-意图崩溃窗口永久卡死**:一次性意图 KV 在 Finalized 后写,中间崩溃即丢失→resume 永不触发。**修**:改**对账式**——`IdentitySyncedAccountStore`(已同步账户标记)+ `getState` 冷启动比对链上真值≠标记即补齐迁移(`_reconcileIdentityRebuild`);标记只在迁移全成后推进,换绑失败不误迁移;删 `IdentityRebindPendingStore`/`resumePendingIdentityRebind`。
 - **H1 通讯录扫码绕过门**:AppBar 扫码键在 gate 外(未注册可写联系人)。**修**:contact_book/membership 整 Scaffold 包 gate(新 `scaffoldTitle` 未放行态带返回键)。
 - **H2 gate 冷启动卡死**:gate 只听 walletsRevision,广场落地页 smoldot 未就绪→queryFailed 卡死。**修**:gate 加 `healthListenable` 监听,未就绪停 loading、operational 自动重判。

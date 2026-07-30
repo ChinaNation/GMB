@@ -132,7 +132,7 @@ export function ClearingBankInstitutionDetailPage({
       <div className="institution-detail-grid">
         <div className="metric-card">
           <div className="metric-label">
-            机构身份ID <code className="metric-label-id">{detail.cidNumber}</code>
+            机构身份CID号 <code className="metric-label-id">{detail.cidNumber}</code>
           </div>
           <div className="metric-value">{detail.cidNumber}</div>
         </div>

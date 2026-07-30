@@ -36,12 +36,13 @@ SignRequestEnvelope _buildTestRequest({
   required String signerPublicKey,
   required String payloadHex,
   required int action,
+  int? expiresAt,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
   return QrEnvelope<SignRequestBody>(
     kind: QrKind.signRequest,
     id: requestId,
-    expiresAt: now + 90,
+    expiresAt: expiresAt ?? now + 90,
     body: SignRequestBody.fromHex(
       action: action,
       signerPublicKeyHex: signerPublicKey,
@@ -49,6 +50,28 @@ SignRequestEnvelope _buildTestRequest({
     ),
   );
 }
+
+List<int> _u64Le(int value) =>
+    List<int>.generate(8, (index) => (value >> (index * 8)) & 0xff);
+
+List<int> _occupyAuthorizationTemplate(String cid, int expiresAt) => [
+      ...List<int>.filled(32, 0x44),
+      cid.length << 2,
+      ...cid.codeUnits,
+      ...List<int>.filled(32, 0),
+      ..._u64Le(0),
+      ..._u64Le(expiresAt),
+    ];
+
+List<int> _rebindAuthorizationTemplate(String cid, int expiresAt) => [
+      ...List<int>.filled(32, 0x44),
+      cid.length << 2,
+      ...cid.codeUnits,
+      ...List<int>.filled(32, 0x55),
+      ...List<int>.filled(32, 0),
+      ..._u64Le(7),
+      ..._u64Le(expiresAt),
+    ];
 
 void main() {
   group('OfflineSignService', () {
@@ -64,6 +87,89 @@ void main() {
     });
 
     tearDown(() => WalletIsar.instance.resetForTest());
+
+    test('首次绑定/换绑仅接受完整授权模板且展示防重放字段', () {
+      final expiresAt = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90;
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final occupyRequest = _buildTestRequest(
+        requestId: 'offline-cid-occupy-template',
+        signerPublicKey: '',
+        payloadHex: '0x${_toHex(_occupyAuthorizationTemplate(cid, expiresAt))}',
+        action: QrActions.citizenOccupy,
+        expiresAt: expiresAt,
+      );
+      final occupy = service.verifyPayload(occupyRequest);
+      expect(occupy.status, SignDecisionStatus.normal);
+      expect(occupy.decoded?.fields['genesis_hash'], '0x${'44' * 32}');
+      expect(occupy.decoded?.fields['expected_binding_revision'], '0');
+      expect(occupy.decoded?.fields['expires_at'], expiresAt.toString());
+
+      final rebindRequest = _buildTestRequest(
+        requestId: 'offline-cid-rebind-template',
+        signerPublicKey: '',
+        payloadHex: '0x${_toHex(_rebindAuthorizationTemplate(cid, expiresAt))}',
+        action: QrActions.citizenRebind,
+        expiresAt: expiresAt,
+      );
+      final rebind = service.verifyPayload(rebindRequest);
+      expect(rebind.status, SignDecisionStatus.normal);
+      expect(
+          rebind.decoded?.fields['expected_old_account_id'], '0x${'55' * 32}');
+      expect(rebind.decoded?.fields['expected_binding_revision'], '7');
+    });
+
+    test('域签名拒绝 envelope expiry 不一致和旧版 CID-only 载荷', () {
+      final expiresAt = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90;
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final mismatch = _buildTestRequest(
+        requestId: 'offline-cid-expiry-mismatch',
+        signerPublicKey: '',
+        payloadHex: '0x${_toHex(_occupyAuthorizationTemplate(cid, expiresAt))}',
+        action: QrActions.citizenOccupy,
+        expiresAt: expiresAt + 1,
+      );
+      expect(service.verifyPayload(mismatch).status, SignDecisionStatus.reject);
+      expect(service.verifyPayload(mismatch).rejectReason, contains('过期时间'));
+
+      final legacy = _buildTestRequest(
+        requestId: 'offline-cid-legacy-payload',
+        signerPublicKey: '',
+        payloadHex: '0x${_toHex([cid.length << 2, ...cid.codeUnits])}',
+        action: QrActions.citizenOccupy,
+        expiresAt: expiresAt,
+      );
+      expect(service.verifyPayload(legacy).status, SignDecisionStatus.reject);
+    });
+
+    test('首次绑定按所选账户签署精确授权并在响应带回 account_id', () async {
+      final expiresAt = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90;
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final request = _buildTestRequest(
+        requestId: 'offline-cid-occupy-sign',
+        signerPublicKey: '',
+        payloadHex: '0x${_toHex(_occupyAuthorizationTemplate(cid, expiresAt))}',
+        action: QrActions.citizenOccupy,
+        expiresAt: expiresAt,
+      );
+      final response = await service.signParsedRequest(
+        accountId: signingAccount.accountId,
+        request: request,
+      );
+      expect(response.body.signerPublicKeyHex, signingAccount.accountId);
+      final signingBytes = QrSigner.signingBytesFor(
+        request.body,
+        selfAccountId:
+            Uint8List.fromList(_hexToBytes(signingAccount.accountId)),
+      );
+      expect(
+        _verifySr25519(
+          signerPublicKeyHex: response.body.signerPublicKeyHex,
+          message: signingBytes,
+          signatureHex: response.body.signatureHex,
+        ),
+        isTrue,
+      );
+    });
 
     test('signParsedRequest should sign normal internal_vote (统一入口)', () async {
       // 所有管理员投票走 InternalVote(20).cast(0)

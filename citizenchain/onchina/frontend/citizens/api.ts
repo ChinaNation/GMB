@@ -222,7 +222,8 @@ export async function searchLegalRepresentativeCitizens(
 
 /**
  * 占号 prepare 返回(段1):发号 + **公民钱包域签名 QR**(占即绑,b.u 空、钱包自填本账户)。
- * 此步不落任何档案 —— 公民占号签名回来 → 段2 组装 occupy_cid → 管理员冷签进块后才建档。
+ * 此步不落任何档案 —— 公民占号签名回来 → 段2 组装 occupy_cid →
+ * 管理员冷签交易 finalized+ExtrinsicSuccess 且同块状态核验通过后才建档。
  */
 export type PrepareCitizenOccupyResult = {
   request_id: string;
@@ -239,7 +240,7 @@ export type SubmitCitizenOccupyResult = {
   expires_at: number;
 };
 
-/** 换绑 prepare(段1)返回:**新钱包域签名 QR**(b.u 空、钱包自填本账户)。 */
+/** 换绑 prepare(段1)返回:**新钱包域签名 QR**(b.u 空、完整授权模板含零账户槽)。 */
 export type PrepareCitizenRebindResult = {
   request_id: string;
   cid_number: string;
@@ -299,8 +300,9 @@ export async function submitCitizenOccupy(
 }
 
 /**
- * 换绑段1 prepare:注册局对本局某匿名 CID 发起换绑钱包账户,返回给**新钱包**的域签名 QR。
- * 限本局已有此 CID 记录(跨注册局换绑后期)。
+ * 换绑段1 prepare:直接按链上 finalized 绑定真源发起。
+ * 匿名 CID 可由任一在册 CREG/FRG 办理；实名 CID 仅本市 CREG/对应省 FRG，
+ * 最终辖区权限由 Runtime 统一裁决。新钱包签名，不要求旧钱包。
  */
 export async function prepareCitizenRebind(
   auth: AdminAuth,

@@ -11,7 +11,6 @@ use crate::{
     core::qr::{bytes_to_b64, public_key_hex_to_b64, QR_V1},
 };
 use axum::http::StatusCode;
-use codec::{Compact, Encode};
 
 pub(crate) fn build_sign_request(
     request_id: &str,
@@ -71,23 +70,21 @@ pub(crate) fn build_sign_request_bytes(
     })
 }
 
-/// 构造「域签名」QR(注册局占号/换绑占即绑):签名账户在段1**未知**,由钱包扫码时自填本账户。
+/// 构造「域签名」QR(注册局首次绑定/换绑):签名账户在段1**未知**，
+/// 生成端把完整授权 SCALE 中的 account_id 槽写成 32 字节零，钱包扫码后严格解析并替换。
 ///
 /// 与 [`build_sign_request_bytes`] 的两处差异:
 /// - `u`(签名账户)**留空** —— 钱包据 `action ∈ {citizen_occupy, citizen_rebind}` 自填本机账户,
 ///   故不走 `public_key_hex_to_b64`(它对空/非法账户会 1001 拒);
-/// - `d` = **`append_bounded(cid)` = `Compact(len) ++ cid_bytes`**(非完整待签 payload)——
-///   钱包扫码 `signing_message(op_tag, d ++ 本账户32)`,与后端 `verify_occupy_signature` /
-///   `verify_admin_rebind_signature` 的 `append_bounded(cid) ++ account` **逐字节对齐**;
-///   `d` 已含 Compact 长度前缀,钱包只需拼接本账户、无需自行 compact 编码。
+/// - `d` = 带零账户槽的完整授权模板，已包含创世哈希、CID、revision 和过期时间。
+///
+/// occupy/rebind 的字段顺序不同，钱包不得再把账户简单追加到 `d` 末尾。
 pub(crate) fn build_domain_sign_request_bytes(
     request_id: &str,
     expires_at: i64,
-    cid_number: &str,
+    authorization_template: &[u8],
     action: u16,
 ) -> Result<String, axum::response::Response> {
-    let mut bounded_cid = Compact(cid_number.len() as u32).encode();
-    bounded_cid.extend_from_slice(cid_number.as_bytes());
     let sign_request = serde_json::json!({
         "p": QR_V1,
         "k": 1,
@@ -97,7 +94,7 @@ pub(crate) fn build_domain_sign_request_bytes(
             "a": action,
             "g": 1,
             "u": "",
-            "d": bytes_to_b64(&bounded_cid),
+            "d": bytes_to_b64(authorization_template),
         }
     });
     serde_json::to_string(&sign_request).map_err(|_| {

@@ -38,6 +38,46 @@ class DecodedPayload {
   final Map<String, String> reviewFields;
 }
 
+/// 注册局首次绑定/换绑域签名 QR 中的完整授权模板。
+///
+/// 生成端把待绑定账户槽写成 32 字节零；钱包只能在严格解码全部字段且无尾字节后，
+/// 把所选账户填回原槽位。禁止沿用旧协议把账户简单追加到 payload 末尾。
+class DecodedCidAccountAuthorizationTemplate {
+  DecodedCidAccountAuthorizationTemplate._({
+    required Uint8List payload,
+    required this.genesisHash,
+    required this.cidNumber,
+    required this.expectedOldAccountId,
+    required this.expectedBindingRevision,
+    required this.expiresAt,
+    required int accountOffset,
+  })  : _payload = Uint8List.fromList(payload),
+        _accountOffset = accountOffset;
+
+  final Uint8List _payload;
+  final int _accountOffset;
+  final String genesisHash;
+  final String cidNumber;
+  final String? expectedOldAccountId;
+  final int expectedBindingRevision;
+  final int expiresAt;
+
+  /// 用所选账户替换零槽并返回与 Runtime 授权结构逐字节一致的 SCALE。
+  ///
+  /// 换绑时新账户不得等于当前绑定账户；失败返回 null，调用端必须红色拒绝。
+  Uint8List? materialize(Uint8List accountId) {
+    if (accountId.length != 32) return null;
+    final oldAccountId = expectedOldAccountId;
+    if (oldAccountId != null &&
+        oldAccountId == PayloadDecoder._bytesToLowerHex(accountId)) {
+      return null;
+    }
+    final out = Uint8List.fromList(_payload);
+    out.setRange(_accountOffset, _accountOffset + 32, accountId);
+    return out;
+  }
+}
+
 /// 管理员人员的钱包端解码结果。
 ///
 /// 字段名与 runtime、CitizenApp 完全一致；账户是唯一授权与去重
@@ -2570,35 +2610,39 @@ class PayloadDecoder {
     );
   }
 
-  // CitizenIdentity(10) / occupy_cid(6) · 注册局占号(占即绑,注册局签名)。
+  // CitizenIdentity(10) / occupy_cid(6) · 注册局代办占号。
+  // 内层 citizen_signature 由用户选择的新账户签名，外层 extrinsic 才由注册局管理员签名。
   // SCALE: [10][6][actor_cid_number:CidNumber][actor_role_code:RoleCode][cid_number:CidNumber]
-  //        [account_id:[u8;32]][occupy_signature:Vec<u8>(Compact(64)+64B)]
+  //        [account_id:[u8;32]][expires_at:u64 LE][occupy_signature:Vec<u8>(Compact(64)+64B)]
   // 逐字节对齐 onchina occupy.rs::encode_occupy_cid_call(占即绑)。
   static DecodedPayload? _decodeOccupyCid(Uint8List bytes) {
     return _decodeOccupyOrRebind(
       bytes,
       action: 'occupy_cid',
       summaryPrefix: '注册局占号绑定',
+      isRebind: false,
     );
   }
 
-  // CitizenIdentity(10) / admin_rebind_cid_account_id(7) · 注册局代匿名 CID 换绑钱包账户(注册局签名)。
-  // SCALE 与 occupy_cid 同构:…cid + new_account_id[32] + rebind_signature:Vec。
+  // CitizenIdentity(10) / admin_rebind_cid_account_id(7) · 注册局为 CID 换绑钱包账户。
+  // SCALE:…cid + new_account_id[32] + expected_binding_revision:u64 LE
+  //       + expires_at:u64 LE + new_account_signature:Vec。
   // 逐字节对齐 onchina occupy.rs::encode_admin_rebind_cid_account_id_call。
   static DecodedPayload? _decodeAdminRebindCidAccountId(Uint8List bytes) {
     return _decodeOccupyOrRebind(
       bytes,
       action: 'admin_rebind_cid_account_id',
       summaryPrefix: '注册局换绑钱包账户',
+      isRebind: true,
     );
   }
 
-  /// occupy_cid / admin_rebind_cid_account_id 同构占即绑解码:
-  /// actor_cid_number + actor_role_code + cid_number + account_id[32] + signature:Vec(64B)。
+  /// occupy_cid / admin_rebind_cid_account_id 的公共前缀解码；两者尾部按最终 call 区分。
   static DecodedPayload? _decodeOccupyOrRebind(
     Uint8List bytes, {
     required String action,
     required String summaryPrefix,
+    required bool isRebind,
   }) {
     var offset = 2;
     final actorRead = _readCidNumber(bytes, offset);
@@ -2616,6 +2660,18 @@ class PayloadDecoder {
     final accountId = bytes.sublist(offset, offset + 32);
     offset += 32;
 
+    var expectedBindingRevision = 0;
+    if (isRebind) {
+      if (offset + 8 > bytes.length) return null;
+      expectedBindingRevision = _readU64Le(bytes, offset);
+      if (expectedBindingRevision <= 0) return null;
+      offset += 8;
+    }
+    if (offset + 8 > bytes.length) return null;
+    final expiresAt = _readU64Le(bytes, offset);
+    if (expiresAt <= 0) return null;
+    offset += 8;
+
     // occupy_signature / rebind_signature:BoundedVec = Compact(len=64) ++ 64 字节。
     final (signatureLen, signatureLenSize) = _decodeCompactU32(bytes, offset);
     if (signatureLenSize == 0 || signatureLen != 64) return null;
@@ -2625,6 +2681,7 @@ class PayloadDecoder {
     if (!_hasCallDataEnd(bytes, offset)) return null;
 
     final accountHex = _bytesToLowerHex(accountId); // 已含 0x 前缀
+    final accountField = isRebind ? 'new_account_id' : 'account_id';
     return DecodedPayload(
       action: action,
       summary: '$summaryPrefix:$cidNumber',
@@ -2632,13 +2689,17 @@ class PayloadDecoder {
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
-        'account_id': accountHex,
+        accountField: accountHex,
+        'expected_binding_revision': expectedBindingRevision.toString(),
+        'expires_at': expiresAt.toString(),
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         'cid_number': cidNumber,
-        'account_id': accountHex,
+        accountField: accountHex,
+        'expected_binding_revision': expectedBindingRevision.toString(),
+        'expires_at': expiresAt.toString(),
       },
     );
   }
@@ -3736,12 +3797,71 @@ class PayloadDecoder {
     }
   }
 
-  /// 读取占号/换绑域签名 QR 的 `d` = `append_bounded(cid)`(Compact(len)+cid),须消费全部字节。
-  /// 供两色展示单独取 CID(占号/换绑 d 只承载 CID,account 由钱包自填)。
-  static String? readBoundedCid(Uint8List bytes) {
-    final read = _readCidNumber(bytes, 0);
-    if (read == null || read.$2 != bytes.length) return null;
-    return read.$1;
+  /// 严格读取 `CidOccupyAuthorization` 模板:
+  /// genesis_hash + cid_number + account_id(零槽) + revision=0 + expires_at。
+  static DecodedCidAccountAuthorizationTemplate?
+      readCidOccupyAuthorizationTemplate(Uint8List bytes) {
+    if (bytes.length < 33 || (bytes[32] & 0x03) != 0) return null;
+    var offset = 32;
+    final cidRead = _readCidNumber(bytes, offset);
+    if (cidRead == null) return null;
+    offset = cidRead.$2;
+    final accountOffset = offset;
+    if (!_hasZeroAccountSlot(bytes, accountOffset)) return null;
+    offset += 32;
+    if (offset + 16 != bytes.length) return null;
+    final expectedBindingRevision = _readU64Le(bytes, offset);
+    offset += 8;
+    final expiresAt = _readU64Le(bytes, offset);
+    if (expectedBindingRevision != 0 || expiresAt <= 0) return null;
+    return DecodedCidAccountAuthorizationTemplate._(
+      payload: bytes,
+      genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
+      cidNumber: cidRead.$1,
+      expectedOldAccountId: null,
+      expectedBindingRevision: expectedBindingRevision,
+      expiresAt: expiresAt,
+      accountOffset: accountOffset,
+    );
+  }
+
+  /// 严格读取 `CidRebindAuthorization` 模板:
+  /// genesis_hash + cid_number + old_account + new_account(零槽) + revision + expires_at。
+  static DecodedCidAccountAuthorizationTemplate?
+      readCidRebindAuthorizationTemplate(Uint8List bytes) {
+    if (bytes.length < 65 || (bytes[32] & 0x03) != 0) return null;
+    var offset = 32;
+    final cidRead = _readCidNumber(bytes, offset);
+    if (cidRead == null) return null;
+    offset = cidRead.$2;
+    if (offset + 32 > bytes.length) return null;
+    final expectedOldAccountId = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final accountOffset = offset;
+    if (!_hasZeroAccountSlot(bytes, accountOffset)) return null;
+    offset += 32;
+    if (offset + 16 != bytes.length) return null;
+    final expectedBindingRevision = _readU64Le(bytes, offset);
+    offset += 8;
+    final expiresAt = _readU64Le(bytes, offset);
+    if (expectedBindingRevision <= 0 || expiresAt <= 0) return null;
+    return DecodedCidAccountAuthorizationTemplate._(
+      payload: bytes,
+      genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
+      cidNumber: cidRead.$1,
+      expectedOldAccountId: _bytesToLowerHex(expectedOldAccountId),
+      expectedBindingRevision: expectedBindingRevision,
+      expiresAt: expiresAt,
+      accountOffset: accountOffset,
+    );
+  }
+
+  static bool _hasZeroAccountSlot(Uint8List bytes, int offset) {
+    if (offset + 32 > bytes.length) return false;
+    for (var index = offset; index < offset + 32; index++) {
+      if (bytes[index] != 0) return false;
+    }
+    return true;
   }
 
   /// 解码机构/公民 CID。CID 是最多 32 字节的非空 ASCII，所有机构交易都显式携带，

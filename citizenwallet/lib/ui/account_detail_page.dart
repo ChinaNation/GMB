@@ -1,26 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
-import '../qr/qr_protocols.dart';
-import '../qr/envelope.dart';
-import '../qr/bodies/wallet_code_body.dart';
 import '../util/screenshot_guard.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
-
-/// 为账户生成固定钱包码（`k=5`）。
-///
-/// 钱包码只声明账户，不带时效、不带账户名、不带 CID/昵称。公民钱包完全离线、无 NTP，
-/// 不得签发带绝对时间戳的凭证；也没有 CID↔AccountId 链上真源，不得伪造 `k=3` 用户码。
-String buildWalletQr({required String accountId}) {
-  return QrEnvelope<WalletCodeBody>(
-    kind: QrKind.walletCode,
-    id: null,
-    expiresAt: null,
-    body: WalletCodeBody(accountId: accountId),
-  ).toRawJson();
-}
+import 'widgets/wallet_qr_dialog.dart';
 
 /// Lv3 账户详情：某钱包(master)下单个账户的公钥、ss58、私钥（账户名可点击改名）。
 ///
@@ -205,72 +189,12 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   }
 
   void _showWalletQr() {
-    final qrData = buildWalletQr(accountId: widget.account.accountId);
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_accountName,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: QrImageView(
-                  data: qrData,
-                  version: QrVersions.auto,
-                  size: 240,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: AppTheme.primaryDark,
-                  ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: AppTheme.primaryDark,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '钱包码：扫描可向本账户转账，或用于扫码登录',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              SelectableText(
-                widget.account.ss58Address,
-                style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
-                    fontFamily: 'monospace'),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('关闭'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    // 与钱包详情页账户列表共用同一份弹窗与载荷,禁止各造一份。
+    showWalletQrDialog(
+      context,
+      accountId: widget.account.accountId,
+      accountName: _accountName,
+      ss58Address: widget.account.ss58Address,
     );
   }
 

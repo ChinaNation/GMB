@@ -146,29 +146,36 @@ export async function purgeIdentity(
   };
 }
 
-/// 换绑吊销:删除**旧身份账户**在 Cloudflare 的鉴权敏感数据(Chat 端到端材料、设备子钥、
-/// 登录挑战、会话),使换绑(常因私钥泄漏触发)后旧账户无法再重建会话。通讯录密文按身份主键
-/// cid 归属、AEAD 密文本身对旧账户已无解密价值,随 CID 迁到新账户,不在吊销删除范围。
+/// finalized CID 绑定版本推进后，删除**旧身份账户**在 Cloudflare 的鉴权敏感数据
+/// (Chat 端到端材料、设备子钥、登录挑战、会话)，使已解绑账户无法再建立旧鉴权上下文。
+/// 本 helper 不接收 HTTP 请求或旧账户签名；后续只能由可信 finalized 链事件消费者调用。
 ///
 /// **不删** posts / media / memberships / follows / 通讯录 —— 这些随 CID 迁到新账户(「永不丢失」),
 /// 由身份迁移单独处理,不属吊销范围。也不关闭按 CID 命名的实时 DO、不删 CID 级
 /// `chat_device_binding_nonces`,否则会误伤换绑后的新账户连接和设备状态。幂等:重复调用为
-/// 安全空操作。调用方使用新账户会话重试，因此旧账户设备子钥删除后仍可继续完成幂等清理。
-export async function revokeRebindOldAccount(
+/// 安全空操作。
+export async function purgeFinalizedOldAccountCredentials(
   env: Env,
   cidNumber: string,
   accountId: string
 ): Promise<{ deleted_rows: number }> {
   // 通讯录密文、实时 DO 与绑定 nonce 均按 cid_number 归属，换绑后继续由新账户使用；
-  // 本函数只按 old account_id 删除账户级材料，禁止通过当前 CID 扩大清理范围。
+  // 本函数只按“旧 CID + 旧 account_id”交集删除账户级材料。旧账户释放后可能已绑定
+  // 另一 CID，禁止延迟到达的旧版本事件误删其新身份凭证。
   const statements = [
-    env.DB.prepare(`DELETE FROM chat_keypackages WHERE account_id = ?`).bind(accountId),
-    env.DB.prepare(`DELETE FROM chat_devices WHERE account_id = ?`).bind(accountId),
+    env.DB.prepare(
+      `DELETE FROM chat_keypackages WHERE cid_number = ? AND account_id = ?`
+    ).bind(cidNumber, accountId),
+    env.DB.prepare(
+      `DELETE FROM chat_devices WHERE cid_number = ? AND account_id = ?`
+    ).bind(cidNumber, accountId),
     env.DB.prepare(
       `DELETE FROM square_login_challenges WHERE cid_number = ? AND account_id = ?`
     ).bind(cidNumber, accountId),
-    // 设备子钥放最后；调用端使用新账户会话，任一步失败都可携同一换绑授权幂等重试。
-    env.DB.prepare(`DELETE FROM square_device_subkeys WHERE account_id = ?`).bind(accountId)
+    // 设备子钥放最后；finalized 事件消费者重放同一版本事件时仍保持幂等。
+    env.DB.prepare(
+      `DELETE FROM square_device_subkeys WHERE cid_number = ? AND account_id = ?`
+    ).bind(cidNumber, accountId)
   ];
   const results = await env.DB.batch(statements);
   const deletedRows = results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);

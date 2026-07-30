@@ -55,6 +55,10 @@
   field_label_zh: 合格选民数
 - field_key: expires_at
   field_label_zh: 过期时间
+- field_key: expected_binding_revision
+  field_label_zh: 预期绑定版本
+- field_key: expected_old_account_id
+  field_label_zh: 当前绑定账户
 - field_key: family_name
   field_label_zh: 姓
 - field_key: institution_code
@@ -63,12 +67,16 @@
   field_label_zh: 治理动作
 - field_key: governance_detail
   field_label_zh: 治理详情
+- field_key: genesis_hash
+  field_label_zh: 创世哈希
 - field_key: given_name
   field_label_zh: 名
 - field_key: membership_level
   field_label_zh: 会员等级
 - field_key: new_domain
   field_label_zh: 新域名
+- field_key: new_account_id
+  field_label_zh: 新绑定账户
 - field_key: new_public_key
   field_label_zh: 新公钥
 - field_key: new_port

@@ -10,6 +10,31 @@ import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/login/login_qr_handler.dart';
 import 'package:citizenwallet/signer/qr_signer.dart';
 
+String _hexBytes(List<int> bytes) =>
+    bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+List<int> _u64Le(int value) =>
+    List<int>.generate(8, (index) => (value >> (index * 8)) & 0xff);
+
+List<int> _occupyAuthorizationTemplate(String cid, int expiresAt) => [
+      ...List<int>.filled(32, 0x44),
+      cid.length << 2,
+      ...cid.codeUnits,
+      ...List<int>.filled(32, 0),
+      ..._u64Le(0),
+      ..._u64Le(expiresAt),
+    ];
+
+List<int> _rebindAuthorizationTemplate(String cid, int expiresAt) => [
+      ...List<int>.filled(32, 0x44),
+      cid.length << 2,
+      ...cid.codeUnits,
+      ...List<int>.filled(32, 0x55),
+      ...List<int>.filled(32, 0),
+      ..._u64Le(7),
+      ..._u64Le(expiresAt),
+    ];
+
 void main() {
   late QrSigner signer;
   late String testSignerPublicKeyHex;
@@ -320,18 +345,20 @@ void main() {
       expect(actual.toList(), isNot(body.payloadBytes.toList()));
     });
 
-    test('注册局占号域签名 = GMB OP_SIGN_CID_OCCUPY(0x12)(bounded_cid ++ 本账户)', () {
+    test('注册局首次绑定按精确 CidOccupyAuthorization 槽位签名', () {
       const cid = 'CN220-CTZN2-198805200-2026';
-      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits]; // Compact(26)=0x68
+      const expiresAt = 1800000000;
+      final template = _occupyAuthorizationTemplate(cid, expiresAt);
       final account = List<int>.filled(32, 0xab);
       final body = SignRequestBody.fromHex(
         action: QrActions.citizenOccupy,
         signerPublicKeyHex: testSignerPublicKeyHex, // 占号下 b.u 被忽略
-        payloadHex:
-            '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        payloadHex: '0x${_hexBytes(template)}',
       );
+      final exactAuthorization = List<int>.from(template)
+        ..setRange(32 + 1 + cid.length, 32 + 1 + cid.length + 32, account);
       final input =
-          Uint8List.fromList([0x47, 0x4d, 0x42, 0x12, ...boundedCid, ...account]);
+          Uint8List.fromList([0x47, 0x4d, 0x42, 0x12, ...exactAuthorization]);
       final digest = Blake2bDigest(digestSize: 32)
         ..update(input, 0, input.length);
       final expected = Uint8List(32);
@@ -344,23 +371,27 @@ void main() {
 
     test('注册局换绑域签名用 OP_SIGN_CID_ADMIN_REBIND(0x1F)', () {
       const cid = 'CN220-CTZN2-198805200-2026';
-      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits];
+      const expiresAt = 1800000000;
+      final template = _rebindAuthorizationTemplate(cid, expiresAt);
       final account = List<int>.filled(32, 0xcd);
       final body = SignRequestBody.fromHex(
         action: QrActions.citizenRebind,
         signerPublicKeyHex: testSignerPublicKeyHex,
-        payloadHex:
-            '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        payloadHex: '0x${_hexBytes(template)}',
       );
+      final accountOffset = 32 + 1 + cid.length + 32;
+      final exactAuthorization = List<int>.from(template)
+        ..setRange(accountOffset, accountOffset + 32, account);
       final input =
-          Uint8List.fromList([0x47, 0x4d, 0x42, 0x1f, ...boundedCid, ...account]);
+          Uint8List.fromList([0x47, 0x4d, 0x42, 0x1f, ...exactAuthorization]);
       final digest = Blake2bDigest(digestSize: 32)
         ..update(input, 0, input.length);
       final expected = Uint8List(32);
       digest.doFinal(expected, 0);
 
       expect(
-        QrSigner.signingBytesFor(body, selfAccountId: Uint8List.fromList(account))
+        QrSigner.signingBytesFor(body,
+                selfAccountId: Uint8List.fromList(account))
             .toList(),
         expected.toList(),
       );
@@ -368,14 +399,58 @@ void main() {
 
     test('占号缺少本账户时返回空(不盲签)', () {
       const cid = 'CN220-CTZN2-198805200-2026';
-      final boundedCid = <int>[cid.length << 2, ...cid.codeUnits];
+      final template = _occupyAuthorizationTemplate(cid, 1800000000);
       final body = SignRequestBody.fromHex(
         action: QrActions.citizenOccupy,
         signerPublicKeyHex: testSignerPublicKeyHex,
-        payloadHex:
-            '0x${boundedCid.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        payloadHex: '0x${_hexBytes(template)}',
       );
       expect(QrSigner.signingBytesFor(body).isEmpty, isTrue);
+    });
+
+    test('域签名拒绝非零占位、旧尾拼接与换绑到当前账户', () {
+      const cid = 'CN220-CTZN2-198805200-2026';
+      final malformedOccupy = _occupyAuthorizationTemplate(cid, 1800000000);
+      malformedOccupy[32 + 1 + cid.length] = 1;
+      final occupyBody = SignRequestBody.fromHex(
+        action: QrActions.citizenOccupy,
+        signerPublicKeyHex: testSignerPublicKeyHex,
+        payloadHex: '0x${_hexBytes(malformedOccupy)}',
+      );
+      expect(
+        QrSigner.signingBytesFor(
+          occupyBody,
+          selfAccountId: Uint8List.fromList(List<int>.filled(32, 0xab)),
+        ),
+        isEmpty,
+      );
+
+      final legacyBody = SignRequestBody.fromHex(
+        action: QrActions.citizenOccupy,
+        signerPublicKeyHex: testSignerPublicKeyHex,
+        payloadHex: '0x${_hexBytes([cid.length << 2, ...cid.codeUnits])}',
+      );
+      expect(
+        QrSigner.signingBytesFor(
+          legacyBody,
+          selfAccountId: Uint8List.fromList(List<int>.filled(32, 0xab)),
+        ),
+        isEmpty,
+      );
+
+      final rebindBody = SignRequestBody.fromHex(
+        action: QrActions.citizenRebind,
+        signerPublicKeyHex: testSignerPublicKeyHex,
+        payloadHex:
+            '0x${_hexBytes(_rebindAuthorizationTemplate(cid, 1800000000))}',
+      );
+      expect(
+        QrSigner.signingBytesFor(
+          rebindBody,
+          selfAccountId: Uint8List.fromList(List<int>.filled(32, 0x55)),
+        ),
+        isEmpty,
+      );
     });
   });
 
