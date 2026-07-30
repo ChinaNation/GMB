@@ -543,3 +543,39 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 - 使用 `WASM_BUILD_FROM_SOURCE=1`、单构建任务和关闭增量缓存的生产 release Node 构建成功；
   项目根 `target/debug/incremental` 与 `target/release/incremental` 均无跨次残留。
 - 本步没有正式创世、冻结、提交、GitHub 推送、WASM CI、其它软件 CI 或部署。
+
+## S7A 创世 preview 候选与第一次冻结（2026-07-30，完成）
+
+- 两次确认后准备生成候选时，`main` 已由其它线程更新为 `6a75cbc8`，新增 runtime、
+  OnChina、CitizenApp、二维码协议与 CI 门禁改动。没有沿用旧审查结论直接烤链，而是先
+  对最新提交重新执行扩展审查。
+- 最新基线验证：Rust workspace Clippy `-D warnings` 与全量测试通过；NodeGuard
+  299 项、runtime 53 项、OnChina 179 项、QR protocol 5+7+1 项、CitizenApp Rust FFI
+  13 项、Worker 222 项、Flutter 1042 项通过。Flutter 另有 5 项按测试声明因纯 Dart
+  环境缺少宿主原生库而跳过；对应 Rust FFI 已通过。CitizenApp analyze、OnChina 前端
+  build、官网 lint/build 和原正式冻结资产交叉检查均通过。
+- 审查发现 4 个 OnChina 文件存在纯格式残留；经单独方案确认后只执行注释缩进、
+  import 排序和换行调整，OnChina 179 项复测通过。本地 `main` 候选源码提交固定为
+  `450e47af19851b9176a5e8bda128aba455bda482`，没有推送。
+- 使用关闭增量、单构建任务并强制从源码生成 WASM 的 production release Node 冷构建
+  成功，用时 30 分 10 秒。随后以 `bake-chainspec.sh` 默认模式生成
+  `artifact_stage=preview` 候选，未使用 `--finalize`。
+- 候选锚点：
+  - `genesis_hash=0x37a3913895b6b2eda0e9fe242639338cc55ee1023e3caf25e31a178af990fa90`
+  - `state_root=0xfdc23210da6d85e69eb2e107e291a1be2edf4c413516af0e12c35a40be4ed2f4`
+  - `runtime_wasm_hash=4f553d22433d1348a133e44468d128ad47803c86e0e3542e14b69ec58a39413e`
+  - `chainspec_hash=ea951f6372facc3d9ad9b748a6a436f516b36a2a4b614c3688ae0525897e5cb8`
+  - `light_sync_state_hash=0f3e54e599cfe987596894278f35d64e7a9077ea93c260f2e0d2d20ed09afa16`
+  - `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`
+- 块 0 物化用时 131 秒，宪法与候选产物白名单检查通过；43 个省级公权分片及 manifest
+  全部交叉校验。隔离节点直接复制候选 genesis-state 启动后为 0 peers、
+  `isSyncing=false`，RPC storage 实证为公权 49,593 个机构 / 99,232 个协议账户，
+  基金会 1 个机构 / 2 个协议账户，全创世 49,594 个机构 / 99,234 个机构协议账户。
+- 隔离节点已停止，RPC 19945 已关闭；仓库外临时目录已移入 macOS 废纸篓，可恢复。
+  preview 只保存在忽略目录 `citizenchain/target/chainspec/`；本步没有覆盖正式
+  chainspec/App/Cloudflare 资产，没有推送、CI、正式 `--finalize` 或部署。
+- 全量 debug 测试产生的 `citizenchain/target/debug/incremental/` 已整体移入 macOS
+  废纸篓且可恢复；`target/debug/incremental` 与 `target/release/incremental` 均无跨次残留。
+- 下一步按既定顺序申请单独 GitHub 推送许可：把 `main` 的候选源码提交推送后，只运行
+  `CitizenChain WASM` CI。CI 成功并取得 artifact/run ID/head SHA 后，再输出正式
+  `--finalize` 技术方案并等待确认。

@@ -103,6 +103,39 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
 均为 block #6、`isSyncing=false`。正式创世已经完成，不得再次执行 `--finalize` 覆盖上述
 锚点；后续 runtime 升级只能通过正式链 `system.setCode`，除非用户另行明确批准正式硬分叉。
 
+## S7A 重新创世 preview 候选（2026-07-30，当前候选、尚未正式冻结）
+
+- 候选源码提交：
+  `450e47af19851b9176a5e8bda128aba455bda482`。该提交已经完成创世前全仓扩展审查、
+  格式清零、Rust 全 workspace Clippy/测试、CitizenApp/Worker/OnChina/官网门禁和
+  production release 冷构建。
+- preview 候选：
+  - `genesis_hash`：
+    `0x37a3913895b6b2eda0e9fe242639338cc55ee1023e3caf25e31a178af990fa90`。
+  - `state_root`：
+    `0xfdc23210da6d85e69eb2e107e291a1be2edf4c413516af0e12c35a40be4ed2f4`。
+  - `runtime_wasm_hash`：
+    `4f553d22433d1348a133e44468d128ad47803c86e0e3542e14b69ec58a39413e`。
+  - 全节点 `chainspec_hash`：
+    `ea951f6372facc3d9ad9b748a6a436f516b36a2a4b614c3688ae0525897e5cb8`。
+  - `light_sync_state_hash`：
+    `0f3e54e599cfe987596894278f35d64e7a9077ea93c260f2e0d2d20ed09afa16`。
+  - `public_institution_root`：
+    `c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
+- `bake-chainspec.sh` 真实物化块 0 用时 131 秒；宪法 `law_id=0`、v1 生效版和不可变条款
+  校验通过。同一次候选产物的 plain spec、App 轻形态、checkpoint、公权分片、
+  Cloudflare 派生配置和 genesis-state manifest 交叉哈希校验通过。
+- 隔离节点直接复制候选 genesis-state 启动后为 0 peers、`isSyncing=false`；RPC 逐页统计
+  块 0 storage 为 49,593 个公权机构 / 99,232 个公权协议账户，公民链基金会另计
+  1 个私权机构 / 2 个私权协议账户，全创世总计 49,594 个机构 / 99,234 个机构协议账户。
+- 候选只保存在忽略目录 `citizenchain/target/chainspec/`，
+  `artifact_stage=preview`，CI run/SHA 均为空；没有执行 `--finalize`，没有覆盖当前正式
+  锚点，没有推送或触发 CI。隔离节点已停止，RPC 19945 已关闭；仓库外临时目录已移入
+  macOS 废纸篓，可恢复。
+- 下一步必须先取得 GitHub 推送许可，将候选源码提交推送到远端 `main` 并只触发
+  `CitizenChain WASM` CI；成功后下载该提交的 CI WASM，以 run ID 和 head SHA 执行
+  release `--finalize`。CI WASM 与本地 preview 哈希或创世结果不一致时必须停止。
+
 ## 历史冻结锚点（2026-07-16，已被正式创世替代）
 
 - runtime 源提交：`7abac7982a5c5ee25580583d456523ce2132743e`；冻结资产提交：`80f58aa5cfe19713edfba7331ea2896cacf09b62`；GitHub `CitizenChain WASM` run：`29530114067`。
