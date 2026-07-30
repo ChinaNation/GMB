@@ -6,8 +6,8 @@
 
 use super::model::ProposeLawInput;
 use super::service::{build_propose_law_call, build_representative_vote_call};
-use crate::core::institution_call::ChainCall;
 use crate::auth::passkey::PasskeyProof;
+use crate::core::institution_call::ChainCall;
 use crate::domains::citizens::occupy::{ChainSignSession, SESSION_TTL_SECS};
 use crate::{api_error, AppState};
 use axum::http::StatusCode;

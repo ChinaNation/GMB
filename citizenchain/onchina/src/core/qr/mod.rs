@@ -339,8 +339,8 @@ fn normalize_hex_no_prefix(value: &str) -> String {
 // 二维码协议夹具必须严格成立，断言式解包用于让协议偏差立即失败。
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     use super::*;
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
     const ACCOUNT_ID: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
 

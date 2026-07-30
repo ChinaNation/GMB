@@ -21,7 +21,9 @@ use crate::core::institution_call::{
     ProposeAddInstitutionAccountArgs, ProposeCloseInstitutionArgs,
 };
 use crate::institution::accounts::derive::derive_account_bytes;
-use crate::institution::admins::{build_chain_sign_output, code_bytes, InstitutionChainSignRequest};
+use crate::institution::admins::{
+    build_chain_sign_output, code_bytes, InstitutionChainSignRequest,
+};
 use crate::institution::subjects::model::{CreateAccountInput, DeleteAccountInput};
 use crate::institution::subjects::service::{
     institution_account_kind_label, is_protocol_account_name, validate_account_name,

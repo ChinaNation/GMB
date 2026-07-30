@@ -480,17 +480,14 @@ pub(crate) fn require_admin_security_grant(
     action_type: AdminActionType,
     target: &str,
     request_payload: Option<&serde_json::Value>,
-// 返回 `PasskeyProof` 而不是 `()`:该凭证是下游冷签会话创建入口
-// (`Db::insert_chain_sign_session`)的必填参数,把"链上写必须先过 passkey"
-// 从运行期约定升级成编译期约束,调用方拿不到凭证就发不出链交易。
+    // 返回 `PasskeyProof` 而不是 `()`:该凭证是下游冷签会话创建入口
+    // (`Db::insert_chain_sign_session`)的必填参数,把"链上写必须先过 passkey"
+    // 从运行期约定升级成编译期约束,调用方拿不到凭证就发不出链交易。
 ) -> Result<crate::auth::passkey::PasskeyProof, axum::response::Response> {
     // 本地写(Passkey):会话 + passkey 断言 + 角色校验;不再有只会话的写动作。
     if action_type.auth_type() == AdminOperationAuth::Passkey {
-        let passkey = crate::auth::passkey::require_passkey_assertion(
-            state,
-            headers,
-            &ctx.account_id,
-        )?;
+        let passkey =
+            crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.account_id)?;
         ensure_action_role_allowed(ctx, &action_type)?;
         return Ok(passkey);
     }
@@ -505,8 +502,8 @@ pub(crate) fn consume_admin_security_grant(
     action_type: AdminActionType,
     target: &str,
     request_payload: Option<&serde_json::Value>,
-// 同时返回冷签 grant 与 passkey 凭证:grant 供本次动作防重放,
-// 凭证供下游冷签会话创建入口做编译期校验,两者都不能丢。
+    // 同时返回冷签 grant 与 passkey 凭证:grant 供本次动作防重放,
+    // 凭证供下游冷签会话创建入口做编译期校验,两者都不能丢。
 ) -> Result<(AdminSecurityGrant, crate::auth::passkey::PasskeyProof), axum::response::Response> {
     // PasskeyColdSign 档:先消费 passkey 断言(fail-closed,绝不降档),再消费冷签 grant。
     let passkey = crate::auth::passkey::require_passkey_assertion(state, headers, &ctx.account_id)?;
