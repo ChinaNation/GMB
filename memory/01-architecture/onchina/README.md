@@ -36,7 +36,9 @@ OnChina 以 PostgreSQL 结构化表作为唯一持久化真源。进程内缓存
 
 - `ids`：全局唯一 CID 号索引。
 - `subjects`：公民、公权机构、私权机构公共主体表，按 `province_code` 分区。
-- `citizens`：公民档案、姓、名、身份 CID、护照号、钱包地址、`province_code/city_code/town_code` 居住/办理地、`birth_*` 出生地和电子护照有效期，按 `province_code` 分区。
+- `citizens`：以永久 `cid_number` 归属公民档案；当前 `account_id` 仅是 finalized 钱包
+  绑定投影，并与 `binding_revision`、finalized 区块号和区块哈希一起保存。换绑不得迁移
+  CID 档案，也不得回退到本地旧账户。
 - `citizen_documents`：公民独立资料库元数据，资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”，按 `province_code` 分区；不得与机构资料库共表。
 - `gov`：公权机构扩展表，按 `province_code` 分区。
 - `private`：私权机构扩展表，按 `province_code` 分区。
@@ -66,6 +68,11 @@ OnChina 以 PostgreSQL 结构化表作为唯一持久化真源。进程内缓存
 - 电子护照状态按钱包公钥精确查询 `citizens`。
 - 投票人数快照读取 `citizens` 聚合计数。
 - 投票凭证只签发投票引擎已经定义的凭证，不实现投票流程。
+
+注册局管理员另有全局链上绑定查询
+`GET /api/v1/admin/citizens/:cid_number/binding`。它要求当前 `institution_code` 为
+FRG/CREG，只返回同一 finalized 区块中的 CID 状态、当前账户、绑定版本、投票/竞选标志和
+区块锚点，不读取本地公民档案。两个注册局节点查询同一 CID 必须得到相同结果。
 
 ## 禁止项
 

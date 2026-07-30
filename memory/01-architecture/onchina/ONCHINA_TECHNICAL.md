@@ -15,6 +15,9 @@ OnChina 不是第五个产品。仓库产品只保留：
 
 ### 1.1 账户标识目标契约
 
+- 公民身份唯一主键是永久 `cid_number`；当前 `account_id` 只是该 CID 当前版本的签名、
+  鉴权和付款凭证。换绑 finalized 后，新账户直接接管同一 CID，旧账户、旧私钥和旧设备
+  不参与后续控制权判定。
 - PostgreSQL、Rust、TypeScript、JSON、缓存和链上调用中的单一账户字段统一为 `account_id`；多账户结构使用准确的 `<role>_account_id`。
 - 账户与 32 字节公钥的文本形式统一为小写 `0x` 加 64 位十六进制；`ss58_address` 仅作派生展示值，不作为登录、权限或数据库关系真源。
 - 登录验签必须从 `signer_public_key` 得到 `signer_account_id`，再读取链上 admins、有效岗位任职和岗位权限；节点绑定或本地投影不得产生第二套授权。
@@ -48,7 +51,7 @@ OnChina 可以向 CitizenApp 或 Cloudflare 边缘层提供公开目录、链上
 3. 为 `subjects/citizens/citizen_documents/gov/private/accounts/docs/audit/institution_admins` 创建 `province_code` 分区。
 4. 读取随包只读行政区 SQLite，并断言 SQLite 省表与 runtime primitives `PROVINCE_CODE_INFOS` 一致。
 5. 初始化登录、节点绑定和链路运行态结构化表。
-6. 初始化链上公权机构查询投影并启动交易索引 worker。
+6. 初始化链上公权机构查询投影，并按 finalized 区块启动公民绑定投影和交易索引 worker。
 
 schema 初始化和链上业务投影必须分离。schema 入口只允许幂等创建最终结构与分区，不得携带 `ALTER/DROP`、旧列清理或兼容读取；公权机构目录只能从链上唯一真源投影。
 
@@ -77,7 +80,12 @@ schema 初始化和链上业务投影必须分离。schema 入口只允许幂等
 
 - `ids(cid_number, kind, province_code, city_code)`：全局身份 ID 索引。
 - `subjects`：主体公共展示字段，按省分区；机构行缓存 `cid_full_name/cid_short_name`、行政区、业务状态、私权分类，以及链上公开法定代表人的 `family_name/given_name/cid_number/legal_representative_account_id`。法定代表人照片只属于 OnChina 链下资料，不进入 `InstitutionInfo`；数据库不保存拼接姓名列。
-- `citizens`：公民档案、姓、名、身份 CID、护照号、可空 `account_id`、`province_code/city_code/town_code` 居住/办理地、`birth_*` 出生地和电子护照有效期字段，按省分区。数据库不保存 SS58；需要展示时由 `account_id` 派生 `ss58_address`。
+- `citizens`：以 `cid_number` 归属公民档案、姓、名、护照号、`province_code/city_code/town_code`
+  居住/办理地、`birth_*` 出生地和电子护照有效期字段，按省分区。可空 `account_id`
+  只是当前 finalized 绑定的本地投影，并与单调 `binding_revision`、
+  `binding_finalized_block_number`、`binding_finalized_block_hash` 同步保存；不得用本地旧账户
+  回退覆盖链上缺失或较新版本。数据库不保存 SS58，需要展示时由当前 `account_id` 派生
+  `ss58_address`。
 - `citizen_documents`：公民独立资料库元数据,资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”,文件本体在磁盘；不得与机构 `docs` 共表。
 - `gov`：公权机构扩展字段，按省分区；链上投影写 `source='CHAIN'`，人工公权机构写 `source='MANUAL'`。
 - `private`：私权机构扩展字段，按省分区；分类字段使用 `private_type/partnership_kind/has_legal_personality`。
@@ -92,6 +100,29 @@ schema 初始化和链上业务投影必须分离。schema 入口只允许幂等
 - `chain_requests`、`chain_nonces`、`tx_records`、`tx_indexer_state`：链路幂等、防重放和索引运行态；交易发送方、接收方固定使用 `sender_account_id/recipient_account_id`。
 
 `cid_number` 是唯一且不可变的身份标识。不得新增 `identity_key`、`generation_key` 等第二身份键。
+
+### 5.1 公民 finalized 绑定单源
+
+- `citizenchain/onchina/src/core/chain_citizen_identity.rs` 是公民公开身份快照的唯一链读取
+  入口。同一次读取必须固定在一个 finalized 区块，并同时读取 `CidRegistry`、
+  `AccountIdByCid`、`BindingRevisionByCid`、`CidByAccountId`、
+  `VotingIdentityByCid` 和 `CandidateIdentityByCid`。
+- 正反绑定不闭环、revision 缺失或为零、竞选身份没有投票身份、非创世块缺少
+  `Timestamp.Now` 时一律失败关闭。创世块没有 timestamp inherent，区块号 0 可按链上时间
+  0 处理。
+- 本地投影只接受更高 revision，或同 revision 且账户完全一致的幂等写入；revision 回退和
+  同 revision 改账户必须拒绝。Revoked 投影清空当前 `account_id`，但保留 revision 和
+  finalized 锚点。
+- 创世法定代表人的本地档案也必须通过同一 finalized 快照取得绑定账户和 revision，
+  不得从基金会管理员常量硬编码当前账户；链下 `creator_account_id` 只作创建来源审计，
+  不得成为当前控制权或授权真源。
+- 注册局全局查询接口固定为
+  `GET /api/v1/admin/citizens/:cid_number/binding`。接口只向已登录的 FRG/CREG 管理员返回
+  链上公开绑定，不读取或泄露链下护照、资料、通讯录等档案；所有注册局都从链上同一
+  finalized 真源查询，不按本地办理地限制。
+- 占号、注册局换绑、身份推送和吊销只有在目标 extrinsic finalized 且
+  `ExtrinsicSuccess` 后，才读取该交易所在 finalized 区块的完整快照回写本地。前端动作完成后
+  必须重新调用全局查询接口，不得把扫码账户或 prepare 会话字段直接显示为已生效绑定。
 
 旧机构直接创建入口已关闭：OnChina 当前创建 API 固定返回 501，前端创建按钮固定禁用，不生成 `0x1e05/0x1f05` 或旧签名会话。后续如恢复机构登记，公权与私权机构管理员必须统一使用 `Admin { account_id, cid_number, family_name, given_name }`，机构治理阈值必须作为 entity 机构配置独立提交，不能由管理员人数或岗位数推导；具体登记规则需另立方案确认。
 
@@ -175,16 +206,17 @@ OnChina 属于 `citizenchain`。不再保留独立 旧独立身份系统 CI、�
 
 涉及 API、数据库、登录、权限、扫码或页面展示的任务，必须使用真实本地服务、真实 PostgreSQL、真实 HTTP 接口或真实页面验收。只通过编译、类型检查或前端 build 不算完成。
 
-账户标识统一第 4 步已在 2026-07-23 完成真实验收：从当前 Runtime 源码生成的
-`citizenchain.compact.compressed.wasm` SHA-256 为
-`6fdd4cf2f7b5b884a63c680ecde5fd4dada73ea7df3e816b9b115129b68afcbb`，隔离
-`citizenchain-fresh` 创世块为
-`0x49f1da82260414adbfb72ce085d8520dbf56d1413b60f583af7722955e877458`。
-真实 PostgreSQL、HTTPS OnChina 和索引器完成 49,593 个机构、99,231 个机构账户投影；
-规范 `account_id` 可进入当前流程，大写、无前缀、SS58、旧 JSON 字段和旧路由被拒绝。
-使用开发密钥生成的有效 sr25519 签名通过验签后，非链上管理员仍被链上管理员门禁拒绝，
-证明签名身份不会绕过链上授权。验收后业务数据库再次清空重建，OnChina、节点和
-PostgreSQL 均已停止，端口 `8964`、`9944`、`5433` 关闭。
+CID 身份总任务第 5 步于 2026-07-30 使用当前源码 fresh runtime、独立链端口、两套独立
+PostgreSQL 和两个不同市注册局 OnChina 实例完成真实验收。两套实例均投影 49,593 个机构和
+99,232 个机构账户，并对 `CN220-CTZN2-198805200-2026` 返回完全一致的 finalized 绑定：
+Active、`binding_revision=1`、当前账户
+`0x0cb1d05c0c9c7f05679b60d6f24c7e5719a3985264e41c5e899d4822dca4b06b`，区块和创世哈希
+均为 `0x49622cb851a0815af75573e281b992565cb31df509c2e3d3b847858c351ef46e`。该哈希只是本步
+隔离 fresh 验收锚点，不是正式创世冻结结果。
+
+本步同时确认：当前仍在运行的旧冻结链 WASM 没有 `BindingRevisionByCid` 元数据，新
+OnChina 会按设计返回失败而不是回退旧账户。正式环境必须等后续唯一正式创世重生并冻结后
+整体切换，禁止把新 OnChina 单独部署到旧 runtime。
 
 账户标识统一第 10 步于 2026-07-24 使用 Pixel 8a、仓库外 fresh 链和独立
 PostgreSQL 完成总验收。当前 fresh genesis hash 为
@@ -201,7 +233,8 @@ Cloudflare staging 的 D1/KV/R2 可清理真写通过，production 只读。仓�
 ```text
 rg "旧独立身份系统名" memory AGENTS.md citizenchain/onchina --glob '!memory/08-tasks/**' --glob '!memory/04-decisions/**'
 cargo check --manifest-path citizenchain/Cargo.toml -p onchina
-npm --prefix citizenchain/onchina/frontend run build
+cargo test --manifest-path citizenchain/Cargo.toml -p onchina
+npm --prefix citizenchain/onchina/frontend exec tsc -- --noEmit
 ```
 
 如果工作区存在其它线程的未完成改动，验收必须说明受影响的命令和原因，不得把其它线程的失败混入本任务结论。

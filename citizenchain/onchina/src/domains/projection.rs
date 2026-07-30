@@ -12,8 +12,8 @@ use chrono::{DateTime, Utc};
 
 use crate::cid::InstitutionCategory;
 use crate::core::chain_runtime::{
-    institution_lookup, is_tier1_registry, read_chain_citizen_detail, OnChainCitizenDetail,
-    OnChainInstitution,
+    institution_lookup, is_tier1_registry, read_chain_citizen_detail, read_chain_citizen_detail_at,
+    OnChainCitizenDetail, OnChainInstitution,
 };
 use crate::core::db::Db;
 use crate::domains::citizens::model::{CitizenRecord, CitizenStatus};
@@ -43,6 +43,9 @@ pub(crate) struct ChainCitizen {
     pub(crate) city_code: String,
     pub(crate) town_code: String,
     pub(crate) account_id: Option<String>,
+    pub(crate) binding_revision: u64,
+    pub(crate) binding_finalized_block_number: i64,
+    pub(crate) binding_finalized_block_hash: String,
     /// citizen_status == Normal。
     pub(crate) status_normal: bool,
     pub(crate) passport_valid_from: Option<String>,
@@ -129,11 +132,11 @@ pub(crate) fn merge_citizen_record(
             existing.map(|e| e.citizen_birth_date.as_str()),
         ),
         // ── 链上来源列:投影权威 ──
-        account_id: chain
-            .account_id
-            .clone()
-            .or_else(|| existing.and_then(|e| e.account_id.clone())),
-        account_verified_at: existing.and_then(|e| e.account_verified_at),
+        // 当前账户完全以 finalized 链快照为准；链上无有效账户时禁止回退本地旧账户。
+        account_id: chain.account_id.clone(),
+        binding_revision: chain.binding_revision,
+        binding_finalized_block_number: Some(chain.binding_finalized_block_number),
+        binding_finalized_block_hash: Some(chain.binding_finalized_block_hash.clone()),
         citizen_status,
         voting_eligible: chain.voting_eligible(),
         passport_valid_from: chain_or_local_str(
@@ -308,6 +311,9 @@ fn chain_citizen_from_detail(d: OnChainCitizenDetail) -> ChainCitizen {
         city_code: d.residence_city_code,
         town_code: d.residence_town_code,
         account_id: d.account_id.map(|a| format!("0x{}", hex::encode(a))),
+        binding_revision: d.binding_revision,
+        binding_finalized_block_number: i64::from(d.binding_finalized_block_number),
+        binding_finalized_block_hash: format!("0x{}", hex::encode(d.binding_finalized_block_hash)),
         status_normal: d.status_normal,
         passport_valid_from: fmt_u32(d.passport_valid_from),
         passport_valid_until: fmt_u32(d.passport_valid_until),
@@ -328,16 +334,57 @@ pub(crate) async fn project_citizen_by_cid(
     cid_number: &str,
     scope: &NodeScope,
 ) -> Result<bool, String> {
-    let Some(detail) = read_chain_citizen_detail(cid_number).await? else {
+    project_citizen_by_cid_at(db, cid_number, scope, None).await
+}
+
+/// Indexer 必须投影事件所在 finalized 块，不能在追块时偷读更晚 head。
+pub(crate) async fn project_citizen_by_cid_at(
+    db: &Db,
+    cid_number: &str,
+    scope: &NodeScope,
+    block_hash: Option<[u8; 32]>,
+) -> Result<bool, String> {
+    let detail = match block_hash {
+        Some(hash) => read_chain_citizen_detail_at(cid_number, Some(hash)).await?,
+        None => read_chain_citizen_detail(cid_number).await?,
+    };
+    let Some(detail) = detail else {
         return Ok(false);
     };
     let chain = chain_citizen_from_detail(detail);
     let existing = db.find_citizen_by_cid(cid_number)?;
+    ensure_binding_projection_monotonic(&chain, existing.as_ref())?;
     let Some(merged) = merge_citizen_record(&chain, existing.as_ref(), scope, Utc::now()) else {
         return Ok(false);
     };
     db.upsert_citizen_row(&merged)?;
     Ok(true)
+}
+
+/// 防止旧 finalized 视图覆盖较新绑定；同 revision 的账户不一致同样是链/投影冲突。
+fn ensure_binding_projection_monotonic(
+    chain: &ChainCitizen,
+    existing: Option<&CitizenRecord>,
+) -> Result<(), String> {
+    let Some(existing) = existing else {
+        return Ok(());
+    };
+    if existing.binding_revision > chain.binding_revision {
+        return Err(format!(
+            "CID {} binding revision regressed from {} to {}",
+            chain.cid_number, existing.binding_revision, chain.binding_revision
+        ));
+    }
+    if existing.binding_revision == chain.binding_revision
+        && existing.binding_revision > 0
+        && existing.account_id != chain.account_id
+    {
+        return Err(format!(
+            "CID {} account changed without binding revision advance",
+            chain.cid_number
+        ));
+    }
+    Ok(())
 }
 
 fn chain_institution_from_lookup(
@@ -527,6 +574,9 @@ mod tests {
             city_code: "018".to_string(),
             town_code: "018001".to_string(),
             account_id: Some("0x".to_string() + &"11".repeat(32)),
+            binding_revision: 1,
+            binding_finalized_block_number: 7,
+            binding_finalized_block_hash: "0x".to_string() + &"22".repeat(32),
             status_normal: true,
             passport_valid_from: Some("20260101".to_string()),
             passport_valid_until: Some("20360101".to_string()),
@@ -649,6 +699,39 @@ mod tests {
         let out = merge_citizen_record(&chain, None, &scope(), now()).unwrap();
         assert_eq!(out.citizen_status, CitizenStatus::Revoked);
         assert!(!out.voting_eligible);
+    }
+
+    #[test]
+    fn finalized_missing_account_never_falls_back_to_local_account() {
+        let existing =
+            merge_citizen_record(&chain_voting_citizen(), None, &scope(), now()).unwrap();
+        let mut chain = chain_voting_citizen();
+        chain.binding_revision = 2;
+        chain.account_id = None;
+        chain.status_normal = false;
+        let out = merge_citizen_record(&chain, Some(&existing), &scope(), now()).unwrap();
+        assert_eq!(out.account_id, None);
+        assert_eq!(out.binding_revision, 2);
+    }
+
+    #[test]
+    fn projection_rejects_revision_regression_and_same_revision_account_change() {
+        let mut existing =
+            merge_citizen_record(&chain_voting_citizen(), None, &scope(), now()).unwrap();
+        existing.binding_revision = 3;
+
+        let mut regressed = chain_voting_citizen();
+        regressed.binding_revision = 2;
+        assert!(ensure_binding_projection_monotonic(&regressed, Some(&existing)).is_err());
+
+        let mut conflicting = chain_voting_citizen();
+        conflicting.binding_revision = 3;
+        conflicting.account_id = Some("0x".to_string() + &"22".repeat(32));
+        assert!(ensure_binding_projection_monotonic(&conflicting, Some(&existing)).is_err());
+
+        let mut advanced = conflicting;
+        advanced.binding_revision = 4;
+        assert!(ensure_binding_projection_monotonic(&advanced, Some(&existing)).is_ok());
     }
 
     fn chain_institution() -> ChainInstitution {

@@ -5,19 +5,19 @@
 //! DATE: 2026-07-30, STEPS: `50`, REPEAT: `20`, LOW RANGE: `[]`, HIGH RANGE: `[]`
 //! WORST CASE MAP SIZE: `1000000`
 //! HOSTNAME: `rhettdeMacBook-Pro.local`, CPU: `<UNKNOWN>`
-//! WASM-EXECUTION: `Compiled`, CHAIN: `Some("/var/folders/z1/h1pvtv0x76xg5h60y_2npmbc0000gn/T/citizenchain-benchmark-spec.XymqqYuVC6")`, DB CACHE: 1024
+//! WASM-EXECUTION: `Compiled`, CHAIN: `Some("/tmp/citizenchain-step6.iVEZ1A/fresh-spec.json")`, DB CACHE: 1024
 
 // Executed Command:
 // ./target/release/citizenchain
 // benchmark
 // pallet
-// --chain=/var/folders/z1/h1pvtv0x76xg5h60y_2npmbc0000gn/T/citizenchain-benchmark-spec.XymqqYuVC6
+// --chain=/tmp/citizenchain-step6.iVEZ1A/fresh-spec.json
 // --genesis-builder=spec-genesis
 // --pallet=citizen_identity
 // --extrinsic=*
 // --steps=50
 // --repeat=20
-// --template=/Users/rhett/GMB/citizenchain/scripts/benchmark-weight-template.hbs
+// --template=scripts/benchmark-weight-template.hbs
 // --output=runtime/misc/citizen-identity/src/weights.rs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
@@ -76,9 +76,9 @@ pub trait WeightInfo {
 	/// Storage: `CitizenIdentity::PopulationTransitionCountByDate` (r:1 w:1)
 	/// Proof: `CitizenIdentity::PopulationTransitionCountByDate` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::IdentityRewardClaimed` (r:1 w:0)
-	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingIdentityRewardClaimed` (r:1 w:1)
-	/// Proof: `CitizenIssuance::PendingIdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::PendingIdentityRewardClaimed` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::AccountRewarded` (r:1 w:0)
 	/// Proof: `CitizenIssuance::AccountRewarded` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingAccountRewarded` (r:1 w:1)
@@ -92,7 +92,7 @@ pub trait WeightInfo {
 	/// Storage: `CitizenIdentity::PopulationTransitions` (r:0 w:1)
 	/// Proof: `CitizenIdentity::PopulationTransitions` (`max_values`: None, `max_size`: Some(86), added: 2561, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingRewards` (r:0 w:1)
-	/// Proof: `CitizenIssuance::PendingRewards` (`max_values`: None, `max_size`: Some(76), added: 2551, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::PendingRewards` (`max_values`: None, `max_size`: Some(77), added: 2552, mode: `MaxEncodedLen`)
 	fn register_voting_identity() -> Weight;
 	/// Storage: `Timestamp::Now` (r:1 w:0)
 	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
@@ -510,9 +510,9 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `CitizenIdentity::PopulationTransitionCountByDate` (r:1 w:1)
 	/// Proof: `CitizenIdentity::PopulationTransitionCountByDate` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::IdentityRewardClaimed` (r:1 w:0)
-	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingIdentityRewardClaimed` (r:1 w:1)
-	/// Proof: `CitizenIssuance::PendingIdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::PendingIdentityRewardClaimed` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::AccountRewarded` (r:1 w:0)
 	/// Proof: `CitizenIssuance::AccountRewarded` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingAccountRewarded` (r:1 w:1)
@@ -526,13 +526,13 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `CitizenIdentity::PopulationTransitions` (r:0 w:1)
 	/// Proof: `CitizenIdentity::PopulationTransitions` (`max_values`: None, `max_size`: Some(86), added: 2561, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingRewards` (r:0 w:1)
-	/// Proof: `CitizenIssuance::PendingRewards` (`max_values`: None, `max_size`: Some(76), added: 2551, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::PendingRewards` (`max_values`: None, `max_size`: Some(77), added: 2552, mode: `MaxEncodedLen`)
 	fn register_voting_identity() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `21501`
 		//  Estimated: `649945`
-		// Minimum execution time: 147_000_000 picoseconds.
-		Weight::from_parts(163_000_000, 0)
+		// Minimum execution time: 135_000_000 picoseconds.
+		Weight::from_parts(138_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(27))
 			.saturating_add(T::DbWeight::get().writes(14))
@@ -589,8 +589,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `22026`
 		//  Estimated: `649945`
-		// Minimum execution time: 161_000_000 picoseconds.
-		Weight::from_parts(170_000_000, 0)
+		// Minimum execution time: 143_000_000 picoseconds.
+		Weight::from_parts(149_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(23))
 			.saturating_add(T::DbWeight::get().writes(12))
@@ -645,8 +645,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `22025`
 		//  Estimated: `649945`
-		// Minimum execution time: 157_000_000 picoseconds.
-		Weight::from_parts(163_000_000, 0)
+		// Minimum execution time: 142_000_000 picoseconds.
+		Weight::from_parts(148_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(23))
 			.saturating_add(T::DbWeight::get().writes(12))
@@ -703,8 +703,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `22169`
 		//  Estimated: `649945`
-		// Minimum execution time: 157_000_000 picoseconds.
-		Weight::from_parts(170_000_000, 0)
+		// Minimum execution time: 143_000_000 picoseconds.
+		Weight::from_parts(151_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(24))
 			.saturating_add(T::DbWeight::get().writes(13))
@@ -757,8 +757,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `22058`
 		//  Estimated: `649945`
-		// Minimum execution time: 139_000_000 picoseconds.
-		Weight::from_parts(151_000_000, 0)
+		// Minimum execution time: 131_000_000 picoseconds.
+		Weight::from_parts(138_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(21))
 			.saturating_add(T::DbWeight::get().writes(12))
@@ -793,8 +793,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `21316`
 		//  Estimated: `649945`
-		// Minimum execution time: 117_000_000 picoseconds.
-		Weight::from_parts(128_000_000, 0)
+		// Minimum execution time: 108_000_000 picoseconds.
+		Weight::from_parts(111_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(13))
 			.saturating_add(T::DbWeight::get().writes(4))
@@ -811,7 +811,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `370`
 		//  Estimated: `3623`
-		// Minimum execution time: 20_000_000 picoseconds.
+		// Minimum execution time: 18_000_000 picoseconds.
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3623))
 			.saturating_add(T::DbWeight::get().reads(4))
@@ -835,8 +835,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `613`
 		//  Estimated: `3623`
-		// Minimum execution time: 25_000_000 picoseconds.
-		Weight::from_parts(26_000_000, 0)
+		// Minimum execution time: 23_000_000 picoseconds.
+		Weight::from_parts(24_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3623))
 			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(4))
@@ -873,8 +873,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `21435`
 		//  Estimated: `649945`
-		// Minimum execution time: 121_000_000 picoseconds.
-		Weight::from_parts(125_000_000, 0)
+		// Minimum execution time: 105_000_000 picoseconds.
+		Weight::from_parts(110_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(14))
 			.saturating_add(T::DbWeight::get().writes(4))
@@ -927,8 +927,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `21987`
 		//  Estimated: `649945`
-		// Minimum execution time: 150_000_000 picoseconds.
-		Weight::from_parts(157_000_000, 0)
+		// Minimum execution time: 129_000_000 picoseconds.
+		Weight::from_parts(136_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(T::DbWeight::get().reads(21))
 			.saturating_add(T::DbWeight::get().writes(12))
@@ -975,7 +975,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		//  Measured:  `325`
 		//  Estimated: `3493`
 		// Minimum execution time: 11_000_000 picoseconds.
-		Weight::from_parts(12_000_000, 0)
+		Weight::from_parts(11_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3493))
 			.saturating_add(T::DbWeight::get().reads(5))
 			.saturating_add(T::DbWeight::get().writes(3))
@@ -1016,8 +1016,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `1273`
 		//  Estimated: `3623`
-		// Minimum execution time: 46_000_000 picoseconds.
-		Weight::from_parts(50_000_000, 0)
+		// Minimum execution time: 42_000_000 picoseconds.
+		Weight::from_parts(44_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3623))
 			.saturating_add(T::DbWeight::get().reads(16))
 			.saturating_add(T::DbWeight::get().writes(8))
@@ -1068,9 +1068,9 @@ impl WeightInfo for () {
 	/// Storage: `CitizenIdentity::PopulationTransitionCountByDate` (r:1 w:1)
 	/// Proof: `CitizenIdentity::PopulationTransitionCountByDate` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::IdentityRewardClaimed` (r:1 w:0)
-	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingIdentityRewardClaimed` (r:1 w:1)
-	/// Proof: `CitizenIssuance::PendingIdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::PendingIdentityRewardClaimed` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::AccountRewarded` (r:1 w:0)
 	/// Proof: `CitizenIssuance::AccountRewarded` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingAccountRewarded` (r:1 w:1)
@@ -1084,13 +1084,13 @@ impl WeightInfo for () {
 	/// Storage: `CitizenIdentity::PopulationTransitions` (r:0 w:1)
 	/// Proof: `CitizenIdentity::PopulationTransitions` (`max_values`: None, `max_size`: Some(86), added: 2561, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::PendingRewards` (r:0 w:1)
-	/// Proof: `CitizenIssuance::PendingRewards` (`max_values`: None, `max_size`: Some(76), added: 2551, mode: `MaxEncodedLen`)
+	/// Proof: `CitizenIssuance::PendingRewards` (`max_values`: None, `max_size`: Some(77), added: 2552, mode: `MaxEncodedLen`)
 	fn register_voting_identity() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `21501`
 		//  Estimated: `649945`
-		// Minimum execution time: 147_000_000 picoseconds.
-		Weight::from_parts(163_000_000, 0)
+		// Minimum execution time: 135_000_000 picoseconds.
+		Weight::from_parts(138_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(27))
 			.saturating_add(RocksDbWeight::get().writes(14))
@@ -1147,8 +1147,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `22026`
 		//  Estimated: `649945`
-		// Minimum execution time: 161_000_000 picoseconds.
-		Weight::from_parts(170_000_000, 0)
+		// Minimum execution time: 143_000_000 picoseconds.
+		Weight::from_parts(149_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(23))
 			.saturating_add(RocksDbWeight::get().writes(12))
@@ -1203,8 +1203,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `22025`
 		//  Estimated: `649945`
-		// Minimum execution time: 157_000_000 picoseconds.
-		Weight::from_parts(163_000_000, 0)
+		// Minimum execution time: 142_000_000 picoseconds.
+		Weight::from_parts(148_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(23))
 			.saturating_add(RocksDbWeight::get().writes(12))
@@ -1261,8 +1261,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `22169`
 		//  Estimated: `649945`
-		// Minimum execution time: 157_000_000 picoseconds.
-		Weight::from_parts(170_000_000, 0)
+		// Minimum execution time: 143_000_000 picoseconds.
+		Weight::from_parts(151_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(24))
 			.saturating_add(RocksDbWeight::get().writes(13))
@@ -1315,8 +1315,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `22058`
 		//  Estimated: `649945`
-		// Minimum execution time: 139_000_000 picoseconds.
-		Weight::from_parts(151_000_000, 0)
+		// Minimum execution time: 131_000_000 picoseconds.
+		Weight::from_parts(138_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(21))
 			.saturating_add(RocksDbWeight::get().writes(12))
@@ -1351,8 +1351,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `21316`
 		//  Estimated: `649945`
-		// Minimum execution time: 117_000_000 picoseconds.
-		Weight::from_parts(128_000_000, 0)
+		// Minimum execution time: 108_000_000 picoseconds.
+		Weight::from_parts(111_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(13))
 			.saturating_add(RocksDbWeight::get().writes(4))
@@ -1369,7 +1369,7 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `370`
 		//  Estimated: `3623`
-		// Minimum execution time: 20_000_000 picoseconds.
+		// Minimum execution time: 18_000_000 picoseconds.
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3623))
 			.saturating_add(RocksDbWeight::get().reads(4))
@@ -1393,8 +1393,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `613`
 		//  Estimated: `3623`
-		// Minimum execution time: 25_000_000 picoseconds.
-		Weight::from_parts(26_000_000, 0)
+		// Minimum execution time: 23_000_000 picoseconds.
+		Weight::from_parts(24_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3623))
 			.saturating_add(RocksDbWeight::get().reads(7))
 			.saturating_add(RocksDbWeight::get().writes(4))
@@ -1431,8 +1431,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `21435`
 		//  Estimated: `649945`
-		// Minimum execution time: 121_000_000 picoseconds.
-		Weight::from_parts(125_000_000, 0)
+		// Minimum execution time: 105_000_000 picoseconds.
+		Weight::from_parts(110_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(14))
 			.saturating_add(RocksDbWeight::get().writes(4))
@@ -1485,8 +1485,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `21987`
 		//  Estimated: `649945`
-		// Minimum execution time: 150_000_000 picoseconds.
-		Weight::from_parts(157_000_000, 0)
+		// Minimum execution time: 129_000_000 picoseconds.
+		Weight::from_parts(136_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 649945))
 			.saturating_add(RocksDbWeight::get().reads(21))
 			.saturating_add(RocksDbWeight::get().writes(12))
@@ -1533,7 +1533,7 @@ impl WeightInfo for () {
 		//  Measured:  `325`
 		//  Estimated: `3493`
 		// Minimum execution time: 11_000_000 picoseconds.
-		Weight::from_parts(12_000_000, 0)
+		Weight::from_parts(11_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3493))
 			.saturating_add(RocksDbWeight::get().reads(5))
 			.saturating_add(RocksDbWeight::get().writes(3))
@@ -1574,8 +1574,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `1273`
 		//  Estimated: `3623`
-		// Minimum execution time: 46_000_000 picoseconds.
-		Weight::from_parts(50_000_000, 0)
+		// Minimum execution time: 42_000_000 picoseconds.
+		Weight::from_parts(44_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3623))
 			.saturating_add(RocksDbWeight::get().reads(16))
 			.saturating_add(RocksDbWeight::get().writes(8))

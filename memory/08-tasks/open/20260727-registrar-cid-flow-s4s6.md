@@ -1,6 +1,6 @@
 # 注册局 CID 流程改造(S4 链 + S6 onchina,合并一大步)
 
-状态:open(四端功能开发完成;待 S5 正式创世资产重生与后置真实验收)
+状态:open(四端功能及总任务第 5 步 OnChina finalized 查询/投影已完成；待第 6-7 步终审和第 8 步正式创世资产重生)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局);**链与 onchina 强耦合,必须同批**([[no-compatibility]] 不留过渡)
 母卡:`20260727-citizenapp-cid-identity-rootless-wallet.md`(S1-S3 已完成:CN 去地域化 CID、自助占号 `self_occupy_cid`、自助换绑 `self_rebind_cid_account_id`、`OP_SIGN_CID_REBIND` 签名域)
 
@@ -18,8 +18,9 @@
 - 匿名 CID 可由任一在册 CREG/FRG 办理；civic CID 可由投票身份居住城市的 CREG 或对应
   省 FRG 办理。换绑不要求旧钱包签名，个人多签不进入本流程。
 - OnChina 不再要求“本局已有本地档案”才允许换绑；它从同一 finalized 状态读取
-  `CidRegistry + AccountIdByCid + BindingRevisionByCid + Timestamp.Now`，严格区分
-  Missing/Active/Revoked。
+  `CidRegistry + AccountIdByCid + BindingRevisionByCid + CidByAccountId +
+  VotingIdentityByCid + CandidateIdentityByCid + Timestamp.Now`，严格区分
+  Missing/Active/Revoked 并校验正反闭环。
 - call 6 固定为
   `actor_cid, actor_role, cid, account_id, expires_at, citizen_signature`；
   call 7 固定为
@@ -30,6 +31,21 @@
   finalized 标记保存后重试只补投影，不得重提。
 - 本节是当前验收合同。下方 2026-07-27/28 的“完成记录”只用于说明开发演进，其中被本节
   点名取代的短载荷、civic 拒绝、本局限定和“后期再做”口径均不再构成规范或兼容许可。
+
+## 总任务第 5 步 OnChina finalized 闭环（2026-07-30，完成）
+
+- `core/chain_citizen_identity.rs` 成为公民绑定、投票/竞选标志和 finalized 锚点的唯一
+  链读取入口；办理、投影和全局查询共用，不再各自拼接 storage 读取。
+- 注册局全局接口允许任一 FRG/CREG 查询链上公开 CID 绑定，不要求本地档案或办理地命中；
+  链下护照和资料仍严格留在办理节点。
+- 两个不同市注册局 OnChina 实例、两套独立 PostgreSQL 对同一 fresh 链 CID 返回完全一致
+  的账户、revision=1 和 finalized 哈希；每套创世机构投影均为 49,593 个机构、99,232 个
+  账户。
+- 当前旧冻结链没有 `BindingRevisionByCid` 元数据，新读取器失败关闭。正式发布必须等待
+  唯一正式创世重生后整体切换；本步未创世、未推送、未触发 CI。
+- 创世法定代表人本地投影也已删除硬编码账户，统一读取 finalized 链上身份快照。后端
+  179 项测试、严格 clippy、前端 TypeScript 和本步 Rust 格式检查通过；源码和编译包残留
+  已清理。现有 HTTPS OnChina 已真实加载新哈希脚本，登录页完整渲染且控制台无错误。
 
 ## 已完成地基(S1-S3,新窗口直接复用)
 - CID = CN 前缀去地域化、人主体(CTZN/NATP/SMTP)12 位号段(`primitives/cid`)。

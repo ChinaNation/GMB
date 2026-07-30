@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use codec::{Decode, Encode};
-use sp_core::hashing::{blake2_256, twox_128};
+use sp_core::hashing::twox_128;
 // twox_64 只在测试期的 key 校验(parse_twox_u32_key)使用;运行期键构造已收敛 shared::storage_keys。
 #[cfg(test)]
 use sp_core::hashing::twox_64;
@@ -25,7 +25,7 @@ const CITIZEN_IDENTITY_PALLET: &[u8] = b"CitizenIdentity";
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct PendingCertificationReward {
     account_id: [u8; 32],
-    cid_number_hash: [u8; 32],
+    cid_number: Vec<u8>,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -64,7 +64,6 @@ pub enum GuardError {
     RewardedCountInvalid,
     RewardLimitExceeded,
     FirstIdentityMissing,
-    IdentityHashMismatch,
     IdentityReverseIndexMismatch,
     IdentityAlreadyExisted,
     RewardAlreadyClaimed,
@@ -74,7 +73,7 @@ pub enum GuardError {
 pub mod storage_key {
     use super::*;
 
-    // `crate::shared::storage_keys` 单源的薄委托;blake2_map_raw 传已编码键(裸哈希入参)。
+    // `crate::shared::storage_keys` 单源的薄委托；map key 必须传对应类型的完整 SCALE 编码。
     fn storage_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
         crate::shared::storage_keys::prefix(pallet, storage)
     }
@@ -91,8 +90,12 @@ pub mod storage_key {
         storage_prefix(CITIZEN_ISSUANCE_PALLET, b"RewardedCount")
     }
 
-    pub fn identity_claimed(hash: &[u8; 32]) -> Vec<u8> {
-        blake2_map_raw(CITIZEN_ISSUANCE_PALLET, b"IdentityRewardClaimed", hash)
+    pub fn identity_claimed(cid_number: &[u8]) -> Vec<u8> {
+        blake2_map_raw(
+            CITIZEN_ISSUANCE_PALLET,
+            b"IdentityRewardClaimed",
+            &cid_number.to_vec().encode(),
+        )
     }
 
     pub fn account_rewarded(account: &[u8; 32]) -> Vec<u8> {
@@ -122,11 +125,11 @@ pub mod storage_key {
         storage_prefix(CITIZEN_ISSUANCE_PALLET, b"PendingRewards")
     }
 
-    pub fn pending_identity(hash: &[u8; 32]) -> Vec<u8> {
+    pub fn pending_identity(cid_number: &[u8]) -> Vec<u8> {
         blake2_map_raw(
             CITIZEN_ISSUANCE_PALLET,
             b"PendingIdentityRewardClaimed",
-            hash,
+            &cid_number.to_vec().encode(),
         )
     }
 
@@ -260,11 +263,11 @@ where
         let pending: PendingCertificationReward = pre(&pending_key)
             .ok_or(GuardError::PendingQueueGap)
             .and_then(|raw| decode_exact(&raw, "PendingRewards"))?;
-        if !accounts.insert(pending.account_id) || !identities.insert(pending.cid_number_hash) {
+        if !accounts.insert(pending.account_id) || !identities.insert(pending.cid_number.clone()) {
             return Err(GuardError::PendingDuplicate);
         }
 
-        let pending_identity_key = storage_key::pending_identity(&pending.cid_number_hash);
+        let pending_identity_key = storage_key::pending_identity(&pending.cid_number);
         let pending_account_key = storage_key::pending_account(&pending.account_id);
         if !unit_present(pre, &pending_identity_key, "PendingIdentityRewardClaimed")?
             || !unit_present(pre, &pending_account_key, "PendingAccountRewarded")?
@@ -281,8 +284,8 @@ where
         let cid_number: Vec<u8> = pre(&storage_key::cid_by_account_id(&pending.account_id))
             .ok_or(GuardError::IdentityReverseIndexMismatch)
             .and_then(|raw| decode_exact(&raw, "CidByAccountId"))?;
-        if blake2_256(&cid_number) != pending.cid_number_hash {
-            return Err(GuardError::IdentityHashMismatch);
+        if cid_number != pending.cid_number {
+            return Err(GuardError::IdentityReverseIndexMismatch);
         }
         let voting_key = storage_key::voting_identity(&cid_number);
         if parent(&voting_key).is_some() {
@@ -298,7 +301,7 @@ where
             return Err(GuardError::IdentityReverseIndexMismatch);
         }
 
-        let claimed_key = storage_key::identity_claimed(&pending.cid_number_hash);
+        let claimed_key = storage_key::identity_claimed(&pending.cid_number);
         let rewarded_key = storage_key::account_rewarded(&pending.account_id);
         if unit_present(parent, &claimed_key, "IdentityRewardClaimed")?
             || unit_present(parent, &rewarded_key, "AccountRewarded")?
@@ -403,9 +406,12 @@ mod tests {
 
         let pending = PendingCertificationReward {
             account_id: [7u8; 32],
-            cid_number_hash: [8u8; 32],
+            cid_number: b"GD001-CTZN1-GOLDEN".to_vec(),
         };
-        assert_eq!(pending.encode(), ([7u8; 32], [8u8; 32]).encode());
+        assert_eq!(
+            pending.encode(),
+            ([7u8; 32], b"GD001-CTZN1-GOLDEN".to_vec()).encode()
+        );
     }
 
     fn voting_identity() -> Vec<u8> {
@@ -435,17 +441,16 @@ mod tests {
         let mut post = BTreeMap::new();
         let account = [7u8; 32];
         let cid = b"GD001-CTZN1-TEST".to_vec();
-        let hash = blake2_256(&cid);
         put(&mut pre, storage_key::pending_count(), 1u32);
         put(
             &mut pre,
             storage_key::pending_reward(0),
             PendingCertificationReward {
                 account_id: account,
-                cid_number_hash: hash,
+                cid_number: cid.clone(),
             },
         );
-        put(&mut pre, storage_key::pending_identity(&hash), ());
+        put(&mut pre, storage_key::pending_identity(&cid), ());
         put(&mut pre, storage_key::pending_account(&account), ());
         pre.insert(storage_key::voting_identity(&cid), voting_identity());
         put(&mut pre, storage_key::account_id_by_cid(&cid), account);
@@ -455,7 +460,7 @@ mod tests {
             cid.clone(),
         );
         put(&mut post, storage_key::rewarded_count(), 1u64);
-        put(&mut post, storage_key::identity_claimed(&hash), ());
+        put(&mut post, storage_key::identity_claimed(&cid), ());
         put(&mut post, storage_key::account_rewarded(&account), ());
         post.insert(storage_key::voting_identity(&cid), voting_identity());
         put(&mut post, storage_key::account_id_by_cid(&cid), account);
@@ -532,8 +537,7 @@ mod tests {
     fn missing_markers_reverse_index_and_wrong_rewarded_count_are_rejected() {
         let (parent, mut pre, post, pre_delta, post_delta, _) = valid_transition();
         let cid = b"GD001-CTZN1-TEST".to_vec();
-        let hash = blake2_256(&cid);
-        pre.remove(&storage_key::pending_identity(&hash));
+        pre.remove(&storage_key::pending_identity(&cid));
         assert_eq!(
             check_transition(
                 2,
@@ -649,7 +653,7 @@ mod tests {
                 &|key| post.get(key).cloned(),
                 &mut FinalizeIssuancePlan::default(),
             ),
-            Err(GuardError::IdentityHashMismatch)
+            Err(GuardError::IdentityReverseIndexMismatch)
         );
 
         let (parent, pre, post, mut pre_delta, post_delta, _) = valid_transition();

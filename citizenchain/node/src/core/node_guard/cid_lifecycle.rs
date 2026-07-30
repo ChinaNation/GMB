@@ -68,15 +68,34 @@ enum CitizenStatus {
 }
 
 /// 公民投票身份以永久 CID 为主键；账户仅通过独立双向索引表达当前签名绑定。
-#[derive(Clone, Debug, Decode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 struct CitizenVotingIdentity {
-    _passport_valid_from: u32,
-    _passport_valid_until: u32,
-    _citizen_status: CitizenStatus,
-    _residence_province_code: Vec<u8>,
-    _residence_city_code: Vec<u8>,
-    _residence_town_code: Vec<u8>,
-    _updated_at: u32,
+    passport_valid_from: u32,
+    passport_valid_until: u32,
+    citizen_status: CitizenStatus,
+    residence_province_code: Vec<u8>,
+    residence_city_code: Vec<u8>,
+    residence_town_code: Vec<u8>,
+    updated_at: u32,
+}
+
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+enum CitizenSex {
+    Male,
+    Female,
+}
+
+/// 竞选身份同样以永久 CID 为主键；当前账户不进入档案，也不参与字段连续性。
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+struct CitizenCandidateIdentity {
+    birth_province_code: Vec<u8>,
+    birth_city_code: Vec<u8>,
+    birth_town_code: Vec<u8>,
+    family_name: Vec<u8>,
+    given_name: Vec<u8>,
+    citizen_sex: CitizenSex,
+    birth_date: u32,
+    updated_at: u32,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -151,6 +170,11 @@ pub enum GuardError {
     CitizenCidRevocationHeightInvalid,
     CitizenIdentityDeleted,
     CitizenIdentityWithoutCid,
+    CitizenCandidateIdentityDeleted,
+    CitizenCandidateIdentityWithoutVotingIdentity,
+    CitizenCandidateIdentityInvalidStatus,
+    CitizenCandidateIdentityLockedFieldChanged,
+    CitizenCandidateIdentityUpdateHeightInvalid,
     CitizenAccountIdBindingMissing,
     CitizenAccountIdBindingMismatch,
     CitizenBindingRevisionMissing,
@@ -213,6 +237,14 @@ pub mod storage_key {
         map_vec(CITIZEN_IDENTITY_PALLET, b"VotingIdentityByCid", cid)
     }
 
+    pub fn candidate_identity_prefix() -> Vec<u8> {
+        storage_prefix(CITIZEN_IDENTITY_PALLET, b"CandidateIdentityByCid")
+    }
+
+    pub fn candidate_identity(cid: &[u8]) -> Vec<u8> {
+        map_vec(CITIZEN_IDENTITY_PALLET, b"CandidateIdentityByCid", cid)
+    }
+
     pub fn account_id_by_cid_prefix() -> Vec<u8> {
         storage_prefix(CITIZEN_IDENTITY_PALLET, b"AccountIdByCid")
     }
@@ -266,6 +298,7 @@ pub mod storage_key {
         vec![
             citizen_registry_prefix(),
             voting_identity_prefix(),
+            candidate_identity_prefix(),
             account_id_by_cid_prefix(),
             cid_by_account_id_prefix(),
             binding_revision_by_cid_prefix(),
@@ -625,6 +658,84 @@ fn check_citizen_transition(
     }
 }
 
+fn validate_candidate_identity<F>(cid: &[u8], read: &F) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let Some(candidate_raw) = read(&storage_key::candidate_identity(cid)) else {
+        return Ok(());
+    };
+    let _: CitizenCandidateIdentity = decode_exact(&candidate_raw, "CandidateIdentityByCid")?;
+    let registry_raw =
+        read(&storage_key::citizen_registry(cid)).ok_or(GuardError::CitizenIdentityWithoutCid)?;
+    let registry: CitizenCidRecord = decode_exact(&registry_raw, "CidRegistry")?;
+    if registry.status != CitizenCidStatus::Active {
+        return Err(GuardError::CitizenCandidateIdentityInvalidStatus);
+    }
+    let voting_raw = read(&storage_key::voting_identity(cid))
+        .ok_or(GuardError::CitizenCandidateIdentityWithoutVotingIdentity)?;
+    let voting: CitizenVotingIdentity = decode_exact(&voting_raw, "VotingIdentityByCid")?;
+    if voting.citizen_status != CitizenStatus::Normal {
+        return Err(GuardError::CitizenCandidateIdentityInvalidStatus);
+    }
+    Ok(())
+}
+
+fn check_candidate_transition<FPost>(
+    block: u32,
+    cid: &[u8],
+    parent_raw: Option<Vec<u8>>,
+    post_raw: Option<Vec<u8>>,
+    post: &FPost,
+) -> Result<(), GuardError>
+where
+    FPost: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    match (parent_raw, post_raw) {
+        (None, Some(after_raw)) => {
+            let after: CitizenCandidateIdentity =
+                decode_exact(&after_raw, "CandidateIdentityByCid")?;
+            if after.updated_at != block {
+                return Err(GuardError::CitizenCandidateIdentityUpdateHeightInvalid);
+            }
+            validate_candidate_identity(cid, post)
+        }
+        (Some(before_raw), Some(after_raw)) => {
+            let before: CitizenCandidateIdentity =
+                decode_exact(&before_raw, "CandidateIdentityByCid")?;
+            let after: CitizenCandidateIdentity =
+                decode_exact(&after_raw, "CandidateIdentityByCid")?;
+            if before.birth_province_code != after.birth_province_code
+                || before.birth_city_code != after.birth_city_code
+                || before.birth_town_code != after.birth_town_code
+                || before.citizen_sex != after.citizen_sex
+                || before.birth_date != after.birth_date
+            {
+                return Err(GuardError::CitizenCandidateIdentityLockedFieldChanged);
+            }
+            if before_raw != after_raw && after.updated_at != block {
+                return Err(GuardError::CitizenCandidateIdentityUpdateHeightInvalid);
+            }
+            validate_candidate_identity(cid, post)
+        }
+        (Some(_), None) => {
+            let registry_raw = post(&storage_key::citizen_registry(cid))
+                .ok_or(GuardError::CitizenCandidateIdentityDeleted)?;
+            let registry: CitizenCidRecord = decode_exact(&registry_raw, "CidRegistry")?;
+            let voting_raw = post(&storage_key::voting_identity(cid))
+                .ok_or(GuardError::CitizenCandidateIdentityDeleted)?;
+            let voting: CitizenVotingIdentity = decode_exact(&voting_raw, "VotingIdentityByCid")?;
+            if registry.status != CitizenCidStatus::Revoked
+                || voting.citizen_status != CitizenStatus::Revoked
+            {
+                return Err(GuardError::CitizenCandidateIdentityDeleted);
+            }
+            Ok(())
+        }
+        (None, None) => Ok(()),
+    }
+}
+
 fn validate_citizen_identity_binding<F>(cid: &[u8], read: &F) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
@@ -640,6 +751,7 @@ where
     if let Some(identity_raw) = read(&storage_key::voting_identity(cid)) {
         let _: CitizenVotingIdentity = decode_exact(&identity_raw, "VotingIdentityByCid")?;
     }
+    validate_candidate_identity(cid, read)?;
 
     let account_raw = read(&storage_key::account_id_by_cid(cid))
         .ok_or(GuardError::CitizenAccountIdBindingMissing)?;
@@ -692,6 +804,7 @@ where
     }
 
     let identity_prefix = storage_key::voting_identity_prefix();
+    let candidate_prefix = storage_key::candidate_identity_prefix();
     let forward_prefix = storage_key::account_id_by_cid_prefix();
     let reverse_prefix = storage_key::cid_by_account_id_prefix();
     let revision_prefix = storage_key::binding_revision_by_cid_prefix();
@@ -702,6 +815,11 @@ where
             if post(key).is_none() {
                 return Err(GuardError::CitizenIdentityDeleted);
             }
+            touched_citizens.insert(cid);
+        }
+        if key.starts_with(&candidate_prefix) {
+            let cid = parse_vec_map_key(key, &candidate_prefix, "CandidateIdentityByCid")?;
+            check_candidate_transition(block, &cid, parent(key), post(key), &post)?;
             touched_citizens.insert(cid);
         }
         if key.starts_with(&forward_prefix) {
@@ -933,6 +1051,13 @@ where
     for key in keys.iter().filter(|key| key.starts_with(&identity_prefix)) {
         let Some(_) = read(key) else { continue };
         let cid = parse_vec_map_key(key, &identity_prefix, "VotingIdentityByCid")?;
+        validate_citizen_identity_binding(&cid, read)?;
+    }
+
+    let candidate_prefix = storage_key::candidate_identity_prefix();
+    for key in keys.iter().filter(|key| key.starts_with(&candidate_prefix)) {
+        let Some(_) = read(key) else { continue };
+        let cid = parse_vec_map_key(key, &candidate_prefix, "CandidateIdentityByCid")?;
         validate_citizen_identity_binding(&cid, read)?;
     }
 
@@ -1294,6 +1419,19 @@ mod tests {
         ])
     }
 
+    fn candidate_identity(updated_at: u32) -> CitizenCandidateIdentity {
+        CitizenCandidateIdentity {
+            birth_province_code: b"GD".to_vec(),
+            birth_city_code: b"001".to_vec(),
+            birth_town_code: b"001001".to_vec(),
+            family_name: b"Guard".to_vec(),
+            given_name: b"Candidate".to_vec(),
+            citizen_sex: CitizenSex::Female,
+            birth_date: 20000101,
+            updated_at,
+        }
+    }
+
     #[test]
     fn cid_guard_checks_only_province_city_code_profit_and_checksum() {
         // 随机段和年份段故意使用非数字、非标准长度；只要四项受保护规则及由原始
@@ -1637,6 +1775,171 @@ mod tests {
                 &GenesisReference::default(),
             ),
             Err(GuardError::CitizenBindingRevisionTransitionInvalid)
+        );
+    }
+
+    #[test]
+    fn candidate_identity_requires_active_normal_voter_and_locks_identity_fields() {
+        let cid = citizen_cid_number("candidate-guard");
+        let account = [12u8; 32];
+        let parent = citizen_state(&cid, account);
+        let candidate_key = storage_key::candidate_identity(&cid);
+        let mut created = parent.clone();
+        created.insert(candidate_key.clone(), candidate_identity(2).encode());
+        let creation_delta =
+            BTreeMap::from([(candidate_key.clone(), created.get(&candidate_key).cloned())]);
+        assert_eq!(
+            check_transition(
+                2,
+                &creation_delta,
+                |key| parent.get(key).cloned(),
+                |key| created.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
+        );
+        assert!(
+            storage_key::enumerated_prefixes().contains(&storage_key::candidate_identity_prefix())
+        );
+        assert_eq!(
+            validate_candidate_identity(&cid, &|key| created.get(key).cloned()),
+            Ok(())
+        );
+
+        // 只有普通 CID 绑定、没有投票身份时，不能凭空生成竞选身份。
+        let mut without_voting = anonymous_citizen_state(&cid, account);
+        without_voting.insert(candidate_key.clone(), candidate_identity(2).encode());
+        assert_eq!(
+            validate_candidate_identity(&cid, &|key| without_voting.get(key).cloned()),
+            Err(GuardError::CitizenCandidateIdentityWithoutVotingIdentity)
+        );
+
+        // 候选人的出生区划、性别和出生日期一经写入不得改变。
+        let mut changed_locked = created.clone();
+        let mut changed = candidate_identity(3);
+        changed.birth_date = 20010101;
+        changed_locked.insert(candidate_key.clone(), changed.encode());
+        let locked_delta = BTreeMap::from([(
+            candidate_key.clone(),
+            changed_locked.get(&candidate_key).cloned(),
+        )]);
+        assert_eq!(
+            check_transition(
+                3,
+                &locked_delta,
+                |key| created.get(key).cloned(),
+                |key| changed_locked.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenCandidateIdentityLockedFieldChanged)
+        );
+
+        // 姓名可更新，但 updated_at 必须等于发生变化的当前区块。
+        let mut renamed = created.clone();
+        let mut renamed_identity = candidate_identity(3);
+        renamed_identity.family_name = b"Updated".to_vec();
+        renamed.insert(candidate_key.clone(), renamed_identity.encode());
+        let rename_delta =
+            BTreeMap::from([(candidate_key.clone(), renamed.get(&candidate_key).cloned())]);
+        assert_eq!(
+            check_transition(
+                3,
+                &rename_delta,
+                |key| created.get(key).cloned(),
+                |key| renamed.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            check_transition(
+                4,
+                &rename_delta,
+                |key| created.get(key).cloned(),
+                |key| renamed.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenCandidateIdentityUpdateHeightInvalid)
+        );
+
+        // SCALE 值必须精确消费，尾随字节同样拒绝。
+        let mut malformed = created.clone();
+        malformed
+            .get_mut(&candidate_key)
+            .expect("candidate identity")
+            .push(0xff);
+        assert_eq!(
+            validate_candidate_identity(&cid, &|key| malformed.get(key).cloned()),
+            Err(GuardError::StorageValueDecodeFailed(
+                "CandidateIdentityByCid"
+            ))
+        );
+    }
+
+    #[test]
+    fn candidate_identity_can_only_be_deleted_with_cid_and_voting_revocation() {
+        let cid = citizen_cid_number("candidate-revoke");
+        let account = [13u8; 32];
+        let candidate_key = storage_key::candidate_identity(&cid);
+        let mut parent = citizen_state(&cid, account);
+        parent.insert(candidate_key.clone(), candidate_identity(2).encode());
+
+        let mut illegal = parent.clone();
+        illegal.remove(&candidate_key);
+        let illegal_delta = BTreeMap::from([(candidate_key.clone(), None)]);
+        assert_eq!(
+            check_transition(
+                3,
+                &illegal_delta,
+                |key| parent.get(key).cloned(),
+                |key| illegal.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::CitizenCandidateIdentityDeleted)
+        );
+
+        let registry_key = storage_key::citizen_registry(&cid);
+        let voting_key = storage_key::voting_identity(&cid);
+        let revision_key = storage_key::binding_revision_by_cid(&cid);
+        let mut revoked = illegal;
+        let mut registry: CitizenCidRecord = decode_exact(
+            revoked.get(&registry_key).expect("cid registry"),
+            "CidRegistry",
+        )
+        .expect("registry decodes");
+        registry.status = CitizenCidStatus::Revoked;
+        registry.revoked_at = Some(3);
+        revoked.insert(registry_key.clone(), registry.encode());
+        let mut voting: CitizenVotingIdentity = decode_exact(
+            revoked.get(&voting_key).expect("voting identity"),
+            "VotingIdentityByCid",
+        )
+        .expect("voting identity decodes");
+        voting.citizen_status = CitizenStatus::Revoked;
+        voting.updated_at = 3;
+        revoked.insert(voting_key.clone(), voting.encode());
+        revoked.insert(revision_key.clone(), 2u64.encode());
+        let lawful_delta = BTreeMap::from([
+            (
+                registry_key,
+                revoked.get(&storage_key::citizen_registry(&cid)).cloned(),
+            ),
+            (
+                voting_key,
+                revoked.get(&storage_key::voting_identity(&cid)).cloned(),
+            ),
+            (candidate_key, None),
+            (revision_key, Some(2u64.encode())),
+        ]);
+        assert_eq!(
+            check_transition(
+                3,
+                &lawful_delta,
+                |key| parent.get(key).cloned(),
+                |key| revoked.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Ok(())
         );
     }
 }

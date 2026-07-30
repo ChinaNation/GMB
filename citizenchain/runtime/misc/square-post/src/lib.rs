@@ -49,7 +49,7 @@ pub const MODULE_TAG: &[u8] = b"sqr-sub";
 pub enum SquarePostCategory {
     /// 普通动态，所有 active CID 都可以发布。
     Normal = 0,
-    /// 竞选动态，必须是 active CID 当前绑定且具有有效投票身份的账户。
+    /// 竞选动态，必须是 active CID 当前绑定且具有有效竞选身份的账户。
     Campaign = 1,
 }
 
@@ -86,7 +86,7 @@ pub trait SquarePostCitizenIdentityProvider<AccountId> {
     fn active_cid_number(account_id: &AccountId) -> Option<Vec<u8>>;
     /// 从 active CID 解析当前绑定账户，并完成正反绑定闭环校验。
     fn current_account_id(cid_number: &[u8]) -> Option<AccountId>;
-    /// Campaign 在 active CID 基础上额外要求有效投票身份。
+    /// Campaign 在 active CID 基础上额外要求有效竞选身份。
     fn is_campaign_eligible(cid_number: &[u8], account_id: &AccountId) -> bool;
     /// benchmark externalities 中播种可用身份；生产构建不暴露此入口。
     #[cfg(feature = "runtime-benchmarks")]
@@ -349,8 +349,8 @@ pub mod pallet {
         EmptyStorageUntil,
         /// 当前签名账户没有 active CID 双向绑定。
         CitizenIdentityUnavailable,
-        /// Campaign 要求当前 active CID 具有有效投票身份。
-        CampaignRequiresVotingIdentity,
+        /// Campaign 要求当前 active CID 具有有效竞选身份。
+        CampaignRequiresCandidateIdentity,
         /// 不能订阅自己（创作者订阅）。
         CannotSubscribeSelf,
         /// 订阅记录不存在。
@@ -484,7 +484,7 @@ pub mod pallet {
                         cid_number.as_slice(),
                         &signer_account_id
                     ),
-                    Error::<T>::CampaignRequiresVotingIdentity
+                    Error::<T>::CampaignRequiresCandidateIdentity
                 );
             }
 

@@ -65,7 +65,8 @@ impl<T: Config> Pallet<T> {
             .iter()
             .cloned()
             .map(|candidate_subject| {
-                let votes = ElectionCandidateTallies::<T>::get(proposal_id, &candidate_subject);
+                let votes =
+                    ElectionCandidateTallies::<T>::get(proposal_id, &candidate_subject.cid_number);
                 (candidate_subject, votes)
             })
             .collect();

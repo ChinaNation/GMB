@@ -5,10 +5,11 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
+use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
-use votingengine::CitizenIdentityReader;
+use votingengine::{CitizenIdentityReader, InternalAdminProvider};
 
 use crate::{
     pallet::{
@@ -27,7 +28,11 @@ fn setup_election<T: Config>(
     votingengine::CitizenSubject<T::AccountId>,
 ) {
     let proposal_id = 0u64;
-    let voter: T::AccountId = account("voter", 0, 0);
+    // 互选入口会按当前机构管理员真源解析签名账户，不能使用任意 benchmark 账户。
+    // fresh spec 中 NRC 第一个在册管理员同时适用于普选夹具。
+    let voter =
+        T::AccountId::decode(&mut &primitives::cid::china::china_cb::CHINA_CB[0].admins[0][..])
+            .expect("NRC benchmark admin account decodes");
     let actor_cid_number: votingengine::CidNumber = primitives::cid::china::china_cb::CHINA_CB[0]
         .cid_number
         .as_bytes()
@@ -44,8 +49,10 @@ fn setup_election<T: Config>(
                 <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
                     candidate, &scope,
                 );
-                <T as votingengine::Config>::CitizenIdentityReader::citizen_subject(candidate)
-                    .expect("benchmark candidate has a complete citizen subject")
+                <T as votingengine::Config>::CitizenIdentityReader::candidate_subject(
+                    candidate, &scope,
+                )
+                .expect("benchmark candidate has a valid candidate identity")
             })
             .collect();
     let selected = candidates[0].clone();
@@ -103,6 +110,10 @@ fn setup_election<T: Config>(
             },
         );
     } else {
+        <T as votingengine::Config>::InternalAdminProvider::benchmark_seed_institution_voter(
+            actor_cid_number.as_slice(),
+            &voter,
+        );
         let subject =
             votingengine::AuthorizationSubject::Institution(entity_primitives::RoleSubject {
                 cid_number: actor_cid_number,
@@ -111,12 +122,27 @@ fn setup_election<T: Config>(
                     .try_into()
                     .expect("benchmark role code"),
             });
+        let canonical_voter =
+            <T as votingengine::Config>::InternalAdminProvider::resolve_institution_voter(
+                match &subject {
+                    votingengine::AuthorizationSubject::Institution(role) => {
+                        role.cid_number.as_slice()
+                    }
+                    votingengine::AuthorizationSubject::PersonalMultisig(_) => unreachable!(),
+                },
+                &voter,
+            )
+            .expect("benchmark institution voter resolves to a canonical admin account");
         votingengine::Pallet::<T>::snapshot_role_voters(
             proposal_id,
-            subject,
-            sp_std::vec![voter.clone()],
+            subject.clone(),
+            sp_std::vec![canonical_voter],
         )
         .expect("benchmark mutual role snapshot");
+        assert!(
+            votingengine::Pallet::<T>::is_subject_voter_in_snapshot(proposal_id, subject, &voter,),
+            "benchmark mutual voter must pass the production snapshot resolver"
+        );
     }
     ElectionTallyStore::<T>::insert(proposal_id, ElectionTally::default());
     (proposal_id, voter, selected)

@@ -592,7 +592,8 @@ impl onchain::CallFeeRoute<AccountId, RuntimeCall, Balance> for RuntimeFeeRouter
                     actor_cid_number, ..
                 }
                 | citizen_identity::pallet::Call::admin_rebind_cid_account_id {
-                    actor_cid_number, ..
+                    actor_cid_number,
+                    ..
                 }
                 | citizen_identity::pallet::Call::revoke_cid {
                     actor_cid_number, ..
@@ -1460,10 +1461,8 @@ impl
                 return false;
             };
             let public = sr25519::Public::from_raw(raw_account);
-            let msg = primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_CID_REBIND,
-                payload,
-            );
+            let msg =
+                primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_REBIND, payload);
             sr25519_verify(&signature, &msg, &public)
         }
     }
@@ -1523,10 +1522,8 @@ impl
                 return false;
             };
             let public = sr25519::Public::from_raw(raw_account);
-            let msg = primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_CID_OCCUPY,
-                payload,
-            );
+            let msg =
+                primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_OCCUPY, payload);
             sr25519_verify(&signature, &msg, &public)
         }
     }
@@ -1653,7 +1650,10 @@ impl square_post::SquarePostCitizenIdentityProvider<AccountId>
     }
 
     fn is_campaign_eligible(cid_number: &[u8], account_id: &AccountId) -> bool {
-        citizen_identity::Pallet::<Runtime>::citizen_subject(account_id).is_some_and(|subject| {
+        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
+            AccountId,
+        >>::candidate_subject(account_id, &citizen_identity::PopulationScope::Country)
+        .is_some_and(|subject| {
             subject.cid_number.as_slice() == cid_number && subject.account_id == *account_id
         })
     }
@@ -2705,6 +2705,35 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         // 创世期或无 CID 管理员按 account_id；None = 非该机构当前管理员。
         let institution_code = cid_institution_code(cid_number)?;
         RuntimeInstitutionAdminQuery::resolve_admin_account(institution_code, cid_number, caller)
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_seed_institution_voter(cid_number: &[u8], voter: &AccountId) {
+        let institution_code =
+            cid_institution_code(cid_number).expect("benchmark institution CID must be valid");
+        assert!(
+            admin_primitives::is_public_admin_code(&institution_code),
+            "election benchmark currently seeds a public institution"
+        );
+        let cid_number: admin_primitives::AdminCidNumber = cid_number
+            .to_vec()
+            .try_into()
+            .expect("benchmark institution CID fits admin bounds");
+        let admins: public_admins::AdminsOf<Runtime> = Vec::from([admin_primitives::Admin {
+            account_id: voter.clone(),
+            cid_number: Default::default(),
+            family_name: Default::default(),
+            given_name: Default::default(),
+        }])
+        .try_into()
+        .expect("single benchmark admin fits bounds");
+        public_admins::AdminAccounts::<Runtime>::insert(
+            cid_number,
+            admin_primitives::InstitutionAdmins {
+                institution_code,
+                admins,
+            },
+        );
     }
 
     fn institution_threshold(

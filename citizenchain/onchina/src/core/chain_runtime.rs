@@ -1151,6 +1151,10 @@ pub(crate) struct OnChainCitizenDetail {
     pub(crate) residence_town_code: String,
     /// 绑定链账户的 raw 32 字节(未绑定为 None)。
     pub(crate) account_id: Option<[u8; 32]>,
+    /// CID 当前绑定单调版本；链上已登记 CID 必须大于 0。
+    pub(crate) binding_revision: u64,
+    pub(crate) binding_finalized_block_number: u32,
+    pub(crate) binding_finalized_block_hash: [u8; 32],
     /// citizen_status == Normal / CidRecord.status == Active。
     pub(crate) status_normal: bool,
     pub(crate) passport_valid_from: Option<u32>,
@@ -1162,154 +1166,53 @@ fn on_chain_bytes_to_string(bytes: Vec<u8>) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-/// 读链上单个公民完整身份:`CitizenIdentity` 的 CidRegistry + VotingIdentityByCid +
-/// AccountIdByCid + CandidateIdentityByCid 四读。`None` = 该 CID 未占号(链上无此公民)。
-/// residence/status 优先取 VotingIdentity,回落 CidRegistry(镇码为空)。
+/// 读链上单个公民完整身份；底层统一走同一 finalized 区块的六读闭环快照。
+/// `None` = 该 CID 未占号；residence/status 优先取 VotingIdentity，回落 CidRegistry。
 pub(crate) async fn read_chain_citizen_detail(
     cid_number: &str,
 ) -> Result<Option<OnChainCitizenDetail>, String> {
-    // 与 pallet 结构体字段序一致的最小解码结构(BoundedVec<u8> 按 Vec<u8> 解码)。
-    #[derive(Decode)]
-    struct RawCidRecord {
-        _registrar_cid_number: Vec<u8>,
-        _commitment: [u8; 32],
-        province: Vec<u8>,
-        city: Vec<u8>,
-        status: u8,
-        _registered_at: u32,
-        _revoked_at: Option<u32>,
-    }
-    #[derive(Decode)]
-    struct RawVotingIdentity {
-        passport_valid_from: u32,
-        passport_valid_until: u32,
-        citizen_status: u8,
-        province: Vec<u8>,
-        city: Vec<u8>,
-        town: Vec<u8>,
-        _updated_at: u32,
-    }
-    #[derive(Decode)]
-    struct RawCandidateIdentity {
-        birth_province: Vec<u8>,
-        birth_city: Vec<u8>,
-        birth_town: Vec<u8>,
-        family_name: Vec<u8>,
-        given_name: Vec<u8>,
-        citizen_sex: u8,
-        birth_date: u32,
-        _updated_at: u32,
-    }
+    read_chain_citizen_detail_at(cid_number, None).await
+}
 
-    let ws_url = super::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for citizen detail failed: {e}"))?;
-    let storage = client
-        .storage()
-        .at_latest()
-        .await
-        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    let cid_key = || vec![dynamic::Value::from_bytes(cid_number.as_bytes())];
+/// 在指定 finalized 区块读取单个公民；indexer 用事件所在块，普通查询用最新 finalized。
+pub(crate) async fn read_chain_citizen_detail_at(
+    cid_number: &str,
+    block_hash: Option<[u8; 32]>,
+) -> Result<Option<OnChainCitizenDetail>, String> {
+    use crate::core::chain_citizen_identity::{read_citizen_identity_at, FinalizedCidStatus};
 
-    // 1) CidRegistry:未占号则链上无此公民。
-    let Some(reg_value) = storage
-        .fetch(&dynamic::storage(
-            "CitizenIdentity",
-            "CidRegistry",
-            cid_key(),
-        ))
-        .await
-        .map_err(|e| format!("fetch CidRegistry {cid_number} failed: {e}"))?
-    else {
+    let snapshot = read_citizen_identity_at(cid_number, block_hash).await?;
+    if snapshot.cid_status == FinalizedCidStatus::Missing {
         return Ok(None);
-    };
-    let mut reg_raw = reg_value.encoded();
-    let cid_record = RawCidRecord::decode(&mut reg_raw)
-        .map_err(|e| format!("decode CidRegistry {cid_number} failed: {e}"))?;
-
-    // 2) AccountIdByCid
-    let account_id = match storage
-        .fetch(&dynamic::storage(
-            "CitizenIdentity",
-            "AccountIdByCid",
-            cid_key(),
-        ))
-        .await
-        .map_err(|e| format!("fetch AccountIdByCid {cid_number} failed: {e}"))?
-    {
-        Some(v) => {
-            let mut raw = v.encoded();
-            Some(
-                <[u8; 32]>::decode(&mut raw)
-                    .map_err(|e| format!("decode AccountIdByCid {cid_number} failed: {e}"))?,
-            )
-        }
-        None => None,
-    };
-
-    // 3) VotingIdentityByCid
-    let voting = match storage
-        .fetch(&dynamic::storage(
-            "CitizenIdentity",
-            "VotingIdentityByCid",
-            cid_key(),
-        ))
-        .await
-        .map_err(|e| format!("fetch VotingIdentityByCid {cid_number} failed: {e}"))?
-    {
-        Some(v) => {
-            let mut raw = v.encoded();
-            Some(
-                RawVotingIdentity::decode(&mut raw)
-                    .map_err(|e| format!("decode VotingIdentityByCid {cid_number} failed: {e}"))?,
-            )
-        }
-        None => None,
-    };
-
-    // 4) CandidateIdentityByCid
-    let candidate = match storage
-        .fetch(&dynamic::storage(
-            "CitizenIdentity",
-            "CandidateIdentityByCid",
-            cid_key(),
-        ))
-        .await
-        .map_err(|e| format!("fetch CandidateIdentityByCid {cid_number} failed: {e}"))?
-    {
-        Some(v) => {
-            let mut raw = v.encoded();
-            let c = RawCandidateIdentity::decode(&mut raw)
-                .map_err(|e| format!("decode CandidateIdentityByCid {cid_number} failed: {e}"))?;
-            Some(OnChainCandidate {
-                family_name: c.family_name,
-                given_name: c.given_name,
-                citizen_sex: c.citizen_sex,
-                birth_date: c.birth_date,
-                birth_province_code: on_chain_bytes_to_string(c.birth_province),
-                birth_city_code: on_chain_bytes_to_string(c.birth_city),
-                birth_town_code: on_chain_bytes_to_string(c.birth_town),
-            })
-        }
-        None => None,
-    };
+    }
+    let binding_revision = snapshot
+        .binding_revision
+        .ok_or_else(|| format!("CID {cid_number} binding revision missing"))?;
+    let candidate = snapshot.candidate.map(|candidate| OnChainCandidate {
+        family_name: candidate.family_name,
+        given_name: candidate.given_name,
+        citizen_sex: candidate.citizen_sex,
+        birth_date: candidate.birth_date,
+        birth_province_code: on_chain_bytes_to_string(candidate.birth_province_code),
+        birth_city_code: on_chain_bytes_to_string(candidate.birth_city_code),
+        birth_town_code: on_chain_bytes_to_string(candidate.birth_town_code),
+    });
 
     // residence + status:优先 VotingIdentity,回落 CidRegistry(status: 0=Normal/Active)。
-    let (province, city, town, status_normal, valid_from, valid_until) = match &voting {
+    let (province, city, town, status_normal, valid_from, valid_until) = match &snapshot.voting {
         Some(v) => (
-            v.province.clone(),
-            v.city.clone(),
-            v.town.clone(),
-            v.citizen_status == 0,
+            v.residence_province_code.clone(),
+            v.residence_city_code.clone(),
+            v.residence_town_code.clone(),
+            snapshot.cid_status == FinalizedCidStatus::Active && v.citizen_status == 0,
             Some(v.passport_valid_from),
             Some(v.passport_valid_until),
         ),
         None => (
-            cid_record.province.clone(),
-            cid_record.city.clone(),
+            snapshot.residence_province_code.clone(),
+            snapshot.residence_city_code.clone(),
             Vec::new(),
-            cid_record.status == 0,
+            snapshot.cid_status == FinalizedCidStatus::Active,
             None,
             None,
         ),
@@ -1320,7 +1223,13 @@ pub(crate) async fn read_chain_citizen_detail(
         residence_province_code: on_chain_bytes_to_string(province),
         residence_city_code: on_chain_bytes_to_string(city),
         residence_town_code: on_chain_bytes_to_string(town),
-        account_id,
+        // Revoked 记录可能仍保留链上映射供审计，但本地不得把它展示成有效当前账户。
+        account_id: (snapshot.cid_status == FinalizedCidStatus::Active)
+            .then_some(snapshot.account_id)
+            .flatten(),
+        binding_revision,
+        binding_finalized_block_number: snapshot.finalized_block_number,
+        binding_finalized_block_hash: snapshot.finalized_block_hash,
         status_normal,
         passport_valid_from: valid_from,
         passport_valid_until: valid_until,

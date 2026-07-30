@@ -126,14 +126,14 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 候选人票数。
+    /// 候选人票数：proposal_id + 永久公民 CID，换绑不得拆分或新增候选人计票。
     #[pallet::storage]
     pub type ElectionCandidateTallies<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        CitizenSubjectOf<T>,
+        votingengine::types::CidNumber,
         u32,
         ValueQuery,
     >;
@@ -307,17 +307,13 @@ pub mod pallet {
                 Error::<T>::NotOrganizerAdmin
             );
 
-            let bounded_candidates = Self::bounded_candidates(candidates)?;
-            ensure!(
-                usize::from(seat_count) <= bounded_candidates.len(),
-                Error::<T>::InvalidSeatCount
-            );
-            match (mode, population_scope.as_ref()) {
-                (ElectionMode::Popular, Some(_)) => {
+            let candidate_scope = match (mode, population_scope.as_ref()) {
+                (ElectionMode::Popular, Some(scope)) => {
                     ensure!(
                         vote_plan.voter_subjects.is_empty(),
                         Error::<T>::InvalidVotePlan
                     );
+                    scope.clone()
                 }
                 (ElectionMode::Mutual, None) => {
                     ensure!(
@@ -329,9 +325,15 @@ pub mod pallet {
                             )),
                         Error::<T>::InvalidVotePlan
                     );
+                    votingengine::PopulationScope::Country
                 }
                 _ => return Err(Error::<T>::ElectionScopeMissing.into()),
-            }
+            };
+            let bounded_candidates = Self::bounded_candidates(candidates, &candidate_scope)?;
+            ensure!(
+                usize::from(seat_count) <= bounded_candidates.len(),
+                Error::<T>::InvalidSeatCount
+            );
 
             let now = frame_system::Pallet::<T>::block_number();
             let end = now.saturating_add(Self::stage_duration());
@@ -517,9 +519,13 @@ pub mod pallet {
                 MutualElectionVotesByTicket::<T>::insert(proposal_id, &ticket, &candidate_subject);
                 ElectionVoter::Institution(ticket)
             };
-            ElectionCandidateTallies::<T>::mutate(proposal_id, &candidate_subject, |votes| {
-                *votes = votes.saturating_add(1);
-            });
+            ElectionCandidateTallies::<T>::mutate(
+                proposal_id,
+                &candidate_subject.cid_number,
+                |votes| {
+                    *votes = votes.saturating_add(1);
+                },
+            );
             let tally = ElectionTallyStore::<T>::mutate(proposal_id, |t| {
                 t.casted = t.casted.saturating_add(1);
                 *t

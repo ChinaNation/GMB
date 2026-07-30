@@ -1,6 +1,6 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(2026-07-29 第 4 步“Cloudflare 绑定三元组、Chat CID 身份与联系人换绑刷新”已完成；未创世、未推送，等待用户确认第 5 步技术方案)
+状态:open(2026-07-30 第 5 步“OnChina 全链 CID 查询、注册局办理、finalized 投影”已完成；未创世、未推送，等待用户确认第 6 步技术方案)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
 citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
@@ -131,9 +131,41 @@ citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本�
   32 文件、222 项全绿。
   未修改 runtime、未创世、未推送、未触发 CI、未部署。
 
-## 背景漏洞(用户 req 4)
-当前身份唯一主键 = 钱包账户,私钥热存本机;私钥泄漏 = 必须换身份 = 丢失全部动态/文章/粉丝等社交资产。
-修复:身份主键切为 **CID 号**,钱包账户降为**可更换的签名子钥**(仿链上个人多签 CID+账户组合)。
+### 第 5 步完成记录（2026-07-30）
+
+- OnChina 新增公民 finalized 身份快照唯一读取入口；同一 finalized 区块原子读取
+  `CidRegistry`、CID→账户、绑定 revision、账户→CID、投票身份和竞选身份，并严格校验
+  正反闭环、revision 和身份层级。创世块缺少 `Timestamp.Now` 按区块号 0 精确处理，
+  非创世块缺失仍失败关闭。
+- 占号、注册局换绑、投票/竞选身份推送和吊销都以目标 extrinsic 所在 finalized 区块的
+  完整快照回写本地，不再信任扫码账户、会话账户或本地旧账户。投影只允许 revision 前进
+  或同版本同账户幂等写入；吊销清空当前账户但保留 revision 和 finalized 锚点。
+- 创世法定代表人本地投影删除硬编码管理员账户和 revision=0 的旧逻辑，改为读取链上
+  finalized 公民身份快照；只有 Active 绑定才作为当前账户，审计创建来源不得充当控制权。
+- `citizens` 删除墙钟式 `account_verified_at`，终态字段改为 `binding_revision`、
+  `binding_finalized_block_number`、`binding_finalized_block_hash`。没有保留 ALTER、
+  双读或旧字段兼容；旧业务库必须按最终 schema 重建。
+- 新增注册局全局链上绑定接口
+  `GET /api/v1/admin/citizens/:cid_number/binding`。任一已登录 FRG/CREG 都可查询同一
+  finalized 公开绑定，接口不读取或暴露链下档案。详情页在占号、换绑、身份推送和吊销后
+  重新查询该接口，当前钱包和版本不做乐观猜测。
+- 真实验收使用当前源码 fresh runtime、独立链和两套独立 PostgreSQL/OnChina 实例。
+  两个不同市注册局对同一 CID 返回逐字段一致的 Active 绑定、revision=1、当前账户和
+  finalized 锚点；两套机构投影均为 49,593 个机构、99,232 个账户。隔离 fresh 哈希
+  `0x49622cb851a0815af75573e281b992565cb31df509c2e3d3b847858c351ef46e`
+  只作本步验收，不是正式创世。
+- 现有旧冻结链缺少 `BindingRevisionByCid` 元数据，新 OnChina 已验证会失败关闭而不回退。
+  因而新 OnChina 不得独立部署到旧 runtime，必须等待后续正式创世统一切换。未修改
+  runtime 源码、未生成正式创世、未推送、未触发 CI、未部署。
+- 后端 179 项测试、`clippy --all-targets --no-deps -D warnings`、前端 TypeScript 检查和
+  本步 Rust 文件独立格式检查均通过。源码及编译包残留扫描通过；Git 跟踪的前端编译包已
+  替换为当前源码哈希 `index-DtHhRXFp.js`。现有 HTTPS OnChina 真实加载该脚本和既有 CSS，
+  登录页完整渲染且浏览器控制台无错误或警告。
+
+## 历史漏洞（已由当前契约修复）
+旧模型曾把钱包账户当身份唯一主键，私钥泄漏会迫使用户更换身份并丢失动态、文章、粉丝等
+CID 业务数据。当前终态已改为 **CID 号是唯一身份主键**，钱包账户只是可换绑的签名、
+鉴权和付款凭证；个人多签 `admins` 是独立账户集合，不得与公民 CID 换绑混为一谈。
 
 ## 三决策(用户 2026-07-27 拍板)
 - **D1 自助·自付费**:公民本人 `Signed` origin 直接占号,自付最低链上费(`ONCHAIN_MIN_FEE=10`),绕过注册局。新增 permissionless `self_occupy_cid`。

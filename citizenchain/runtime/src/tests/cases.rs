@@ -1346,26 +1346,53 @@ fn runtime_square_post_normal_publish_requires_and_records_active_cid() {
 }
 
 #[test]
-fn runtime_square_post_campaign_rejects_anonymous_active_cid() {
+fn runtime_square_post_campaign_rejects_voting_only_citizen() {
     new_test_ext().execute_with(|| {
-        let signer_account_id = AccountId::new([43u8; 32]);
-        let cid_number = real_cid_number("SQUARE-ANON-CAMPAIGN", "CTZN", "1");
-        let bounded_cid_number: citizen_identity::CidNumberBound =
-            cid_number.try_into().expect("cid number should fit");
-        assert_ok!(CitizenIdentity::self_occupy_cid(
-            RuntimeOrigin::signed(signer_account_id.clone()),
-            bounded_cid_number,
+        let (_, registrar, actor_cid_number, actor_role_code) =
+            setup_frg_citizen_identity_admin(b"HU");
+        let signer_pair =
+            sr25519::Pair::from_string("//square-voting-only", None).expect("signer pair");
+        let account_id = AccountId::new(signer_pair.public().0);
+        let cid_number = real_cid_number("SQUARE-VOTER", "CTZN", "1");
+        let citizen_cid_number: citizen_identity::CidNumberBound = cid_number
+            .clone()
+            .try_into()
+            .expect("cid number should fit");
+        let expires_at = cid_authorization_expires_at();
+        assert_ok!(CitizenIdentity::occupy_cid(
+            RuntimeOrigin::signed(registrar.clone()),
+            actor_cid_number.clone(),
+            actor_role_code.clone(),
+            citizen_cid_number.clone(),
+            account_id.clone(),
+            expires_at,
+            sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id, expires_at,),
+        ));
+        let voting = build_voting_identity_payload(
+            account_id.clone(),
+            &cid_number,
+            b"HU",
+            b"4301",
+            b"4301001",
+        );
+        let signature = sign_citizen_identity_payload(&signer_pair, &voting);
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(registrar),
+            actor_cid_number,
+            actor_role_code,
+            voting,
+            signature,
         ));
         assert_noop!(
             SquarePost::publish_post(
-                RuntimeOrigin::signed(signer_account_id),
+                RuntimeOrigin::signed(account_id),
                 b"sqp_runtime_campaign_denied".to_vec(),
                 square_post::SquarePostCategory::Campaign,
                 [4u8; 32],
                 b"sqr_runtime_campaign_denied".to_vec(),
                 1_893_456_000_000,
             ),
-            square_post::Error::<Runtime>::CampaignRequiresVotingIdentity
+            square_post::Error::<Runtime>::CampaignRequiresCandidateIdentity
         );
     });
 }
@@ -1394,20 +1421,30 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_account_id() {
             expires_at,
             sign_cid_occupy(&signer_pair, &citizen_cid_number, &account_id, expires_at,),
         ));
-        let payload = build_voting_identity_payload(
+        let voting = build_voting_identity_payload(
             account_id.clone(),
             &cid_number,
             b"HU",
             b"4301",
             b"4301001",
         );
-        let signature = sign_citizen_identity_payload(&signer_pair, &payload);
+        let candidate = citizen_identity::CandidateIdentityPayload {
+            voting,
+            birth_province_code: test_area_code(b"HU"),
+            birth_city_code: test_area_code(b"4301"),
+            birth_town_code: test_area_code(b"4301001"),
+            family_name: b"Square".to_vec().try_into().expect("family name fits"),
+            given_name: b"Candidate".to_vec().try_into().expect("given name fits"),
+            citizen_sex: citizen_identity::CitizenSex::Female,
+            birth_date: 20000101,
+        };
+        let signature = sign_citizen_identity_payload(&signer_pair, &candidate);
 
-        assert_ok!(CitizenIdentity::register_voting_identity(
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
             actor_role_code,
-            payload,
+            candidate,
             signature,
         ));
         assert_ok!(SquarePost::publish_post(

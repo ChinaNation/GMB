@@ -256,7 +256,7 @@ const KNOWN_ENGLISH_MESSAGES: Record<string, string> = {
   'citizen record not found': '未找到公民记录',
   'citizen record is not bound': '公民档案不完整',
   'citizen status is stale': '公民状态已过期，请重新同步',
-  'account_id already bound': '该投票账户已存在公民档案',
+  'account_id already bound': '该钱包账户已绑定其他 CID',
   'challenge expired': '签名请求已过期，请重新操作',
   'invalid signature hex': '签名格式无效',
   'institution not found': '机构不存在',
@@ -273,7 +273,7 @@ const KNOWN_ENGLISH_MESSAGES: Record<string, string> = {
 const FIELD_LABELS: Record<string, string> = {
   address: '地址',
   account_id: '账户 ID',
-  ss58_address: '钱包地址',
+  ss58_address: 'SS58 地址',
   identity_code: '身份CID',
   name: '名称',
   province: '省份',

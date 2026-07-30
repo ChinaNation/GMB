@@ -10,10 +10,7 @@ use frame_support::{
 };
 use frame_system as system;
 use primitives::citizen_const::{CITIZEN_ISSUANCE_HIGH_REWARD, CITIZEN_ISSUANCE_MAX_COUNT};
-use sp_runtime::{
-    traits::{Hash, IdentityLookup},
-    BuildStorage,
-};
+use sp_runtime::{traits::IdentityLookup, BuildStorage};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -290,14 +287,15 @@ fn register_voting_identity_triggers_reward_issuance() {
         // 占号先行:身份写入前置。
         occupy_tag("0001");
 
-        let cid_number = &citizen_cid_number("0001");
-        let cid_number_hash = <Test as frame_system::Config>::Hashing::hash(cid_number);
+        let cid_number = citizen_cid_number("0001");
+        let cid_number_bound =
+            CidNumberBound::try_from(cid_number.clone()).expect("cid number should fit");
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            payload(1, cid_number),
+            payload(1, &cid_number),
             valid_signature(),
         ));
 
@@ -307,7 +305,7 @@ fn register_voting_identity_triggers_reward_issuance() {
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
-        assert!(citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(cid_number_hash));
+        assert!(citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(cid_number_bound));
         assert!(citizen_issuance::AccountRewarded::<Test>::contains_key(1));
     });
 }
@@ -318,15 +316,16 @@ fn candidate_first_onchain_triggers_reward_issuance() {
         // 占号先行:身份写入前置。
         occupy_tag("0001");
 
-        let cid_number = &citizen_cid_number("0001");
-        let cid_number_hash = <Test as frame_system::Config>::Hashing::hash(cid_number);
+        let cid_number = citizen_cid_number("0001");
+        let cid_number_bound =
+            CidNumberBound::try_from(cid_number.clone()).expect("cid number should fit");
 
         // 该公民从未登记投票身份,直接以竞选身份完成首次上链(第 3 条:不强制先投票)。
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            candidate_payload(1, cid_number),
+            candidate_payload(1, &cid_number),
             valid_signature(),
         ));
 
@@ -337,7 +336,7 @@ fn candidate_first_onchain_triggers_reward_issuance() {
         // 竞选身份首次上链与投票身份首次登记同权,发放一次性高额认证奖励。
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
-        assert!(citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(cid_number_hash));
+        assert!(citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(cid_number_bound));
         assert!(citizen_issuance::AccountRewarded::<Test>::contains_key(1));
     });
 }
@@ -404,7 +403,8 @@ fn updating_existing_identity_does_not_issue_second_reward() {
         assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
         assert!(
             citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(
-                <Test as frame_system::Config>::Hashing::hash(&citizen_cid_number("0001"))
+                CidNumberBound::try_from(citizen_cid_number("0001"))
+                    .expect("cid number should fit")
             )
         );
     });

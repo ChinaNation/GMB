@@ -14,14 +14,17 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
-use codec::{Compact, Decode, Encode};
+use codec::{Compact, Encode};
 use serde::{Deserialize, Serialize};
-use subxt::{dynamic, OnlineClient, PolkadotConfig};
 use uuid::Uuid;
 
 use crate::auth::actions::require_admin_security_grant;
 use crate::auth::login::{parse_account_id_bytes, AdminAuthContext};
 use crate::auth::operation_auth::AdminActionType;
+use crate::core::chain_citizen_identity::{
+    read_citizen_identity_at, read_finalized_citizen_identity as read_finalized_cid_binding,
+    FinalizedCidStatus, FinalizedCitizenIdentity as FinalizedCidBinding,
+};
 use crate::core::chain_submit;
 use crate::crypto::pubkey::{normalize_account_id, same_account_id};
 use crate::domains::citizens::admin_entry::{
@@ -192,17 +195,38 @@ impl Db {
         cid_number: &str,
         account_id: &str,
         onchain_tx_hash: &str,
+        binding_revision: u64,
+        binding_finalized_block_number: u32,
+        binding_finalized_block_hash: &str,
     ) -> Result<u64, String> {
         let cid_number = cid_number.to_string();
         let account_id = account_id.to_string();
         let onchain_tx_hash = onchain_tx_hash.to_string();
+        let binding_revision = i64::try_from(binding_revision)
+            .map_err(|_| "citizen binding revision exceeds i64".to_string())?;
+        let binding_finalized_block_number = i64::from(binding_finalized_block_number);
+        let binding_finalized_block_hash = binding_finalized_block_hash.to_string();
         self.with_client(move |conn| {
             conn.execute(
                 "UPDATE citizens
-                 SET citizen_status = 'REVOKED', status_updated_at = extract(epoch from now())::bigint,
-                     onchain_tx_hash = $2, onchain_at = now(), updater_account_id = $3, updated_at = now()
-                 WHERE cid_number = $1",
-                &[&cid_number, &onchain_tx_hash, &account_id],
+                 SET account_id = NULL, citizen_status = 'REVOKED',
+                     binding_revision = $2, binding_finalized_block_number = $3,
+                     binding_finalized_block_hash = $4,
+                     status_updated_at = extract(epoch from now())::bigint,
+                     onchain_tx_hash = $5, onchain_at = now(), updater_account_id = $6, updated_at = now()
+                 WHERE cid_number = $1
+                   AND (
+                       binding_revision < $2
+                       OR (binding_revision = $2 AND citizen_status = 'REVOKED')
+                   )",
+                &[
+                    &cid_number,
+                    &binding_revision,
+                    &binding_finalized_block_number,
+                    &binding_finalized_block_hash,
+                    &onchain_tx_hash,
+                    &account_id,
+                ],
             )
             .map_err(|e| format!("mark citizen revoked failed: {e}"))
         })
@@ -215,28 +239,45 @@ impl Db {
     pub(crate) fn confirm_citizen_identity_onchain(
         &self,
         cid_number: &str,
-        citizen_account_id: &str,
         registrar_account_id: &str,
         onchain_tx_hash: &str,
-        onchain_block_number: Option<u64>,
+        finalized: &FinalizedCidBinding,
     ) -> Result<u64, String> {
+        let (citizen_account_id, binding_revision) = finalized
+            .active_binding()
+            .ok_or_else(|| "finalized CID binding is not active".to_string())?;
         let cid_number = cid_number.to_string();
-        let citizen_account_id = citizen_account_id.to_string();
+        let citizen_account_id = format!("0x{}", hex::encode(citizen_account_id));
         let registrar_account_id = registrar_account_id.to_string();
         let onchain_tx_hash = onchain_tx_hash.to_string();
-        let block = onchain_block_number.map(|n| n as i64);
+        let block = Some(i64::from(finalized.finalized_block_number));
+        let binding_revision = i64::try_from(binding_revision)
+            .map_err(|_| "citizen binding revision exceeds i64".to_string())?;
+        let binding_finalized_block_hash =
+            format!("0x{}", hex::encode(finalized.finalized_block_hash));
         self.with_client(move |conn| {
             conn.execute(
                 "UPDATE citizens
-                 SET account_id = $2, account_verified_at = now(), onchain_tx_hash = $3,
+                 SET account_id = $2, binding_revision = $3,
+                     binding_finalized_block_number = $4,
+                     binding_finalized_block_hash = $5, onchain_tx_hash = $6,
                      onchain_block_number = $4, onchain_at = now(),
-                     updater_account_id = $5, updated_at = now()
-                 WHERE cid_number = $1",
+                     updater_account_id = $7, updated_at = now()
+                 WHERE cid_number = $1
+                   AND (
+                       binding_revision < $3
+                       OR (
+                           binding_revision = $3
+                           AND (account_id IS NULL OR account_id = $2)
+                       )
+                   )",
                 &[
                     &cid_number,
                     &citizen_account_id,
-                    &onchain_tx_hash,
+                    &binding_revision,
                     &block,
+                    &binding_finalized_block_hash,
+                    &onchain_tx_hash,
                     &registrar_account_id,
                 ],
             )
@@ -250,38 +291,6 @@ impl Db {
 fn append_bounded(out: &mut Vec<u8>, bytes: &[u8]) {
     out.extend(Compact(bytes.len() as u32).encode());
     out.extend_from_slice(bytes);
-}
-
-/// 同一个 finalized storage 视图中的 CID 登记/绑定状态。
-///
-/// prepare 与 submit 都必须读取该快照，禁止用 OnChina 本地投影代替链上授权真源。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct FinalizedCidBinding {
-    genesis_hash: [u8; 32],
-    chain_now_seconds: u64,
-    cid_status: FinalizedCidStatus,
-    registrar_cid_number: Option<Vec<u8>>,
-    commitment: Option<[u8; 32]>,
-    account_id: Option<[u8; 32]>,
-    binding_revision: Option<u64>,
-}
-
-#[derive(Decode)]
-struct RawCidRecord {
-    registrar_cid_number: Vec<u8>,
-    commitment: [u8; 32],
-    _residence_province_code: Vec<u8>,
-    _residence_city_code: Vec<u8>,
-    status: u8,
-    _registered_at: u32,
-    _revoked_at: Option<u32>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FinalizedCidStatus {
-    Missing,
-    Active,
-    Revoked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -301,23 +310,6 @@ enum FinalizedTargetState {
     Pending,
     Confirmed,
     Conflict,
-}
-
-impl FinalizedCidBinding {
-    fn is_unoccupied(&self) -> bool {
-        self.cid_status == FinalizedCidStatus::Missing
-            && self.account_id.is_none()
-            && self.binding_revision.is_none()
-    }
-
-    fn active_binding(&self) -> Option<([u8; 32], u64)> {
-        match (self.cid_status, self.account_id, self.binding_revision) {
-            (FinalizedCidStatus::Active, Some(account_id), Some(revision)) if revision > 0 => {
-                Some((account_id, revision))
-            }
-            _ => None,
-        }
-    }
 }
 
 fn authorization_expires_at(chain_now_seconds: u64) -> Option<u64> {
@@ -376,131 +368,15 @@ async fn verify_finalized_binding_at(
     cid_number: &str,
     expectation: &FinalizedBindingExpectation,
     block_hash: [u8; 32],
-) -> Result<(), String> {
-    let snapshot = read_cid_binding_at(cid_number, Some(block_hash)).await?;
+) -> Result<FinalizedCidBinding, String> {
+    let snapshot = read_citizen_identity_at(cid_number, Some(block_hash)).await?;
     if finalized_target_state(&snapshot, expectation) == FinalizedTargetState::Confirmed {
-        Ok(())
+        Ok(snapshot)
     } else {
         Err(format!(
             "CID {cid_number} 在本次 extrinsic 的 finalized block 未达到精确目标状态"
         ))
     }
-}
-
-fn decode_all<T: Decode>(encoded: &[u8], field: &str) -> Result<T, String> {
-    let mut input = encoded;
-    let value = T::decode(&mut input).map_err(|e| format!("decode {field} failed: {e}"))?;
-    if !input.is_empty() {
-        return Err(format!(
-            "decode {field} left {} trailing bytes",
-            input.len()
-        ));
-    }
-    Ok(value)
-}
-
-async fn read_cid_binding_at(
-    cid_number: &str,
-    block_hash: Option<[u8; 32]>,
-) -> Result<FinalizedCidBinding, String> {
-    let ws_url = crate::core::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for CID binding failed: {e}"))?;
-    let genesis_hash = client.genesis_hash().0;
-    // subxt 的 at_latest() 读取最新 finalized block；三项 storage 必须共用同一视图。
-    let storage_client = client.storage();
-    let storage = match block_hash {
-        Some(hash) => storage_client.at(subxt::utils::H256(hash)),
-        None => storage_client
-            .at_latest()
-            .await
-            .map_err(|e| format!("get finalized CID binding storage failed: {e}"))?,
-    };
-    let cid_key = || vec![dynamic::Value::from_bytes(cid_number.as_bytes())];
-
-    let chain_now_millis: u64 = storage
-        .fetch(&dynamic::storage("Timestamp", "Now", Vec::new()))
-        .await
-        .map_err(|e| format!("fetch finalized Timestamp.Now failed: {e}"))?
-        .ok_or_else(|| "finalized Timestamp.Now missing".to_string())
-        .and_then(|value| decode_all(value.encoded(), "finalized Timestamp.Now"))?;
-    let (cid_status, registrar_cid_number, commitment) = match storage
-        .fetch(&dynamic::storage(
-            "CitizenIdentity",
-            "CidRegistry",
-            cid_key(),
-        ))
-        .await
-        .map_err(|e| format!("fetch CidRegistry {cid_number} failed: {e}"))?
-    {
-        None => (FinalizedCidStatus::Missing, None, None),
-        Some(value) => {
-            let record: RawCidRecord =
-                decode_all(value.encoded(), &format!("CidRegistry {cid_number}"))?;
-            match record.status {
-                0 => (
-                    FinalizedCidStatus::Active,
-                    Some(record.registrar_cid_number),
-                    Some(record.commitment),
-                ),
-                1 => (
-                    FinalizedCidStatus::Revoked,
-                    Some(record.registrar_cid_number),
-                    Some(record.commitment),
-                ),
-                other => {
-                    return Err(format!(
-                        "CidRegistry {cid_number} has unknown status {other}"
-                    ));
-                }
-            }
-        }
-    };
-    let account_id = match storage
-        .fetch(&dynamic::storage(
-            "CitizenIdentity",
-            "AccountIdByCid",
-            cid_key(),
-        ))
-        .await
-        .map_err(|e| format!("fetch AccountIdByCid {cid_number} failed: {e}"))?
-    {
-        Some(value) => Some(decode_all(
-            value.encoded(),
-            &format!("AccountIdByCid {cid_number}"),
-        )?),
-        None => None,
-    };
-    let binding_revision = match storage
-        .fetch(&dynamic::storage(
-            "CitizenIdentity",
-            "BindingRevisionByCid",
-            cid_key(),
-        ))
-        .await
-        .map_err(|e| format!("fetch BindingRevisionByCid {cid_number} failed: {e}"))?
-    {
-        Some(value) => Some(decode_all(
-            value.encoded(),
-            &format!("BindingRevisionByCid {cid_number}"),
-        )?),
-        None => None,
-    };
-
-    Ok(FinalizedCidBinding {
-        genesis_hash,
-        chain_now_seconds: chain_now_millis / 1000,
-        cid_status,
-        registrar_cid_number,
-        commitment,
-        account_id,
-        binding_revision,
-    })
-}
-
-async fn read_finalized_cid_binding(cid_number: &str) -> Result<FinalizedCidBinding, String> {
-    read_cid_binding_at(cid_number, None).await
 }
 
 fn encode_cid_occupy_authorization(
@@ -2304,15 +2180,19 @@ pub(crate) async fn submit_chain_sign(
         }
     };
     let tx_hash = finalized_submit.tx_hash.clone();
+    let mut finalized_cid_snapshot = None;
     if let Some((cid_number, expectation)) = finalized_binding.as_ref() {
         // 本次 extrinsic 已由 submit-and-watch 证明 finalized+ExtrinsicSuccess；再用
         // finalized storage 精确核对 account+revision/注册局/commitment 后才回写。
-        if let Err(err) =
-            verify_finalized_binding_at(cid_number, expectation, finalized_submit.block_hash).await
+        match verify_finalized_binding_at(cid_number, expectation, finalized_submit.block_hash)
+            .await
         {
-            tracing::error!(error = %err, tx_hash = %tx_hash, "wait finalized CID binding failed");
-            let detail = format!("交易已提交({tx_hash})但 CID 绑定未 finalized: {err}");
-            return api_error(StatusCode::BAD_GATEWAY, 2004, detail.as_str());
+            Ok(snapshot) => finalized_cid_snapshot = Some(snapshot),
+            Err(err) => {
+                tracing::error!(error = %err, tx_hash = %tx_hash, "wait finalized CID binding failed");
+                let detail = format!("交易已提交({tx_hash})但 CID 绑定未 finalized: {err}");
+                return api_error(StatusCode::BAD_GATEWAY, 2004, detail.as_str());
+            }
         }
     }
     if !had_stored_finalized {
@@ -2337,10 +2217,35 @@ pub(crate) async fn submit_chain_sign(
         .unwrap_or_default()
         .to_string();
 
+    // 身份推送和吊销不属于占号/换绑 expectation，但本地回写仍必须使用本次
+    // finalized 区块的完整绑定版本与双向闭环，不能根据会话字段猜测。
+    if finalized_cid_snapshot.is_none()
+        && matches!(
+            session.purpose.as_str(),
+            PURPOSE_CITIZEN_REVOKE | PURPOSE_CITIZEN_IDENTITY_PUSH
+        )
+    {
+        match read_citizen_identity_at(cid_number.as_str(), Some(finalized_submit.block_hash)).await
+        {
+            Ok(snapshot) => finalized_cid_snapshot = Some(snapshot),
+            Err(err) => {
+                tracing::error!(error = %err, tx_hash = %tx_hash, "read finalized citizen snapshot failed");
+                return api_error(
+                    StatusCode::BAD_GATEWAY,
+                    2004,
+                    "交易已 finalized，但公民绑定快照读取失败",
+                );
+            }
+        }
+    }
+
     // 按 purpose 分派落正式投影。这里已经链上确认;失败路径不得提前写业务数据。
     let mut citizen_output = None;
     match session.purpose.as_str() {
         PURPOSE_CITIZEN_OCCUPY => {
+            let Some(snapshot) = finalized_cid_snapshot.as_ref() else {
+                return api_error(StatusCode::BAD_GATEWAY, 2004, "缺少 finalized CID 快照");
+            };
             let validated: ValidatedCitizenInput = match session
                 .context
                 .get("validated")
@@ -2352,30 +2257,15 @@ pub(crate) async fn submit_chain_sign(
                     return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "会话档案数据损坏");
                 }
             };
-            // 占即绑:用户钱包账户在 submit_citizen_occupy 阶段已存入会话 context。
-            let citizen_account_id = match session
-                .context
-                .get("citizen_account_id")
-                .and_then(|v| v.as_str())
-            {
-                Some(v) => v.to_string(),
-                None => {
-                    return api_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        1004,
-                        "会话缺少用户钱包账户",
-                    );
-                }
-            };
+            // 占即绑账户只取本次 finalized 快照；会话账户已在 expectation 核验中使用。
             let record = match persist_citizen_record(
                 &state,
                 &headers,
                 ctx.account_id.as_str(),
-                citizen_account_id.as_str(),
                 &validated,
                 cid_number.as_str(),
                 tx_hash.as_str(),
-                block_number,
+                snapshot,
             ) {
                 Ok(v) => v,
                 Err(resp) => return resp,
@@ -2383,55 +2273,51 @@ pub(crate) async fn submit_chain_sign(
             citizen_output = Some(create_output_from_record(record));
         }
         PURPOSE_CITIZEN_REVOKE => {
+            let Some(snapshot) = finalized_cid_snapshot.as_ref() else {
+                return api_error(StatusCode::BAD_GATEWAY, 2004, "缺少 finalized CID 快照");
+            };
+            let Some(snapshot_revision) = snapshot.binding_revision else {
+                return api_error(StatusCode::BAD_GATEWAY, 2004, "finalized 绑定版本缺失");
+            };
+            let snapshot_block_hash = format!("0x{}", hex::encode(snapshot.finalized_block_hash));
             if let Err(err) = state.db.mark_citizen_revoked(
                 cid_number.as_str(),
                 ctx.account_id.as_str(),
                 tx_hash.as_str(),
+                snapshot_revision,
+                snapshot.finalized_block_number,
+                snapshot_block_hash.as_str(),
             ) {
                 tracing::error!(error = %err, "mark citizen revoked failed");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "吊销落库失败");
             }
         }
         PURPOSE_CITIZEN_IDENTITY_PUSH => {
-            let citizen_account_id = session
-                .context
-                .get("citizen_account_id")
-                .and_then(|v| v.as_str());
-            let Some(citizen_account_id) = citizen_account_id else {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "身份上链会话数据损坏",
-                );
+            let Some(snapshot) = finalized_cid_snapshot.as_ref() else {
+                return api_error(StatusCode::BAD_GATEWAY, 2004, "缺少 finalized CID 快照");
             };
             // 只有链交易最终确认后，才一次性绑定公民账户并记录上链结果。
             if let Err(err) = state.db.confirm_citizen_identity_onchain(
                 cid_number.as_str(),
-                citizen_account_id,
                 ctx.account_id.as_str(),
                 tx_hash.as_str(),
-                block_number,
+                snapshot,
             ) {
                 tracing::error!(error = %err, "update citizen onchain failed");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "上链状态回写失败");
             }
         }
         PURPOSE_CITIZEN_ADMIN_REBIND => {
-            let new_account_id = session
-                .context
-                .get("new_account_id")
-                .and_then(|v| v.as_str());
-            let Some(new_account_id) = new_account_id else {
-                return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "换绑会话数据损坏");
+            let Some(snapshot) = finalized_cid_snapshot.as_ref() else {
+                return api_error(StatusCode::BAD_GATEWAY, 2004, "缺少 finalized CID 快照");
             };
             // 链上换绑已经是最终事实；本地有公民投影时同步账户，没有投影也必须成功。
             // 因此这里只把数据库错误视为失败，UPDATE 命中 0 行不影响链上换绑结果。
             match state.db.confirm_citizen_identity_onchain(
                 cid_number.as_str(),
-                new_account_id,
                 ctx.account_id.as_str(),
                 tx_hash.as_str(),
-                block_number,
+                snapshot,
             ) {
                 Ok(0) => tracing::info!(
                     cid_number = %cid_number,
@@ -2513,13 +2399,17 @@ mod tests {
         }
     }
 
+    fn required_resume_phase(session: &ChainSignSession) -> ChainResumePhase {
+        match chain_resume_phase(session) {
+            Ok(phase) => phase,
+            Err(error) => panic!("valid recovery fixture should decode: {error}"),
+        }
+    }
+
     #[test]
     fn retry_phase_is_projection_only_after_finalized_marker() {
         let fresh = chain_session_with_context(serde_json::json!({}));
-        assert_eq!(
-            chain_resume_phase(&fresh).expect("fresh phase"),
-            ChainResumePhase::Submit
-        );
+        assert_eq!(required_resume_phase(&fresh), ChainResumePhase::Submit);
 
         let submitted = chain_session_with_context(serde_json::json!({
             "submitted_tx_hash": format!("0x{}", "11".repeat(32)),
@@ -2527,7 +2417,7 @@ mod tests {
             "submitted_from_block_hash": format!("0x{}", "22".repeat(32)),
         }));
         assert!(matches!(
-            chain_resume_phase(&submitted).expect("recovery phase"),
+            required_resume_phase(&submitted),
             ChainResumePhase::Recover(_)
         ));
         let submitted_with_cursor = chain_session_with_context(serde_json::json!({
@@ -2537,7 +2427,7 @@ mod tests {
             "recovery_cursor_block_number": 7,
             "recovery_cursor_block_hash": format!("0x{}", "44".repeat(32)),
         }));
-        match chain_resume_phase(&submitted_with_cursor).expect("cursor recovery phase") {
+        match required_resume_phase(&submitted_with_cursor) {
             ChainResumePhase::Recover(attempt) => {
                 assert_eq!(attempt.recovery_cursor_block_number, Some(7));
                 assert_eq!(attempt.recovery_cursor_block_hash, Some([0x44; 32]));
@@ -2554,7 +2444,7 @@ mod tests {
             "finalized_block_hash": format!("0x{}", "33".repeat(32)),
         }));
         assert!(matches!(
-            chain_resume_phase(&finalized).expect("projection phase"),
+            required_resume_phase(&finalized),
             ChainResumePhase::Project(_)
         ));
 
@@ -2604,13 +2494,19 @@ mod tests {
     ) -> FinalizedCidBinding {
         FinalizedCidBinding {
             genesis_hash: [0xaau8; 32],
+            finalized_block_hash: [0xbbu8; 32],
+            finalized_block_number: 9,
             chain_now_seconds,
             cid_status,
             registrar_cid_number: (cid_status != FinalizedCidStatus::Missing)
                 .then(|| b"CN001-CREG-0001".to_vec()),
             commitment: (cid_status != FinalizedCidStatus::Missing).then_some([0x55u8; 32]),
+            residence_province_code: b"GD".to_vec(),
+            residence_city_code: b"001".to_vec(),
             account_id,
             binding_revision,
+            voting: None,
+            candidate: None,
         }
     }
 
@@ -2744,25 +2640,6 @@ mod tests {
             finalized_target_state(&snapshot, &expectation),
             FinalizedTargetState::Conflict
         );
-    }
-
-    #[test]
-    fn finalized_storage_decode_rejects_trailing_layout_bytes() {
-        let mut encoded_record = (
-            b"CN001-CREG-0001".to_vec(),
-            [0x44u8; 32],
-            Vec::<u8>::new(),
-            Vec::<u8>::new(),
-            0u8,
-            42u32,
-            Option::<u32>::None,
-        )
-            .encode();
-        let decoded: RawCidRecord =
-            decode_all(&encoded_record, "CidRegistry fixture").expect("exact record should decode");
-        assert_eq!(decoded.status, 0);
-        encoded_record.push(0xff);
-        assert!(decode_all::<RawCidRecord>(&encoded_record, "CidRegistry fixture").is_err());
     }
 
     /// 占号调用字节 golden:锁死链↔onchina 字节契约(pallet 10 / call 6 占即绑新签名)。

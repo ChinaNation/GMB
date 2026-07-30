@@ -4,11 +4,11 @@
 
 use crate::{
     pallet::{
-        Call, CidNumberOf, Config, Pallet, PlatformPrice, RenewalIndex, RenewalSchedule,
-        Subscriptions,
+        Call, CidNumberOf, Config, Pallet, PlatformPrice, PostIdOf, RenewalIndex, RenewalSchedule,
+        SquarePosts, Subscriptions,
     },
-    IssuerKey, MembershipLevel, SquarePostCitizenIdentityProvider, SubscriptionPlan,
-    SubscriptionState, SubscriptionStatus,
+    IssuerKey, MembershipLevel, SquarePostCategory, SquarePostCitizenIdentityProvider,
+    SubscriptionPlan, SubscriptionState, SubscriptionStatus,
 };
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
@@ -37,6 +37,27 @@ mod benchmarks {
             .try_into()
             .ok()
             .expect("benchmark CID must fit SquarePost bounds")
+    }
+
+    /// 竞选动态是发布入口最重路径：除 active CID 双向绑定外，还必须读取竞选身份。
+    #[benchmark]
+    fn publish_post() {
+        let caller: T::AccountId = whitelisted_caller();
+        let _ = benchmark_cid::<T>(&caller);
+        let post_id = b"benchmark-campaign-post".to_vec();
+
+        #[extrinsic_call]
+        _(
+            RawOrigin::Signed(caller),
+            post_id.clone(),
+            SquarePostCategory::Campaign,
+            [7u8; 32],
+            b"benchmark-storage-receipt".to_vec(),
+            1,
+        );
+
+        let post_id: PostIdOf<T> = post_id.try_into().ok().expect("benchmark post id fits");
+        assert!(SquarePosts::<T>::contains_key(post_id));
     }
 
     #[benchmark]

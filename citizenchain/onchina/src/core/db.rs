@@ -419,7 +419,12 @@ impl Db {
                 id BIGINT,
                 account_id TEXT
                     CHECK (account_id IS NULL OR account_id ~ '^0x[0-9a-f]{64}$'),
-                account_verified_at TIMESTAMPTZ,
+                binding_revision BIGINT NOT NULL DEFAULT 0 CHECK (binding_revision >= 0),
+                binding_finalized_block_number BIGINT,
+                binding_finalized_block_hash TEXT CHECK (
+                    binding_finalized_block_hash IS NULL OR
+                    binding_finalized_block_hash ~ '^0x[0-9a-f]{64}$'
+                ),
                 citizen_status TEXT NOT NULL,
                 voting_eligible BOOLEAN NOT NULL,
                 passport_valid_from TEXT NOT NULL DEFAULT '',

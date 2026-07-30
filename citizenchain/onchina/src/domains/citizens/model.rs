@@ -30,7 +30,13 @@ pub(crate) struct CitizenRecord {
     pub(crate) citizen_birth_date: String,
     #[serde(default)]
     pub(crate) account_id: Option<String>,
-    pub(crate) account_verified_at: Option<DateTime<Utc>>,
+    /// finalized 当前绑定版本；0 只允许表示尚未上链的本地档案。
+    #[serde(default)]
+    pub(crate) binding_revision: u64,
+    #[serde(default)]
+    pub(crate) binding_finalized_block_number: Option<i64>,
+    #[serde(default)]
+    pub(crate) binding_finalized_block_hash: Option<String>,
     pub(crate) citizen_status: CitizenStatus,
     #[serde(default)]
     pub(crate) voting_eligible: bool,
@@ -148,6 +154,9 @@ pub(crate) struct CitizenRow {
     pub(crate) citizen_birth_date: String,
     pub(crate) account_id: Option<String>,
     pub(crate) ss58_address: Option<String>,
+    pub(crate) binding_revision: u64,
+    pub(crate) binding_finalized_block_number: Option<i64>,
+    pub(crate) binding_finalized_block_hash: Option<String>,
     pub(crate) citizen_status: CitizenStatus,
     pub(crate) voting_eligible: bool,
     pub(crate) vote_status: CitizenStatus,
@@ -191,7 +200,9 @@ mod tests {
             citizen_sex: "FEMALE".to_string(),
             citizen_birth_date: "2000-01-01".to_string(),
             account_id: Some(format!("0x{}", "ab".repeat(32))),
-            account_verified_at: Some(now),
+            binding_revision: 1,
+            binding_finalized_block_number: Some(7),
+            binding_finalized_block_hash: Some(format!("0x{}", "11".repeat(32))),
             citizen_status: CitizenStatus::Normal,
             voting_eligible: true,
             passport_valid_from: "2026-05-24".to_string(),

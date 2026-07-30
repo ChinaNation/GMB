@@ -123,7 +123,7 @@ impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
         who: &AccountId32,
         _scope: &PopulationScope,
     ) -> Option<votingengine::CitizenSubject<AccountId32>> {
-        (*who != account(251)).then(|| test_citizen_subject(who))
+        (*who != account(249) && *who != account(251)).then(|| test_citizen_subject(who))
     }
 
     fn population_data(scope: &PopulationScope) -> Option<votingengine::PopulationData> {
@@ -445,7 +445,8 @@ fn popular_creation_rejects_invalid_candidate_subject_and_bad_shape() {
     new_test_ext().execute_with(|| {
         let invalid_subject = votingengine::CitizenSubject {
             cid_number: candidate(12).cid_number,
-            account_id: account(251),
+            // 249 有普通公民/投票身份，但没有竞选身份，不能进入候选人快照。
+            account_id: account(249),
         };
         assert_noop!(
             ElectionVote::do_create_popular_election(
@@ -638,7 +639,7 @@ fn same_admin_can_vote_once_for_each_frozen_institution_role() {
             2
         );
         assert_eq!(
-            ElectionCandidateTallies::<Test>::get(proposal_id, candidate(11)),
+            ElectionCandidateTallies::<Test>::get(proposal_id, candidate(11).cid_number),
             2
         );
     });

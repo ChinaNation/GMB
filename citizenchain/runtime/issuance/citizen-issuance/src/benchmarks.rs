@@ -6,7 +6,6 @@ use citizen_identity::OnVotingIdentityRegistered;
 use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_support::traits::Hooks;
-use sp_runtime::traits::Hash;
 
 use crate::pallet::{
     AccountRewarded, Config, IdentityRewardClaimed, Pallet, PendingRewardCount, RewardedCount,
@@ -36,20 +35,21 @@ mod benchmarks {
             },
         )
         .expect("citizen cid should generate");
-        let cid_number = cid_number.as_bytes();
-        let cid_number_hash = T::Hashing::hash(cid_number);
+        let cid_number = citizen_identity::CidNumberBound::try_from(cid_number.into_bytes())
+            .expect("benchmark cid number should fit");
 
         #[block]
         {
             <Pallet<T> as OnVotingIdentityRegistered<T::AccountId>>::on_voting_identity_registered(
-                &who, cid_number,
+                &who,
+                &cid_number,
             );
             Pallet::<T>::on_finalize(frame_system::Pallet::<T>::block_number());
         }
 
         assert_eq!(RewardedCount::<T>::get(), 1u64);
         assert_eq!(PendingRewardCount::<T>::get(), 0u32);
-        assert!(IdentityRewardClaimed::<T>::contains_key(cid_number_hash));
+        assert!(IdentityRewardClaimed::<T>::contains_key(cid_number));
         assert!(AccountRewarded::<T>::contains_key(&who));
     }
 }

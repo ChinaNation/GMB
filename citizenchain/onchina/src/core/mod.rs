@@ -1,3 +1,5 @@
+/// 公民 CID finalized 六读闭环快照；注册局办理、查询和投影共用。
+pub(crate) mod chain_citizen_identity;
 /// 跨业务复用的链上凭证签名、SCALE payload 与 genesis hash 对齐工具。
 pub(crate) mod chain_runtime;
 pub(crate) mod chain_submit;

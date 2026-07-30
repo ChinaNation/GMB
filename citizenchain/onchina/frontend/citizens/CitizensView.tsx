@@ -1,7 +1,7 @@
 // 注册局顶层视图 —— activeView === 'citizens' 分支。
 // 包含:citizen 列表 + 搜索栏 + 表格 + 直接录入公民弹窗。
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, Form, Input, Space, Table, Tag, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 
@@ -163,10 +163,10 @@ export function CitizensView() {
     await refreshList(searchKeyword, null, true);
   };
 
-  const handleCitizenUpdated = (next: CitizenRow) => {
+  const handleCitizenUpdated = useCallback((next: CitizenRow) => {
     setSelectedCitizen(next);
     setRows((prev) => prev.map((row) => (row.cid_number === next.cid_number ? next : row)));
-  };
+  }, []);
 
   const statusTag = (status: string | undefined) => (
     status === 'NORMAL' ? <Tag color="green">正常</Tag> : <Tag color="red">注销</Tag>
@@ -204,7 +204,7 @@ export function CitizensView() {
       render: (_v: unknown, row) => makeCitizenName(row),
     },
     {
-      title: '投票账户',
+      title: '当前绑定钱包账户',
       dataIndex: 'ss58_address',
       align: 'center',
       render: (v: string | null | undefined) => v || '-',
@@ -273,7 +273,7 @@ export function CitizensView() {
             <Form.Item name="keyword" style={{ marginBottom: 0 }}>
               <Input
                 style={{ width: 420, maxWidth: '72vw' }}
-                placeholder="护照号/身份CID/姓名/投票账户"
+                placeholder="护照号/身份CID/姓名/当前绑定钱包账户"
                 allowClear
                 disabled={!canUseCitizenList}
                 onPressEnter={() => searchForm.submit()}

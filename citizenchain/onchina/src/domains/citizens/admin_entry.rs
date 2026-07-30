@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::cid::{generate_cid_number, GenerateCidInput};
+use crate::core::chain_citizen_identity::FinalizedCitizenIdentity;
 use crate::crypto::pubkey::{account_id_to_ss58, normalize_account_id};
 use crate::domains::citizens::passport_no::{
     generate_passport_no_with_retry, is_voting_age_at, passport_valid_from, passport_valid_until,
@@ -110,7 +111,8 @@ pub(crate) fn validate_citizen_input(
             "当前注册局缺少省作用域,无法占号",
         ));
     };
-    let Some(province_code) = crate::cid::china::province_code_by_name(province_name.as_str()) else {
+    let Some(province_code) = crate::cid::china::province_code_by_name(province_name.as_str())
+    else {
         return Err(api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份"));
     };
     let province_code = province_code.to_string();
@@ -199,12 +201,20 @@ pub(crate) fn persist_citizen_record(
     state: &AppState,
     headers: &HeaderMap,
     account_id: &str,
-    citizen_account_id: &str,
     v: &ValidatedCitizenInput,
     cid_number: &str,
     onchain_tx_hash: &str,
-    onchain_block_number: Option<u64>,
+    finalized: &FinalizedCitizenIdentity,
 ) -> Result<CitizenRecord, axum::response::Response> {
+    let Some((citizen_account_id, binding_revision)) = finalized.active_binding() else {
+        return Err(api_error(
+            StatusCode::BAD_GATEWAY,
+            2004,
+            "finalized CID 绑定无效",
+        ));
+    };
+    let citizen_account_id = format!("0x{}", hex::encode(citizen_account_id));
+    let binding_finalized_block_hash = format!("0x{}", hex::encode(finalized.finalized_block_hash));
     // 匿名占号:档案选填,出生日期可空,不解析成 NaiveDate(空串会 panic),按字符串原样落库。
     let citizen_birth_date = v.citizen_birth_date.clone();
     let family_name = v.family_name.clone();
@@ -245,8 +255,10 @@ pub(crate) fn persist_citizen_record(
         citizen_sex: citizen_sex.clone(),
         citizen_birth_date: citizen_birth_date.clone(),
         // 占即绑:占号阶段就绑定用户钱包账户(链上 occupy_cid 已绑)。
-        account_id: Some(citizen_account_id.to_string()),
-        account_verified_at: Some(now),
+        account_id: Some(citizen_account_id),
+        binding_revision,
+        binding_finalized_block_number: Some(i64::from(finalized.finalized_block_number)),
+        binding_finalized_block_hash: Some(binding_finalized_block_hash),
         citizen_status: CitizenStatus::Normal,
         voting_eligible: v.voting_eligible,
         passport_valid_from: valid_from.clone(),
@@ -260,7 +272,7 @@ pub(crate) fn persist_citizen_record(
         birth_town_code: birth_town_code.clone(),
         archive_hash: None,
         onchain_tx_hash: Some(onchain_tx_hash.to_string()),
-        onchain_block_number: onchain_block_number.map(|n| n as i64),
+        onchain_block_number: Some(i64::from(finalized.finalized_block_number)),
         onchain_at: Some(now),
         creator_account_id: account_id.to_string(),
         created_at: now,
@@ -444,7 +456,8 @@ impl Db {
                 .query_opt(
                     "SELECT COALESCE(id, 0), cid_number, passport_no, family_name,
                             given_name, citizen_sex, citizen_birth_date, account_id,
-                            account_verified_at, citizen_status, voting_eligible,
+                            binding_revision, binding_finalized_block_number,
+                            binding_finalized_block_hash, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
                             province_code, city_code, town_code,
                             birth_province_code, birth_city_code, birth_town_code,
@@ -505,26 +518,28 @@ pub(crate) fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
         citizen_sex: row.get(5),
         citizen_birth_date: row.get(6),
         account_id: row.get(7),
-        account_verified_at: row.get(8),
-        citizen_status: citizen_status_from_db(row.get::<_, String>(9).as_str()),
-        voting_eligible: row.get(10),
-        passport_valid_from: row.get(11),
-        passport_valid_until: row.get(12),
-        status_updated_at: row.get(13),
-        province_code: row.get(14),
-        city_code: row.get(15),
-        town_code: row.get(16),
-        birth_province_code: row.get(17),
-        birth_city_code: row.get(18),
-        birth_town_code: row.get(19),
-        archive_hash: row.get(20),
-        onchain_tx_hash: row.get(21),
-        onchain_block_number: row.get(22),
-        onchain_at: row.get(23),
-        creator_account_id: row.get(24),
-        created_at: row.get(25),
-        updater_account_id: row.get(26),
-        updated_at: row.get(27),
+        binding_revision: u64::try_from(row.get::<_, i64>(8)).unwrap_or(0),
+        binding_finalized_block_number: row.get(9),
+        binding_finalized_block_hash: row.get(10),
+        citizen_status: citizen_status_from_db(row.get::<_, String>(11).as_str()),
+        voting_eligible: row.get(12),
+        passport_valid_from: row.get(13),
+        passport_valid_until: row.get(14),
+        status_updated_at: row.get(15),
+        province_code: row.get(16),
+        city_code: row.get(17),
+        town_code: row.get(18),
+        birth_province_code: row.get(19),
+        birth_city_code: row.get(20),
+        birth_town_code: row.get(21),
+        archive_hash: row.get(22),
+        onchain_tx_hash: row.get(23),
+        onchain_block_number: row.get(24),
+        onchain_at: row.get(25),
+        creator_account_id: row.get(26),
+        created_at: row.get(27),
+        updater_account_id: row.get(28),
+        updated_at: row.get(29),
     }
 }
 
@@ -857,7 +872,9 @@ mod edit_tests {
             citizen_sex: String::new(),
             citizen_birth_date: String::new(),
             account_id: None,
-            account_verified_at: None,
+            binding_revision: 0,
+            binding_finalized_block_number: None,
+            binding_finalized_block_hash: None,
             citizen_status: CitizenStatus::Normal,
             voting_eligible: false,
             passport_valid_from: String::new(),

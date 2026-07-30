@@ -339,7 +339,7 @@ fn real_calendar_handles_leap_year_and_missing_target_date() {
 }
 
 #[test]
-fn post_requires_active_cid_and_campaign_requires_voting_identity() {
+fn post_requires_active_cid_and_campaign_requires_candidate_identity() {
     new_test_ext().execute_with(|| {
         assert_noop!(
             SquarePost::publish_post(
@@ -378,7 +378,7 @@ fn post_requires_active_cid_and_campaign_requires_voting_identity() {
                 b"receipt".to_vec(),
                 1_893_456_000_000,
             ),
-            Error::<Test>::CampaignRequiresVotingIdentity
+            Error::<Test>::CampaignRequiresCandidateIdentity
         );
         assert_ok!(SquarePost::publish_post(
             RuntimeOrigin::signed(verified_account()),

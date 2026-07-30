@@ -81,6 +81,10 @@ pub trait InternalAdminProvider<AccountId> {
         Some(caller.clone())
     }
 
+    /// FRAME benchmark 专用：把指定账户写成目标机构可解析的当前管理员。
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_seed_institution_voter(_cid_number: &[u8], _voter: &AccountId) {}
+
     /// 读取机构治理阈值唯一真源。
     ///
     /// 阈值属于机构而不是管理员集合或投票引擎；生产实现必须路由到对应 entity

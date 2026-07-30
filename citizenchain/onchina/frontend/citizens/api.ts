@@ -27,6 +27,9 @@ export type CitizenRow = {
   citizen_birth_date: string;
   account_id?: string | null;
   ss58_address?: string | null;
+  binding_revision: number;
+  binding_finalized_block_number?: number | null;
+  binding_finalized_block_hash?: string | null;
   citizen_status: CitizenState;
   voting_eligible: boolean;
   vote_status: CitizenState;
@@ -256,6 +259,23 @@ export type SubmitCitizenRebindResult = {
   expires_at: number;
 };
 
+/** 所有注册局可见的 finalized CID 公开绑定，不包含任何链下公民档案。 */
+export type FinalizedCitizenBinding = {
+  cid_number: string;
+  cid_status: 'ACTIVE' | 'REVOKED';
+  binding_active: boolean;
+  account_id?: string | null;
+  ss58_address?: string | null;
+  binding_revision?: number | null;
+  voting_identity: boolean;
+  candidate_identity: boolean;
+  registry_rebind_required: boolean;
+  registrar_cid_number?: string | null;
+  finalized_block_number: number;
+  finalized_block_hash: string;
+  genesis_hash: string;
+};
+
 /** 吊销 prepare 返回:冷签 QR。 */
 export type PrepareCitizenRevokeResult = {
   request_id: string;
@@ -334,6 +354,16 @@ export async function submitCitizenRebind(
     headers: jsonAdminHeaders(auth),
     body: JSON.stringify({ request_id: requestId, account_id, rebind_signature }),
   });
+}
+
+export async function fetchFinalizedCitizenBinding(
+  auth: AdminAuth,
+  cidNumber: string,
+): Promise<FinalizedCitizenBinding> {
+  return request<FinalizedCitizenBinding>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/binding`,
+    { headers: adminHeaders(auth) },
+  );
 }
 
 /**

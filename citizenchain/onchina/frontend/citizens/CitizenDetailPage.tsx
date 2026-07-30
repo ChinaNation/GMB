@@ -1,7 +1,7 @@
 // 公民详情页承接单个公民档案展示与链上身份推送。
 // 本地建档不要求钱包;只有本页推送链上身份时才录入钱包并要求目标钱包签名。
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -41,6 +41,7 @@ import { notice } from '../utils/notice';
 import {
   CITIZEN_DOCUMENT_TYPES,
   completeCitizenOnchainSignature,
+  fetchFinalizedCitizenBinding,
   prepareCitizenRevoke,
   prepareCitizenRebind,
   submitCitizenRebind,
@@ -53,6 +54,7 @@ import {
   type CitizenDocumentType,
   type CitizenOnchainIdentityLevel,
   type CitizenRow,
+  type FinalizedCitizenBinding,
   type PrepareCitizenOnchainResult,
 } from './api';
 
@@ -148,6 +150,8 @@ export function CitizenDetailPage({
 }: Props) {
   const [form] = Form.useForm<OnchainForm>();
   const [current, setCurrent] = useState(citizen);
+  const currentRef = useRef(current);
+  currentRef.current = current;
   const [editOpen, setEditOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [prepareLoading, setPrepareLoading] = useState(false);
@@ -189,11 +193,37 @@ export function CitizenDetailPage({
     loadDocuments();
   }, [loadDocuments]);
 
-  const updateCitizenAccount = (account_id: string, ss58_address: string) => {
-    const next = { ...current, account_id: account_id, ss58_address: ss58_address };
-    setCurrent(next);
-    onUpdated(next);
-  };
+  const applyFinalizedBinding = useCallback(
+    (binding: FinalizedCitizenBinding) => {
+      const account_id = binding.binding_active ? binding.account_id ?? null : null;
+      const ss58_address = binding.binding_active ? binding.ss58_address ?? null : null;
+      const next: CitizenRow = {
+        ...currentRef.current,
+        account_id,
+        ss58_address,
+        binding_revision: binding.binding_revision ?? 0,
+        binding_finalized_block_number: binding.finalized_block_number,
+        binding_finalized_block_hash: binding.finalized_block_hash,
+      };
+      currentRef.current = next;
+      setCurrent(next);
+      onUpdated(next);
+      form.setFieldValue('account_id', account_id ?? '');
+    },
+    [form, onUpdated],
+  );
+
+  const loadFinalizedBinding = useCallback(async () => {
+    const binding = await fetchFinalizedCitizenBinding(auth, current.cid_number);
+    applyFinalizedBinding(binding);
+    return binding;
+  }, [applyFinalizedBinding, auth, current.cid_number]);
+
+  useEffect(() => {
+    void loadFinalizedBinding().catch((err) =>
+      notice.error(err, 'finalized 钱包绑定加载失败'),
+    );
+  }, [loadFinalizedBinding]);
 
   const prepareOnchainSignature = async () => {
     const values = await form.validateFields();
@@ -256,8 +286,8 @@ export function CitizenDetailPage({
           signed.signature,
         );
         notice.success(`公民身份已上链,交易哈希：${submitted.tx_hash}`);
-        // 钱包绑定只在链交易最终确认后反映到页面，避免未上链先显示已绑定。
-        updateCitizenAccount(output.account_id, output.ss58_address);
+        // 页面只采用 finalized 六读闭环结果，不信任准备阶段或扫码响应中的账户。
+        await loadFinalizedBinding();
       } finally {
         setChainSubmitting(false);
       }
@@ -296,6 +326,7 @@ export function CitizenDetailPage({
         signed.signature,
       );
       notice.success(`公民身份已吊销,交易哈希：${submitted.tx_hash}`);
+      await loadFinalizedBinding();
     } catch (err) {
       notice.error(err, '公民身份吊销失败');
     } finally {
@@ -330,8 +361,8 @@ export function CitizenDetailPage({
         adminSigned.signature,
       );
       notice.success(`换绑上链成功,交易哈希：${submitted.tx_hash}`);
-      // 绑定账户以链上确认为准;ss58 待列表刷新回填,先更新 account_id。
-      updateCitizenAccount(newWalletSigned.account_id, '');
+      // 新钱包签名只证明控制权；显示账户必须重新读取 finalized 链上闭环。
+      await loadFinalizedBinding();
       setRebindRoleCode('');
     } catch (err) {
       notice.error(err, '换绑钱包失败');
@@ -412,7 +443,11 @@ export function CitizenDetailPage({
           <Descriptions.Item label="性别">{sexText(current.citizen_sex)}</Descriptions.Item>
           <Descriptions.Item label="出生日期">{formatDate(current.citizen_birth_date)}</Descriptions.Item>
           <Descriptions.Item label="年龄">{typeof ageYears === 'number' ? `${ageYears}周岁` : '-'}</Descriptions.Item>
-          <Descriptions.Item label="投票账户">{current.ss58_address || '-'}</Descriptions.Item>
+          <Descriptions.Item label="当前绑定钱包账户">{current.ss58_address || '-'}</Descriptions.Item>
+          <Descriptions.Item label="绑定版本">{current.binding_revision || '-'}</Descriptions.Item>
+          <Descriptions.Item label="绑定 finalized 区块">
+            {current.binding_finalized_block_number ?? '-'}
+          </Descriptions.Item>
           <Descriptions.Item label="选举权利">{current.voting_eligible ? '有' : '无'}</Descriptions.Item>
           <Descriptions.Item label="公民状态">{statusTag(current.citizen_status)}</Descriptions.Item>
           <Descriptions.Item label="投票身份状态">{statusText(current.identity_status)}</Descriptions.Item>

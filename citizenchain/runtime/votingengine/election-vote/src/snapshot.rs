@@ -28,13 +28,15 @@ impl<T: Config> Pallet<T> {
 
     pub(crate) fn bounded_candidates(
         candidates: sp_std::vec::Vec<CitizenSubjectOf<T>>,
+        scope: &votingengine::PopulationScope,
     ) -> Result<BoundedVec<CitizenSubjectOf<T>, MaxElectionCandidatesOf<T>>, DispatchError> {
         ensure!(!candidates.is_empty(), Error::<T>::EmptyCandidateSnapshot);
         Self::ensure_unique_candidate_cids(&candidates)?;
         ensure!(
             candidates.iter().all(|candidate| {
-                <T as votingengine::Config>::CitizenIdentityReader::citizen_subject(
+                <T as votingengine::Config>::CitizenIdentityReader::candidate_subject(
                     &candidate.account_id,
+                    scope,
                 )
                 .as_ref()
                     == Some(candidate)

@@ -5,7 +5,7 @@
 //! 发放一次性认证奖励。竞选身份不要求先有投票身份，首次即以竞选身份上链同样发币。
 //!
 //! ## 核心规则
-//! - 双重防重：按 `cid_number` 哈希 + 按账户，防止同一公民或同一账户重复领奖。
+//! - 双重防重：按规范 `cid_number` + 按账户，防止同一公民或同一账户重复领奖。
 //! - 阶梯奖励：前 `CITIZEN_ISSUANCE_HIGH_REWARD_COUNT` 人获高额奖励，之后降为常规奖励。
 //! - 总量硬顶：累计发放人数达到 `CITIZEN_ISSUANCE_MAX_COUNT` 后停止发放。
 //! - 本模块不暴露任何 extrinsic，所有触发均来自上游回调。
@@ -29,7 +29,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::BlockNumberFor;
     use scale_info::TypeInfo;
-    use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Zero};
+    use sp_runtime::traits::{SaturatedConversion, Zero};
     use sp_runtime::RuntimeDebug;
 
     use crate::weights::WeightInfo;
@@ -76,11 +76,11 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn reward_claimed)]
-    /// 按 cid_number 哈希维度防重，确保同一公民身份不会重复领取奖励。
+    /// 按规范 cid_number 防重，确保同一公民身份不会重复领取奖励。
     // unit 是 StorageMap 的存在标记值，不是函数返回类型，不能按 lint 建议删除。
     #[allow(clippy::unused_unit)]
     pub type IdentityRewardClaimed<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
+        StorageMap<_, Blake2_128Concat, citizen_identity::CidNumberBound, (), ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn account_rewarded)]
@@ -102,9 +102,10 @@ pub mod pallet {
         TypeInfo,
         MaxEncodedLen,
     )]
-    pub struct PendingCertificationReward<AccountId, Hash> {
+    pub struct PendingCertificationReward<AccountId> {
         pub account_id: AccountId,
-        pub cid_number_hash: Hash,
+        /// 奖励唯一身份键；账户只是第二防重键和实际收款账户。
+        pub cid_number: citizen_identity::CidNumberBound,
     }
 
     #[pallet::storage]
@@ -113,18 +114,13 @@ pub mod pallet {
 
     #[pallet::storage]
     /// 按本块登记顺序保存待发凭据，保证跨奖励档位时顺序可复算。
-    pub type PendingRewards<T: Config> = StorageMap<
-        _,
-        Twox64Concat,
-        u32,
-        PendingCertificationReward<T::AccountId, T::Hash>,
-        OptionQuery,
-    >;
+    pub type PendingRewards<T: Config> =
+        StorageMap<_, Twox64Concat, u32, PendingCertificationReward<T::AccountId>, OptionQuery>;
 
     #[pallet::storage]
-    /// 本块 CID 临时防重表；finalize 后必须清空，不形成第二套永久真源。
+    /// 本块规范 CID 临时防重表；finalize 后必须清空，不形成第二套永久真源。
     pub type PendingIdentityRewardClaimed<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
+        StorageMap<_, Blake2_128Concat, citizen_identity::CidNumberBound, (), ValueQuery>;
 
     #[pallet::storage]
     /// 本块账户临时防重表；finalize 后必须清空，不形成第二套永久真源。
@@ -161,13 +157,13 @@ pub mod pallet {
         /// 公民投票身份首次登记后，认证发行模块执行一次奖励发放。
         CertificationRewardIssued {
             account_id: T::AccountId,
-            cid_number_hash: T::Hash,
+            cid_number: citizen_identity::CidNumberBound,
             reward: BalanceOf<T>,
         },
         /// 奖励因重复、超限等原因被跳过时触发，reason 字段说明具体原因。
         CertificationRewardSkipped {
             account_id: T::AccountId,
-            cid_number_hash: T::Hash,
+            cid_number: citizen_identity::CidNumberBound,
             reason: SkipReason,
         },
     }
@@ -206,14 +202,14 @@ pub mod pallet {
                 drop(imbalance);
 
                 RewardedCount::<T>::put(rewarded_count.saturating_add(1));
-                IdentityRewardClaimed::<T>::insert(pending.cid_number_hash, ());
+                IdentityRewardClaimed::<T>::insert(&pending.cid_number, ());
                 AccountRewarded::<T>::insert(&pending.account_id, ());
-                PendingIdentityRewardClaimed::<T>::remove(pending.cid_number_hash);
+                PendingIdentityRewardClaimed::<T>::remove(&pending.cid_number);
                 PendingAccountRewarded::<T>::remove(&pending.account_id);
 
                 Self::deposit_event(Event::<T>::CertificationRewardIssued {
                     account_id: pending.account_id,
-                    cid_number_hash: pending.cid_number_hash,
+                    cid_number: pending.cid_number,
                     reward,
                 });
             }
@@ -237,11 +233,11 @@ pub mod pallet {
 
         fn try_queue_certification_reward(
             account_id: &T::AccountId,
-            cid_number_hash: T::Hash,
+            cid_number: &citizen_identity::CidNumberBound,
         ) -> Result<BalanceOf<T>, SkipReason> {
             // 先查公民身份，再查账户，优先返回更贴近业务语义的跳过原因。
-            if IdentityRewardClaimed::<T>::contains_key(cid_number_hash)
-                || PendingIdentityRewardClaimed::<T>::contains_key(cid_number_hash)
+            if IdentityRewardClaimed::<T>::contains_key(cid_number)
+                || PendingIdentityRewardClaimed::<T>::contains_key(cid_number)
             {
                 return Err(SkipReason::DuplicateCitizenIdentity);
             }
@@ -280,10 +276,10 @@ pub mod pallet {
                 pending_count,
                 PendingCertificationReward {
                     account_id: account_id.clone(),
-                    cid_number_hash,
+                    cid_number: cid_number.clone(),
                 },
             );
-            PendingIdentityRewardClaimed::<T>::insert(cid_number_hash, ());
+            PendingIdentityRewardClaimed::<T>::insert(cid_number, ());
             PendingAccountRewarded::<T>::insert(account_id, ());
             PendingRewardCount::<T>::put(next_pending_count);
 
@@ -293,14 +289,16 @@ pub mod pallet {
 
     /// 实现 citizen-identity 的登记回调，在公民投票身份首次登记后自动尝试发放认证奖励。
     impl<T: Config> OnVotingIdentityRegistered<T::AccountId> for Pallet<T> {
-        fn on_voting_identity_registered(account_id: &T::AccountId, cid_number: &[u8]) {
-            let cid_number_hash = T::Hashing::hash(cid_number);
-            match Self::try_queue_certification_reward(account_id, cid_number_hash) {
+        fn on_voting_identity_registered(
+            account_id: &T::AccountId,
+            cid_number: &citizen_identity::CidNumberBound,
+        ) {
+            match Self::try_queue_certification_reward(account_id, cid_number) {
                 Ok(_reward) => {}
                 Err(reason) => {
                     Self::deposit_event(Event::<T>::CertificationRewardSkipped {
                         account_id: account_id.clone(),
-                        cid_number_hash,
+                        cid_number: cid_number.clone(),
                         reason,
                     });
                 }

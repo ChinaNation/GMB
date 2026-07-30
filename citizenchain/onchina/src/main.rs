@@ -180,6 +180,9 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
             .account_id
             .as_deref()
             .and_then(crate::crypto::pubkey::account_id_to_ss58),
+        binding_revision: record.binding_revision,
+        binding_finalized_block_number: record.binding_finalized_block_number,
+        binding_finalized_block_hash: record.binding_finalized_block_hash.clone(),
         citizen_status: record.citizen_status.clone(),
         voting_eligible: record.voting_eligible,
         vote_status: record.computed_vote_status(),
@@ -562,6 +565,8 @@ impl Db {
         };
         let citizen_status = citizen_status_text(&record.citizen_status);
         let id = i64::try_from(record.id).map_err(|_| "citizen id exceeds i64".to_string())?;
+        let binding_revision = i64::try_from(record.binding_revision)
+            .map_err(|_| "citizen binding revision exceeds i64".to_string())?;
         Self::upsert_target_id_row(
             conn,
             cid_number.as_str(),
@@ -602,14 +607,16 @@ impl Db {
             "INSERT INTO citizens (
                 cid_number, passport_no, family_name, given_name,
                 citizen_sex, citizen_birth_date, province_code, city_code, id,
-                account_id, account_verified_at, citizen_status, voting_eligible, passport_valid_from,
+                account_id, binding_revision, binding_finalized_block_number,
+                binding_finalized_block_hash, citizen_status, voting_eligible, passport_valid_from,
                 passport_valid_until, status_updated_at, town_code, birth_province_code, birth_city_code,
                 birth_town_code, archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
                 creator_account_id, created_at, updater_account_id, updated_at
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                $20, $21, $22, $23, $24, $25, $26, $27, $28
+                $20, $21, $22, $23, $24, $25, $26, $27, $28,
+                $29, $30
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 passport_no = EXCLUDED.passport_no,
@@ -620,7 +627,9 @@ impl Db {
                 city_code = EXCLUDED.city_code,
                 id = EXCLUDED.id,
                 account_id = EXCLUDED.account_id,
-                account_verified_at = EXCLUDED.account_verified_at,
+                binding_revision = EXCLUDED.binding_revision,
+                binding_finalized_block_number = EXCLUDED.binding_finalized_block_number,
+                binding_finalized_block_hash = EXCLUDED.binding_finalized_block_hash,
                 citizen_status = EXCLUDED.citizen_status,
                 voting_eligible = EXCLUDED.voting_eligible,
                 passport_valid_from = EXCLUDED.passport_valid_from,
@@ -635,7 +644,12 @@ impl Db {
                 onchain_block_number = EXCLUDED.onchain_block_number,
                 onchain_at = EXCLUDED.onchain_at,
                 updater_account_id = EXCLUDED.updater_account_id,
-                updated_at = EXCLUDED.updated_at",
+                updated_at = EXCLUDED.updated_at
+             WHERE citizens.binding_revision < EXCLUDED.binding_revision
+                OR (
+                    citizens.binding_revision = EXCLUDED.binding_revision
+                    AND citizens.account_id IS NOT DISTINCT FROM EXCLUDED.account_id
+                )",
             &[
                 &cid_number,
                 &record.passport_no,
@@ -647,7 +661,9 @@ impl Db {
                 &city_code,
                 &id,
                 &record.account_id,
-                &record.account_verified_at,
+                &binding_revision,
+                &record.binding_finalized_block_number,
+                &record.binding_finalized_block_hash,
                 &citizen_status,
                 &record.voting_eligible,
                 &record.passport_valid_from,
@@ -760,7 +776,9 @@ impl Db {
                 .query(
                     "SELECT COALESCE(c.id, 0), c.cid_number, c.passport_no, c.family_name,
                                     c.given_name, c.citizen_sex, c.citizen_birth_date,
-                                    c.account_id, c.account_verified_at,
+                                    c.account_id, c.binding_revision,
+                                    c.binding_finalized_block_number,
+                                    c.binding_finalized_block_hash,
                                     c.citizen_status, c.voting_eligible,
                                     c.passport_valid_from, c.passport_valid_until, c.status_updated_at,
                                     c.province_code, c.city_code, c.town_code,
@@ -804,7 +822,7 @@ impl Db {
             let mut output = Vec::with_capacity(rows.len());
             for row in rows {
                 let id_i64: i64 = row.get(0);
-                let created_at: DateTime<Utc> = row.get(25);
+                let created_at: DateTime<Utc> = row.get(27);
                 let record = crate::domains::citizens::admin_entry::citizen_record_from_row(&row);
                 output.push((citizen_row_from_record(&record), created_at, id_i64));
             }
@@ -2106,8 +2124,8 @@ fn main() {
         warn!("ONCHINA_GOV_CHAIN_AUDIT=0,已跳过创世机构目录链上对账(仅限开发)");
     }
 
-    // 创世公民播种:联邦注册局把程伟(基金会法定代表人,无 citizen-identity)直接落本地库
-    // (贵州/绥阳市)。幂等——已有则跳过;非联邦节点内部跳过;失败仅告警不阻断启动(纯新增)。
+    // 创世公民播种:联邦注册局按 finalized citizen-identity 当前绑定把程伟落本地库，
+    // 基金会贵州/绥阳位置只作链下档案分区。幂等——已有则跳过;非联邦节点内部跳过。
     match crate::domains::genesis_projection::seed_genesis_citizen_blocking(&state.db) {
         Ok(true) => info!("创世公民(法定代表人)已播种进联邦注册局本地库"),
         Ok(false) => {}
@@ -2387,6 +2405,12 @@ fn main() {
             .route(
                 "/api/v1/admin/citizens/rebind/submit",
                 post(domains::citizens::occupy::submit_citizen_rebind),
+            )
+            // 所有在册注册局管理员均可查询任意 CID 的公开 finalized 当前绑定；
+            // 该接口不读取或跨辖区暴露本地护照、证件与档案。
+            .route(
+                "/api/v1/admin/citizens/:cid_number/binding",
+                get(domains::citizens::chain_identity::finalized_citizen_binding),
             )
             .route(
                 "/api/v1/admin/chain/submit",
@@ -2705,9 +2729,7 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "origin is required" => "ONCHINA_LOGIN_ORIGIN_REQUIRED",
         "session_id is required" => "ONCHINA_LOGIN_SESSION_REQUIRED",
         "domain is required" => "ONCHINA_LOGIN_DOMAIN_REQUIRED",
-        "challenge_id, account_id, signature are required" => {
-            "ONCHINA_LOGIN_REQUEST_INVALID"
-        }
+        "challenge_id, account_id, signature are required" => "ONCHINA_LOGIN_REQUEST_INVALID",
         "challenge_id and session_id are required" => "ONCHINA_LOGIN_RESULT_PARAM_REQUIRED",
         "sign request not found" => "ONCHINA_LOGIN_CHALLENGE_NOT_FOUND",
         "sign request already consumed" => "ONCHINA_LOGIN_CHALLENGE_CONSUMED",

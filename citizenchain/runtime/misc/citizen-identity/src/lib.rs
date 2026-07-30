@@ -610,7 +610,7 @@ impl<AccountId, Signature> CitizenIdentityAuthority<AccountId, Signature> for ()
 }
 
 pub trait OnVotingIdentityRegistered<AccountId> {
-    fn on_voting_identity_registered(_who: &AccountId, _cid_number: &[u8]) {}
+    fn on_voting_identity_registered(_who: &AccountId, _cid_number: &CidNumberBound) {}
 }
 
 impl<AccountId> OnVotingIdentityRegistered<AccountId> for () {}
@@ -1069,7 +1069,7 @@ pub mod pallet {
             Self::replace_voting_identity(payload.cid_number.clone(), identity, None)?;
             T::OnVotingIdentityRegistered::on_voting_identity_registered(
                 &payload.account_id,
-                payload.cid_number.as_slice(),
+                &payload.cid_number,
             );
             Self::deposit_event(Event::<T>::VotingIdentityRegistered {
                 account_id: payload.account_id,
@@ -1123,7 +1123,7 @@ pub mod pallet {
             if is_first_onchain_identity {
                 T::OnVotingIdentityRegistered::on_voting_identity_registered(
                     &payload.voting.account_id,
-                    payload.voting.cid_number.as_slice(),
+                    &payload.voting.cid_number,
                 );
             }
             CandidateIdentityByCid::<T>::insert(

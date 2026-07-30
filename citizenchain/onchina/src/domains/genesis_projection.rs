@@ -2,7 +2,8 @@
 //!
 //! 设计见 memory/01-architecture/citizenchain/onchina-citizen-private-projection-design.md §2.5。
 //! 现阶段两个创世实体:
-//! - 创世公民程伟(人主体 CN 号,基金会法定代表人,无 citizen-identity)→ **直接播种进联邦注册局本地库**,
+//! - 创世公民程伟(人主体 CN 号,基金会法定代表人,已有创世 citizen-identity 绑定)→
+//!   **按 finalized 链上绑定播种进联邦注册局本地库**,
 //!   置于 贵州省(GZ)/绥阳市(与基金会同市)。人主体 CID 去地域化,省市取自基金会机构 CID,
 //!   非从程伟号段推。联邦贵州组管理员进绥阳市即可见/可按 CID 搜到;
 //!   不加省级特殊视图,不用 PENDING/待补档。
@@ -14,6 +15,7 @@ use chrono::Utc;
 
 use crate::auth::repo::active_node_binding;
 use crate::cid::InstitutionCategory;
+use crate::core::chain_citizen_identity::{read_finalized_citizen_identity, FinalizedCidStatus};
 use crate::core::chain_runtime::{institution_lookup, is_tier1_registry};
 use crate::core::db::Db;
 use crate::domains::citizens::model::{CitizenRecord, CitizenStatus};
@@ -21,7 +23,7 @@ use crate::institution::subjects::model::LegalRepresentative;
 use crate::institution::subjects::Institution;
 
 use primitives::cid::china::citizenchain::{
-    CITIZENCHAIN_FOUNDATION, CITIZENCHAIN_GENESIS_ADMINS, LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
+    CITIZENCHAIN_FOUNDATION, LEGAL_REPRESENTATIVE_CITIZEN_CID_NUMBER,
     LEGAL_REPRESENTATIVE_FAMILY_NAME, LEGAL_REPRESENTATIVE_GIVEN_NAME,
 };
 use primitives::cid::number::{cid_scope_codes, parse_cid_number_parts};
@@ -46,15 +48,6 @@ fn stable_citizen_id(cid_number: &str) -> u64 {
             acc.wrapping_mul(131).wrapping_add(u64::from(byte))
         })
         .max(1)
-}
-
-/// 创世法定代表人(程伟)账户 0x 小写 hex。
-fn genesis_legal_representative_account_hex() -> String {
-    let account = CITIZENCHAIN_GENESIS_ADMINS
-        .first()
-        .map(|admin| admin.account_id)
-        .unwrap_or([0u8; 32]);
-    format!("0x{}", hex::encode(account))
 }
 
 fn citizen_exists(db: &Db, province_code: &str, cid_number: &str) -> Result<bool, String> {
@@ -91,7 +84,34 @@ pub(crate) fn seed_genesis_citizen_blocking(db: &Db) -> Result<bool, String> {
         return Ok(false);
     }
 
-    let account_hex = genesis_legal_representative_account_hex();
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("create genesis citizen chain runtime failed: {e}"))?;
+    let snapshot = rt.block_on(read_finalized_citizen_identity(cid_number.as_str()))?;
+    if snapshot.cid_status == FinalizedCidStatus::Missing {
+        return Err("genesis citizen CID is missing from finalized chain".to_string());
+    }
+    let binding_revision = snapshot
+        .binding_revision
+        .ok_or_else(|| "genesis citizen binding revision missing".to_string())?;
+    let audit_account_id = snapshot
+        .account_id
+        .ok_or_else(|| "genesis citizen account binding missing".to_string())?;
+    let current_account_id = (snapshot.cid_status == FinalizedCidStatus::Active)
+        .then(|| format!("0x{}", hex::encode(audit_account_id)));
+    let creator_account_id = format!("0x{}", hex::encode(audit_account_id));
+    let finalized_block_hash = format!("0x{}", hex::encode(snapshot.finalized_block_hash));
+    let voting_eligible =
+        snapshot.cid_status == FinalizedCidStatus::Active && snapshot.voting.is_some();
+    let passport_valid_from = snapshot
+        .voting
+        .as_ref()
+        .map(|identity| identity.passport_valid_from.to_string())
+        .unwrap_or_default();
+    let passport_valid_until = snapshot
+        .voting
+        .as_ref()
+        .map(|identity| identity.passport_valid_until.to_string())
+        .unwrap_or_default();
     let now = Utc::now();
     let record = CitizenRecord {
         id: stable_citizen_id(cid_number.as_str()),
@@ -102,13 +122,18 @@ pub(crate) fn seed_genesis_citizen_blocking(db: &Db) -> Result<bool, String> {
         given_name: LEGAL_REPRESENTATIVE_GIVEN_NAME.to_string(),
         citizen_sex: String::new(),
         citizen_birth_date: String::new(),
-        account_id: Some(account_hex.clone()),
-        account_verified_at: None,
-        citizen_status: CitizenStatus::Normal,
-        // 无 citizen-identity(无护照窗口/居住地)→ 暂不具投票资格,补齐并上链后由正常流程更新。
-        voting_eligible: false,
-        passport_valid_from: String::new(),
-        passport_valid_until: String::new(),
+        account_id: current_account_id,
+        binding_revision,
+        binding_finalized_block_number: Some(i64::from(snapshot.finalized_block_number)),
+        binding_finalized_block_hash: Some(finalized_block_hash),
+        citizen_status: if snapshot.cid_status == FinalizedCidStatus::Active {
+            CitizenStatus::Normal
+        } else {
+            CitizenStatus::Revoked
+        },
+        voting_eligible,
+        passport_valid_from,
+        passport_valid_until,
         status_updated_at: Some(now.timestamp()),
         province_code,
         city_code,
@@ -120,7 +145,8 @@ pub(crate) fn seed_genesis_citizen_blocking(db: &Db) -> Result<bool, String> {
         onchain_tx_hash: None,
         onchain_block_number: None,
         onchain_at: None,
-        creator_account_id: account_hex, // 以程伟自身账户作可验证来源锚点
+        // 创建来源只是链下审计字段；即使 CID 后续换绑，也不把它解释为当前控制账户。
+        creator_account_id,
         created_at: now,
         updater_account_id: None,
         updated_at: now,
@@ -226,10 +252,11 @@ mod tests {
     #[test]
     fn split_province_city_reads_foundation_scope() {
         // 基金会机构 CID → 贵州(GZ)/绥阳(018);创世公民程伟居住地即取此。
-        assert_eq!(
-            split_province_city(CITIZENCHAIN_FOUNDATION.cid_number).expect("foundation scope"),
-            ("GZ".to_string(), "018".to_string())
-        );
+        let scope = match split_province_city(CITIZENCHAIN_FOUNDATION.cid_number) {
+            Ok(value) => value,
+            Err(error) => panic!("foundation scope should decode: {error}"),
+        };
+        assert_eq!(scope, ("GZ".to_string(), "018".to_string()));
     }
 
     #[test]

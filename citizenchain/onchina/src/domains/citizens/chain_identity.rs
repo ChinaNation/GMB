@@ -94,6 +94,86 @@ pub(crate) struct CompleteCitizenOnchainOutput {
     pub(crate) citizen_identity_chain_sign_request: String,
 }
 
+/// 所有注册局都可查询的链上公开 CID 绑定，不包含任何链下公民档案。
+#[derive(Serialize)]
+pub(crate) struct FinalizedCitizenBindingOutput {
+    pub(crate) cid_number: String,
+    pub(crate) cid_status: String,
+    pub(crate) binding_active: bool,
+    pub(crate) account_id: Option<String>,
+    pub(crate) ss58_address: Option<String>,
+    pub(crate) binding_revision: Option<u64>,
+    pub(crate) voting_identity: bool,
+    pub(crate) candidate_identity: bool,
+    pub(crate) registry_rebind_required: bool,
+    pub(crate) registrar_cid_number: Option<String>,
+    pub(crate) finalized_block_number: u32,
+    pub(crate) finalized_block_hash: String,
+    pub(crate) genesis_hash: String,
+}
+
+pub(crate) async fn finalized_citizen_binding(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(cid_number): Path<String>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if let Err(response) = ensure_registry_admin(&ctx) {
+        return response;
+    }
+    let cid_number = cid_number.trim().to_string();
+    if crate::cid::validate_cid_number_format(cid_number.as_str()).is_err() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "CID 格式错误");
+    }
+    let snapshot = match crate::core::chain_citizen_identity::read_finalized_citizen_identity(
+        cid_number.as_str(),
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::error!(cid_number = %cid_number, error = %err, "read finalized citizen binding failed");
+            return api_error(StatusCode::BAD_GATEWAY, 2004, "finalized 公民绑定读取失败");
+        }
+    };
+    if snapshot.is_unoccupied() {
+        return api_error(StatusCode::NOT_FOUND, 1004, "链上 CID 不存在");
+    }
+    // Revoked 记录可在链上保留最后账户映射供审计，但接口中的 account_id 只表达
+    // 当前有效控制钱包；吊销后必须为空，禁止把旧账户继续展示成当前授权。
+    let active_binding = snapshot.active_binding();
+    let binding_active = active_binding.is_some();
+    let account_id = active_binding.map(|(account_id, _)| format!("0x{}", hex::encode(account_id)));
+    let ss58_address = account_id
+        .as_deref()
+        .and_then(crate::crypto::pubkey::account_id_to_ss58);
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: FinalizedCitizenBindingOutput {
+            cid_number,
+            cid_status: snapshot.cid_status.as_str().to_string(),
+            binding_active,
+            account_id,
+            ss58_address,
+            binding_revision: snapshot.binding_revision,
+            voting_identity: snapshot.voting.is_some(),
+            candidate_identity: snapshot.candidate.is_some(),
+            registry_rebind_required: snapshot.registry_rebind_required(),
+            registrar_cid_number: snapshot
+                .registrar_cid_number
+                .map(|value| String::from_utf8_lossy(&value).into_owned()),
+            finalized_block_number: snapshot.finalized_block_number,
+            finalized_block_hash: format!("0x{}", hex::encode(snapshot.finalized_block_hash)),
+            genesis_hash: format!("0x{}", hex::encode(snapshot.genesis_hash)),
+        },
+    })
+    .into_response()
+}
+
 pub(crate) async fn prepare_citizen_onchain_signature(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -275,10 +355,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         );
     }
     let account_id = sign_response.body.account_id;
-    if !same_account_id(
-        account_id.as_str(),
-        citizen_account.account_id.as_str(),
-    ) {
+    if !same_account_id(account_id.as_str(), citizen_account.account_id.as_str()) {
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与录入钱包不一致");
     }
     let citizen_signature = sign_response.body.signature;
@@ -497,7 +574,8 @@ impl Db {
                 .query_opt(
                     "SELECT COALESCE(id, 0), cid_number, passport_no, family_name,
                             given_name, citizen_sex, citizen_birth_date, account_id,
-                            account_verified_at, citizen_status, voting_eligible,
+                            binding_revision, binding_finalized_block_number,
+                            binding_finalized_block_hash, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
                             province_code, city_code, town_code,
                             birth_province_code, birth_city_code, birth_town_code,

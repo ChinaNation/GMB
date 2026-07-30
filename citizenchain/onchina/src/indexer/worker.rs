@@ -174,7 +174,7 @@ async fn run_indexer_loop(ws_url: &str, db_pool: &Db) -> Result<(), String> {
         let records = event_parser::parse_block_events(&events, block_num, block_ts);
         db_pool.with_client(|conn| db::insert_block_records(conn, block_num, &records))?;
         if let Some(scope) = projection_scope.as_ref() {
-            project_block_entities(db_pool, &events, scope).await;
+            project_block_entities(db_pool, &events, block.hash(), scope).await;
         }
     }
 }
@@ -203,7 +203,7 @@ async fn process_block_at_hash(
     db_pool.with_client(|conn| db::insert_block_records(conn, block_number, &records))?;
 
     if let Some(scope) = projection_scope {
-        project_block_entities(db_pool, &events, scope).await;
+        project_block_entities(db_pool, &events, block_hash, scope).await;
     }
 
     Ok(())
@@ -214,12 +214,18 @@ async fn process_block_at_hash(
 async fn project_block_entities(
     db_pool: &Db,
     events: &subxt::events::Events<PolkadotConfig>,
+    block_hash: subxt::utils::H256,
     scope: &crate::domains::projection::NodeScope,
 ) {
     let (citizen_cids, institution_cids) = event_parser::collect_entity_projection_cids(events);
     for cid in citizen_cids {
-        if let Err(err) =
-            crate::domains::projection::project_citizen_by_cid(db_pool, &cid, scope).await
+        if let Err(err) = crate::domains::projection::project_citizen_by_cid_at(
+            db_pool,
+            &cid,
+            scope,
+            Some(block_hash.0),
+        )
+        .await
         {
             warn!(cid = %cid, error = %err, "indexer citizen projection failed");
         }
