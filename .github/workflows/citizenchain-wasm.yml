@@ -30,10 +30,10 @@ env:
 jobs:
   build-wasm:
     name: 编译 WASM
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: 校验源码版本与构建用途
         env:
@@ -88,13 +88,57 @@ jobs:
           PY
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.97.1
+        # 1.97.1 在上游是可移动分支；固定当前生成提交，action 内仍硬编码 toolchain=1.97.1。
+        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b
         with:
           targets: wasm32v1-none
           components: rust-src
 
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
+
+      - name: 校验锁文件并记录构建环境
+        working-directory: citizenchain
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import subprocess
+          from pathlib import Path
+
+          def command_output(*command: str) -> str:
+              return subprocess.check_output(
+                  command,
+                  text=True,
+                  stderr=subprocess.STDOUT,
+              ).strip()
+
+          lock_data = Path("Cargo.lock").read_bytes()
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as out:
+              out.write("\n## CitizenChain WASM 固定构建环境\n\n")
+              out.write("- runner label：`ubuntu-24.04`\n")
+              out.write(f"- runner OS / arch：`{os.environ['RUNNER_OS']} / {os.environ['RUNNER_ARCH']}`\n")
+              out.write(f"- runner image OS：`{os.environ.get('ImageOS', 'unknown')}`\n")
+              out.write(f"- runner image version：`{os.environ.get('ImageVersion', 'unknown')}`\n")
+              out.write(
+                  "- checkout action："
+                  "`fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09` (`v5.1.0`)\n"
+              )
+              out.write(
+                  "- rust-toolchain action："
+                  "`46511b1c83438f0dd37c02d843619ece5a4abb5b` (`1.97.1`)\n"
+              )
+              out.write(f"- Cargo.lock SHA-256：`{hashlib.sha256(lock_data).hexdigest()}`\n")
+              for label, command in (
+                  ("rustc", ("rustc", "--version", "--verbose")),
+                  ("cargo", ("cargo", "--version", "--verbose")),
+                  ("protoc", ("protoc", "--version")),
+                  ("clang", ("clang", "--version")),
+              ):
+                  out.write(f"\n### {label}\n\n```\n{command_output(*command)}\n```\n")
+          PY
 
       - name: 删除全部旧编译产物
         working-directory: citizenchain
@@ -106,7 +150,7 @@ jobs:
         working-directory: citizenchain
         env:
           WASM_BUILD_FROM_SOURCE: "1"
-        run: cargo build --release -p citizenchain
+        run: cargo build --locked --release -p citizenchain
 
       - name: 校验 WASM 产物并记录摘要
         working-directory: citizenchain

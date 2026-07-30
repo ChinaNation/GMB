@@ -1,7 +1,7 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(2026-07-30 全仓审查、真实验收、CI-WASM preview 与 Node 20 action 清零已
-完成；等待固定新候选并重跑唯一 WASM CI)
+状态:open(2026-07-30 全仓审查、真实验收、CI-WASM preview、Node 20 清零与 WASM
+供应链固定已完成；等待固定新候选并重跑唯一 WASM CI)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
 citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
@@ -661,3 +661,25 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 - 原 run `30589266930` 产生于 action 升级前，保留为审计证据但不用于正式创世。下一步
   必须基于本步提交固定新候选 tag，只重跑 `CitizenChain WASM`，取得无 Node 20 注解的
   成功 artifact 后重新执行 CI-WASM preview。
+
+## S7B-C2 WASM 构建供应链固定（2026-07-30，完成）
+
+- `CitizenChain WASM` runner 从可移动的 `ubuntu-latest` 收敛为明确
+  `ubuntu-24.04`；上一成功 run 实际也使用 Ubuntu 24.04，未改变目标平台。
+- `actions/checkout@v5` 固定为官方 `v5.1.0` commit
+  `fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09`。
+- `dtolnay/rust-toolchain@1.97.1` 经 GitHub API 查明实际是可移动的
+  `refs/heads/1.97.1`，已固定到当前生成提交
+  `46511b1c83438f0dd37c02d843619ece5a4abb5b`；该提交的 composite action 内容明确
+  `toolchain: 1.97.1`，targets/components 参数保持不变。
+- 构建前新增 `cargo metadata --locked --no-deps`，正式编译改为
+  `cargo build --locked --release -p citizenchain`；Cargo.lock 需要变动时失败关闭，
+  禁止 CI 临时解析未提交依赖。
+- GitHub Step Summary 新增固定环境证据：runner label/OS/arch/image 版本、checkout
+  与 Rust action SHA、Cargo.lock SHA-256、Rust/Cargo/Protobuf/Clang 完整版本。
+- `actionlint`、`git diff --check`、`cargo metadata --locked`、官方 checkout tag/SHA、
+  Rust 分支/SHA/硬编码 1.97.1 核验均通过；内嵌摘要脚本已在本机真实运行并输出完整
+  证据，临时摘要文件已移入 macOS 废纸篓。
+- 本步没有修改 runtime、业务代码或正式创世资产，没有推送或触发 CI。下一步必须把
+  本步提交固定为新的轻量候选 tag，只触发唯一 `CitizenChain WASM` 普通源码构建；
+  成功后精确下载新 run artifact 并重新执行非 finalize preview。

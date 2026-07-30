@@ -31,6 +31,11 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   `download-artifact v8.0.1`、`setup-node v7.0.0`、`setup-java v5.6.0` 和
   `setup-android v4.0.1` 均固定到官方 release commit；其余 JavaScript action 已逐项
   核验为 Node 24，Rust toolchain 与 Flutter action 为 composite。
+- 正式 WASM workflow 必须固定 `ubuntu-24.04` runner label、checkout 完整提交和
+  Rust 1.97.1 toolchain action 完整提交；不得使用 `ubuntu-latest`、可移动 checkout
+  大版本 tag 或上游 `refs/heads/1.97.1` 分支。Cargo 必须同时执行
+  `metadata --locked` 和 `build --locked`，并在 Step Summary 记录 runner image、
+  Rust/Cargo/Protobuf/Clang 版本、Cargo.lock SHA-256 与 action SHA。
 - 主要命中目录：
   - `citizenchain/runtime/**`
   - `.github/workflows/citizenchain-wasm.yml`

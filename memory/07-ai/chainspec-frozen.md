@@ -200,6 +200,14 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
   `setup-java v5.6.0` 和 `setup-android v4.0.1` 均固定到官方 release commit；
   `actionlint` 与全部外部 action 运行时核验通过。本次 run 产生于升级前，仍不得用于
   正式 `--finalize`；必须基于升级后的新提交重新生成候选 tag 并重跑唯一 WASM CI。
+- S7B-C2 进一步固定正式 WASM 供应链：runner 从 `ubuntu-latest` 改为
+  `ubuntu-24.04`；checkout 固定为官方 `v5.1.0` commit
+  `fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09`；上游实际为可移动分支的
+  `dtolnay/rust-toolchain@1.97.1` 固定为 commit
+  `46511b1c83438f0dd37c02d843619ece5a4abb5b`，该 action 内容继续硬编码 Rust 1.97.1。
+  workflow 现在同时执行 `cargo metadata --locked` 与 `cargo build --locked`，并记录
+  runner image、工具链/系统依赖版本、Cargo.lock SHA-256 和 action SHA。上述改动必须
+  随新候选 tag 重跑成功后，才能产生可用于正式冻结的新 CI artifact。
 
 ## 历史冻结锚点（2026-07-16，已被正式创世替代）
 
