@@ -96,18 +96,6 @@ jobs:
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
 
-      # WASM 是后续本地启动和桌面打包的基础产物,手动运行上传本次 CI 产物。
-      - name: 清理旧版 WASM artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/${{ github.repository }}/actions/artifacts" \
-            --jq '.artifacts[] | select(.name == "citizenchain-wasm") | .id' \
-          | while read -r id; do
-              echo "删除旧 artifact: $id"
-              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
-            done
-
       - name: 删除全部旧编译产物
         working-directory: citizenchain
         run: |
@@ -120,8 +108,41 @@ jobs:
           WASM_BUILD_FROM_SOURCE: "1"
         run: cargo build --release -p citizenchain
 
+      - name: 校验 WASM 产物并记录摘要
+        working-directory: citizenchain
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+
+          output_dir = Path("target/release/wbuild/citizenchain")
+          filenames = (
+              "citizenchain.wasm",
+              "citizenchain.compact.wasm",
+              "citizenchain.compact.compressed.wasm",
+          )
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          rows = []
+          for filename in filenames:
+              path = output_dir / filename
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(f"WASM 产物不存在或为空：{path}")
+              data = path.read_bytes()
+              digest = hashlib.blake2b(data, digest_size=32).hexdigest()
+              rows.append((filename, len(data), digest))
+
+          with summary.open("a", encoding="utf-8") as out:
+              out.write("\n## CitizenChain WASM 产物\n\n")
+              out.write("| 文件 | 字节数 | Blake2-256 |\n")
+              out.write("| --- | ---: | --- |\n")
+              for filename, size, digest in rows:
+                  out.write(f"| `{filename}` | {size} | `0x{digest}` |\n")
+          PY
+
+      # WASM 是正式创世和后续升级的安全输入；上传失败必须使整次运行失败。
+      # 历史 artifact 由 retention-days 自动过期，不得在新产物上传前删除审计证据。
       - name: 上传 WASM
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: citizenchain-wasm

@@ -1,6 +1,7 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(2026-07-30 第 5 步“OnChina 全链 CID 查询、注册局办理、finalized 投影”已完成；未创世、未推送，等待用户确认第 6 步技术方案)
+状态:open(2026-07-30 全仓审查、真实验收、源码 preview 与 WASM CI 证据链加固已完成；
+尚未正式创世、推送或触发 CI，等待候选 tag/WASM CI 步骤确认)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
 citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
@@ -576,6 +577,29 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
   chainspec/App/Cloudflare 资产，没有推送、CI、正式 `--finalize` 或部署。
 - 全量 debug 测试产生的 `citizenchain/target/debug/incremental/` 已整体移入 macOS
   废纸篓且可恢复；`target/debug/incremental` 与 `target/release/incremental` 均无跨次残留。
-- 下一步按既定顺序申请单独 GitHub 推送许可：把 `main` 的候选源码提交推送后，只运行
-  `CitizenChain WASM` CI。CI 成功并取得 artifact/run ID/head SHA 后，再输出正式
-  `--finalize` 技术方案并等待确认。
+- 下一步按既定顺序申请单独 GitHub 远端操作许可：把本地 `main` 当前提交固定为不可变
+  候选 tag，只推该 tag 而不移动 `origin/main`，然后手动运行 `CitizenChain WASM`
+  CI。CI 成功并取得 artifact/run ID/head SHA 后，先完成 CI-WASM preview 核验，再
+  输出正式 `--finalize` 技术方案并等待确认。
+
+## S7B-A WASM CI 正式创世证据链加固（2026-07-30，完成）
+
+- 审查发现原 workflow 在上传前删除全部同名历史 artifact，且上传步骤允许
+  `continue-on-error`；可能出现旧证据已删除、新产物上传失败、整次运行仍显示成功，
+  不满足正式创世必须使用 GitHub CI 成功 WASM 的要求。
+- workflow 已改为上传失败即失败关闭；构建后逐一核验原始、compact 和 compressed
+  三个 WASM 存在且非空，并把字节数和 Blake2-256 写入 GitHub Step Summary。历史
+  artifact 不再主动删除，只按 30 天 retention 自动过期。
+- `download-wasm.sh` 不再查询“最新成功”运行，强制传入 run ID、40 位 head SHA 和
+  候选 tag；下载前确认远端轻量 tag 直接指向预期提交，并核对 workflow 名称、`workflow_dispatch`、`completed/success`、
+  head SHA、ref 与唯一未过期 artifact。产物先下载到系统临时目录，三个预期 WASM
+  完整且数量精确后才替换 `target/wasm-ci/`。
+- `actionlint`、`shellcheck`、Bash 语法、diff 空白检查均通过；使用历史成功 run 配置
+  错误候选 tag 的失败关闭测试在下载前正确拒绝，未改动已有本地 WASM。
+- 正式创世唯一允许使用候选 tag 上本次 GitHub Actions 成功运行产出的
+  `citizenchain.compact.compressed.wasm`；本地源码 WASM 只作预检，不得作为
+  `--finalize` 输入。
+- 下一步另行申请远端操作许可：只推不可变候选 tag，不移动 `origin/main`，避免提前
+  触发其它软件 CI；随后以 `runtime_upgrade=false` 且不提供目标链参数，手动运行
+  `CitizenChain WASM`。取得精确 run ID、artifact ID、head SHA 和三个 WASM 摘要后，
+  先使用该 CI WASM 生成非 finalize preview 并核对，再提出正式冻结方案。

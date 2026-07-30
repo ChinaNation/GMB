@@ -46,9 +46,14 @@
 
 ## 正式创世流程
 
-1. GitHub `CitizenChain WASM` CI 成功后，下载同一提交的
-   `citizenchain.compact.compressed.wasm`。
-2. 执行：
+1. 把已审查的 `main` 提交固定为直接指向该提交的轻量候选 tag；只推送该 tag，不提前移动远端
+   `main`，避免误触发其它软件 CI。以该 tag 手动执行 GitHub `CitizenChain WASM`
+   普通源码构建，且运行必须成功。
+2. 使用 `citizenchain/scripts/download-wasm.sh` 明确传入本次运行的 run ID、40 位
+   head SHA 和候选 tag；脚本先确认远端 `refs/tags/<候选名>` 直接指向该提交，再核对
+   workflow、`workflow_dispatch` 事件、完成状态、conclusion、head SHA、ref 和唯一未过期 artifact 后，下载同一运行的
+   `citizenchain.compact.compressed.wasm`。禁止选择“最新成功”运行。
+3. 执行：
 
    ```bash
    citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> \
@@ -56,7 +61,7 @@
      --wasm-ci-head-sha <HEAD_SHA>
    ```
 
-3. 脚本必须完成：
+4. 脚本必须完成：
    - 导出 fresh plain spec。
    - 启动临时节点物化块 0。
    - 通过 `check-constitution-genesis.py --rpc --expect-code-file <CI_WASM>`。
@@ -67,13 +72,13 @@
    - 同步并校验 Cloudflare 各环境的 genesis/state root。
    - 导出 `target/chainspec/genesis-state/manifest.json` 和
      `target/chainspec/genesis-state/chains/citizenchain/db`。
-4. 打包前执行 `citizenchain/scripts/prepack.sh` 或 `prepack.ps1`，把
+5. 打包前执行 `citizenchain/scripts/prepack.sh` 或 `prepack.ps1`，把
    `genesis-state/` 放进 Tauri resources。
-5. 节点首启时优先复制内置创世状态包；没有该包时，只允许开发/排障场景回退到
+6. 节点首启时优先复制内置创世状态包；没有该包时，只允许开发/排障场景回退到
    GenesisBuilder 本地物化。
-6. `CitizenChain` 软件 CI 只能消费已冻结且 `artifact_stage=release` 的状态包；preview
+7. `CitizenChain` 软件 CI 只能消费已冻结且 `artifact_stage=release` 的状态包；preview
    清单、缺失 CI provenance 或与仓库 plain spec hash 不一致时打包必须失败。
-7. 无头服务器下载对应平台软件，停服务安装后保留节点身份密钥和 GRANDPA keystore；
+8. 无头服务器下载对应平台软件，停服务安装后保留节点身份密钥和 GRANDPA keystore；
    新数据目录由安装包内 release 状态包初始化，既有链数据库不得被覆盖。
 
 ## 当前唯一正式创世锚点（2026-07-26）
@@ -132,9 +137,16 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
   `artifact_stage=preview`，CI run/SHA 均为空；没有执行 `--finalize`，没有覆盖当前正式
   锚点，没有推送或触发 CI。隔离节点已停止，RPC 19945 已关闭；仓库外临时目录已移入
   macOS 废纸篓，可恢复。
-- 下一步必须先取得 GitHub 推送许可，将候选源码提交推送到远端 `main` 并只触发
-  `CitizenChain WASM` CI；成功后下载该提交的 CI WASM，以 run ID 和 head SHA 执行
-  release `--finalize`。CI WASM 与本地 preview 哈希或创世结果不一致时必须停止。
+- S7B-A 已把 WASM workflow 改为上传失败即整次运行失败；三个 WASM 文件上传前必须
+  存在、非空并把大小与 Blake2-256 写入 CI Summary。历史 artifact 不再在新上传前
+  删除，由 30 天 retention 自动过期，避免“旧证据已删、新上传失败但 CI 仍成功”。
+- 下载入口必须钉死 run ID、head SHA 和远端轻量候选 tag，并确认 tag 直接指向预期提交，
+  然后在系统临时目录完整核验三个 WASM
+  后才替换本地忽略目录 `citizenchain/target/wasm-ci/`。下一步须另获远端操作许可，
+  只推不可变候选 tag，不移动 `origin/main`；然后在该 tag 上手动执行唯一
+  `CitizenChain WASM` CI。CI 成功后使用该次运行的
+  `citizenchain.compact.compressed.wasm` 生成 CI-WASM preview；它与本地源码 preview
+  的 runtime 代码或创世结果不一致时必须停止，不能执行 release `--finalize`。
 
 ## 历史冻结锚点（2026-07-16，已被正式创世替代）
 
