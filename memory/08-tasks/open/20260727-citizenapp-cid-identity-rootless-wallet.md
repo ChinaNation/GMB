@@ -1,7 +1,7 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(2026-07-30 全仓审查、真实验收、CI-WASM preview 已完成；正式冻结前需清理
-GitHub artifact action 的 Node 20 弃用注解并重跑唯一 WASM CI)
+状态:open(2026-07-30 全仓审查、真实验收、CI-WASM preview 与 Node 20 action 清零已
+完成；等待固定新候选并重跑唯一 WASM CI)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
 citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
@@ -635,3 +635,29 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
   runner 强制改用 Node 24。本次 artifact 完整且运行成功，但为满足“没有问题后再正式
   创世”，必须先升级到官方当前原生 Node 24 版本、重新固定候选 tag 并重跑唯一 WASM
   CI。当前 run 不用于正式 `--finalize`。
+
+## S7B-C1 GitHub Actions Node 20 全仓清零（2026-07-30，完成）
+
+- 全仓共更新 11 处 Node 20 action 引用：
+  - 5 处 `upload-artifact` 固定到官方 `v7.0.1` commit
+    `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`
+  - 1 处 `download-artifact` 固定到官方 `v8.0.1` commit
+    `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c`
+  - 3 处 `setup-node` 固定到官方 `v7.0.0` commit
+    `820762786026740c76f36085b0efc47a31fe5020`
+  - 1 处 `setup-java` 固定到官方 `v5.6.0` commit
+    `03ad4de0992f5dab5e18fcb136590ce7c4a0ac95`
+  - 1 处 `setup-android` 固定到官方 `v4.0.1` commit
+    `40fd30fb8d7440372e1316f5d1809ec01dcd3699`
+- 每个 SHA 都通过 GitHub API 与对应官方 release tag 反向核验，`action.yml` 均明确
+  `using: node24`。`setup-android v4` 的默认 cmdline-tools 20.0 与现有无自定义参数
+  用法兼容，CitizenApp 后续仍显式安装 Android Platform 36。
+- 其余外部 action 逐项检查：`checkout@v5`、`setup-node@v5` 和
+  `Swatinem/rust-cache@v2` 已是 Node 24；`dtolnay/rust-toolchain@1.97.1` 与
+  `subosito/flutter-action@v2` 是 composite。全仓没有 Node 20 action 残留。
+- 全部 workflow `actionlint`、固定引用数量断言、官方 tag/SHA/runtime 反向核验和
+  `git diff --check` 通过。本步没有修改 runtime、业务代码或正式创世资产，没有推送或
+  触发 CI。
+- 原 run `30589266930` 产生于 action 升级前，保留为审计证据但不用于正式创世。下一步
+  必须基于本步提交固定新候选 tag，只重跑 `CitizenChain WASM`，取得无 Node 20 注解的
+  成功 artifact 后重新执行 CI-WASM preview。

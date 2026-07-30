@@ -11,6 +11,10 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 - 安全门禁与 Claude 审查属于跨模块能力，继续对 PR 全局生效
 - `push` / `pull_request` 自动触发的 workflow 只允许执行 CI 校验、编译、测试和检查构建,不得访问服务器、不得发布 GitHub Release、不得部署、不得读取部署 SSH 密钥或正式签名密钥
 - 只有 GitHub 页面手动 `Run workflow`(`workflow_dispatch`) 才允许进入正式发布链路,包括 `GMB_APP_KEY`、`GMB_TOP_KEY / GMB_TOP_PUBKEY`、`GMB_SSH_KEY`、GitHub Release 发布、正式安装包上传和旧发布产物清理
+- 全仓外部 JavaScript action 必须使用 Node 24；涉及产物上传/下载和本次 Node 20
+  升级的 action 必须固定到经官方 release tag 反向核验的完整提交 SHA。既有 Node 24
+  大版本 tag 是否需要固定，由正式产物供应链审查单独决定；Composite action 不受 Node
+  运行时约束，但仍须在使用前核对来源与版本。
 
 ## 2. citizenchain 当前规则
 
@@ -23,6 +27,10 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 - 正式创世普通源码构建必须运行在不可变候选 tag；为保持“WASM CI → 正式冻结 → 其它软件 CI”的顺序，只推该 tag，不提前移动远端 `main`。仓库现有 push workflow 均只监听 `main`，tag 推送本身不得自动触发其它软件 CI。
 - WASM 上传前必须校验三个产物存在且非空，并把大小和 Blake2-256 写入 CI Summary；上传失败必须使运行失败。历史 artifact 由 retention 自动过期，不得在新上传前删除审计证据。
 - 正式创世下载必须通过 `download-wasm.sh --run-id ... --head-sha ... --ref ...` 钉死成功运行、提交和候选 tag，并确认远端轻量 tag 直接指向预期提交；禁止按“最新成功”选择 artifact。
+- 2026-07-30 已清理全仓 action 的 Node 20 残留：`upload-artifact v7.0.1`、
+  `download-artifact v8.0.1`、`setup-node v7.0.0`、`setup-java v5.6.0` 和
+  `setup-android v4.0.1` 均固定到官方 release commit；其余 JavaScript action 已逐项
+  核验为 Node 24，Rust toolchain 与 Flutter action 为 composite。
 - 主要命中目录：
   - `citizenchain/runtime/**`
   - `.github/workflows/citizenchain-wasm.yml`

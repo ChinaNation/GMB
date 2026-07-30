@@ -195,9 +195,11 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
   99,232 个账户、基金会 1 个机构 / 2 个账户，总计 49,594 个机构 / 99,234 个账户。
   节点已经停止，RPC 19945 已关闭，验收目录已移入 macOS 废纸篓。
 - 本次 workflow 唯一注解指出 `actions/upload-artifact@v4` 仍声明 Node 20，GitHub
-  runner 强制以 Node 24 运行。官方当前 `v7.0.1` 已原生使用 Node 24；正式冻结前必须
-  先升级 action、重新生成候选 tag 并重跑唯一 WASM CI，不能直接拿本次有弃用注解的
-  run 执行 `--finalize`。
+  runner 强制以 Node 24 运行。S7B-C1 已在本地把全仓 Node 20 action 清零：
+  `upload-artifact v7.0.1`、`download-artifact v8.0.1`、`setup-node v7.0.0`、
+  `setup-java v5.6.0` 和 `setup-android v4.0.1` 均固定到官方 release commit；
+  `actionlint` 与全部外部 action 运行时核验通过。本次 run 产生于升级前，仍不得用于
+  正式 `--finalize`；必须基于升级后的新提交重新生成候选 tag 并重跑唯一 WASM CI。
 
 ## 历史冻结锚点（2026-07-16，已被正式创世替代）
 
