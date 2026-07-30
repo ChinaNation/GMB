@@ -108,7 +108,7 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
 均为 block #6、`isSyncing=false`。正式创世已经完成，不得再次执行 `--finalize` 覆盖上述
 锚点；后续 runtime 升级只能通过正式链 `system.setCode`，除非用户另行明确批准正式硬分叉。
 
-## S7A 重新创世 preview 候选（2026-07-30，当前候选、尚未正式冻结）
+## S7A 重新创世源码 preview（2026-07-30，已被 CI-WASM preview 取代）
 
 - 候选源码提交：
   `450e47af19851b9176a5e8bda128aba455bda482`。该提交已经完成创世前全仓扩展审查、
@@ -145,8 +145,59 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
   后才替换本地忽略目录 `citizenchain/target/wasm-ci/`。下一步须另获远端操作许可，
   只推不可变候选 tag，不移动 `origin/main`；然后在该 tag 上手动执行唯一
   `CitizenChain WASM` CI。CI 成功后使用该次运行的
-  `citizenchain.compact.compressed.wasm` 生成 CI-WASM preview；它与本地源码 preview
-  的 runtime 代码或创世结果不一致时必须停止，不能执行 release `--finalize`。
+  `citizenchain.compact.compressed.wasm` 生成 CI-WASM preview。CI 与本机源码 WASM
+  字节或创世结果不一致时必须先停止并核对提交、锁文件、工具链、runtime 版本和 API，
+  不能直接执行 release `--finalize`。
+
+## S7B-B GitHub CI-WASM preview（2026-07-30，当前候选、尚未正式冻结）
+
+- 轻量候选 tag：
+  `genesis-wasm-candidate-20260730-b77ca3c1`，直接指向提交
+  `b77ca3c1ce7e12fe9df87e15a29444f7650bff7c`；只推送了该 tag，
+  `origin/main` 未移动，未触发任何自动 workflow。
+- 手动普通源码构建：
+  - workflow：`CitizenChain WASM`
+  - run ID：`30589266930`
+  - job ID：`91027744279`
+  - artifact ID：`8777906747`
+  - `runtime_upgrade=false`，未携带升级链版本或创世哈希
+  - run、编译、摘要校验和 artifact 上传全部成功，耗时 9 分 39 秒
+- GitHub artifact 精确包含三个非空 WASM：
+  - `citizenchain.wasm`：6,860,169 字节，
+    SHA-256 `0d1c2fb5dc4c3f7d1486a10f6efb4ed84de03c4eca2b66a6b604df7fd666cf51`，
+    Blake2-256 `ed3a7a448d6946c008ee6cafcfbaf3e66427e6741cfc97ab3db5e9909586b814`
+  - `citizenchain.compact.wasm`：6,581,358 字节，
+    SHA-256 `74c3553b5cbcbda3c7e055145b01e826f1d160ce62bc0e88441bf5b67e52d035`，
+    Blake2-256 `e772daba5ee2280408a17be3460c9fd12fae421bb3b193e059590487826a21d2`
+  - `citizenchain.compact.compressed.wasm`：1,162,535 字节，
+    SHA-256 `eecd43eb87815e2fe7601ef02856717b3ba7a1204f59998321887a3388fa4e91`，
+    Blake2-256 `8d92e92ccd52693bce9ae915bae74600d58f6581d8e800396ef9bcfbf0b5f93e`
+- 本机与 CI 使用同一提交、同一 `Cargo.lock` 和 Rust 1.97.1；macOS ARM 与 Ubuntu
+  runner 产出的 WASM 函数/类型排列和调试名称布局不同，但 `runtime_version`、
+  `runtime_apis`、producer 和 target features 完全一致。已按门禁停止核对，最终确认
+  GitHub CI compressed WASM 才是正式创世唯一权威输入，本机 WASM 不再参与冻结。
+- 使用上述 CI compressed WASM 执行非 finalize preview：
+  - `genesis_hash`：
+    `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`
+  - `state_root`：
+    `0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`
+  - `chainspec_hash`：
+    `df2e5a28d99084ec5bcbed28db21ec3eecacbf364b421ce1fb47628c897387fe`
+  - `light_sync_state_hash`：
+    `a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`
+  - `public_institution_root`：
+    `c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`
+- manifest 为 `artifact_stage=preview`，精确记录上述 run ID/head SHA；`:code`
+  1,162,535 字节并与 CI compressed WASM 逐字节一致。块 0 物化耗时 131 秒，宪法、
+  白名单、节点/App/checkpoint/43 个公权分片/Cloudflare 交叉检查全部通过。
+- 隔离节点复制该 genesis-state 后真实启动；RPC 返回 0 peers、`isSyncing=false`、
+  runtime `specVersion=0`，块 0 哈希和状态根与候选一致。逐页统计公权 49,593 个机构 /
+  99,232 个账户、基金会 1 个机构 / 2 个账户，总计 49,594 个机构 / 99,234 个账户。
+  节点已经停止，RPC 19945 已关闭，验收目录已移入 macOS 废纸篓。
+- 本次 workflow 唯一注解指出 `actions/upload-artifact@v4` 仍声明 Node 20，GitHub
+  runner 强制以 Node 24 运行。官方当前 `v7.0.1` 已原生使用 Node 24；正式冻结前必须
+  先升级 action、重新生成候选 tag 并重跑唯一 WASM CI，不能直接拿本次有弃用注解的
+  run 执行 `--finalize`。
 
 ## 历史冻结锚点（2026-07-16，已被正式创世替代）
 

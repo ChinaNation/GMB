@@ -1,7 +1,7 @@
 # citizenapp CID 身份层 + 无根多账户钱包(全量跨模块)
 
-状态:open(2026-07-30 全仓审查、真实验收、源码 preview 与 WASM CI 证据链加固已完成；
-尚未正式创世、推送或触发 CI，等待候选 tag/WASM CI 步骤确认)
+状态:open(2026-07-30 全仓审查、真实验收、CI-WASM preview 已完成；正式冻结前需清理
+GitHub artifact action 的 Node 20 弃用注解并重跑唯一 WASM CI)
 所属模块:Chain(citizenchain runtime)+ OnChina(注册局)+ Mobile(citizenapp);
 citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本地静止态加密属于独立任务
 关联/推翻:
@@ -603,3 +603,35 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
   触发其它软件 CI；随后以 `runtime_upgrade=false` 且不提供目标链参数，手动运行
   `CitizenChain WASM`。取得精确 run ID、artifact ID、head SHA 和三个 WASM 摘要后，
   先使用该 CI WASM 生成非 finalize preview 并核对，再提出正式冻结方案。
+
+## S7B-B 唯一 WASM CI 与 CI-WASM preview（2026-07-30，完成但存在前置清理项）
+
+- 轻量 tag `genesis-wasm-candidate-20260730-b77ca3c1` 已只身推送，直接指向
+  `b77ca3c1ce7e12fe9df87e15a29444f7650bff7c`；`origin/main` 未移动，tag 推送没有
+  触发任何自动 workflow。
+- 只手动运行一次 `CitizenChain WASM` 普通源码构建：run `30589266930`、job
+  `91027744279`、artifact `8777906747`；来源 tag/head SHA 精确匹配，
+  `runtime_upgrade=false` 且没有升级链参数。编译、三文件摘要校验和上传全部成功，
+  耗时 9 分 39 秒，没有运行其它软件 CI、发布或部署。
+- 加固下载脚本核对远端 tag、workflow、event、status/conclusion、head SHA/ref 和唯一
+  artifact 后下载成功。正式候选 compressed WASM 为 1,162,535 字节，
+  SHA-256 `eecd43eb87815e2fe7601ef02856717b3ba7a1204f59998321887a3388fa4e91`，
+  Blake2-256 `8d92e92ccd52693bce9ae915bae74600d58f6581d8e800396ef9bcfbf0b5f93e`。
+- 同提交、同锁文件、同 Rust 1.97.1 的 macOS ARM 与 Ubuntu WASM 字节因函数/类型排列
+  和调试名称布局不同；`runtime_version`、全部 runtime API、producer 和 target
+  features 一致。按门禁停止核对后，继续只以 GitHub CI compressed WASM 为权威输入。
+- CI-WASM 非 finalize preview：
+  - `genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`
+  - `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`
+  - `chainspec_hash=df2e5a28d99084ec5bcbed28db21ec3eecacbf364b421ce1fb47628c897387fe`
+  - `light_sync_state_hash=a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`
+  - `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`
+- `:code` 与 CI compressed WASM 逐字节一致；宪法、43 个公权分片、状态包白名单及
+  节点/App/checkpoint/Cloudflare 交叉校验通过。隔离节点真实 RPC 返回 0 peers、
+  `isSyncing=false`、`specVersion=0`；公权 49,593 个机构 / 99,232 个账户，基金会
+  1 个机构 / 2 个账户，全创世总计 49,594 个机构 / 99,234 个账户。节点已停止，
+  19945 已关闭，临时验收目录已移入 macOS 废纸篓。
+- 唯一残留：GitHub 注解显示 `actions/upload-artifact@v4` 仍声明 Node 20，只是被
+  runner 强制改用 Node 24。本次 artifact 完整且运行成功，但为满足“没有问题后再正式
+  创世”，必须先升级到官方当前原生 Node 24 版本、重新固定候选 tag 并重跑唯一 WASM
+  CI。当前 run 不用于正式 `--finalize`。
