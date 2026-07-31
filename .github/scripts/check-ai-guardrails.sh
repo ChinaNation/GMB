@@ -3,22 +3,9 @@ set -euo pipefail
 
 base_ref="${BASE_REF:-origin/main}"
 
-# push 事件传入的是上一次推送的 commit SHA。首次推送、强推或新建分支时
-# GitHub 会给出全 0 SHA，此时没有可比基线，退回与父提交对比。
-if [[ "${base_ref}" =~ ^0{40}$ || -z "${base_ref}" ]]; then
-  base_ref="HEAD~1"
-fi
-
 if ! git rev-parse --verify "${base_ref}" >/dev/null 2>&1; then
-  # 只有 origin/<branch> 形态才能靠 fetch 补齐；裸 SHA 取不到时退回父提交，
-  # 不能让门禁因为取不到基线而静默跳过。
-  if [[ "${base_ref}" == origin/* ]]; then
-    branch="${base_ref#origin/}"
-    git fetch origin "${branch}" --depth=1
-  else
-    echo "[guardrails] 基线 ${base_ref} 不可用，退回 HEAD~1 对比" >&2
-    base_ref="HEAD~1"
-  fi
+  branch="${base_ref#origin/}"
+  git fetch origin "${branch}" --depth=1
 fi
 
 merge_base="$(git merge-base HEAD "${base_ref}")"
@@ -166,15 +153,6 @@ check_chinese_comment_gate() {
   local added_lines
   local added_count
 
-  # 中文注释：自动生成物豁免。Substrate benchmark CLI 产出的 weights.rs 由
-  # citizenchain/scripts/benchmark-weight-template.hbs 逐行渲染，人手写进去的注释
-  # 下次重跑 benchmark 就会被覆盖。对它们要求「新增中文注释」是必然误报，
-  # 会训练人去绕过整道门禁，故按文件头的 AUTO-GENERATED 标记精确跳过；
-  # 只跳过本条中文注释检查，其它检查（残留标记、协议标识等）照常生效。
-  if [[ -f "$file" ]] && head -5 "$file" | grep -q 'THIS FILE WAS AUTO-GENERATED'; then
-    return 0
-  fi
-
   # 中文注释：统一使用 ERE 匹配字面加号，兼容 macOS BSD grep 与 GNU grep。
   added_lines="$(git diff --unified=0 "${diff_target}" -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
 
@@ -189,19 +167,6 @@ check_chinese_comment_gate() {
   fi
 
   if printf '%s\n' "$added_lines" | grep -Eq "$chinese_comment_regex"; then
-    return 0
-  fi
-
-  # 中文注释：纯格式化豁免。`cargo fmt` 重排缩进/换行会把同一段代码整块记成
-  # 「新增 N 行」，但一个字符的逻辑都没改，要求为它补新注释是必然误报。
-  # 判据：把新增块与删除块各自去掉全部空白后逐字节比较，完全相等即判定为
-  # 纯格式化。rustfmt 只动空白与换行，故相等就意味着逻辑零变化；
-  # 若它顺带增删了尾逗号导致不相等，则退回照常拦截（fail-closed，不放过真改动）。
-  local removed_lines added_squashed removed_squashed
-  removed_lines="$(git diff --unified=0 "${diff_target}" -- "$file" | grep -E '^-' | grep -vE '^---' || true)"
-  added_squashed="$(printf '%s\n' "$added_lines" | sed 's/^+//' | tr -d '[:space:]')"
-  removed_squashed="$(printf '%s\n' "$removed_lines" | sed 's/^-//' | tr -d '[:space:]')"
-  if [[ -n "$removed_squashed" && "$added_squashed" == "$removed_squashed" ]]; then
     return 0
   fi
 
