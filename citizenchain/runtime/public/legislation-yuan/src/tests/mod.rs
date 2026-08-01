@@ -338,21 +338,34 @@ pub fn article(number: u32, body: &[u8]) -> Article<Test> {
     }
 }
 
-/// 把若干条包成「1 章 1 节」的法律全文(测试用)。
-pub fn chapters_of(articles: Vec<Article<Test>>) -> ChaptersOf<Test> {
-    let section = Section::<Test> {
-        number: 1,
-        title: title("第一节".as_bytes()),
+/// 构造指定节号及其条文，供宪法三层编号唯一性测试复用。
+pub fn section(number: u32, articles: Vec<Article<Test>>) -> Section<Test> {
+    Section::<Test> {
+        number,
+        title: title(format!("第{number}节").as_bytes()),
         title_en: None,
         articles: BoundedVec::try_from(articles).expect("articles within bound"),
-    };
-    let chapter = Chapter::<Test> {
-        number: 1,
-        title: title("第一章".as_bytes()),
+    }
+}
+
+/// 构造指定章号及其各节，供宪法三层编号唯一性测试复用。
+pub fn chapter(number: u32, sections: Vec<Section<Test>>) -> Chapter<Test> {
+    Chapter::<Test> {
+        number,
+        title: title(format!("第{number}章").as_bytes()),
         title_en: None,
-        sections: BoundedVec::try_from(vec![section]).expect("sections within bound"),
-    };
-    BoundedVec::try_from(vec![chapter]).expect("chapters within bound")
+        sections: BoundedVec::try_from(sections).expect("sections within bound"),
+    }
+}
+
+/// 构造任意章结构的有界宪法全文。
+pub fn structured_chapters(chapters: Vec<Chapter<Test>>) -> ChaptersOf<Test> {
+    BoundedVec::try_from(chapters).expect("chapters within bound")
+}
+
+/// 把若干条包成「1 章 1 节」的法律全文(测试用)。
+pub fn chapters_of(articles: Vec<Article<Test>>) -> ChaptersOf<Test> {
+    structured_chapters(vec![chapter(1, vec![section(1, articles)])])
 }
 
 /// 构造两章宪法:核心章(第一章总则)+ 一般章(第二章),供第十九条章→档位测试。

@@ -8,7 +8,7 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 - 改哪个模块，就优先只跑哪个模块
 - 共享依赖变更时，允许多模块联动触发
-- 安全门禁与 Claude 审查属于跨模块能力，继续对 PR 全局生效
+- 文档、残留和 pallet 注册表门禁属于跨模块能力，作为 `citizenchain-ci.yml` 内部 job 对 PR 全局生效
 - `push` / `pull_request` 自动触发的 workflow 只允许执行 CI 校验、编译、测试和检查构建,不得访问服务器、不得发布 GitHub Release、不得部署、不得读取部署 SSH 密钥或正式签名密钥
 - 只有 GitHub 页面手动 `Run workflow`(`workflow_dispatch`) 才允许进入正式发布链路,包括 `GMB_APP_KEY`、`GMB_TOP_KEY / GMB_TOP_PUBKEY`、`GMB_SSH_KEY`、GitHub Release 发布、正式安装包上传和旧发布产物清理
 - 全仓外部 JavaScript action 必须使用 Node 24；涉及产物上传/下载和本次 Node 20
@@ -40,18 +40,21 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - `citizenchain/runtime/**`
   - `.github/workflows/citizenchain-wasm.yml`
 
-### 2.2 node 桌面安装包
+### 2.2 CitizenChain 全工程与桌面安装包
 
-- workflow：`.github/workflows/citizenchain.yml`
-- 主要命中目录：
-  - `push main` 只构建并上传 4 个用户安装包 artifact,不读取 Tauri updater 签名密钥,不发布 GitHub Release,不生成客户端更新通知,不部署服务器
+- workflow：`.github/workflows/citizenchain-ci.yml`
+- 主要规则：
+  - 所有 PR 运行文档/残留/pallet 注册表门禁；纯文档 PR 不运行链编译与桌面打包。
+  - `citizenchain/**`、`primitives/**` 或共享 Cargo 变更先执行启动协议、pallet 注册表、宪法 SCALE 自检、全 Rust workspace fmt/check/test/clippy、OnChina 前端和节点前端构建。
+  - 全工程验证成功后，由同一 workflow matrix 构建并上传 4 个用户安装包 artifact。
+  - `push main` 和 `mode=ci` 不读取 Tauri updater 签名密钥，不发布 GitHub Release，不生成客户端更新通知，不部署服务器。
   - GitHub 页面手动 `Run workflow` 才进入正式发布路径：构建同样 4 个用户安装包，使用 `GMB_TOP_KEY / GMB_TOP_PUBKEY` 生成 updater 签名产物，发布 GitHub Release，更新 `citizenchain-latest.json`，使用 `GMB_SSH_KEY` 部署 Linux 服务器
   - 单个 workflow 通过 matrix 同时构建 macOS Apple / Windows / Linux amd / Linux arm，四个安装包使用同一个桌面端版本号（macOS 仅保留 ARM，不再构建 Intel）
   - 四个用户安装包名称固定为：
-    - `公民链-macOS-apple.dmg`
-    - `公民链-Windows.exe`
-    - `公民链-Linux-amd.deb`
-    - `公民链-Linux-arm.deb`
+    - `公民链.dmg`
+    - `公民链.exe`
+    - `公民链AMD.deb`
+    - `公民链ARM.deb`
   - 暂时不做 macOS / Windows / Linux 系统级签名；Tauri updater 签名不属于系统安装包签名，手动正式发布时必须继续保留
   - 自动更新、GitHub Release、Linux 服务器部署属于正式发布链路，不允许因为统一 4 个用户安装包而删除
   - 三端安装包不下载、不内置最新 `citizenchain-wasm` artifact；现有链运行 runtime 以链上 `System.set_code` 为准
@@ -59,10 +62,7 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - 手动发布成功后上传 4 个用户安装包、updater 内部资产、updater 签名产物与 `citizenchain-latest.json` 到 GitHub Release，供桌面端点击更新链路使用
   - 桌面端启动检查到可用 updater 后，顶部 `设置` tab 显示红点；红点只读取 Tauri updater 状态，不另建已读/未读状态
   - Linux 服务器部署只允许通过本机 `citizenconsole/` 控制台选择一个权威节点，并使用当前提交最新成功 CI 的 `公民链-Linux-amd.deb`；节点 IP、身份私钥、GRANDPA 私钥和 SSH 私钥来自该节点独立 Keychain 项，不允许恢复 GitHub workflow 固定 IP 批量部署。
-- 代码目录：
-  - `citizenchain/node/**`
-  - `citizenchain/node/frontend/**`
-  - `citizenchain/node/src/<功能名>/**`
+- 代码边界：`citizenchain/**`、`primitives/**`、根 Cargo 真源及对应检查脚本。
 
 ## 3. 其他模块的分流方向
 
@@ -74,7 +74,8 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - 手动发布跟随公民链发布边界，不构建独立身份系统安装包
 - `citizenapp`
   - CI：`.github/workflows/citizenapp-ci.yml`
-  - `push` / `pull_request`:只构建 Debug APK 做工程检查,不读取 release keystore
+  - `push` / `pull_request`:同时执行 Flutter analyze/test、Cloudflare 类型与测试、全新本地 D1 schema 和 Debug APK 检查，不读取 release keystore
+  - Cloudflare 属于 CitizenApp 同一条 CI，禁止新建独立 workflow
   - 手动 `Run workflow`:读取 `GMB_APP_KEY`,构建正式签名 `公民.apk`,发布 Android 更新 Release
 - `citizenwallet`
   - CI：`.github/workflows/citizenwallet-ci.yml`
@@ -89,8 +90,7 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 因此：
 
-- 全局门禁继续保留
-- Claude 审查继续保留
-- 模块级构建和测试按目录精确触发
-- 共享 Rust 根目录变更允许触发多个 citizenchain workflow
+- 全仓严格只保留 CitizenChain、CitizenChain WASM、CitizenApp、CitizenWallet 四个 workflow
+- 全局 PR 门禁继续保留，但作为 CitizenChain workflow 的内部 job，不再独立占用第五条流水线
+- 模块级构建和测试按目录精确触发，CitizenChain 本身保持全 workspace 覆盖
 - push 自动 CI 与手动发布部署必须保持密钥边界隔离

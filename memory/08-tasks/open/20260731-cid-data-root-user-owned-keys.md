@@ -160,13 +160,52 @@
 
 ### 第四步：创世前全仓最终审计与冻结候选确认
 
-状态：pending（必须先输出技术方案并取得确认）
+状态：in progress（CI、宪法三层编号和 OnChina 管理员换绑接管已完成；等待下一项方案确认）
 
 - 只读复核 CID 唯一身份、当前 `account_id` 控制、双签交接、奖励双重防重、投票/竞选、
   机构管理员、宪法编号唯一性、数据加密边界和 Substrate 官方命名是否仍有漏洞或残留。
-- 当前实际存在四条产品 CI 和单独的 `ai-guardrails.yml`，合计五个 workflow 文件；按用户
-  “只保留四条流水线”口径复核并把守卫合并进四条产品 CI，官网继续不使用 CI，CitizenApp
-  与 Cloudflare 共用同一条 CI，CitizenChain CI 覆盖完整链工程，最终不保留第五条流水线。
+- 已删除单独 `ai-guardrails.yml`，目前严格只有 `citizenchain-ci.yml`、
+  `citizenchain-wasm.yml`、`citizenapp-ci.yml`、`citizenwallet-ci.yml` 四个 workflow；官网无 CI。
+- AI Guardrails 和 pallet 注册表检查已并入 CitizenChain PR job；CitizenChain 变更还会执行
+  全 Rust workspace fmt/check/test/clippy、宪法 SCALE 自检、OnChina 前端和节点前端构建，
+  成功后才进入四平台桌面端 matrix。
+- Cloudflare 已并入 CitizenApp CI，覆盖绑定类型时效、TypeScript、Vitest 和全新本地
+  D1 schema；同时清理 npm script 中过期的 `citizenapp-square-db` 本地名，统一使用
+  Wrangler 绑定 `DB`。
+- 本地验收：四个 workflow 数量精确；`actionlint`、YAML、启动协议、pallet 注册表、
+  宪法 SCALE 自检通过；Cloudflare 32 个测试文件/220 项通过，全新临时 D1 的
+  60 条 schema 命令全部成功。
+- CitizenChain 新 CI 命令已真实执行：两个前端 build、`cargo fmt --all -- --check`、
+  `cargo check --workspace --all-targets --locked` 和
+  `cargo test --workspace --all-targets --locked` 全部通过。Clippy 曾拦下
+  `runtime/misc/citizen-identity/src/tests/mod.rs` 第 49、420 行的两处冗余字段初始化；
+  用户完成本项 runtime 二次确认后已统一改为 Rust 字段简写，不改变逻辑、SCALE、字段顺序、
+  权限或安全模型。`citizen-identity` 70 项测试通过，随后
+  `cargo clippy --workspace --all-targets -- -D warnings` 全量退出 0，原 CI 阻断已消除。
+- 宪法三层编号唯一性已在用户确认和 runtime 二次确认后完成：章号全文唯一、同章节号唯一、
+  条号全文唯一；不同章允许复用节号，不要求编号连续或从 1 开始。runtime 在创世、修宪提案、
+  投票结果最终写入三层失败关闭，原生 ConstitutionGuard 和 Python 创世检查执行相同口径；
+  未修改 `constitution.scale`、冻结 chainspec 或任何创世数据。
+- 本项验收：`legislation-yuan` 45 项、`core::constitution` 47 项及稳定源码下全 Rust workspace
+  测试全部通过；全 workspace check/Clippy、宪法 SCALE 自检、pallet 注册表和 AI
+  启动协议通过。`citizen-identity` 两处冗余字段初始化已在独立 runtime 二次确认后修复，
+  全 workspace、全部 target、`-D warnings` 的严格 Clippy 当前通过。
+  冻结主网 chainspec 使用其内嵌 GitHub CI WASM 在全新 `--tmp` 目录真实启动，节点守卫自检通过，
+  RPC 返回创世哈希 `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`
+  且 `isSyncing=false`；钉住 block#0 的宪法创世检查通过。未推送、未触发 CI、未部署、未创世。
+- OnChina 管理员授权已统一为单一 finalized 快照：带 CID 管理员通过
+  `AccountIdByCid / CidByAccountId` 闭环解析当前绑定账户；私权 LR 在名册 CID 为空时读取
+  本机构法定代表人 CID；冻结公权无 CID 管理员和私权非 LR 无 CID 管理员按名册账户；
+  个人多签保持账户治理且不进入 OnChina。岗位任职继续以名册账户关联，API 和鉴权输出当前
+  可签名账户，换绑后不重写岗位即可由新账户接管。
+- 登录反查、管理员列表、敏感操作复核和周期会话撤权复用同一解析器。真实 HTTP 负例发现并
+  修复“遍历到任意节点桌面治理机构就误报普通账户”的顺序问题：现在必须先命中目标签名账户
+  的管理员名册，才返回桌面端或个人多签边界错误。
+- 本项验证：OnChina 191 项测试通过，`cargo clippy -p onchina --all-targets -- -D warnings`
+  通过；冻结 plain chainspec 创世哈希核对正确，临时 OnChina 完成 49,593 个机构、99,232 个
+  账户投影与 34 项抽样对账。真实登录第一步中 FRG 冻结管理员和基金会当前绑定账户返回 200，
+  无在册账户返回 403 / `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN`。临时节点、PostgreSQL 和服务已关闭，
+  临时数据库移入废纸篓；未修改 runtime、创世、远端 CI 或部署状态。
 - 汇总拟冻结提交、候选 tag、唯一 WASM workflow、预计触发范围与风险，单独取得远端推送
   许可；本步骤不推送、不触发 CI、不执行 `bake --finalize`。
 

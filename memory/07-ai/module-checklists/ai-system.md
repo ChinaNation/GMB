@@ -10,7 +10,7 @@
 
 - 启动协议改动时同步检查 `memory/AGENTS.md`、`memory/CODEX.md`
 - Claude 审查改动时同步检查 `memory/CLAUDE.md`
-- GitHub 门禁改动时同步检查 `.github/workflows/ai-guardrails.yml`
+- GitHub 门禁改动时同步检查 `.github/workflows/citizenchain-ci.yml` 内的 `guardrails` job，不得恢复独立第五条 workflow
 - 真实开发任务必须创建任务卡
 - 包含 `检查为什么报错` 的只读报错诊断请求不得创建任务卡、不得修改代码
 

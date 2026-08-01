@@ -285,7 +285,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 消费者：
   - `citizenapp/lib/8964/`
   - Cloudflare R2 bucket `citizenapp-square-media`
-  - Cloudflare D1 database `citizenapp-square-db`
+  - Cloudflare D1 binding `DB`，唯一生产数据库 `citizenapp-square-db-production`
   - Cloudflare KV namespace `citizenapp-square-feed-cache`
 - HTTP API 字段：
   - `GET /health` 响应：`ok`、`service`、`storage_backend`、`content_on_chain`
@@ -551,7 +551,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `citizenapp/cloudflare/`：设备登记、一次性 KeyPackage、WebSocket 瞬时密文/信令转发和无内容唤醒。
 - 消费者：
   - `citizenapp/lib/chat/`
-  - Cloudflare D1 database `citizenapp-square-db`
+  - Cloudflare D1 binding `DB`，唯一生产数据库 `citizenapp-square-db-production`
   - Cloudflare Durable Objects / WebSocket，按**身份主键 `cid_number`** 路由到 `ChatRealtimeObject`（每身份一信箱，换绑后同一 CID 同一信箱）。
 - HTTP API 字段（**收件/归属一律按 `cid_number` 寻址**；`account_id` 只作设备所有者与 MLS 名册身份）：
   - `POST /v1/chat/devices/register`：`device_id`、`device_public_key_hex`、`push_provider`、`push_token`、`binding_signature`、`expires_at`、`nonce`；身份与账户只取 session。响应含 `cid_number`、`account_id`、`device_id`、`device_public_key_hex`、`binding_message`、`expires_at`。

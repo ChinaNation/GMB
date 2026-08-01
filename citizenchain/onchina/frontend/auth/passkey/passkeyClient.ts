@@ -231,4 +231,7 @@ export async function getPasskeyStatus(auth: AdminAuth): Promise<boolean> {
 }
 
 /** 重要/特殊操作提交头:断言令牌随此头发送给后端消费。 */
-export const PASSKEY_ASSERTION_HEADER = "X-Passkey-Assertion";
+/// passkey 断言请求头名。
+/// 全仓统一小写:后端 `http_security.rs` 用 `HeaderName::from_static` 注册,
+/// 该 API 只接受小写、否则 panic;`auth/passkey/mod.rs` 同名常量亦为小写。
+export const PASSKEY_ASSERTION_HEADER = "x-passkey-assertion";

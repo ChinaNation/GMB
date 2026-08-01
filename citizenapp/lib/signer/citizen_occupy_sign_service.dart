@@ -35,11 +35,14 @@ class CitizenOccupySignPrep {
   final String cidNumber;
   final bool isOccupy;
   final String genesisHash;
+  /// 换绑授权模板中的当前绑定账户；首次占号时为空。
   final String? currentAccountId;
   final BigInt expectedBindingRevision;
   final BigInt expiresAt;
   final Account account;
+  /// 当前账户仅在本机存在可签名私钥时取得，不建立任何服务端恢复通道。
   final Account? currentAccount;
+  /// 已填入新 account_id 的完整 SCALE 载荷，新旧账户对同一份换绑语义签名。
   final Uint8List materializedPayload;
 }
 
@@ -94,6 +97,7 @@ class CitizenOccupySignService {
     if (materializedPayload == null) {
       throw const CitizenOccupySignException('换绑新账户不得与当前绑定账户相同');
     }
+    // 只有当前账户私钥在本机可用时才附加旧账户签名；缺失时不伪造、不回退。
     final currentAccount =
         authorization.currentAccountId == null || walletManager == null
             ? null
@@ -138,6 +142,7 @@ class CitizenOccupySignService {
     String? currentAccountSignatureHex;
     final currentAccount = prep.currentAccount;
     if (!prep.isOccupy && currentAccount != null) {
+      // 同一次换绑扫码内，当前账户和新账户共同绑定同一份 materialized payload。
       final currentAccountDigest = signingMessage(
         opTag: kOpSignCidRebind,
         scalePayload: prep.materializedPayload,

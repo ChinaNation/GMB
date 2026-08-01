@@ -35,9 +35,9 @@
 
 GitHub 自动运行：
 
-- `AI Guardrails`
-- `Claude PR Review`
-- 目录命中的模块级 CI
+- CitizenChain workflow 内的 `guardrails` job
+- 变更目录命中的 CitizenChain、CitizenApp 或 CitizenWallet 产品 CI
+- CitizenChain WASM 只允许在明确的手动流程中执行
 
 ### 2.4 审查修复
 
@@ -83,14 +83,14 @@ GitHub 自动运行：
 
 1. `memory/` 文档是否完整
 2. PR 是否更新了文档
-3. GitHub Secret 是否已配置
-4. Claude GitHub App 是否已安装
+3. 对应产品 workflow 的路径和 `changes` job 是否命中
+4. 手动正式发布所需 GitHub Secret 是否已配置
 5. Workflow 是否真的被触发
 
 补充判断：
 
-- 如果 `Claude PR Review` 报 `Credit balance is too low`，先检查 API key 是否来自有余额的 workspace
-- 如果 `Claude PR Review` 报 `error_max_turns`，说明额度已通，优先检查 workflow 里的 `--max-turns` 是否过小
+- 如果 PR 只出现 `guardrails` 而没有产品构建，先检查该 PR 是否仅修改文档；这种路由是正常的。
+- 如果 CitizenChain 代码变更没有进入全 workspace 验证，检查 `changes` job 输出和 diff base，不得通过新建第五条 workflow 规避。
 - 如果你怀疑“改了一个目录却跑了另一个目录”，先对照 `memory/07-ai/ci-path-routing.md`
 
 ## 5. 当前阶段结论

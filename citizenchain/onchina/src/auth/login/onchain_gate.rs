@@ -168,12 +168,13 @@ async fn find_allowed_memberships_for_login(
     }
 }
 
-/// 钱包码给出目标账户后，按 `account_id` 单向反查链上 Active 管理员集合。
+/// 钱包码给出目标账户后，按当前签名 `account_id` 反查链上 Active 管理员集合。
 ///
 /// 判据 fail-closed：账户格式非法、链不可达、集合为空一律拒绝登录，不存在「读不到就
-/// 放行」。旧口径要求二维码同时携带 CID 并与 AccountId 双向闭环；改为只收 account_id
-/// 后攻击面收缩——「二维码里 CID 与账户互不匹配」这种形态从根上不存在，而账户是否为
-/// 在职管理员本来就由 `AdminAccounts` 的账户匹配决定，CID 只是同一记录上的冗余字段。
+/// 放行」。二维码不重复携带管理员 CID；服务端从链上管理员名册读取 CID，并在同一个
+/// finalized 区块通过 `CitizenIdentity` 正反向闭环解析当前绑定 `account_id`。因此换绑后
+/// 只有新账户能登录，名册中的岗位关联旧账户不能继续签名；冻结公权管理员与私权非 LR
+/// 没有 CID 时，严格按 runtime 规则使用名册 `account_id`。
 ///
 /// 完成签名后仍会再次执行完整 gate，以最新链上状态为准签发会话。
 pub(super) async fn validate_login_identity(account_id: &str) -> Result<String, GateError> {

@@ -5,7 +5,8 @@
 检查项:
 1. `:code` 存在,可选校验其字节等于指定 CI WASM。
 2. `LegislationYuan::Laws[0]` 是宪法、全国 scope、v1 生效、无待生效版。
-3. `LegislationYuan::LawVersions[0][1]` 存在且包含不可修改条款。
+3. `LegislationYuan::LawVersions[0][1]` 存在，章号全局唯一、同章节号唯一、条号全局唯一，
+   且包含全部不可修改条款。
 4. `ConstitutionImmutableManifest` 清单与 v1 条文摘要逐字匹配。
 5. `LawsByScope[Constitution][0] == [0]`, `NextLawId == 1`。
 """
@@ -180,7 +181,7 @@ def parse_law(raw: bytes) -> Law:
 
 
 def self_test() -> None:
-    """锁定 houses 的变长 Vec<CidNumber> 解码，防止恢复固定宽度假设。"""
+    """锁定 SCALE 解码与宪法章号、同章节号、条号三层唯一性。"""
 
     def compact_small(value: int) -> bytes:
         if not 0 <= value < 64:
@@ -205,6 +206,82 @@ def self_test() -> None:
     law = parse_law(raw)
     if law != Law(0, TIER_CONSTITUTION, 0, 1, 1, None, LAW_STATUS_EFFECTIVE):
         raise AssertionError(f"Law SCALE self-test 失败:{law}")
+
+    def vec_bytes(value: bytes) -> bytes:
+        return compact_small(len(value)) + value
+
+    def encode_article(number: int) -> bytes:
+        return b"".join(
+            (
+                u32(number),
+                vec_bytes(f"article-{number}".encode()),
+                bytes([0]),
+                vec_bytes(b"body"),
+                bytes([0]),
+                compact_small(0),
+            )
+        )
+
+    def encode_section(number: int, article_numbers: tuple[int, ...]) -> bytes:
+        return b"".join(
+            (
+                u32(number),
+                vec_bytes(f"section-{number}".encode()),
+                bytes([0]),
+                compact_small(len(article_numbers)),
+                *(encode_article(article_number) for article_number in article_numbers),
+            )
+        )
+
+    def encode_chapter(number: int, sections: tuple[tuple[int, tuple[int, ...]], ...]) -> bytes:
+        return b"".join(
+            (
+                u32(number),
+                vec_bytes(f"chapter-{number}".encode()),
+                bytes([0]),
+                compact_small(len(sections)),
+                *(encode_section(section_number, article_numbers)
+                  for section_number, article_numbers in sections),
+            )
+        )
+
+    def encode_version(chapters: tuple[tuple[int, tuple[tuple[int, tuple[int, ...]], ...]], ...]) -> bytes:
+        return b"".join(
+            (
+                u64(CONSTITUTION_LAW_ID),
+                u32(GENESIS_VERSION),
+                vec_bytes(b"constitution"),
+                bytes([0]),
+                compact_small(len(chapters)),
+                *(encode_chapter(chapter_number, sections)
+                  for chapter_number, sections in chapters),
+                bytes(32),
+                bytes([0]),
+                u64(0),
+                u64(0),
+                u64(0),
+            )
+        )
+
+    # 不同章允许复用相同节号。
+    valid_version = encode_version(((1, ((7, (1,)),)), (2, ((7, (2,)),))))
+    parsed = parse_version(valid_version)
+    if sorted(parsed.articles) != [1, 2]:
+        raise AssertionError(f"合法宪法结构解析异常: {sorted(parsed.articles)}")
+
+    invalid_versions = (
+        (encode_version(((1, ((1, (1,)),)), (1, ((1, (2,)),)))), "重复章号"),
+        (encode_version(((1, ((3, (1,)), (3, (2,)))),)), "重复节号"),
+        (encode_version(((1, ((1, (9,)),)), (2, ((1, (9,)),)))), "重复条号"),
+    )
+    for invalid_version, expected_error in invalid_versions:
+        try:
+            parse_version(invalid_version)
+        except ValueError as exc:
+            if expected_error not in str(exc):
+                raise AssertionError(f"结构错误类型异常: {exc}") from exc
+        else:
+            raise AssertionError(f"未拒绝宪法{expected_error}")
     print("constitution SCALE self-test ok")
 
 
@@ -226,21 +303,30 @@ def parse_article(s: Scale) -> tuple[int, bytes]:
     return number, s.data[start : s.i]
 
 
-def parse_section(s: Scale, articles: dict[int, bytes]) -> None:
-    s.u32()
+def parse_section(s: Scale, articles: dict[int, bytes], section_numbers: set[int]) -> None:
+    section_number = s.u32()
+    if section_number in section_numbers:
+        raise ValueError(f"同一章出现重复节号: {section_number}")
+    section_numbers.add(section_number)
     s.vec_bytes()
     s.opt_bytes()
     for _ in range(s.compact()):
         number, raw_article = parse_article(s)
+        if number in articles:
+            raise ValueError(f"宪法全文出现重复条号: {number}")
         articles[number] = raw_article
 
 
-def parse_chapter(s: Scale, articles: dict[int, bytes]) -> None:
-    s.u32()
+def parse_chapter(s: Scale, articles: dict[int, bytes], chapter_numbers: set[int]) -> None:
+    chapter_number = s.u32()
+    if chapter_number in chapter_numbers:
+        raise ValueError(f"宪法全文出现重复章号: {chapter_number}")
+    chapter_numbers.add(chapter_number)
     s.vec_bytes()
     s.opt_bytes()
+    section_numbers: set[int] = set()
     for _ in range(s.compact()):
-        parse_section(s, articles)
+        parse_section(s, articles, section_numbers)
 
 
 def parse_version(raw: bytes) -> Version:
@@ -250,8 +336,9 @@ def parse_version(raw: bytes) -> Version:
     s.vec_bytes()
     s.opt_bytes()
     articles: dict[int, bytes] = {}
+    chapter_numbers: set[int] = set()
     for _ in range(s.compact()):
-        parse_chapter(s, articles)
+        parse_chapter(s, articles, chapter_numbers)
     s.raw(32)
     s.u8()
     s.u64()

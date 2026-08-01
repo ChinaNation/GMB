@@ -63,26 +63,12 @@ class _ImportWalletPageState extends State<ImportWalletPage>
         title: const Text('导入钱包'),
         centerTitle: true,
       ),
+      // 候选词 Wrap 位于输入框**下方**，键盘升起时最容易被盖住。
+      // 顶部留白压到最小、标题与输入框间距收紧，把输入框和候选区整体上提，
+      // 让候选词落在键盘上沿之上。
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
         children: [
-          // 图标
-          Center(
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withAlpha(25),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.download_rounded,
-                size: 30,
-                color: AppTheme.primaryLight,
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           const Text(
             '输入助记词',
             textAlign: TextAlign.center,
@@ -92,16 +78,7 @@ class _ImportWalletPageState extends State<ImportWalletPage>
               color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            '逐个输入单词，从候选列表中选择匹配项',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           Bip39InputField(controller: _mnemonicController, wordCount: 0),
           const SizedBox(height: 28),
           FilledButton(

@@ -90,6 +90,104 @@ plist 是 launchd **socket 激活**（`Sockets.Listeners` 127.0.0.1:8888，`RunA
 
 新增回归测试锁死该约束，全仓禁止再出现 `deploy-all` / `startBatchRun` / `nodeChildEnv`。
 
+### 六、本机数据清理三按钮重整（用户指令）
+
+| 原 | 现 |
+| --- | --- |
+| 清空链数据 `clear-chain-data` | **删除**（按钮 + `clear_local_chain_data` + mode 白名单 + case 分支） |
+| 清空节点数据 `clear-node-data` | **清空非链数据** `clear-non-chain-data`（行为不变：只清 OnChina 内嵌 PG） |
+| 删除本机全部旧数据 `reset-formal-local-data` | **删除全部数据** `delete-all-data`（改为保留 TLS 的逐项删除） |
+
+标题改了 id/mode 也一并改：留 `clear-node-data` 这种与显示名不符的内部名就是命名残留。
+
+#### 关键冲突：TLS 证书在 gmb.dev 里面
+
+`citizenchain/scripts/run.sh:61` 把 `ONCHINA_TLS_DIR` 设为
+`$HOME/Library/Application Support/gmb.dev/onchina-tls`。原实现是 `rm -rf` 整个 `gmb.dev`，
+**会连 TLS 一起删掉**，与「保留 TLS 证书」的新要求直接冲突。故当前目录改为逐项遍历删除。
+
+`gmb.dev` 下有**两个** TLS 目录，性质不同，均保留：
+
+- `onchina-tls/` —— OnChina 的 CA 根证书与私钥（`onchina-org-root-ca.key`）。
+  **删掉不可逆**：重新生成即是另一个 CA，已签发的机构证书全部作废。
+- `tls/` —— 节点 libp2p 传输层自签证书（`cert.der`/`key.der`）。
+  `node/src/core/tls_cert.rs` 写明「TLS 层只负责传输加密，身份认证由 Noise 协议通过 peer ID 完成」，
+  缺失时自动重建。
+
+两者都不含链状态、不含节点身份。节点身份在 `chains/citizenchain/network/secret_ed25519`，
+属区块链数据，**随删除全部数据一并清除**（PeerId 会变，本机开发节点可接受）。
+
+`china.sqlite` 在仓库内（`citizenchain/onchina/src/cid/china/china.sqlite`），属冻结资产，天然不受影响。
+
+旧产品目录（`gmb`、两个旧 bundle id 的 Application Support 与 Containers）**整体删除**——
+当前产品不读取它们，其中的旧 `tls/` 早已失效。
+
+#### 安全设计
+
+- 遍历根**硬编码** `$HOME/Library/Application Support/gmb.dev`，不用可被 `GMB_APP_DATA_DIR`
+  覆盖的 `$app_data_dir`：那个变量一旦被改写，整目录遍历就会指向任意位置
+- `shopt -s dotglob` 让隐藏项也进入遍历，否则点开头的残留数据被静默留下；`nullglob` 防空目录产生字面 `*`
+- 每项删除后复验 `[[ ! -e ]]`，未删净立即 exit 1
+- 旧目录仍走 case 白名单 + Finder 兜底（不清空整个废纸篓）
+
+#### 充值台账绝不删除（用户质疑「账本不能删除」→ 查实为资金安全漏洞）
+
+原实现（沿用自 `reset_formal_local_data`）会删 `.runtime/topup-ledger.json`。用户质疑后查实，
+问题比「审计记录丢失」严重得多：
+
+**台账是防重复发币的唯一依据。** `topup/routes.mjs:358` 幂等①：
+
+```js
+const prior = await getLedgerEntry(ctx.consoleDir, order.order_id);
+if (prior?.gmb_tx_hash && prior?.gmb_block_hash
+    && Number.isSafeInteger(prior?.gmb_extrinsic_index) && prior?.signed_extrinsic_hex) {
+  // 已记完整发币证明 → 只重试回写，绝不重复发币
+```
+
+台账一删，已发币订单 `prior` 读回 null，幂等判定失效，**会重新发一次币**。
+
+`topup/ledger.mjs:24` 的注释早已警告过这件事——「损坏、权限错误和 IO 错误必须 fail-closed，
+否则把既有发币记录误当作空表会造成重复发币」。作者对**文件损坏**做了 fail-closed，
+但**删除文件**走的是 `ENOENT → return {}` 这条「首次运行」正常路径，正好从旁边绕过了那道保护。
+
+处置：删除动作里删台账的整段代码移除；`assert_deletable` 随之**收紧为仓库内一律拒绝**
+（原本为台账开的 `.runtime` 例外不再需要），守卫因此没有任何例外，更简洁也更安全。
+
+#### 代码不可删守卫 `assert_deletable`（用户指令：不允许按钮删掉任何代码和代码里的数据库）
+
+先查清事实：`baseChildEnv()` 是严格白名单（`HOME/USER/LOGNAME/SHELL/TMPDIR/LANG/LC_ALL/SSH_AUTH_SOCK`
++ PATH + `GMB_ROOT` + node 路径），**`GMB_APP_DATA_DIR` 与 `ONCHINA_PG_DATA_DIR` 都不在其中**，
+子进程拿不到，故点按钮这条路径上 `app_data_dir` 恒为 `gmb.dev`，环境变量污染不可能发生；
+`china.sqlite` 也从来不在任何删除目标里。
+
+但「恰好没删」不等于「不可能删」。新增 `assert_deletable`，清理路径上**每个 rm 之前必过**（4 处）：
+
+- 拒绝仓库内任何路径（`$GMB_ROOT` 及其子路径），含 `citizenchain/onchina/src/cid/china/china.sqlite`
+- 拒绝 `/`、`$HOME`、`$HOME/Library`、`Application Support` 根、`Containers` 根
+- 先 `cd … && pwd -P` 解析符号链接再比对前缀，防止用软链把仓库挂进清理目标绕过前缀判断
+- **无任何例外**：`citizenconsole/.runtime` 也在拒绝之列——充值台账就在那里
+
+#### 实测验证
+
+**保留逻辑**：scratchpad 造假目录跑同一段遍历（绝不碰真实 `gmb.dev`）——
+`.hidden-state`、`chains`、`cold-wallets.json`、`onchina-pgdata`、`security-audit.log` 全删，
+`onchina-tls` 与 `tls` 保留且内容完好。
+
+**守卫**：抽出函数单独跑用例，全部符合预期。拒绝 `china.sqlite`、仓库根、仓库内源码目录、
+**软链穿透进仓库**、`$HOME`、`Application Support` 根、`.runtime/topup-ledger.json` 与
+`.runtime` 内任何路径；放行 `gmb.dev/chains` 与旧 `gmb` 目录。
+
+**测试有效性（变异验证）**：「每个 rm 前必须有守卫」这条断言，在原文件检出 0 漏网；
+分别去掉 `entry` 守卫、去掉 `pg_data_dir` 守卫、新增一个裸 `rm` —— 三种变异全部被检出，
+证明不是永远通过的假断言。
+
+#### 文档同步
+
+两处描述现状的技术文档已订正（`done/` 归档属历史记录不动；其余「不部署服务器」是泛指 CI 行为，与按钮无关）：
+
+- `05-modules/citizenchain/node/NODE_TECHNICAL.md` —— 原文描述「部署服务器会并发启动所有配置齐全节点」
+- `01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md` —— 原文以「部署服务器」指代生产入口
+
 ## 埋雷点（差点让 build-production 白跑一次）
 
 Xcode 工程用的是**显式文件列表**（`PBXSourcesBuildPhase.files` 逐个列出），

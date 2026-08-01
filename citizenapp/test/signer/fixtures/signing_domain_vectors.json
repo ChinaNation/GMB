@@ -1,5 +1,5 @@
 {
-  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 覆盖哈希域 op_tag(0x10/0x12/0x13-0x17/0x1A-0x1D/0x1F);message_hex 逐字节取自 runtime/primitives/tests/fixtures/signing_domain_vectors.json,与冷钱包/链端一致。",
+  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 覆盖哈希域 op_tag(0x10/0x12/0x13-0x17/0x1A-0x1D/0x1F);message_hex 逐字节取自 runtime/primitives/tests/fixtures/signing_domain_vectors.json,与冷钱包/链端一致。 【镜像】真源在 citizenchain/runtime/primitives/tests/fixtures/signing_domain_vectors.json，本文件是供本端金标测试独立回归的副本。不得在此自造向量或单方面改值；需要新向量请先在真源登记。CI 由 .github/scripts/check-golden-vectors-sync.mjs 比对。",
   "domain": "GMB",
   "vectors": [
     {

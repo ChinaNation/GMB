@@ -46,7 +46,7 @@ fn cid_authorization_scale_contract_keeps_canonical_field_order() {
     let rebind = CidRebindAuthorization {
         genesis_hash,
         cid_number: cid_number.clone(),
-        current_account_id: current_account_id,
+        current_account_id,
         new_account_id,
         expected_binding_revision: 7,
         expires_at: 8,
@@ -417,7 +417,7 @@ fn rebind_authorization(
     CidRebindAuthorization {
         genesis_hash: System::block_hash(0),
         cid_number: cid(cid_number),
-        current_account_id: current_account_id,
+        current_account_id,
         new_account_id,
         expected_binding_revision,
         expires_at,

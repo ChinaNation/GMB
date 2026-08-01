@@ -56,7 +56,7 @@ pub mod pallet {
     use primitives::constitution::{self, AmendmentScope, CONSTITUTION_CORE_CHAPTER_INDEX};
     use primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES;
     use primitives::genesis::GENESIS_LAW_VERSION_LABELS;
-    use sp_runtime::sp_std::vec::Vec;
+    use sp_runtime::sp_std::{collections::btree_set::BTreeSet, vec::Vec};
     use sp_runtime::DispatchError;
     use votingengine::{ProposalExecutionOutcome, VotePlanOf, VotingEngineKind};
 
@@ -96,7 +96,7 @@ pub mod pallet {
         pub text_en: Option<TextOf<T>>,
     }
 
-    /// 法律条文(第 N 条,目录叶 + 正文)。`number` 全法唯一连续,用于不可修改条款比对。
+    /// 法律条文(第 N 条,目录叶 + 正文)。宪法的 `number` 在全文中全局唯一。
     #[derive(
         Encode,
         Decode,
@@ -110,7 +110,7 @@ pub mod pallet {
     )]
     #[scale_info(skip_type_params(T))]
     pub struct Article<T: Config> {
-        /// 条序号(数字,全法唯一连续),如第一条 → 1
+        /// 条序号(数字；宪法内全局唯一),如第一条 → 1
         pub number: u32,
         /// 条标题(中文,如「第一条」)
         pub title: TitleOf<T>,
@@ -138,7 +138,7 @@ pub mod pallet {
     )]
     #[scale_info(skip_type_params(T))]
     pub struct Section<T: Config> {
-        /// 节序号(数字)
+        /// 节序号(数字；宪法内同一章唯一，不同章允许复用)
         pub number: u32,
         /// 节标题(中文)
         pub title: TitleOf<T>,
@@ -162,7 +162,7 @@ pub mod pallet {
     )]
     #[scale_info(skip_type_params(T))]
     pub struct Chapter<T: Config> {
-        /// 章序号(数字)
+        /// 章序号(数字；宪法内全局唯一)
         pub number: u32,
         /// 章标题(中文)
         pub title: TitleOf<T>,
@@ -444,6 +444,8 @@ pub mod pallet {
             }
             let chapters = ChaptersOf::<T>::decode(&mut &CONSTITUTION_SCALE[..])
                 .expect("内置 constitution.scale 必须解码为 ChaptersOf");
+            Pallet::<T>::ensure_unique_constitution_numbers(&chapters)
+                .expect("内置 constitution.scale 的章号、同章节号、条号必须唯一");
 
             // L3 创世锚:逐条断言不可修改条款存在(缺即 panic,烤不出非法创世),
             // 并把条号 + 内容摘要冻结进链上 manifest,供节点启动期交叉校验(ADR-027 §6.1)。
@@ -566,6 +568,12 @@ pub mod pallet {
         RoutingMismatch,
         /// 宪法修改的表决类型不合法(只能特别案或重要案)
         InvalidVoteTypeForConstitution,
+        /// 同一宪法版本中出现重复章号。
+        DuplicateChapterNumber,
+        /// 同一章中出现重复节号；不同章允许使用相同节号。
+        DuplicateSectionNumber,
+        /// 同一宪法版本中出现重复条号。
+        DuplicateArticleNumber,
         /// 命中宪法不可修改条款(第 1/2/3/17/19/24/34/42 条)
         ImmutableArticleViolation,
         /// 修改第一章总则核心条款必须走特别案表决(宪法第十九条)
@@ -752,6 +760,9 @@ pub mod pallet {
                 &legislature_cid_number,
             )?;
             if law.tier == Tier::Constitution {
+                // 宪法目录身份先按章/节/条三层唯一性校验，避免后续按条号查找时
+                // `.find()` 或集合去重掩盖重复条文。
+                Self::ensure_unique_constitution_numbers(&chapters)?;
                 let effective_version = law
                     .effective_version
                     .ok_or(Error::<T>::LawVersionNotFound)?;
@@ -1047,6 +1058,40 @@ pub mod pallet {
                 .flat_map(|c| c.sections.iter())
                 .flat_map(|s| s.articles.iter())
                 .find(|a| a.number == number)
+        }
+
+        /// 校验单一宪法版本的三层编号唯一性。
+        ///
+        /// - 章号在全文中全局唯一；
+        /// - 节号只在所属章内唯一，不同章允许复用；
+        /// - 条号在全文中全局唯一。
+        ///
+        /// 本规则只约束唯一性，不要求编号连续，也不要求从 1 开始。
+        pub(crate) fn ensure_unique_constitution_numbers(
+            chapters: &ChaptersOf<T>,
+        ) -> DispatchResult {
+            let mut chapter_numbers = BTreeSet::new();
+            let mut article_numbers = BTreeSet::new();
+            for chapter in chapters {
+                ensure!(
+                    chapter_numbers.insert(chapter.number),
+                    Error::<T>::DuplicateChapterNumber
+                );
+                let mut section_numbers = BTreeSet::new();
+                for section in &chapter.sections {
+                    ensure!(
+                        section_numbers.insert(section.number),
+                        Error::<T>::DuplicateSectionNumber
+                    );
+                    for article in &section.articles {
+                        ensure!(
+                            article_numbers.insert(article.number),
+                            Error::<T>::DuplicateArticleNumber
+                        );
+                    }
+                }
+            }
+            Ok(())
         }
 
         /// 宪法不可修改条款必须逐字保持一致(增/改/删任一即违规)。
@@ -1591,6 +1636,8 @@ pub mod pallet {
                         &summary.legislature_cid_number,
                     )?;
                     if law.tier == Tier::Constitution {
+                        // 最终写入层独立复核三层编号唯一性，禁止异常回调载荷绕过提案入口。
+                        Self::ensure_unique_constitution_numbers(chapters)?;
                         let effective_version = law
                             .effective_version
                             .ok_or(Error::<T>::LawVersionNotFound)?;

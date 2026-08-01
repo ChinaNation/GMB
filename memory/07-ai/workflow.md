@@ -44,20 +44,20 @@
 
 ## 3. GitHub 自动化入口
 
-- `.github/workflows/ai-guardrails.yml`
-- `.github/workflows/claude-pr-review.yml`
-- `.github/workflows/claude-on-comment.yml`
-- `.github/workflows/citizenchain-wasm.yml`
 - `.github/workflows/citizenchain-ci.yml`
+- `.github/workflows/citizenchain-wasm.yml`
 - `.github/workflows/citizenapp-ci.yml`
 - `.github/workflows/citizenwallet-ci.yml`
 
+全仓严格只保留上述四个 workflow。AI 门禁是 `citizenchain-ci.yml` 的 PR job；CitizenApp
+与 Cloudflare 共用 `citizenapp-ci.yml`；OnChina 归属 CitizenChain；官网不使用 CI。
+
 ## 4. 路径分流执行原则
 
-- `citizenchain/runtime/**` 通过独立 WASM CI 产出链上升级 wasm，`citizenchain/node/**` 通过统一 `citizenchain-ci.yml` matrix 构建 Linux / Windows / macOS 桌面安装包，`citizenchain/onchina/**` 归属公民链内部能力检查
-- 共享 Rust 目录变更时，允许多侧联动执行
+- `citizenchain/**` 和共享 Rust 变更先进入 `citizenchain-ci.yml` 全 workspace 验证，成功后再由同一 workflow matrix 构建 Linux / Windows / macOS 桌面安装包
+- `citizenchain-wasm.yml` 仅作为手动、独立、可审计的 runtime WASM 产物入口
 - `citizenapp`、`citizenwallet` 分别独立执行
-- 纯文档、Pages 等目录按各自规则触发
+- 纯文档 PR 仍进入 CitizenChain `guardrails` job，不触发无关产品构建
 - 目录路由细则统一记录在 `memory/07-ai/ci-path-routing.md`
 
 ## 5. 本地执行入口

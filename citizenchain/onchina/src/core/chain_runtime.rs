@@ -1,6 +1,8 @@
 use codec::Decode;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hasher, sync::OnceLock};
+use subxt::backend::legacy::LegacyRpcMethods;
+use subxt::backend::rpc::RpcClient;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 use twox_hash::XxHash64;
 
@@ -565,6 +567,19 @@ struct OnChainAdminRecord {
     given_name: Vec<u8>,
 }
 
+/// 管理员名册与当前签名账户的同区块解析结果。
+///
+/// `role_assignment_account_id` 保留链上岗位任职使用的名册锚点；`account_id` 是管理员
+/// CID 在同一个 finalized 区块上的当前绑定账户，也是 OnChina 唯一接受的签名账户。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedOnChainAdminRecord {
+    role_assignment_account_id: [u8; 32],
+    account_id: [u8; 32],
+    cid_number: Vec<u8>,
+    family_name: Vec<u8>,
+    given_name: Vec<u8>,
+}
+
 struct OnChainAdminAccount {
     institution_code: [u8; 4],
     admins: Vec<OnChainAdminRecord>,
@@ -574,6 +589,7 @@ struct OnChainAdminAccount {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OnChainAdmin {
     pub(crate) account_id: String,
+    pub(crate) role_assignment_account_id: [u8; 32],
     pub(crate) cid_number: String,
     pub(crate) family_name: String,
     pub(crate) given_name: String,
@@ -626,11 +642,6 @@ fn decode_onchain_admin_account(
         if !seen.insert(admin.account_id) {
             return Err("InstitutionAdmins contains duplicate account_id".to_string());
         }
-        if pallet == AdminPallet::PrivateAdmins
-            && (admin.family_name.is_empty() || admin.given_name.is_empty())
-        {
-            return Err("InstitutionAdmins family_name/given_name is empty".to_string());
-        }
         std::str::from_utf8(admin.family_name.as_slice())
             .map_err(|_| "InstitutionAdmins family_name is not UTF-8".to_string())?;
         std::str::from_utf8(admin.given_name.as_slice())
@@ -642,6 +653,72 @@ fn decode_onchain_admin_account(
         institution_code,
         admins,
     })
+}
+
+/// 一次 OnChina 授权读取固定到一个 finalized 区块，禁止管理员名册、CID 绑定与岗位
+/// 分别读取不同高度。
+pub(crate) struct FinalizedChainView {
+    pub(crate) client: OnlineClient<PolkadotConfig>,
+    pub(crate) block_hash: subxt::utils::H256,
+    block_number: u32,
+}
+
+impl FinalizedChainView {
+    pub(crate) async fn connect() -> Result<Self, String> {
+        let ws_url = super::chain_url::chain_ws_url()?;
+        let rpc_client = RpcClient::from_insecure_url(ws_url.as_str())
+            .await
+            .map_err(|e| format!("connect chain rpc for finalized admin view failed: {e}"))?;
+        let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());
+        let client = OnlineClient::<PolkadotConfig>::from_rpc_client(rpc_client)
+            .await
+            .map_err(|e| format!("connect chain client for finalized admin view failed: {e}"))?;
+        let block_hash = rpc
+            .chain_get_finalized_head()
+            .await
+            .map_err(|e| format!("fetch finalized head for admin view failed: {e}"))?;
+        let block_number = rpc
+            .chain_get_header(Some(block_hash))
+            .await
+            .map_err(|e| format!("fetch finalized header for admin view failed: {e}"))?
+            .ok_or_else(|| "finalized header for admin view is missing".to_string())?
+            .number;
+        Ok(Self {
+            client,
+            block_hash,
+            block_number,
+        })
+    }
+
+    pub(crate) fn storage(
+        &self,
+    ) -> subxt::storage::Storage<PolkadotConfig, OnlineClient<PolkadotConfig>> {
+        self.client.storage().at(self.block_hash)
+    }
+
+    /// 岗位任期按同一 finalized 区块的链时间判定，禁止使用 OnChina 主机本地时钟。
+    pub(crate) async fn current_day(&self) -> Result<u32, String> {
+        let value = self
+            .storage()
+            .fetch(&dynamic::storage("Timestamp", "Now", Vec::new()))
+            .await
+            .map_err(|e| format!("fetch finalized Timestamp.Now for admin view failed: {e}"))?;
+        let millis = match value {
+            Some(value) => {
+                let mut encoded = value.encoded();
+                let millis = u64::decode(&mut encoded)
+                    .map_err(|e| format!("decode finalized Timestamp.Now failed: {e}"))?;
+                if !encoded.is_empty() {
+                    return Err("finalized Timestamp.Now has trailing bytes".to_string());
+                }
+                millis
+            }
+            None if self.block_number == 0 => 0,
+            None => return Err("finalized Timestamp.Now missing outside genesis".to_string()),
+        };
+        u32::try_from(millis / 86_400_000)
+            .map_err(|_| "finalized chain day is outside u32 range".to_string())
+    }
 }
 
 /// 机构 Active 管理员集合所属链上 pallet。
@@ -743,6 +820,19 @@ fn console_login_block_reason(code: &[u8; 4]) -> Option<&'static str> {
     None
 }
 
+/// 只有目标签名账户确实属于该链上管理员名册时，才返回控制台边界拒绝原因。
+///
+/// 管理员反查会遍历全部名册；若在确认成员资格前记录拒绝原因，任意陌生账户都会因链上
+/// 存在节点桌面治理机构而被误报为其管理员。
+fn console_login_block_reason_for_membership(
+    code: &[u8; 4],
+    membership_matched: bool,
+) -> Option<&'static str> {
+    membership_matched
+        .then(|| console_login_block_reason(code))
+        .flatten()
+}
+
 pub(crate) fn identity_from_binding_parts(
     institution_code: &str,
     institution_cid_number: Option<&str>,
@@ -840,16 +930,6 @@ pub(crate) fn chain_province_name_by_code(province_code: [u8; 2]) -> Option<Stri
         .map(|info| info.province_name.to_string())
 }
 
-fn matching_admin<'a>(
-    decoded: &'a OnChainAdminAccount,
-    target: &[u8; 32],
-) -> Option<&'a OnChainAdminRecord> {
-    decoded
-        .admins
-        .iter()
-        .find(|admin| &admin.account_id == target)
-}
-
 /// 解出 `Blake2_128Concat<CidNumber>` storage key 中的 CID。
 fn admin_accounts_cid_from_key(key_bytes: &[u8]) -> Result<Vec<u8>, String> {
     const PREFIX_AND_HASH_LEN: usize = 32 + 16;
@@ -927,6 +1007,232 @@ fn project_legal_representative(
         cid_number: value.cid_number,
         account_id: value.account_id,
     })
+}
+
+async fn private_legal_representative_at(
+    storage: &subxt::storage::Storage<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+    institution_cid_number: &[u8],
+) -> Result<Option<RawLegalRepresentative>, String> {
+    let address = dynamic::storage(
+        "PrivateManage",
+        "Institutions",
+        vec![dynamic::Value::from_bytes(institution_cid_number)],
+    );
+    let Some(value) = storage
+        .fetch(&address)
+        .await
+        .map_err(|e| format!("fetch PrivateManage institution failed: {e}"))?
+    else {
+        return Err("private admin roster has no matching institution".to_string());
+    };
+    let mut encoded = value.encoded();
+    let info = RawInstitutionInfo::decode(&mut encoded)
+        .map_err(|e| format!("decode PrivateManage institution info failed: {e}"))?;
+    if !encoded.is_empty() {
+        return Err("PrivateManage institution info has trailing bytes".to_string());
+    }
+    Ok(info.legal_representative)
+}
+
+/// 反查目标公民 CID 当前担任法定代表人的私权机构及其岗位关联账户。
+///
+/// `PrivateManage` 没有按法定代表人 CID 建二级索引，因此登录反查需要一次 finalized
+/// 全表遍历；结果只保留目标 CID，避免为每个私权管理员名册逐条发起 storage 请求。
+async fn private_legal_representative_accounts_for_cid(
+    storage: &subxt::storage::Storage<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+    target_cid_number: Option<&[u8]>,
+) -> Result<BTreeMap<Vec<u8>, [u8; 32]>, String> {
+    let Some(target_cid_number) = target_cid_number else {
+        return Ok(BTreeMap::new());
+    };
+    let mut matches = BTreeMap::new();
+    let mut iter = storage
+        .iter(dynamic::storage(
+            "PrivateManage",
+            "Institutions",
+            Vec::<dynamic::Value>::new(),
+        ))
+        .await
+        .map_err(|e| format!("iterate PrivateManage Institutions failed: {e}"))?;
+    while let Some(item) = iter.next().await {
+        let item = item.map_err(|e| format!("read PrivateManage Institutions failed: {e}"))?;
+        let mut encoded = item.value.encoded();
+        let info = RawInstitutionInfo::decode(&mut encoded)
+            .map_err(|e| format!("decode PrivateManage institution info failed: {e}"))?;
+        if !encoded.is_empty() {
+            return Err("PrivateManage institution info has trailing bytes".to_string());
+        }
+        let Some(legal_representative) = info.legal_representative else {
+            continue;
+        };
+        if legal_representative.cid_number.as_slice() != target_cid_number {
+            continue;
+        }
+        const PREFIX_AND_HASH_LEN: usize = 32 + 16;
+        let mut key = item
+            .key_bytes
+            .get(PREFIX_AND_HASH_LEN..)
+            .ok_or_else(|| "PrivateManage Institutions storage key is too short".to_string())?;
+        let institution_cid_number = Vec::<u8>::decode(&mut key)
+            .map_err(|e| format!("decode PrivateManage institution CID failed: {e}"))?;
+        if !key.is_empty() {
+            return Err("PrivateManage Institutions storage key has trailing bytes".to_string());
+        }
+        matches.insert(institution_cid_number, legal_representative.account_id);
+    }
+    Ok(matches)
+}
+
+fn matching_roster_admin_by_cid_or_public_account<'a>(
+    decoded: &'a OnChainAdminAccount,
+    pallet: AdminPallet,
+    target_account_id: &[u8; 32],
+    target_cid_number: Option<&[u8]>,
+) -> Option<&'a OnChainAdminRecord> {
+    if let Some(target_cid_number) = target_cid_number {
+        if let Some(admin) = decoded
+            .admins
+            .iter()
+            .find(|admin| admin.cid_number.as_slice() == target_cid_number)
+        {
+            return Some(admin);
+        }
+    }
+    (pallet == AdminPallet::PublicAdmins)
+        .then(|| {
+            decoded
+                .admins
+                .iter()
+                .find(|admin| admin.cid_number.is_empty() && &admin.account_id == target_account_id)
+        })
+        .flatten()
+}
+
+async fn matching_admin_for_signer<'a>(
+    storage: &subxt::storage::Storage<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+    decoded: &'a OnChainAdminAccount,
+    pallet: AdminPallet,
+    institution_cid_number: &[u8],
+    target_account_id: &[u8; 32],
+    target_cid_number: Option<&[u8]>,
+    private_legal_representatives: &BTreeMap<Vec<u8>, [u8; 32]>,
+) -> Result<Option<&'a OnChainAdminRecord>, String> {
+    if let Some(admin) = matching_roster_admin_by_cid_or_public_account(
+        decoded,
+        pallet,
+        target_account_id,
+        target_cid_number,
+    ) {
+        return Ok(Some(admin));
+    }
+    if target_cid_number.is_some() && pallet == AdminPallet::PrivateAdmins {
+        if let Some(role_assignment_account_id) =
+            private_legal_representatives.get(institution_cid_number)
+        {
+            let admin = decoded.admins.iter().find(|admin| {
+                &admin.account_id == role_assignment_account_id && admin.cid_number.is_empty()
+            });
+            if admin.is_none() {
+                return Err("private legal representative is missing from admin roster".to_string());
+            }
+            return Ok(admin);
+        }
+    }
+    if pallet == AdminPallet::PublicAdmins {
+        return Ok(None);
+    }
+    let Some(account_only_admin) = decoded
+        .admins
+        .iter()
+        .find(|admin| admin.cid_number.is_empty() && &admin.account_id == target_account_id)
+    else {
+        return Ok(None);
+    };
+    let legal_representative =
+        private_legal_representative_at(storage, institution_cid_number).await?;
+    if legal_representative
+        .as_ref()
+        .is_some_and(|value| value.account_id == account_only_admin.account_id)
+    {
+        // 目标仍是名册旧账户时，LR 必须继续通过其 CID 当前绑定匹配，禁止回退旧账户。
+        return Ok(None);
+    }
+    Ok(Some(account_only_admin))
+}
+
+/// 把管理员名册的岗位关联账户解析为同一 finalized 区块上的实际签名账户。
+///
+/// 任何带 CID 的机构管理员、以及从机构记录取得 CID 的私权法定代表人，只认 CID 当前
+/// 绑定账户；无 CID 的冻结公权管理员与私权非 LR 按名册 `account_id` 直接授权，严格
+/// 镜像 runtime `resolve_admin_account`。个人多签不经过本入口。CID 已撤销或当前未绑定
+/// 时，该管理员不进入有效集合，不回退旧账户。
+async fn resolve_onchain_admin_records(
+    storage: &subxt::storage::Storage<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+    decoded: OnChainAdminAccount,
+    pallet: AdminPallet,
+    institution_cid_number: &[u8],
+) -> Result<Vec<ResolvedOnChainAdminRecord>, String> {
+    use crate::core::chain_citizen_identity::read_active_cid_account_id_at;
+
+    let legal_representative = if pallet == AdminPallet::PrivateAdmins {
+        private_legal_representative_at(storage, institution_cid_number).await?
+    } else {
+        None
+    };
+    let mut resolved = Vec::with_capacity(decoded.admins.len());
+    let mut effective_accounts = std::collections::BTreeSet::new();
+    for admin in decoded.admins {
+        let matching_legal_representative = legal_representative
+            .as_ref()
+            .filter(|value| value.account_id == admin.account_id);
+        let (cid_number, family_name, given_name) = match matching_legal_representative {
+            Some(value) => {
+                if !admin.cid_number.is_empty() && admin.cid_number != value.cid_number {
+                    return Err(
+                        "private legal representative CID does not match admin roster".to_string(),
+                    );
+                }
+                (
+                    value.cid_number.clone(),
+                    value.family_name.clone(),
+                    value.given_name.clone(),
+                )
+            }
+            None => (
+                admin.cid_number.clone(),
+                admin.family_name.clone(),
+                admin.given_name.clone(),
+            ),
+        };
+        let account_id = if cid_number.is_empty() {
+            // 冻结公权管理员、私权非 LR 没有公民 CID，不虚构身份字段，直接使用名册账户。
+            admin.account_id
+        } else {
+            if family_name.is_empty() || given_name.is_empty() {
+                return Err("CID-bound admin family_name/given_name is empty".to_string());
+            }
+            let cid_number_text = std::str::from_utf8(cid_number.as_slice())
+                .map_err(|_| "admin cid_number is not UTF-8".to_string())?;
+            let Some(current_account_id) =
+                read_active_cid_account_id_at(storage, cid_number_text).await?
+            else {
+                // 不存在有效当前绑定时，该 CID 管理员没有可接受的签名账户。
+                continue;
+            };
+            current_account_id
+        };
+        if !effective_accounts.insert(account_id) {
+            return Err("resolved admin set contains duplicate account_id".to_string());
+        }
+        resolved.push(ResolvedOnChainAdminRecord {
+            role_assignment_account_id: admin.account_id,
+            account_id,
+            cid_number,
+            family_name,
+            given_name,
+        });
+    }
+    Ok(resolved)
 }
 
 /// 与 public-manage `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 字段序一致。
@@ -1331,25 +1637,27 @@ pub(crate) async fn for_each_chain_private_institution_cid(
     Ok(count)
 }
 
-/// 按 `account_id` 查找该账户所属的全部 Active 管理员机构集合。
+/// 按当前签名 `account_id` 查找该账户所属的全部 Active 管理员机构集合。
 ///
-/// 账户匹配（`matching_admin`）本身就确认了「该账户是此机构的在职管理员」，
-/// 无需二维码额外声明个人 CID：钱包码只给 account_id，登录判据由链上单向反查决定。
+/// 带 CID 的名册成员先解析到当前绑定账户，再和已验签账户匹配；换绑后新账户立即接管，
+/// 名册中的旧岗位关联账户不再具有签名权。冻结公权管理员与私权非 LR 没有 CID 时，
+/// 与 runtime 一致按名册 `account_id` 匹配。
 pub(crate) async fn find_active_admin_memberships(
     verified_account_id: &str,
 ) -> Result<Vec<ActiveAdminMembership>, String> {
     let target = parse_account_id_bytes(verified_account_id).ok_or_else(|| {
         "verified_account_id must be lowercase 0x plus 64 hexadecimal characters".to_string()
     })?;
-    let ws_url = super::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for admin membership scan failed: {e}"))?;
-    let storage = client
-        .storage()
-        .at_latest()
-        .await
-        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let finalized = FinalizedChainView::connect().await?;
+    let storage = finalized.storage();
+    let target_cid_number =
+        crate::core::chain_citizen_identity::read_active_cid_number_by_account_id_at(
+            &storage, target,
+        )
+        .await?;
+    let private_legal_representatives =
+        private_legal_representative_accounts_for_cid(&storage, target_cid_number.as_deref())
+            .await?;
 
     let mut memberships = Vec::new();
     let mut blocked_login_reason: Option<&'static str> = None;
@@ -1370,30 +1678,45 @@ pub(crate) async fn find_active_admin_memberships(
             let decoded = decode_onchain_admin_account(raw, pallet).map_err(|e| {
                 format!("decode {} AdminAccounts failed: {e}", pallet.pallet_name())
             })?;
-            if matching_admin(&decoded, &target).is_none() {
-                continue;
-            }
-            if let Some(reason) = console_login_block_reason(&decoded.institution_code) {
-                blocked_login_reason.get_or_insert(reason);
-                continue;
-            }
-            let allowed = console_admin_pallets(&decoded.institution_code)?;
-            if !allowed.contains(&pallet) {
-                continue;
-            }
+            let institution_code = decoded.institution_code;
             let cid_number = admin_accounts_cid_from_key(&kv.key_bytes)?;
             let cid_number_text = String::from_utf8(cid_number.clone())
                 .map_err(|_| "AdminAccounts cid_number is not UTF-8".to_string())?;
             if primitives::cid::code::institution_code_from_cid_number(&cid_number_text)
-                != Some(decoded.institution_code)
+                != Some(institution_code)
             {
                 return Err("AdminAccounts cid_number does not match institution_code".to_string());
             }
-            if decoded.institution_code == FRG_CODE {
+            let matched_admin = matching_admin_for_signer(
+                &storage,
+                &decoded,
+                pallet,
+                &cid_number,
+                &target,
+                target_cid_number.as_deref(),
+                &private_legal_representatives,
+            )
+            .await?;
+            if let Some(reason) = console_login_block_reason_for_membership(
+                &institution_code,
+                matched_admin.is_some(),
+            ) {
+                blocked_login_reason.get_or_insert(reason);
+                continue;
+            }
+            let Some(matched_admin) = matched_admin else {
+                continue;
+            };
+            let allowed = console_admin_pallets(&institution_code)?;
+            if !allowed.contains(&pallet) {
+                continue;
+            }
+            if institution_code == FRG_CODE {
                 let province_codes =
                     crate::institution::admins::chain_roles::fetch_frg_province_codes_for_admin(
+                        &finalized,
                         &cid_number,
-                        target,
+                        matched_admin.account_id,
                     )
                     .await?;
                 for province_code in province_codes {
@@ -1406,7 +1729,7 @@ pub(crate) async fn find_active_admin_memberships(
                 continue;
             }
             memberships.push(ActiveAdminMembership {
-                institution_code: decoded.institution_code,
+                institution_code,
                 cid_number: cid_number_text,
                 frg_province_code: None,
             });
@@ -1423,24 +1746,24 @@ pub(crate) async fn find_active_admin_memberships(
     Ok(memberships)
 }
 
-/// 读取本节点机构的链上管理员人员集合；授权方只使用 `account_id`。
+/// 读取本节点机构的链上管理员人员集合；`account_id` 始终是当前可签名账户。
 ///
 /// 按候选 pallet 顺序探测 `<Pallet>::AdminAccounts[cid_number]`，命中首个集合即返回。
 ///
 /// 返回:`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=不存在或非 Active;`Err`=链不可达或解码失败。
-/// 读 latest 块(membership 变更治理级稀有,后台扫描持续复查)。
 pub(crate) async fn fetch_active_admins_onchain(
     identity: &NodeInstitutionIdentity,
 ) -> Result<Option<Vec<OnChainAdmin>>, String> {
-    let ws_url = super::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for admin set failed: {e}"))?;
-    let storage = client
-        .storage()
-        .at_latest()
-        .await
-        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let finalized = FinalizedChainView::connect().await?;
+    fetch_active_admins_onchain_at(identity, &finalized).await
+}
+
+/// 在调用方固定的 finalized 区块读取管理员集合，供岗位合并复用同一快照。
+pub(crate) async fn fetch_active_admins_onchain_at(
+    identity: &NodeInstitutionIdentity,
+    finalized: &FinalizedChainView,
+) -> Result<Option<Vec<OnChainAdmin>>, String> {
+    let storage = finalized.storage();
 
     let addresses = identity
         .admin_pallets
@@ -1468,21 +1791,30 @@ pub(crate) async fn fetch_active_admins_onchain(
         let raw = thunk.encoded();
         let decoded = decode_onchain_admin_account(raw, *pallet)
             .map_err(|e| format!("decode on-chain admin account failed: {e}"))?;
-        let mut admin_records = decoded.admins;
+        let mut admin_records = resolve_onchain_admin_records(
+            &storage,
+            decoded,
+            *pallet,
+            identity.cid_number.as_bytes(),
+        )
+        .await?;
         if let Some(province_code) = identity.frg_province_code {
             let province_admins =
                 crate::institution::admins::chain_roles::fetch_frg_admins_for_province(
+                    finalized,
                     identity.cid_number.as_bytes(),
                     province_code,
                 )
                 .await?;
-            admin_records.retain(|admin| province_admins.contains(&admin.account_id));
+            admin_records
+                .retain(|admin| province_admins.contains(&admin.role_assignment_account_id));
         }
         let admins = admin_records
             .into_iter()
             .map(|admin| {
                 Ok(OnChainAdmin {
                     account_id: format!("0x{}", hex::encode(admin.account_id)),
+                    role_assignment_account_id: admin.role_assignment_account_id,
                     cid_number: String::from_utf8(admin.cid_number)
                         .map_err(|_| "on-chain cid_number is not UTF-8".to_string())?,
                     family_name: String::from_utf8(admin.family_name)
@@ -1540,15 +1872,23 @@ mod tests {
         assert_eq!(decoded.institution_code, *b"CREG");
         assert_eq!(decoded.admins.len(), 1);
         assert_eq!(decoded.admins[0].account_id, [0x42; 32]);
-        // 个人 CID 仍是记录的一部分，但登录判据只按 account_id 单向反查，
-        // 不再要求二维码额外声明 CID（钱包码只含 account_id）。
+        // 管理员 CID 由链上名册提供，钱包码无需重复声明；实际签名账户由该 CID
+        // 在同一个 finalized 区块上的当前绑定决定。
         assert_eq!(
             decoded.admins[0].cid_number.as_slice(),
             "CN220-CTZN2-198805200-2026".as_bytes()
         );
-        // 账户匹配本身就确认在职管理员身份，这是登录唯一判据的来源。
-        assert!(super::matching_admin(&decoded, &[0x42u8; 32]).is_some());
-        assert!(super::matching_admin(&decoded, &[0x43u8; 32]).is_none());
+        let resolved = [super::ResolvedOnChainAdminRecord {
+            role_assignment_account_id: decoded.admins[0].account_id,
+            account_id: [0x43; 32],
+            cid_number: decoded.admins[0].cid_number.clone(),
+            family_name: decoded.admins[0].family_name.clone(),
+            given_name: decoded.admins[0].given_name.clone(),
+        }];
+        // 换绑后岗位关联仍保留名册账户，但只有 CID 当前绑定的新账户能签名。
+        assert!(resolved.iter().all(|admin| admin.account_id != [0x42; 32]));
+        assert!(resolved.iter().any(|admin| admin.account_id == [0x43; 32]));
+        assert_eq!(resolved[0].role_assignment_account_id, [0x42; 32]);
 
         let old_layout = (*b"CREG", vec![[0x42u8; 32]]).encode();
         assert!(
@@ -1595,6 +1935,53 @@ mod tests {
         );
         assert_eq!(decoded.admins[0].family_name, "程".as_bytes());
         assert_eq!(decoded.admins[0].given_name, "伟".as_bytes());
+
+        let account_only = admin_primitives::InstitutionAdmins {
+            institution_code: *b"SFGY",
+            admins: vec![admin_primitives::Admin {
+                account_id: [0x25u8; 32],
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
+            }],
+        }
+        .encode();
+        let decoded_account_only =
+            super::decode_onchain_admin_account(&account_only, super::AdminPallet::PrivateAdmins)
+                .expect("private non-LR admin may remain account-only");
+        assert!(decoded_account_only.admins[0].cid_number.is_empty());
+        assert!(decoded_account_only.admins[0].family_name.is_empty());
+        assert!(decoded_account_only.admins[0].given_name.is_empty());
+    }
+
+    #[test]
+    fn frozen_public_admin_without_cid_uses_roster_account_only() {
+        let mut decoded = super::OnChainAdminAccount {
+            institution_code: *b"FRG\0",
+            admins: vec![super::OnChainAdminRecord {
+                account_id: [0x31; 32],
+                cid_number: Vec::new(),
+                family_name: Vec::new(),
+                given_name: Vec::new(),
+            }],
+        };
+        assert!(super::matching_roster_admin_by_cid_or_public_account(
+            &decoded,
+            super::AdminPallet::PublicAdmins,
+            &[0x31; 32],
+            Some(b"CN220-CTZN2-198805200-2026"),
+        )
+        .is_some());
+
+        // 一旦名册已有管理员 CID，旧名册账户不得再作为无 CID 例外回退。
+        decoded.admins[0].cid_number = b"CN220-CTZN2-198805200-2026".to_vec();
+        assert!(super::matching_roster_admin_by_cid_or_public_account(
+            &decoded,
+            super::AdminPallet::PublicAdmins,
+            &[0x31; 32],
+            Some(b"CN221-CTZN2-198805200-2026"),
+        )
+        .is_none());
     }
 
     #[test]
@@ -1608,6 +1995,15 @@ mod tests {
             assert_eq!(
                 super::console_admin_pallets(code).unwrap_err(),
                 super::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED
+            );
+            // 遍历到受阻机构并不代表目标账户属于该机构；只有实际命中名册才返回边界错误。
+            assert_eq!(
+                super::console_login_block_reason_for_membership(code, false),
+                None
+            );
+            assert_eq!(
+                super::console_login_block_reason_for_membership(code, true),
+                Some(super::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED)
             );
         }
     }

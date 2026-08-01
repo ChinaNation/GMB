@@ -84,9 +84,10 @@ GitHub PR / Actions
 - `memory/CODEX.md`
 - `memory/CLAUDE.md`
 - `.github/pull_request_template.md`
-- `.github/workflows/ai-guardrails.yml`
-- `.github/workflows/claude-pr-review.yml`
-- `.github/workflows/claude-on-comment.yml`
+- `.github/workflows/citizenchain-ci.yml`（内含 PR AI 门禁）
+- `.github/workflows/citizenchain-wasm.yml`
+- `.github/workflows/citizenapp-ci.yml`（内含 Cloudflare）
+- `.github/workflows/citizenwallet-ci.yml`
 - `scripts/check-ai-guardrails.sh`
 - `memory/07-ai/github-activation.md`
 - `memory/07-ai/daily-operations.md`
@@ -131,5 +132,5 @@ AI 文档边界统一收口在：
 
 1. 增加 AI 任务记录、变更记录和回归记录的自动索引
 2. 继续把模块级完成标准接入更多自动化入口
-3. 继续细化各系统独立 workflow 的构建深度与发布门禁
+3. 在四条 workflow 不增加数量的前提下，继续细化产品构建深度与发布门禁
 4. 如果确实需要，再建设自有 Flutter Desktop AI 控制台

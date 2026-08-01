@@ -42,8 +42,8 @@ pub(crate) async fn admin_auth_qr_sign_request(
         return api_error(StatusCode::BAD_REQUEST, 1001, "domain is required");
     }
     // 登录第 1 步只收钱包码：管理员私钥保管在离线的 CitizenWallet，钱包码由它自己
-    // 就能出示。二维码不携带 CID 与昵称——CID 由链上 `CidByAccountId` 反查，管理员
-    // 姓名由链上记录读出，两者都比二维码自述可靠。
+    // 就能出示。二维码不携带 CID 与昵称——后端从链上管理员名册读取身份字段，并在
+    // 同一个 finalized 区块按分层规则解析当前可签名账户，禁止信任二维码自述身份。
     let scanned_account_id = match crate::core::qr::parse_wallet_code_account_id(&input.identity_qr)
     {
         Ok(value) => value,

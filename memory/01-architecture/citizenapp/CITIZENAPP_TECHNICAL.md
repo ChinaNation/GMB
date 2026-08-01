@@ -58,8 +58,10 @@ keyPassword=...
 ```
 
 - GitHub Actions 的 `citizenapp-ci.yml` 分两种模式：
-  - push / PR：只构建 Debug APK 做工程检查，不读取正式签名密钥，不发布 GitHub Release，不清理旧 artifact。
+  - push / PR：执行 Flutter analyze/test、Cloudflare Worker 绑定类型时效校验、TypeScript、Vitest、全新本地 D1 唯一 schema 执行和 Debug APK 工程检查；不读取正式签名密钥，不发布 GitHub Release，不清理旧 artifact。
   - 手动 `Run workflow`：通过 `GMB_APP_KEY` 注入统一移动端 release keystore，构建正式签名 `公民.apk` artifact，并发布 Android 更新 Release。
+
+- Cloudflare 不得新建独立 workflow；其 CI 始终是 `citizenapp-ci.yml` 内的一个 job。D1 命令统一按 Wrangler 绑定 `DB` 寻址，不在 npm script 里另写环境数据库名。
 - 手动发布只需要配置一个 GitHub Secret：`GMB_APP_KEY`。内容至少包含：
   - `keystore=<base64后的jks>`
   - `password=<keystore密码>`

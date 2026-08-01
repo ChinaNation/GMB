@@ -3,12 +3,19 @@ name: CitizenChain
 on:
   push:
     branches: [main]
-    # 中文注释:按 ci-path-routing 文档,node 桌面端/deb 构建只在 node 目录(含
-    # chainspecs/)变更时触发。runtime/** 改动只走 citizenchain-wasm.yml；
-    # 桌面端 CI 只负责构建四个平台软件。
     paths:
       - ".github/workflows/citizenchain-ci.yml"
-      - "citizenchain/node/**"
+      - ".github/scripts/**"
+      - "scripts/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "primitives/**"
+      - "citizenchain/**"
+  # 中文注释：PR 不做路径过滤，确保原独立 AI Guardrails 的文档与残留门禁对每个 PR 生效。
+  # 链工程验证和四平台打包由 changes job 按真实变更再收窄。
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
     inputs:
       mode:
@@ -21,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: citizenchain-${{ github.ref }}
@@ -29,12 +37,194 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
   # 中文注释:桌面端版本以源码 tauri.conf.json/Cargo.toml 为准(由公民控制台按 ci=+0.0.1 / release=+0.1 自增),CI 不再用 run_number 覆盖。
   GMB_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
 
 jobs:
+  changes:
+    name: 识别公民链变更范围
+    runs-on: ubuntu-latest
+    outputs:
+      citizenchain: ${{ steps.scope.outputs.citizenchain }}
+      desktop: ${{ steps.scope.outputs.desktop }}
+    steps:
+      - name: 拉取完整变更历史
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: 计算链工程与桌面端变更
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "citizenchain=true" >> "$GITHUB_OUTPUT"
+            echo "desktop=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            diff_base="origin/${BASE_REF}"
+          elif [[ "$BEFORE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            diff_base="${GITHUB_SHA}^"
+          else
+            diff_base="$BEFORE_SHA"
+          fi
+
+          citizenchain=false
+          desktop=false
+          while IFS= read -r file; do
+            case "$file" in
+              citizenchain/*|primitives/*|Cargo.toml|Cargo.lock|.github/workflows/citizenchain-ci.yml|.github/scripts/*|scripts/*)
+                citizenchain=true
+                ;;
+            esac
+            case "$file" in
+              citizenchain/*|primitives/*|Cargo.toml|Cargo.lock|.github/workflows/citizenchain-ci.yml)
+                desktop=true
+                ;;
+            esac
+          done < <(git diff --name-only "$diff_base" "$GITHUB_SHA")
+
+          echo "citizenchain=$citizenchain" >> "$GITHUB_OUTPUT"
+          echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
+
+  # 金标向量真源在本仓 citizenchain/runtime/primitives/tests/fixtures/。
+  # 独立成 job 且不设 if：guardrails 只在 PR 跑，而真源改动常直接推 main，
+  # 挂在那里等于门禁失效。本 job 是纯 Node 静态比对，秒级、无需工具链。
+  golden-vectors:
+    name: 校验金标向量跨端一致
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+
+      - name: 比对真源与各端镜像
+        run: node .github/scripts/check-golden-vectors-sync.mjs
+
+  guardrails:
+    name: 文档、残留与 pallet 注册表门禁
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取完整变更历史
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: 检查文档更新与残留清理
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: ./.github/scripts/check-ai-guardrails.sh
+
+      - name: 校验 pallet 注册表与链上一致
+        run: node .github/scripts/check-pallet-registry-sync.mjs
+
+  verify:
+    name: 公民链全工程验证
+    needs: changes
+    if: ${{ needs.changes.outputs.citizenchain == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            llvm \
+            llvm-dev \
+            libclang-dev \
+            libpam0g-dev \
+            libssl-dev \
+            pkg-config \
+            protobuf-compiler
+
+      - name: 配置 libclang 与 protoc
+        run: |
+          {
+            echo "LLVM_CONFIG_PATH=$(command -v llvm-config)"
+            echo "LIBCLANG_PATH=$(llvm-config --libdir)"
+            echo "PROTOC=$(command -v protoc)"
+          } >> "$GITHUB_ENV"
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            citizenchain/node/frontend/package-lock.json
+            citizenchain/onchina/frontend/package-lock.json
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: citizenchain-workspace
+          workspaces: citizenchain -> target
+
+      - name: 检查 AI 启动协议与模块残留
+        run: bash scripts/check-startup-acceptance.sh --ci
+
+      - name: 校验 pallet 注册表与链上一致
+        run: node .github/scripts/check-pallet-registry-sync.mjs
+
+      - name: 校验宪法创世 SCALE 解码器
+        run: python3 citizenchain/scripts/check-constitution-genesis.py --self-test
+
+      - name: 检查 Rust 格式
+        working-directory: citizenchain
+        run: cargo fmt --all -- --check
+
+      - name: 检查全 Rust workspace
+        working-directory: citizenchain
+        run: cargo check --workspace --all-targets --locked
+
+      - name: 运行全 Rust workspace 测试
+        working-directory: citizenchain
+        run: cargo test --workspace --all-targets --locked
+
+      - name: 执行全 Rust workspace Clippy
+        working-directory: citizenchain
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: 构建 OnChina 前端
+        run: |
+          npm --prefix citizenchain/onchina/frontend ci
+          npm --prefix citizenchain/onchina/frontend run build
+
+      # 三档鉴权的前端头部组装 + 与 Rust 后端 header 名的跨端锁。
+      # 复用上一步已装好的依赖,不重复 npm ci。
+      - name: 测试 OnChina 前端
+        run: npm --prefix citizenchain/onchina/frontend test
+
+      - name: 构建公民链节点前端
+        run: |
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
+
+      - name: 清理本次 Rust 增量缓存
+        if: ${{ success() }}
+        run: find citizenchain/target -type d -name incremental -prune -exec rm -rf {} +
+
   build-desktop:
     name: 打包公民链桌面端 (${{ matrix.name }})
+    needs: [changes, verify]
+    if: ${{ needs.changes.outputs.desktop == 'true' && needs.verify.result == 'success' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

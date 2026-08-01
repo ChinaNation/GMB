@@ -1,28 +1,86 @@
 import { describe, expect, it } from 'vitest';
-import { bytesToHex, hexToBytes, signingMessage } from '../src/shared/signing_message';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  bytesToHex,
+  hexToBytes,
+  signingMessage,
+  OP_SIGN_CHAT_DEVICE_BIND,
+  OP_SIGN_SQUARE_LOGIN,
+  OP_SIGN_SQUARE_DEVICE_BIND,
+  OP_SIGN_SQUARE_ACTION,
+} from '../src/shared/signing_message';
 
-// 金标向量副本，逐字节对齐 citizenchain
-// runtime/primitives/tests/fixtures/signing_domain_vectors.json。
-// 任一漂移即 worker 与链端签名消息不一致 —— 必须与该 fixture 同步更新。
-const GOLDEN_VECTORS: Array<{ op_tag: number; scale_payload_hex: string; message_hex: string }> = [
-  { op_tag: 0x10, scale_payload_hex: '0102030405060708', message_hex: '19e050b3476dfd7db0aae9d527e205da44b8f9d00e5ddf4f81f4830ab0c00568' },
-  { op_tag: 0x11, scale_payload_hex: '0011223344556677', message_hex: 'd477515eb1cb4ec972e7a3635f895ecd7f12e34b525cfdcc283fbd3a0f8f3270' },
-  { op_tag: 0x13, scale_payload_hex: '3132333435363738', message_hex: 'd33919e352038d7bd62172b0530362fb6ef0da3990e27b56ea9325195fc6b1a6' },
-  { op_tag: 0x14, scale_payload_hex: '4142434445464748', message_hex: '501d0b85cf1ac826d58c974337b824b202d105dd9928a79c423052b8bd976274' },
-  { op_tag: 0x15, scale_payload_hex: '5152535455565758', message_hex: '4e4aece62f76d1e6e198cb6382f6bbe49d3d858d9c263d96662bf064c6fc36f0' },
-  { op_tag: 0x16, scale_payload_hex: '6162636465666768', message_hex: '49f4eb5bdc4ce83b738568504e1df83e9ce08b39debee48977041da8f17b4af2' },
-  { op_tag: 0x17, scale_payload_hex: '7172737475767778', message_hex: '8942b83ce5d46d2e1ca865fe4fbd699c86733551c83c771189aabf65978269da' },
-  { op_tag: 0x1a, scale_payload_hex: '696d2d62696e6431', message_hex: 'ecfabbf1ad5cf526920af3e85dd129a45f45190e88fe33431f3e4d83f7a1167f' },
-  { op_tag: 0x1b, scale_payload_hex: '73712d6c6f67696e', message_hex: '76a011b084004e797527ada19d740f6a0cf0b1c6d534fd92c08972aceddb642f' },
-  { op_tag: 0x1c, scale_payload_hex: '73712d62696e64696e67', message_hex: '6ba60be1df51dbf63ff00a9f2ef838b44492b42933009fb2b48ec9cdd0c32ebc' },
-  { op_tag: 0x1d, scale_payload_hex: '73712d616374696f6e', message_hex: '88a1c979a2018717db6313ae6ce8f5766cabd9760158317a557fded0c0119f6a' }
-];
+// 签名域金标锁(Worker ⇔ citizenchain)。
+//
+// 本文件**直接读真源**,Worker 侧不保存镜像副本 —— 沿用 cross_end_contract.test.ts
+// 的做法(直接读另一端的源文件)。原先向量是硬编码在本文件里的常量数组:那种形态下,
+// 同时改实现与改向量,本端测试依旧全绿,两端就此静默分叉;而 Worker 是**服务端校验方**,
+// 算错的表现是静默放行或静默拒绝合法请求,开发期不会暴露。直读真源让这种漂移在
+// 物理上不可能发生,比"复制一份再靠 CI 比对"更强,因此本端不登记进
+// .github/scripts/check-golden-vectors-sync.mjs 的 mirrors。
+//
+// 真源:citizenchain/runtime/primitives/tests/fixtures/signing_domain_vectors.json
+// 规范实现:citizenchain/runtime/primitives/src/sign.rs::signing_message
+// 契约:被签消息 = blake2_256( GMB(3B) || op_tag(1B) || SCALE(payload) )
 
-describe('signingMessage golden vectors (worker ⇔ citizenchain)', () => {
-  for (const vector of GOLDEN_VECTORS) {
-    it(`op_tag 0x${vector.op_tag.toString(16)} matches the chain golden message`, () => {
-      const message = signingMessage(vector.op_tag, hexToBytes(vector.scale_payload_hex));
-      expect(bytesToHex(message)).toBe(vector.message_hex);
+const REPO_ROOT = join(import.meta.dirname, '../../..');
+const VECTORS_PATH = join(
+  REPO_ROOT,
+  'citizenchain/runtime/primitives/tests/fixtures/signing_domain_vectors.json',
+);
+
+interface SigningVector {
+  name: string;
+  op_tag: string;
+  scale_payload_hex: string;
+  message_hex: string;
+}
+
+const canonical = JSON.parse(readFileSync(VECTORS_PATH, 'utf8')) as {
+  domain: string;
+  vectors: SigningVector[];
+};
+
+describe('signingMessage 金标向量(直读 citizenchain 真源)', () => {
+  it('真源可读、域为 GMB 且向量非空', () => {
+    // 读不到或读成空数组时,下面的 for 循环会一条用例都不生成而整体显示通过。
+    // 这条断言挡住"金标静默失效"这种最坏情况。
+    expect(canonical.domain).toBe('GMB');
+    expect(canonical.vectors.length).toBeGreaterThan(0);
+  });
+
+  // 全部 op_tag 都过一遍:signingMessage 是通用原语,op_tag 只是输入字节,
+  // 覆盖 Worker 当前未使用的域也能锁住 blake2 实现与拼接顺序。
+  for (const vector of canonical.vectors) {
+    it(`${vector.name} (op_tag ${vector.op_tag}) 与链端金标逐字节一致`, () => {
+      const message = signingMessage(
+        Number(vector.op_tag),
+        hexToBytes(vector.scale_payload_hex),
+      );
+      expect(bytesToHex(message)).toBe(vector.message_hex.toLowerCase());
+    });
+  }
+});
+
+describe('Worker op_tag 常量与真源登记值一致', () => {
+  // 摘要算对不代表常量用对:Worker 若把某个 op_tag 常量写错,会去验一个
+  // 密码学上完全合法、但语义是另一种操作的签名。按真源的 name 反查 op_tag,
+  // 把常量值本身钉死。
+  const byName = new Map(canonical.vectors.map((vector) => [vector.name, vector]));
+
+  const constants: ReadonlyArray<readonly [string, number]> = [
+    ['OP_SIGN_CHAT_DEVICE_BIND', OP_SIGN_CHAT_DEVICE_BIND],
+    ['OP_SIGN_SQUARE_LOGIN', OP_SIGN_SQUARE_LOGIN],
+    ['OP_SIGN_SQUARE_DEVICE_BIND', OP_SIGN_SQUARE_DEVICE_BIND],
+    ['OP_SIGN_SQUARE_ACTION', OP_SIGN_SQUARE_ACTION],
+  ];
+
+  for (const [name, value] of constants) {
+    it(`${name} = 0x${value.toString(16)}`, () => {
+      const vector = byName.get(name);
+      expect(vector, `真源缺少 ${name} 向量`).toBeDefined();
+      expect(value).toBe(Number(vector!.op_tag));
     });
   }
 });

@@ -142,7 +142,7 @@ pub(crate) struct AdminIdentifyOutput {
 
 #[derive(Deserialize)]
 pub(crate) struct AdminQrSignRequestInput {
-    /// 管理员先出示的完整 QR_V1/k=3 用户码；后端只从中读取 b.ss58_address。
+    /// 管理员先出示的完整 QR_V1/k=5 钱包码；后端只从中读取规范 `b.account_id`。
     pub(crate) identity_qr: String,
     pub(crate) origin: Option<String>,
     pub(crate) domain: Option<String>,

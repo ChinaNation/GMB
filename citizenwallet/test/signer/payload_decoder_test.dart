@@ -18,9 +18,23 @@ void main() {
   String hexLower(List<int> payload) =>
       payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+  List<int> compactU32(int value) {
+    if (value < 64) return [value << 2];
+    if (value < 16384) {
+      final v = (value << 2) | 1;
+      return [v & 0xff, (v >> 8) & 0xff];
+    }
+    final v = (value << 2) | 2;
+    return [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
+  }
+
+  /// SCALE `Vec<u8>` = compact(**字节**长度) ++ utf8。
+  ///
+  /// 长度前缀必须走 [compactU32]:此处曾内联 `bytes.length << 2`,只覆盖 1 字节档,
+  /// 文本超过 63 字节即编出错误前缀,基于它构造的用例会建立在非法输入上。
   List<int> compactVec(String text) {
     final bytes = utf8.encode(text);
-    return [bytes.length << 2, ...bytes];
+    return [...compactU32(bytes.length), ...bytes];
   }
 
   List<int> adminPerson(
@@ -63,16 +77,6 @@ void main() {
       tmp >>= 8;
     }
     return out;
-  }
-
-  List<int> compactU32(int value) {
-    if (value < 64) return [value << 2];
-    if (value < 16384) {
-      final v = (value << 2) | 1;
-      return [v & 0xff, (v >> 8) & 0xff];
-    }
-    final v = (value << 2) | 2;
-    return [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
   }
 
   Map<String, dynamic> readRolePermissionFixture() {

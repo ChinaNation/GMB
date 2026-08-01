@@ -50,6 +50,8 @@ CID 号生成和校验唯一源码目录为 `citizenchain/onchina/src/cid/`。�
 
 OnChina 管理端只承认当前节点 active binding 绑定机构的链上 active admin 登录。登录态必须携带 `institution_code`、`admin_level`、`scope_province_name`、`scope_city_name`、`scope_town_name`、后端下发的 `workspace` 和 `capabilities`。
 
+管理员登录反查、节点绑定确认、会话签发、周期撤权复查和管理员列表必须使用同一个链上分层解析器，并把每次解析固定到单一 finalized 区块。带 CID 管理员只认 CID 当前绑定 `account_id`；私权 LR 的有效 CID 可来自本机构法定代表人记录；冻结公权无 CID 管理员与私权非 LR 无 CID 管理员按名册 `account_id`；个人多签不进入 OnChina。岗位任职仍以名册 `account_id` 为关联锚点，不能把岗位锚点误当成换绑后的签名账户，也不能把本地 PostgreSQL 变成第二授权真源。
+
 所有业务列表和 CRUD 必须将登录态转换为后端 scope 条件：
 
 - FRG：按登录管理员在链上 `InstitutionRoleAssignments` 中的省岗位码限制；机构 CID 登记地址不得参与管理员权限派生。
@@ -112,7 +114,7 @@ OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录
 | `ONCHINA_LOGIN_QR_BAD_KIND` | 二维码类型不正确，请扫描公民钱包生成的签名响应 |
 | `ONCHINA_LOGIN_QR_BAD_PUBKEY` | 签名账户格式无效 |
 | `ONCHINA_LOGIN_QR_BAD_SIGNATURE` | 签名格式无效 |
-| `ONCHINA_LOGIN_USER_CONTACT_INVALID` | 用户二维码无效，请出示完整的 `QR_V1/k=3` 用户码 |
+| `ONCHINA_LOGIN_WALLET_CODE_INVALID` | 钱包码无效，请出示完整的 `QR_V1/k=5` 钱包码 |
 | `ONCHINA_LOGIN_ORIGIN_REQUIRED` | 登录来源缺失，请刷新页面后重试 |
 | `ONCHINA_LOGIN_SESSION_REQUIRED` | 登录会话缺失，请刷新页面后重试 |
 | `ONCHINA_LOGIN_DOMAIN_REQUIRED` | 登录域名缺失，请使用 `https://onchina.local:8964` 访问 |
@@ -128,7 +130,7 @@ OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录
 | `ONCHINA_LOGIN_COMPLETE_FAILED` | 登录签名响应处理失败，请查看服务日志 |
 | `ONCHINA_LOGIN_RESULT_SAVE_FAILED` | 登录结果保存失败，请稍后重试 |
 | `ONCHINA_LOGIN_RESULT_QUERY_FAILED` | 查询登录结果失败，请稍后重试 |
-| `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN` | 当前钱包不是本机构链上有效管理员 |
+| `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN` | 当前钱包不是任何受 OnChina 支持机构的链上有效管理员 |
 | `ONCHINA_LOGIN_DESKTOP_GOVERNANCE_UNSUPPORTED` | 国家储委会、省储委会、省储行使用节点桌面端管理，不支持登录链上中国平台 |
 | `ONCHINA_LOGIN_PERSONAL_MULTISIG_UNSUPPORTED` | 个人多签账户不支持登录链上中国平台 |
 | `ONCHINA_LOGIN_CHAIN_UNREACHABLE` | 无法连接区块链节点，请确认节点已启动并同步 |

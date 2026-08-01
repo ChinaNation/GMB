@@ -1,5 +1,5 @@
 {
-  "_comment": "ADR-026 Phase 2 二进制前缀域(非 hash)golden 字节布局. 这两个域签的是原始可解析字节: 冷钱包(citizenwallet)对整段 payload sr25519 签名, node 按字节偏移解析. 前 4 字节 = GMB(3B) || op_tag(1B) 二进制前缀(单一真源 primitives::sign::binary_domain_prefix). 供 Dart 四方(node 构造/node 验签解析/citizenwallet 签名解码/citizenapp 构造)逐字节对齐. nonce 字段在 golden 里固定为全 0(真实运行为随机 16B), 其余字段为固定示例值非真实业务数据.",
+  "_comment": "ADR-026 Phase 2 二进制前缀域(非 hash)golden 字节布局. 这两个域签的是原始可解析字节: 冷钱包(citizenwallet)对整段 payload sr25519 签名, node 按字节偏移解析. 前 4 字节 = GMB(3B) || op_tag(1B) 二进制前缀(单一真源 primitives::sign::binary_domain_prefix). 供 Dart 四方(node 构造/node 验签解析/citizenwallet 签名解码/citizenapp 构造)逐字节对齐. nonce 字段在 golden 里固定为全 0(真实运行为随机 16B), 其余字段为固定示例值非真实业务数据. 【镜像】真源在 citizenchain/runtime/primitives/tests/fixtures/binary_prefix_domain_vectors.json，本文件是供本端金标测试独立回归的副本。不得在此自造向量或单方面改值；需要新向量请先在真源登记。CI 由 .github/scripts/check-golden-vectors-sync.mjs 比对。",
   "domain": "GMB",
   "vectors": [
     {

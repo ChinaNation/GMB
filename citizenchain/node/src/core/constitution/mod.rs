@@ -371,6 +371,10 @@ pub enum GuardError {
     VersionContentHashChanged(u32),
     /// 存在不在 `1..=latest_version` 声明范围内的隐藏宪法版本。
     VersionOutsideDeclaredRange(u32),
+    /// 同一版本内出现重复章号。
+    DuplicateChapterNumber(u32),
+    /// 同一章内出现重复节号；不同章允许使用相同节号。
+    DuplicateSectionNumber { chapter: u32, section: u32 },
     /// 同一版本内出现重复条号，可能隐藏第二份恶意条文。
     DuplicateArticleNumber(u32),
     /// 某不可修改条款在状态中缺失(被删/改号)。
@@ -505,7 +509,7 @@ fn validate_law_identity_and_state(law: &MLawHead) -> Result<(), GuardError> {
     Ok(())
 }
 
-/// 校验版本值与 RAW key 的身份一致性、全文哈希和全局条号唯一性。
+/// 校验版本值与 RAW key 的身份一致性、全文哈希和章/节/条三层编号唯一性。
 fn validate_version_identity_and_structure(
     head: &MLawVersionHead,
     expected_version: u32,
@@ -522,15 +526,25 @@ fn validate_version_identity_and_structure(
     if head.content_hash != sp_core::blake2_256(&head.chapters.encode()) {
         return Err(GuardError::VersionContentHashChanged(expected_version));
     }
+    let mut chapter_numbers = BTreeSet::new();
     let mut article_numbers = BTreeSet::new();
-    for article in head
-        .chapters
-        .iter()
-        .flat_map(|chapter| chapter.sections.iter())
-        .flat_map(|section| section.articles.iter())
-    {
-        if !article_numbers.insert(article.number) {
-            return Err(GuardError::DuplicateArticleNumber(article.number));
+    for chapter in &head.chapters {
+        if !chapter_numbers.insert(chapter.number) {
+            return Err(GuardError::DuplicateChapterNumber(chapter.number));
+        }
+        let mut section_numbers = BTreeSet::new();
+        for section in &chapter.sections {
+            if !section_numbers.insert(section.number) {
+                return Err(GuardError::DuplicateSectionNumber {
+                    chapter: chapter.number,
+                    section: section.number,
+                });
+            }
+            for article in &section.articles {
+                if !article_numbers.insert(article.number) {
+                    return Err(GuardError::DuplicateArticleNumber(article.number));
+                }
+            }
         }
     }
     Ok(())
@@ -871,6 +885,36 @@ mod tests {
             body: body.as_bytes().to_vec(),
             body_en: Some("EN".as_bytes().to_vec()),
             clauses: Vec::new(),
+        }
+    }
+
+    fn section_bytes(number: u32, articles: Vec<MArticle>) -> MSection {
+        MSection {
+            number,
+            title: format!("第{number}节").into_bytes(),
+            title_en: None,
+            articles,
+        }
+    }
+
+    fn chapter_bytes(number: u32, sections: Vec<MSection>) -> MChapter {
+        MChapter {
+            number,
+            title: format!("第{number}章").into_bytes(),
+            title_en: None,
+            sections,
+        }
+    }
+
+    fn version_head(chapters: Vec<MChapter>) -> MLawVersionHead {
+        MLawVersionHead {
+            law_id: CONSTITUTION_LAW_ID,
+            version: GENESIS_CONSTITUTION_VERSION,
+            title: b"constitution".to_vec(),
+            title_en: None,
+            content_hash: sp_core::blake2_256(&chapters.encode()),
+            chapters,
+            vote_type: LAW_VOTE_TYPE_SPECIAL,
         }
     }
 
@@ -1637,6 +1681,60 @@ mod tests {
         assert_eq!(
             check_immutable_articles(reader(valid_current_state(1, articles)), &reference),
             Err(GuardError::DuplicateArticleNumber(1))
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_chapter_number() {
+        let head = version_head(vec![
+            chapter_bytes(3, vec![section_bytes(1, vec![article_bytes(1, "a")])]),
+            chapter_bytes(3, vec![section_bytes(1, vec![article_bytes(2, "b")])]),
+        ]);
+        assert_eq!(
+            validate_version_identity_and_structure(&head, GENESIS_CONSTITUTION_VERSION),
+            Err(GuardError::DuplicateChapterNumber(3))
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_section_number_within_chapter() {
+        let head = version_head(vec![chapter_bytes(
+            4,
+            vec![
+                section_bytes(8, vec![article_bytes(1, "a")]),
+                section_bytes(8, vec![article_bytes(2, "b")]),
+            ],
+        )]);
+        assert_eq!(
+            validate_version_identity_and_structure(&head, GENESIS_CONSTITUTION_VERSION),
+            Err(GuardError::DuplicateSectionNumber {
+                chapter: 4,
+                section: 8,
+            })
+        );
+    }
+
+    #[test]
+    fn allows_same_section_number_in_different_chapters() {
+        let head = version_head(vec![
+            chapter_bytes(1, vec![section_bytes(6, vec![article_bytes(10, "a")])]),
+            chapter_bytes(2, vec![section_bytes(6, vec![article_bytes(20, "b")])]),
+        ]);
+        assert_eq!(
+            validate_version_identity_and_structure(&head, GENESIS_CONSTITUTION_VERSION),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_article_number_across_chapters() {
+        let head = version_head(vec![
+            chapter_bytes(1, vec![section_bytes(1, vec![article_bytes(9, "a")])]),
+            chapter_bytes(2, vec![section_bytes(1, vec![article_bytes(9, "b")])]),
+        ]);
+        assert_eq!(
+            validate_version_identity_and_structure(&head, GENESIS_CONSTITUTION_VERSION),
+            Err(GuardError::DuplicateArticleNumber(9))
         );
     }
 

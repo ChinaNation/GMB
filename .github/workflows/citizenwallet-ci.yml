@@ -37,6 +37,11 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v5
 
+      # 金标向量真源在 citizenchain/runtime/primitives；本端只持镜像。
+      # 改动 citizenwallet/** 只触发本条流水线，故门禁必须挂在这里，不能只挂链端。
+      - name: 校验金标向量跨端一致
+        run: node .github/scripts/check-golden-vectors-sync.mjs
+
       - name: 读取 Flutter 版本
         id: flutter-version
         run: |

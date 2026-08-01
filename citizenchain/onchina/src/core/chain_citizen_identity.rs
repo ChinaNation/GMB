@@ -131,6 +131,113 @@ fn decode_all<T: Decode>(encoded: &[u8], field: &str) -> Result<T, String> {
     Ok(value)
 }
 
+/// 在调用方已经固定的 finalized storage 上解析 CID 当前绑定账户。
+///
+/// 本入口只服务管理员签名授权，不另建身份真源：登记状态、正向绑定、绑定版本与
+/// `CidByAccountId` 反向闭环仍全部读取 `CitizenIdentity`。返回 `None` 表示 CID 不存在、
+/// 已撤销或没有有效当前绑定；闭环损坏则返回错误并拒绝授权。
+pub(crate) async fn read_active_cid_account_id_at(
+    storage: &subxt::storage::Storage<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+    cid_number: &str,
+) -> Result<Option<[u8; 32]>, String> {
+    let cid_key = || vec![dynamic::Value::from_bytes(cid_number.as_bytes())];
+    let cid_record = storage
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "CidRegistry",
+            cid_key(),
+        ))
+        .await
+        .map_err(|e| format!("fetch CidRegistry {cid_number} failed: {e}"))?
+        .map(|value| {
+            decode_all::<RawCidRecord>(value.encoded(), &format!("CidRegistry {cid_number}"))
+        })
+        .transpose()?;
+    let account_id = storage
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "AccountIdByCid",
+            cid_key(),
+        ))
+        .await
+        .map_err(|e| format!("fetch AccountIdByCid {cid_number} failed: {e}"))?
+        .map(|value| {
+            decode_all::<[u8; 32]>(value.encoded(), &format!("AccountIdByCid {cid_number}"))
+        })
+        .transpose()?;
+    let binding_revision = storage
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "BindingRevisionByCid",
+            cid_key(),
+        ))
+        .await
+        .map_err(|e| format!("fetch BindingRevisionByCid {cid_number} failed: {e}"))?
+        .map(|value| {
+            decode_all::<u64>(
+                value.encoded(),
+                &format!("BindingRevisionByCid {cid_number}"),
+            )
+        })
+        .transpose()?;
+    let cid_status = match cid_record {
+        None => FinalizedCidStatus::Missing,
+        Some(record) => match record.status {
+            0 => FinalizedCidStatus::Active,
+            1 => FinalizedCidStatus::Revoked,
+            other => {
+                return Err(format!(
+                    "CidRegistry {cid_number} has unknown status {other}"
+                ));
+            }
+        },
+    };
+    validate_binding_closure(
+        storage,
+        cid_number,
+        cid_status,
+        account_id,
+        binding_revision,
+        false,
+        false,
+    )
+    .await?;
+    Ok(match (cid_status, account_id, binding_revision) {
+        (FinalizedCidStatus::Active, Some(account_id), Some(revision)) if revision > 0 => {
+            Some(account_id)
+        }
+        _ => None,
+    })
+}
+
+/// 由当前签名账户读取其唯一有效 CID，并复核 CID → AccountId 正向绑定闭环。
+pub(crate) async fn read_active_cid_number_by_account_id_at(
+    storage: &subxt::storage::Storage<PolkadotConfig, OnlineClient<PolkadotConfig>>,
+    account_id: [u8; 32],
+) -> Result<Option<Vec<u8>>, String> {
+    let Some(value) = storage
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "CidByAccountId",
+            vec![dynamic::Value::from_bytes(account_id)],
+        ))
+        .await
+        .map_err(|e| format!("fetch CidByAccountId failed: {e}"))?
+    else {
+        return Ok(None);
+    };
+    let cid_number = decode_all::<Vec<u8>>(value.encoded(), "CidByAccountId")?;
+    let cid_number_text = std::str::from_utf8(cid_number.as_slice())
+        .map_err(|_| "CidByAccountId is not UTF-8".to_string())?;
+    let current_account_id = read_active_cid_account_id_at(storage, cid_number_text)
+        .await?
+        .ok_or_else(|| "CidByAccountId points to a CID without active binding".to_string())?;
+    if current_account_id != account_id {
+        return Err("CidByAccountId does not match AccountIdByCid".to_string());
+    }
+    Ok(Some(cid_number))
+}
+
 /// 读取最新 finalized CID 身份快照。
 pub(crate) async fn read_finalized_citizen_identity(
     cid_number: &str,

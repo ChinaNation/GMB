@@ -42,6 +42,7 @@ export interface SignRequestBody {
 export interface SignResponseBody {
   account_id: string;
   signature: string;
+  /** 换绑时当前账户和其签名必须成对出现；其它签名响应同时省略。 */
   current_account_id?: string;
   current_account_signature?: string;
 }
@@ -176,6 +177,7 @@ function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
   requireExactKeys(b, ['u', 's', 'o', 'r'], 'b');
   const u = requireCompactB64(b, 'u');
   const s = requireCompactB64(b, 's');
+  // 紧凑字段 o/r 是不可拆分的当前账户授权对，禁止接受半条换绑证据。
   const hasCurrentAccount = Object.prototype.hasOwnProperty.call(b, 'o');
   const hasCurrentAccountSignature = Object.prototype.hasOwnProperty.call(b, 'r');
   if (hasCurrentAccount !== hasCurrentAccountSignature) {

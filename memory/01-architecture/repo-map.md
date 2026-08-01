@@ -158,33 +158,16 @@ OnChina 是 `citizenchain` 内置能力，不再作为独立产品目录存在�
 
 ## 7. GitHub Actions 路径分流原则
 
-GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
+GMB 只保留四条产品 workflow：
 
-- `citizenchain/node`
-  - `.github/workflows/citizenchain.yml`
-- `citizenchain/runtime/governance`
-  - `.github/workflows/citizenchain-runtime-governance.yml`
-- `citizenchain/runtime/issuance`
-  - `.github/workflows/citizenchain-runtime-issuance.yml`
-- `citizenchain/runtime/misc`
-  - `.github/workflows/citizenchain-runtime-misc.yml`
-- `citizenchain/runtime/primitives`
-  - `.github/workflows/citizenchain-runtime-primitives.yml`
-- `citizenchain/runtime/src`
-  - `.github/workflows/citizenchain-runtime-src.yml`
-- `citizenchain/runtime/transaction`
-  - `.github/workflows/citizenchain-runtime-transaction.yml`
-- `citizenchain/onchina`
-  - 归属公民链 CI，按 OnChina 后端、前端和链交互变更执行对应本地/CI 检查；不得恢复独立 旧独立身份系统 CI
-- `citizenapp`
-  - `.github/workflows/citizenapp-ci.yml`
-- `citizenwallet`
-  - `.github/workflows/citizenwallet-ci.yml`
-- `citizenweb`
-  - 当前暂无专用 GitHub Actions，官网发布前需在本地执行 `npm run build` 并部署 `citizenweb/dist/`
+- `.github/workflows/citizenchain-ci.yml`：CitizenChain 全工程 CI，包含 runtime、node、OnChina、共享 Rust workspace、两个链端前端和 PR AI 门禁；桌面端依然以同一 workflow matrix 构建四平台。
+- `.github/workflows/citizenchain-wasm.yml`：唯一 runtime WASM 产物入口，只允许手动触发。
+- `.github/workflows/citizenapp-ci.yml`：CitizenApp Flutter、Android 与同产品 Cloudflare Worker/D1 的共用 CI。
+- `.github/workflows/citizenwallet-ci.yml`：CitizenWallet Flutter、Android CI。
+- `citizenweb`：官网不使用 GitHub Actions，发布前在本地构建并部署 `citizenweb/dist/`。
 
 补充说明：
 
 - OnChina 不再保留独立发布包、独立部署 workflow 或独立产品入口。
-- Pages 只在 `docs/**` 或自身 workflow 变更时触发
-- 共享 Rust 根目录变更允许触发多个 citizenchain workflow，这是保留的安全边界
+- 原独立 `ai-guardrails.yml` 已删除，门禁 job 并入 `citizenchain-ci.yml`，不构成第五条流水线。
+- 共享 Rust 与 `citizenchain/**` 变更统一进入 CitizenChain 全工程验证；WASM 继续保持手动、独立、可审计。

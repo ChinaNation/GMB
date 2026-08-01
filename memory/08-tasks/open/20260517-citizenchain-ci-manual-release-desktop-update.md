@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-- `citizenchain.yml` 支持本地推送代码触发构建检查，但推送触发不得发布 GitHub Release，也不得部署服务器。
+- `citizenchain-ci.yml` 支持推送代码触发全链工程验证和桌面端构建检查，但推送触发不得发布 GitHub Release，也不得部署服务器。
 - 只有正式 Release 操作才发布桌面端 GitHub Release；历史“同一 workflow 部署6台服务器”已经废弃，服务器部署现由本机 `deploy/` 控制台逐节点执行。
 - 区块链软件打开后检查 GitHub Release 更新；有新版本时，在设置 tab 的“节点程序版本”数字前显示“更新”按钮。
 - 用户点击“更新”后，才停止当前节点、安装更新并重启区块链软件。

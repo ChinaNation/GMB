@@ -1,15 +1,17 @@
 //! 机构岗位与管理员任职的链上只读适配层。
 //!
-//! `admins` pallet 只回答“哪些钱包是本机构管理员”；岗位定义和任职关系只从
-//! `PublicManage` / `PrivateManage` 读取。本模块负责合并两类真源，不参与投票或任免业务。
+//! `admins` pallet 保存管理员名册；有管理员 CID 时，实际签名账户由
+//! `CitizenIdentity::AccountIdByCid` 当前绑定决定。岗位定义和任职关系只从
+//! `PublicManage` / `PrivateManage` 读取。本模块在同一个 finalized 区块合并三类真源，
+//! 不参与投票或任免业务。
 
 use std::collections::{HashMap, HashSet};
 
 use codec::Decode;
-use subxt::{dynamic, OnlineClient, PolkadotConfig};
+use subxt::dynamic;
 
 use crate::core::chain_runtime::{
-    fetch_active_admins_onchain, AdminPallet, NodeInstitutionIdentity,
+    fetch_active_admins_onchain_at, AdminPallet, FinalizedChainView, NodeInstitutionIdentity,
 };
 
 const ROLE_STATUS_ACTIVE: u8 = 0;
@@ -34,6 +36,13 @@ struct RawInstitutionAssignment {
     assignment_source: u8,
     assignment_source_ref: Vec<u8>,
     assignment_status: u8,
+}
+
+#[derive(Debug, Clone)]
+struct ActiveAdminRoleProjection {
+    account_id: String,
+    family_name: String,
+    given_name: String,
 }
 
 /// 管理员人员记录和一条可选有效任职的联合投影。
@@ -88,11 +97,6 @@ fn assignment_is_effective(
         && current_day <= assignment.term_end
 }
 
-fn current_utc_day() -> Result<u32, String> {
-    let current_day = chrono::Utc::now().timestamp().div_euclid(86_400);
-    u32::try_from(current_day).map_err(|_| "current UTC day is outside u32 range".to_string())
-}
-
 fn entity_pallet_name(admin_pallet: AdminPallet) -> &'static str {
     match admin_pallet {
         AdminPallet::PublicAdmins => "PublicManage",
@@ -101,18 +105,11 @@ fn entity_pallet_name(admin_pallet: AdminPallet) -> &'static str {
 }
 
 async fn read_roles_and_assignments(
+    finalized: &FinalizedChainView,
     cid_number: &[u8],
     admin_pallet: AdminPallet,
 ) -> Result<(Vec<RawInstitutionRole>, Vec<RawInstitutionAssignment>), String> {
-    let ws_url = crate::core::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for institution roles failed: {e}"))?;
-    let storage = client
-        .storage()
-        .at_latest()
-        .await
-        .map_err(|e| format!("get latest institution role storage failed: {e}"))?;
+    let storage = finalized.storage();
     let pallet = entity_pallet_name(admin_pallet);
 
     // 值本身携带 CID；全表遍历后按 CID 过滤，避免依赖动态 storage key 的哈希后缀。
@@ -162,14 +159,14 @@ async fn read_roles_and_assignments(
 fn merge_active_assignments(
     roles: Vec<RawInstitutionRole>,
     assignments: Vec<RawInstitutionAssignment>,
-    active_admins: &HashMap<[u8; 32], (String, String)>,
+    active_admins: &HashMap<[u8; 32], ActiveAdminRoleProjection>,
+    current_day: u32,
 ) -> Result<Vec<InstitutionAssignmentView>, String> {
     let active_roles: HashMap<Vec<u8>, RawInstitutionRole> = roles
         .into_iter()
         .filter(|role| role.role_status == ROLE_STATUS_ACTIVE)
         .map(|role| (role.role_code.clone(), role))
         .collect();
-    let current_day = current_utc_day()?;
     let mut views = Vec::new();
     for assignment in assignments {
         if !active_admins.contains_key(&assignment.account_id) {
@@ -183,10 +180,11 @@ fn merge_active_assignments(
         if !assignment_is_effective(role, &assignment, current_day) {
             continue;
         }
+        let admin = &active_admins[&assignment.account_id];
         views.push(InstitutionAssignmentView {
-            account_id: format!("0x{}", hex::encode(assignment.account_id)),
-            family_name: active_admins[&assignment.account_id].0.clone(),
-            given_name: active_admins[&assignment.account_id].1.clone(),
+            account_id: admin.account_id.clone(),
+            family_name: admin.family_name.clone(),
+            given_name: admin.given_name.clone(),
             role_code: String::from_utf8_lossy(&assignment.role_code).to_string(),
             role_name: String::from_utf8_lossy(&role.role_name).to_string(),
             term_required: role.term_required,
@@ -211,31 +209,33 @@ fn merge_active_assignments(
 pub(crate) async fn fetch_active_assignments_onchain(
     identity: &NodeInstitutionIdentity,
 ) -> Result<Option<Vec<InstitutionAssignmentView>>, String> {
+    let finalized = FinalizedChainView::connect().await?;
     let cid_number = identity.cid_number.as_str();
-    let Some(admins) = fetch_active_admins_onchain(identity).await? else {
+    let Some(admins) = fetch_active_admins_onchain_at(identity, &finalized).await? else {
         return Ok(None);
     };
-    let active_admins: HashMap<[u8; 32], (String, String)> = admins
+    let active_admins: HashMap<[u8; 32], ActiveAdminRoleProjection> = admins
         .iter()
         .map(|admin| {
-            crate::auth::login::parse_account_id_bytes(&admin.account_id)
-                .map(|account| {
-                    (
-                        account,
-                        (admin.family_name.clone(), admin.given_name.clone()),
-                    )
-                })
-                .ok_or_else(|| "active admin account decode failed".to_string())
+            Ok((
+                admin.role_assignment_account_id,
+                ActiveAdminRoleProjection {
+                    account_id: admin.account_id.clone(),
+                    family_name: admin.family_name.clone(),
+                    given_name: admin.given_name.clone(),
+                },
+            ))
         })
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<_, String>>()?;
+    let current_day = finalized.current_day().await?;
 
     for pallet in &identity.admin_pallets {
         let (roles, assignments) =
-            read_roles_and_assignments(cid_number.as_bytes(), *pallet).await?;
+            read_roles_and_assignments(&finalized, cid_number.as_bytes(), *pallet).await?;
         if roles.is_empty() {
             continue;
         }
-        let mut views = merge_active_assignments(roles, assignments, &active_admins)?;
+        let mut views = merge_active_assignments(roles, assignments, &active_admins, current_day)?;
         if let Some(province_code) = identity.frg_province_code {
             let expected =
                 primitives::governance_skeleton::province_commissioner_role_code(province_code);
@@ -243,16 +243,16 @@ pub(crate) async fn fetch_active_assignments_onchain(
         }
         let covered = views
             .iter()
-            .filter_map(|view| crate::auth::login::parse_account_id_bytes(&view.account_id))
+            .map(|view| view.account_id.clone())
             .collect::<HashSet<_>>();
-        for (account_id, (family_name, given_name)) in &active_admins {
-            if covered.contains(account_id) {
+        for admin in active_admins.values() {
+            if covered.contains(&admin.account_id) {
                 continue;
             }
             views.push(InstitutionAssignmentView {
-                account_id: format!("0x{}", hex::encode(account_id)),
-                family_name: family_name.clone(),
-                given_name: given_name.clone(),
+                account_id: admin.account_id.clone(),
+                family_name: admin.family_name.clone(),
+                given_name: admin.given_name.clone(),
                 role_code: String::new(),
                 role_name: String::new(),
                 term_required: false,
@@ -275,17 +275,18 @@ pub(crate) async fn fetch_active_assignments_onchain(
 
 /// 查找某个联邦注册局管理员账户当前担任专员的省码。
 pub(crate) async fn fetch_frg_province_codes_for_admin(
+    finalized: &FinalizedChainView,
     cid_number: &[u8],
     account_id: [u8; 32],
 ) -> Result<Vec<[u8; 2]>, String> {
     let (roles, assignments) =
-        read_roles_and_assignments(cid_number, AdminPallet::PublicAdmins).await?;
+        read_roles_and_assignments(finalized, cid_number, AdminPallet::PublicAdmins).await?;
     let active_roles: HashMap<Vec<u8>, RawInstitutionRole> = roles
         .into_iter()
         .filter(|role| role.role_status == ROLE_STATUS_ACTIVE)
         .map(|role| (role.role_code.clone(), role))
         .collect();
-    let current_day = current_utc_day()?;
+    let current_day = finalized.current_day().await?;
     let assigned_codes: HashSet<Vec<u8>> = assignments
         .into_iter()
         .filter(|assignment| {
@@ -312,11 +313,12 @@ pub(crate) async fn fetch_frg_province_codes_for_admin(
 
 /// 从 FRG entity 任职真源取指定省专员岗位的有效管理员账户 ID。
 pub(crate) async fn fetch_frg_admins_for_province(
+    finalized: &FinalizedChainView,
     cid_number: &[u8],
     province_code: [u8; 2],
 ) -> Result<HashSet<[u8; 32]>, String> {
     let (roles, assignments) =
-        read_roles_and_assignments(cid_number, AdminPallet::PublicAdmins).await?;
+        read_roles_and_assignments(finalized, cid_number, AdminPallet::PublicAdmins).await?;
     let expected = primitives::governance_skeleton::province_commissioner_role_code(province_code);
     let role = roles
         .into_iter()
@@ -324,7 +326,7 @@ pub(crate) async fn fetch_frg_admins_for_province(
     let Some(role) = role else {
         return Err("federal registry province commissioner role is not active".to_string());
     };
-    let current_day = current_utc_day()?;
+    let current_day = finalized.current_day().await?;
     Ok(assignments
         .into_iter()
         .filter(|assignment| {
@@ -410,6 +412,45 @@ mod scale_contract_tests {
         assignment.term_start = 0;
         assignment.term_end = 0;
         assert!(!assignment_is_effective(&role, &assignment, 10));
+    }
+
+    #[test]
+    fn role_assignment_anchor_survives_admin_account_rebind() {
+        let role = RawInstitutionRole {
+            cid_number: b"CID".to_vec(),
+            role_code: b"LR".to_vec(),
+            role_name: "法定代表人".as_bytes().to_vec(),
+            term_required: false,
+            role_status: ROLE_STATUS_ACTIVE,
+        };
+        let assignment = RawInstitutionAssignment {
+            cid_number: b"CID".to_vec(),
+            account_id: [0x11; 32],
+            role_code: b"LR".to_vec(),
+            term_start: 0,
+            term_end: 0,
+            assignment_source: 5,
+            assignment_source_ref: b"proposal".to_vec(),
+            assignment_status: ASSIGNMENT_STATUS_ACTIVE,
+        };
+        let current_account_id = format!("0x{}", hex::encode([0x22; 32]));
+        let active_admins = HashMap::from([(
+            [0x11; 32],
+            ActiveAdminRoleProjection {
+                account_id: current_account_id.clone(),
+                family_name: "程".to_string(),
+                given_name: "伟".to_string(),
+            },
+        )]);
+        let views = merge_active_assignments(vec![role], vec![assignment], &active_admins, 10)
+            .expect("role assignment must join through the roster anchor");
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].account_id, current_account_id);
+        assert_ne!(
+            views[0].account_id,
+            format!("0x{}", hex::encode([0x11; 32]))
+        );
+        assert_eq!(views[0].role_code, "LR");
     }
 
     fn fixture_case(name: &str) -> Vec<u8> {

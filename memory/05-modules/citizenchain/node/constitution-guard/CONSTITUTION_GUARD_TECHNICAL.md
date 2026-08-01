@@ -27,7 +27,7 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - `Law(0)` 或创世版本缺失、解码失败；
 - `law_id/tier/scope/status/版本指针` 非法；
 - manifest 与二进制清单或创世条文摘要不一致；
-- `LawVersion` 身份、内容哈希、条号唯一性不合法；
+- `LawVersion` 身份、内容哈希或章号/同章节号/条号三层唯一性不合法；
 - 版本 key 集不严格等于 `1..=latest_version`；
 - 任一历史版本破坏不可修改条款或缺少既有凭据记录。
 
@@ -42,7 +42,10 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - 已进入父状态的历史版本和两类修宪凭据逐字冻结，后续区块不得修改、删除或事后补写；
 - 每个版本值内部 `law_id/version` 必须与 RAW key 一致；
 - `content_hash=blake2_256(chapters.encode())`；
-- 全文条号全局唯一，不允许用重复条号隐藏第二份条文；
+- 章号在单一版本全文中全局唯一；
+- 节号在所属章内唯一，不同章允许复用同一节号；
+- 条号在单一版本全文中全局唯一，不允许用重复条号隐藏第二份条文；
+- 三层编号只要求唯一，不要求连续或从 1 开始；
 - 第 1/2/3/17/19/24/34/42 条在所有受检版本中必须恰好存在且与 block#0 逐字一致；
 - 核心章修改必须记录为特别案并存在过口径公投记录；所有修宪版本必须存在过 4/7 口径的护宪终审记录。
 
@@ -99,8 +102,8 @@ ConstitutionGuard `39/39` 全部通过。凭据仍是计数型状态，不是签
 
 ## 9. 第 6.2 步恶意状态与拒绝矩阵
 
-ConstitutionGuard 39 个定向测试已经覆盖 Law[0] 缺失/身份错误、tier/status/houses/指针异常、scope
-唯一索引、manifest 篡改、不可修改条款删除或修改、条号重复、版本身份/内容哈希、历史版本删除或
+`core::constitution` 47 个定向测试已经覆盖 Law[0] 缺失/身份错误、tier/status/houses/指针异常、scope
+唯一索引、manifest 篡改、不可修改条款删除或修改、章号/同章节号/条号重复、跨章复用节号、版本身份/内容哈希、历史版本删除或
 改写、隐藏版本、核心章特别案、公投凭据、护宪凭据、SCALE 尾随字节、预计算 delta 和 `:code` 全检。
 
 本步额外加固 `LawVersions` 与两类修宪凭据的 RAW key 解析：提取版本号前必须重算并比对

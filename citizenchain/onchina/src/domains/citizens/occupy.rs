@@ -2464,6 +2464,8 @@ pub(crate) async fn submit_chain_sign(
 }
 
 #[cfg(test)]
+// 测试需要在前置条件失效时立即失败，断言式解包仅限本测试模块。
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

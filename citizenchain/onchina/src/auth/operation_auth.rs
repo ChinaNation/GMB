@@ -282,4 +282,180 @@ mod tests {
             assert_eq!(parsed, action);
         }
     }
+
+    /// 全部动作类型的登记表：新增变体时本 `match` 编译失败，强制在此登记档位。
+    ///
+    /// 这是**编译期**约束,比运行期断言强:`auth_type()` 用 `|` 按组归档,新增变体很容易
+    /// 被顺手并进错误的组而无人察觉;本表逐个列举,形态不同,两处同时错的概率极低。
+    fn expected_tier(action: &AdminActionType) -> AdminOperationAuth {
+        use AdminActionType as A;
+        use AdminOperationAuth::{Passkey, PasskeyColdSign};
+        match action {
+            // 本地写:只改 onchina 本地库,不产生 extrinsic。
+            A::InstitutionUploadDocument => Passkey,
+            A::InstitutionDeleteDocument => Passkey,
+            A::NodeBindingUnbind => Passkey,
+            A::CitizenOnchainPush => Passkey,
+            // 链上写:产生链上交易/凭证、改 Active 集合或高危治理。
+            A::CreateCityRegistry => PasskeyColdSign,
+            A::DeleteCityRegistry => PasskeyColdSign,
+            A::InstitutionCreate => PasskeyColdSign,
+            A::InstitutionUpdate => PasskeyColdSign,
+            A::InstitutionCreateAccount => PasskeyColdSign,
+            A::InstitutionDeleteAccount => PasskeyColdSign,
+            A::ProposeEnactLaw => PasskeyColdSign,
+            A::ProposeAmendLaw => PasskeyColdSign,
+            A::ProposeRepealLaw => PasskeyColdSign,
+            A::CastRepresentativeVote => PasskeyColdSign,
+            A::CastReferendumVote => PasskeyColdSign,
+            A::ExecutiveSign => PasskeyColdSign,
+            A::OverrideSign => PasskeyColdSign,
+            A::GuardVote => PasskeyColdSign,
+            A::ProposePersonnel => PasskeyColdSign,
+            A::ProposeBudget => PasskeyColdSign,
+        }
+    }
+
+    /// 与 [`expected_tier`] 共用同一份穷尽 `match`,保证遍历不漏变体。
+    const ALL_ACTIONS: [AdminActionType; 20] = [
+        AdminActionType::CreateCityRegistry,
+        AdminActionType::DeleteCityRegistry,
+        AdminActionType::InstitutionCreate,
+        AdminActionType::InstitutionUpdate,
+        AdminActionType::InstitutionCreateAccount,
+        AdminActionType::InstitutionDeleteAccount,
+        AdminActionType::InstitutionUploadDocument,
+        AdminActionType::InstitutionDeleteDocument,
+        AdminActionType::NodeBindingUnbind,
+        AdminActionType::ProposeEnactLaw,
+        AdminActionType::ProposeAmendLaw,
+        AdminActionType::ProposeRepealLaw,
+        AdminActionType::CastRepresentativeVote,
+        AdminActionType::CastReferendumVote,
+        AdminActionType::ExecutiveSign,
+        AdminActionType::OverrideSign,
+        AdminActionType::GuardVote,
+        AdminActionType::ProposePersonnel,
+        AdminActionType::ProposeBudget,
+        AdminActionType::CitizenOnchainPush,
+    ];
+
+    #[test]
+    fn all_actions_list_covers_every_variant() {
+        // ALL_ACTIONS 是手写数组,漏写不会编译失败。用 expected_tier 的穷尽 match 反查:
+        // 每个变体都能在表中找到,且表内无重复 —— 二者共同保证遍历完整。
+        let mut seen = std::collections::BTreeSet::new();
+        for action in ALL_ACTIONS {
+            assert!(
+                seen.insert(action.as_str()),
+                "ALL_ACTIONS 存在重复项: {}",
+                action.as_str()
+            );
+            // 触发 expected_tier 的穷尽 match,新增变体未登记则此处编译失败。
+            let _ = expected_tier(&action);
+        }
+        assert_eq!(
+            seen.len(),
+            ALL_ACTIONS.len(),
+            "ALL_ACTIONS 长度与去重后不符"
+        );
+    }
+
+    #[test]
+    fn every_action_tier_matches_the_registry() {
+        // 档位是三档鉴权的入口判据:链上写被误归为本地写 = 该动作不再需要冷签,
+        // 等于凭 passkey 就能发链交易。逐变体钉死,不依赖 auth_type() 的分组写法。
+        for action in ALL_ACTIONS {
+            assert_eq!(
+                action.auth_type(),
+                expected_tier(&action),
+                "{} 的鉴权档与登记表不符",
+                action.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn no_write_action_falls_back_to_session_tier() {
+        // Session 档只用于只读查询。任何写动作落到 Session 即完全绕过 passkey,
+        // 是最严重的降档失败模式,单独立一条断言。
+        for action in ALL_ACTIONS {
+            assert_ne!(
+                action.auth_type(),
+                AdminOperationAuth::Session,
+                "{} 落到只读档 Session,写动作绝不允许",
+                action.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn governance_and_signing_actions_must_require_cold_sign() {
+        // 独立于登记表的第二道锁:按动作语义(提案/表决/签署)推导,不看 auth_type() 的实现。
+        // 这些动作一律产生链上交易,必须 PasskeyColdSign。命名前缀新增同类动作时同样受约束。
+        for action in ALL_ACTIONS {
+            let name = action.as_str();
+            let is_governance_write = name.starts_with("PROPOSE_")
+                || name.starts_with("CAST_")
+                || name.ends_with("_SIGN")
+                || name == "GUARD_VOTE";
+            if is_governance_write {
+                assert_eq!(
+                    action.auth_type(),
+                    AdminOperationAuth::PasskeyColdSign,
+                    "{name} 产生链上交易,必须走冷签档"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tier_membership_counts_are_pinned() {
+        // 计数锁:动作在档间迁移时,上面的逐变体断言会红;而**新增**动作若被
+        // 顺手归入本地写档,逐变体断言可能连同登记表一起被改而静默通过。
+        // 把两档的成员数钉死,迫使任何档位人数变化都成为显式决策。
+        let passkey = ALL_ACTIONS
+            .iter()
+            .filter(|a| a.auth_type() == AdminOperationAuth::Passkey)
+            .count();
+        let cold_sign = ALL_ACTIONS
+            .iter()
+            .filter(|a| a.auth_type() == AdminOperationAuth::PasskeyColdSign)
+            .count();
+        assert_eq!(passkey, 4, "本地写(Passkey)档动作数变化,必须显式确认");
+        assert_eq!(
+            cold_sign, 16,
+            "链上写(PasskeyColdSign)档动作数变化,必须显式确认"
+        );
+        assert_eq!(passkey + cold_sign, ALL_ACTIONS.len());
+    }
+
+    #[test]
+    fn action_type_string_mapping_round_trips_for_every_variant() {
+        // as_str() 与 parse_action_type() 是前后端共享的线格式。任一方向漏改,
+        // 前端发来的动作名会被解析成另一个动作 —— 可能连带换掉鉴权档。
+        for action in ALL_ACTIONS {
+            let text = action.as_str();
+            let parsed = parse_action_type(text)
+                .unwrap_or_else(|_| panic!("{text} 无法被 parse_action_type 解析"));
+            assert_eq!(parsed, action, "{text} 往返后变成了另一个动作");
+        }
+    }
+
+    #[test]
+    fn unknown_action_type_is_rejected() {
+        // fail-closed:未登记的动作名必须拒绝,不得回退到任意默认动作或默认档位。
+        for bad in [
+            "",
+            "UNKNOWN",
+            "institution_create",
+            "INSTITUTION_CREATE ",
+            "PROPOSE_ENACT_LAW_V2",
+        ] {
+            assert!(
+                parse_action_type(bad).is_err(),
+                "非法动作名 {bad:?} 被接受了"
+            );
+        }
+    }
 }

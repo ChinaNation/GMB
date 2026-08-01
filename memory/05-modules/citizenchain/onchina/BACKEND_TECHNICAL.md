@@ -166,11 +166,11 @@ passkey 的消费点统一钉在**创建冷签会话那一步**，不在 prepare
 - `POST /api/v1/admin/address/chain-call` 直接返回待冷签 call、不经会话表，拿不到类型约束，
   故在 handler 内显式断言。
 
-机构管理员列表 API 联合读取链上 `admins(account_id + cid_number + family_name + given_name)` 人员集合与 entity 岗位、`InstitutionRolePermissions` 和有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源；业务授权必须由完整 `RoleSubject + BusinessActionId + operation` 查询，不按账户或前端标签推断。
+机构管理员列表 API 联合读取链上 `admins(account_id + cid_number + family_name + given_name)` 人员集合与 entity 岗位、`InstitutionRolePermissions` 和有效任职。一次读取必须固定到同一个 finalized 区块：名册 `account_id` 继续作为岗位任职关联锚点，带 CID 管理员对外返回和鉴权使用该 CID 的当前绑定 `account_id`；换绑后岗位不重写，但新账户立即取得签名权、旧账户立即失权。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；管理员即使没有岗位也必须保留人员行，姓名只展示。本地联系方式、照片和 Passkey 不得成为管理员资格或岗位真源；业务授权必须由完整 `RoleSubject + BusinessActionId + operation` 查询，不按账户或前端标签推断。
 
 链上机构唯一查询先读取 `PublicManage::Institutions[cid_number]`，未命中再读取 `PrivateManage::Institutions[cid_number]`，不建立本地分流真源；公私权 CID 不重复由 runtime 与 NodeGuard 的链上不变式保证。2026-07-24 当前 fresh 链全量投影精确为 49,593 个机构和 99,232 个账户：49,593 个机构主账户、49,593 个机构费用账户、43 个省储行质押账户，以及两和基金、安全基金、联邦公民安全基金三个独立基金账户。非营利法人“公民链技术发展基金会” `GZ018-SFGYR-201206100-2026` 属私权创世机构，只参加独立私权存在性审计，不冒充公权目录行。启动抽样当前覆盖 32 个派生公权机构、1 个公权常量机构和该基金会，共 34 项。
 
-链上机构管理员无论来自 `PublicAdmins` 还是 `PrivateAdmins`，都统一解码为 `account_id + cid_number + family_name + given_name`。非空 CID 的最终绑定由 runtime 向 `citizen-identity` 校验，OnChina 本地公民库只能用于输入补全和展示，不能变成链上授权真源。
+链上机构管理员无论来自 `PublicAdmins` 还是 `PrivateAdmins`，都统一解码为 `account_id + cid_number + family_name + given_name`。OnChina 严格镜像 runtime 分层解析：非空管理员 CID 通过 `CitizenIdentity::AccountIdByCid / CidByAccountId` 正反向闭环取得当前账户；私权法定代表人名册 CID 为空时，使用同一机构 `PrivateManage::Institutions.legal_representative.cid_number`；冻结公权无 CID 管理员和私权非 LR 无 CID 管理员直接使用名册 `account_id`。CID 已撤销、绑定缺失或正反向不闭合时失败关闭，不回退名册旧账户。个人多签只按账户治理且不进入 OnChina。本地公民库只能用于输入补全和展示，不能变成链上授权真源。
 
 机构治理链写入口：
 
@@ -226,6 +226,8 @@ passkey 的消费点统一钉在**创建冷签会话那一步**，不在 prepare
 正式创世前曾使用管理员三字段布局；该布局现已全部废弃。OnChina 当前对公权、私权机构统一按四字段 `Admin` 解码与治理/登记编码，不兼容任何旧三字段机构布局；个人多签同样使用统一四字段 SCALE 结构。
 
 2026-07-19 私权创世公民链基金会第 6 步验收：`institution_lookup` 已实现在相同 CID 主键下依次读取 `PublicManage` 和 `PrivateManage`，公权全量目录迭代继续只读取公权 storage；启动抽样固定增加公民链基金会，全量公权审计先独立核验基金会存在，再执行 49,593 个公权机构的双向比对。OnChina 137 项测试通过；没有把基金会复制进本地公权投影、没有读取本地公民数据库生成法定代表人，也没有新增第二套基金会身份常量。
+
+2026-08-01 管理员换绑接管验收：登录反查、管理员列表、岗位合并和会话复查统一固定到 finalized 区块，带 CID 管理员只接受当前绑定账户，岗位继续以名册账户关联。冻结 plain chainspec 的创世哈希核对为 `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`；临时 OnChina 从链投影得到 49,593 个机构、99,232 个账户并完成 34 项抽样对账。真实 `POST /api/v1/admin/auth/qr/sign-request` 验证 FRG 冻结无 CID 管理员与基金会当前绑定账户均返回 200，无在册账户返回 403 / `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN`。OnChina 191 项测试和 `cargo clippy -p onchina --all-targets -- -D warnings` 通过；未修改 runtime、创世或远端状态。
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'

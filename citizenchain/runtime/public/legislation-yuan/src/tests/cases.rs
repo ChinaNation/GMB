@@ -822,6 +822,140 @@ fn amend_nonexistent_law_rejected() {
     });
 }
 
+// ───────────────── 宪法章号 / 同章节号 / 条号唯一性 ─────────────────
+
+#[test]
+fn constitution_rejects_duplicate_chapter_number() {
+    new_test_ext().execute_with(|| {
+        let chapters = structured_chapters(vec![
+            chapter(1, vec![section(1, vec![article(1, b"a")])]),
+            chapter(1, vec![section(1, vec![article(2, b"b")])]),
+        ]);
+        assert_noop!(
+            Lib::ensure_unique_constitution_numbers(&chapters),
+            Error::<Test>::DuplicateChapterNumber
+        );
+    });
+}
+
+#[test]
+fn constitution_rejects_duplicate_section_number_in_same_chapter() {
+    new_test_ext().execute_with(|| {
+        let chapters = structured_chapters(vec![chapter(
+            1,
+            vec![
+                section(3, vec![article(1, b"a")]),
+                section(3, vec![article(2, b"b")]),
+            ],
+        )]);
+        assert_noop!(
+            Lib::ensure_unique_constitution_numbers(&chapters),
+            Error::<Test>::DuplicateSectionNumber
+        );
+    });
+}
+
+#[test]
+fn constitution_allows_same_section_number_in_different_chapters() {
+    let chapters = structured_chapters(vec![
+        chapter(1, vec![section(7, vec![article(10, b"a")])]),
+        chapter(2, vec![section(7, vec![article(20, b"b")])]),
+    ]);
+    assert_ok!(Lib::ensure_unique_constitution_numbers(&chapters));
+}
+
+#[test]
+fn constitution_rejects_duplicate_article_number_across_chapters() {
+    new_test_ext().execute_with(|| {
+        let chapters = structured_chapters(vec![
+            chapter(1, vec![section(1, vec![article(9, b"a")])]),
+            chapter(2, vec![section(1, vec![article(9, b"b")])]),
+        ]);
+        assert_noop!(
+            Lib::ensure_unique_constitution_numbers(&chapters),
+            Error::<Test>::DuplicateArticleNumber
+        );
+    });
+}
+
+#[test]
+fn amend_constitution_rejects_duplicate_chapter_before_article_lookup() {
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        let chapters = structured_chapters(vec![
+            chapter(
+                1,
+                vec![section(
+                    1,
+                    vec![
+                        article(1, b"core-1"),
+                        article(5, b"CHANGED"),
+                        article(20, b"core-20"),
+                    ],
+                )],
+            ),
+            chapter(
+                1,
+                vec![section(
+                    1,
+                    vec![article(60, b"gen-60"), article(61, b"gen-61")],
+                )],
+            ),
+        ]);
+        assert_noop!(
+            Lib::propose_amend_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                actor_cid_number(),
+                proposer_role_code(),
+                executive_cid_number(),
+                legislature_cid_number(),
+                VoteType::Special,
+                title(b"constitution-v2"),
+                None,
+                chapters,
+                200,
+            ),
+            Error::<Test>::DuplicateChapterNumber
+        );
+    });
+}
+
+#[test]
+fn write_constitution_rechecks_duplicate_section_before_storage() {
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        let mut summary = enact_summary(Tier::Constitution, 0, VoteType::Major, b"c-v2");
+        summary.action = LawAction::Amend;
+        summary.law_id = 0;
+        let chapters = structured_chapters(vec![
+            chapter(
+                1,
+                vec![section(
+                    1,
+                    vec![
+                        article(1, b"core-1"),
+                        article(5, b"core-5"),
+                        article(20, b"core-20"),
+                    ],
+                )],
+            ),
+            chapter(
+                2,
+                vec![
+                    section(1, vec![article(60, b"CHANGED")]),
+                    section(1, vec![article(61, b"gen-61")]),
+                ],
+            ),
+        ]);
+        assert_noop!(
+            Lib::write_law_version(9, summary, chapters, Timestamp::now()),
+            Error::<Test>::DuplicateSectionNumber
+        );
+        assert!(LawVersions::<Test>::get(0, 2).is_none());
+    });
+}
+
 // ───────────────── 宪法 constitution.scale 解码与结构校验 ─────────────────
 
 #[test]
@@ -830,6 +964,7 @@ fn constitution_scale_decodes_and_is_well_formed() {
     let bytes = include_bytes!("../constitution.scale");
     let chapters = crate::pallet::ChaptersOf::<Test>::decode(&mut &bytes[..])
         .expect("constitution.scale 解码为 ChaptersOf");
+    assert_ok!(Lib::ensure_unique_constitution_numbers(&chapters));
     assert_eq!(chapters.len(), 7, "7 章");
     let articles: Vec<_> = chapters
         .iter()

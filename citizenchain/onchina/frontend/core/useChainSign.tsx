@@ -18,6 +18,7 @@ import { adminHeaders, request } from '../utils/http';
 export type ChainSignResult = {
   account_id: string;
   signature: string;
+  /** 换绑扫码可在同一响应中附带当前账户授权，二者不得拆成两次交互。 */
   current_account_id?: string;
   current_account_signature?: string;
 };
@@ -99,6 +100,7 @@ export function useChainSign(title = '管理员公民钱包签名'): UseChainSig
         if (!signed.account_id) {
           throw new Error('签名响应缺少 account_id');
         }
+        // 统一把新账户签名和可选的当前账户签名交回同一个提交调用。
         pending.resolve({
           account_id: signed.account_id,
           signature: signed.signature,

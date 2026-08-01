@@ -32,5 +32,8 @@
     "theme",
     "utils",
     "workspace"
-  ]
+  ],
+  // 测试由 vitest 自行转译(它注入 Node 环境类型);生产 build 的 `tsc -b` 不编译测试,
+  // 否则 node:fs / import.meta.dirname 这类 Node API 会让浏览器侧类型检查失败。
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"]
 }

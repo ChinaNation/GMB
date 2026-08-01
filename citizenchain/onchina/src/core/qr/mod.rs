@@ -157,7 +157,7 @@ impl SignRequestEnvelope {
 
 /// 登录签名请求 payload 固定为 `system` 的 UTF-8 字节。
 ///
-/// `u` 必须是用户码预先确定的目标账户公钥；登录请求不允许存在空目标或任意钱包签名。
+/// `u` 必须是钱包码预先确定的目标账户公钥；登录请求不允许存在空目标或任意钱包签名。
 pub fn login_request_body(
     system: &str,
     target_account_id: &str,
@@ -246,8 +246,9 @@ struct WalletCodeBody {
 /// 未知字段全部拒绝。已废止的旧 `k=5 chat_node_pairing` 载荷会因 body 字段集不匹配
 /// 被 `deny_unknown_fields` 拒掉，不需要专门的拒绝分支。
 ///
-/// 钱包码不携带 CID 与昵称：CID 由链上 `CidByAccountId` 反查，管理员姓名由链上记录
-/// 读出，两者都比二维码自述可靠，且「两字段互不匹配」这类攻击形态从根上不存在。
+/// 钱包码不携带 CID 与昵称：后端从链上管理员名册读取身份字段，并在同一个 finalized
+/// 区块解析带 CID 管理员的当前绑定账户。私权 LR 的 CID 来自机构法定代表人记录；冻结
+/// 公权无 CID 管理员和私权非 LR 无 CID 管理员按名册账户处理；个人多签不进入 OnChina。
 /// 管理员私钥保管在离线的 CitizenWallet，钱包码由它自己就能出示，登录第 1 步不再
 /// 需要联网热钱包参与。
 pub(crate) fn parse_wallet_code_account_id(raw: &str) -> Result<String, QrParseError> {
