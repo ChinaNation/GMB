@@ -161,8 +161,14 @@ jobs:
             libclang-dev \
             libpam0g-dev \
             libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
             pkg-config \
-            protobuf-compiler
+            protobuf-compiler \
+            patchelf \
+            file
 
       - name: 配置 libclang 与 protoc
         run: |

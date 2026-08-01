@@ -323,6 +323,10 @@
   runner 没有无关的 Python `xxhash` 包而失败。`--self-test` 不计算 storage key，本次把
   `xxhash` 延迟到完整 chainspec/RPC 校验真正调用 `twox_128` 时加载；宪法结构断言、完整
   创世校验和 Substrate storage key 算法均不改变。
+- CitizenChain run `30723361276` 已通过上述宪法自检，随后在全 workspace/all-targets
+  `cargo check` 因 `glib-sys` 找不到 `glib-2.0.pc` 失败。全工程 job 必须覆盖 Linux
+  Tauri crate，本次补齐同 workflow 桌面 Linux job 已使用的 GTK、WebKit、AppIndicator、
+  RSVG 等系统包，不通过排除 crate 或缩小 workspace 绕过。
 - 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
 
 ## 第一步预计修改目录
