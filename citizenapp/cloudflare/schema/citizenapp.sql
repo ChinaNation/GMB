@@ -1,5 +1,5 @@
 -- CitizenApp Cloudflare 唯一 schema 基线。
--- SCHEMA VERSION: v1.1.0
+-- SCHEMA VERSION: v1.2.0
 --
 -- 文件名固定 citizenapp.sql：禁止改名、新建、多建，本目录只允许这一个文件。
 -- 开发期（零用户）：改本文件 + 升版本号 + 追加日志，然后清空重建；不写迁移、不做兼容。
@@ -7,6 +7,7 @@
 --
 -- v1.0.0  2026-07-31  基线冻结：废止 0002/0003 迁移链，收敛为唯一 schema 文件。
 -- v1.1.0  2026-07-31  删除 cid_data_roots：数据根改为用户助记词本地派生，服务端不再持有任何密钥材料。
+-- v1.2.0  2026-07-31  修复母种子绑定漏洞：恢复每 CID 随机稳定数据根及独立恢复封装。
 
 -- 登录与注销挑战都绑定唯一身份主键 CID；account_id 仅记录本次必须签名的当前账户。
 CREATE TABLE square_login_challenges (
@@ -22,6 +23,26 @@ CREATE INDEX idx_square_login_challenges_account_id
   ON square_login_challenges(account_id, expires_at);
 CREATE INDEX idx_square_login_challenges_cid_number
   ON square_login_challenges(cid_number, expires_at);
+
+-- 每个 CID 唯一的稳定数据根恢复封装。D1 只保存 AES-256-GCM 密文；恢复 KEK 由
+-- Worker Secret 按创世、CID 与 key version 派生。account_id 只记录当前授权账户，
+-- 不参与数据根归属，也不能据此生成另一把数据根。
+CREATE TABLE cid_data_roots (
+  cid_number TEXT PRIMARY KEY,
+  recovery_ciphertext TEXT NOT NULL,
+  recovery_nonce TEXT NOT NULL,
+  recovery_key_version INTEGER NOT NULL CHECK(recovery_key_version > 0),
+  data_root_hash TEXT NOT NULL CHECK(
+    length(data_root_hash) = 64
+    AND data_root_hash NOT GLOB '*[^0-9a-f]*'
+  ),
+  active_binding_revision INTEGER NOT NULL CHECK(active_binding_revision > 0),
+  active_account_id TEXT NOT NULL CHECK(length(active_account_id) = 66 AND substr(active_account_id, 1, 2) = '0x' AND substr(active_account_id, 3) NOT GLOB '*[^0-9a-f]*'),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_cid_data_roots_active_account
+  ON cid_data_roots(active_account_id, active_binding_revision);
 
 -- 广场会话强一致索引。明文 token 只交给客户端，D1 与 KV 键仅保存其 SHA-256；
 -- cid_number 是注销范围，account_id 只记录签发该凭证时的当前绑定账户，供换绑吊销筛选。

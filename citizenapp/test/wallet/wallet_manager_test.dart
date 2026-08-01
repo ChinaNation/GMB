@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/security/local_cipher.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
@@ -25,6 +27,25 @@ String _coldSs58(int byte) =>
 
 String _hex(List<int> b) =>
     b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+
+CidDataRoot _recoveredDataRoot() => CidDataRoot(
+    Uint8List.fromList(List<int>.generate(32, (index) => index + 7)));
+
+Future<void> _installRecoveredDataRoot(
+  WalletManager manager, {
+  required String cidNumber,
+  required int bindingRevision,
+  required String accountId,
+}) async {
+  final dataRoot = _recoveredDataRoot();
+  await manager.installCidDataRootForCurrentBinding(
+    cidNumber: cidNumber,
+    bindingRevision: bindingRevision,
+    accountId: accountId,
+    dataRoot: dataRoot,
+    dataRootHash: await CidDataRootVault.dataRootHash(dataRoot),
+  );
+}
 
 /// 助记词 → 母种子（master mini-secret，32B）。
 Future<Uint8List> _masterSeed(String mnemonic) async {
@@ -152,8 +173,8 @@ void main() {
       const cidNumber = 'GD-CTZN1-TEST';
       const currentKey = 'citizenapp_cid_contacts_key_GD-CTZN1-TEST';
       contactBlobStore.values[legacyKey] = '旧派生密钥';
-      await manager.installCidDataRootFromMnemonic(
-        mnemonic: _mnemonicA,
+      await _installRecoveredDataRoot(
+        manager,
         cidNumber: cidNumber,
         bindingRevision: 1,
         accountId: accountId,
@@ -222,8 +243,8 @@ void main() {
         _mnemonicA,
       );
 
-      await manager.installCidDataRootFromMnemonic(
-        mnemonic: _mnemonicA,
+      await _installRecoveredDataRoot(
+        manager,
         cidNumber: 'GD-CTZN1-TEST',
         bindingRevision: 1,
         accountId: account1.accountId,
@@ -264,8 +285,8 @@ void main() {
       final manager = WalletManager();
       final hot = await manager.importWallet(_mnemonicA);
       final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x44));
-      await manager.installCidDataRootFromMnemonic(
-        mnemonic: _mnemonicA,
+      await _installRecoveredDataRoot(
+        manager,
         cidNumber: 'GD-CTZN1-TEST',
         bindingRevision: 1,
         accountId: hot.accountId,
@@ -337,6 +358,52 @@ void main() {
       expect(def, isNotNull);
       expect(def!.walletIndex, imported.walletIndex);
       expect(def.isHotWallet, isTrue);
+    });
+
+    test('A/B 助记词完全不同且 A 全部秘密已删，B 仍用同一 CID 根解密旧密文', () async {
+      const cidNumber = 'CN220-CTZN2-198805200-2026';
+      final aad = '${LocalKeyPurpose.chat.domain}|message-before-rebind';
+      final manager = WalletManager();
+      final walletA = await manager.importWallet(_mnemonicA);
+      await _installRecoveredDataRoot(
+        manager,
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: walletA.accountId,
+      );
+      final keyA = await _recoveredDataRoot().subkey(LocalKeyPurpose.chat);
+      final oldCiphertext = await LocalCipher.encryptString(
+        key: keyA,
+        plaintext: 'A 钱包时期的 CID 私有数据',
+        aad: aad,
+      );
+
+      // 模拟旧钱包、旧设备和旧缓存全部不可用：删除 A 整只热钱包及其本机数据根包装。
+      await manager.deleteWallet(walletA.walletIndex);
+      expect(fakeStore.accountKeys, isEmpty);
+      expect(
+        contactBlobStore.values[CidDataRootVault.activeBindingKey],
+        isNull,
+      );
+
+      final walletB = await manager.importWallet(_mnemonicB);
+      expect(walletB.accountId, isNot(walletA.accountId));
+      await _installRecoveredDataRoot(
+        manager,
+        cidNumber: cidNumber,
+        bindingRevision: 2,
+        accountId: walletB.accountId,
+      );
+      final keyB = await _recoveredDataRoot().subkey(LocalKeyPurpose.chat);
+      expect(
+        await LocalCipher.decryptString(
+          key: keyB,
+          blob: oldCiphertext,
+          aad: aad,
+        ),
+        'A 钱包时期的 CID 私有数据',
+      );
+      expect(fakeStore.accountKeys.containsKey(walletA.accountId), isFalse);
     });
 
     test('D3：无锁屏设备拒绝创建热钱包（fail-closed）', () async {

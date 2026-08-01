@@ -7,8 +7,9 @@ import 'package:citizenapp/security/local_cipher.dart';
 
 /// 本地静止态密钥用途域。
 ///
-/// 每个用途一把独立子钥，任一泄露不波及其他；且与**云端**通讯录密钥
-/// (`citizenapp.contacts/encryption`) 完全分开，云密文与本地密文不共钥。
+/// 每个用途一把独立子钥，任一泄露不波及其他；本地通讯录域
+/// (`citizenapp.cid/contacts-local`) 与云端通讯录域
+/// (`citizenapp.cid/contacts-cloud`) 完全分开，云密文与本地密文不共钥。
 enum LocalKeyPurpose {
   /// 聊天正文、会话摘要等本地明文字段。
   chat('citizenapp.cid/chat'),
@@ -37,54 +38,16 @@ enum LocalKeyPurpose {
   final String domain;
 }
 
-/// CID 稳定数据根：每个 CID 唯一、换绑时不变的 32 字节主钥。
+/// CID 稳定数据根：每个 CID 首次随机生成、换绑时不变的 32 字节主钥。
 ///
-/// 由**用户助记词的母种子**确定性派生，与绑定的是哪个钱包账户无关：
-///
-/// ```text
-/// 助记词 ──► 母种子(临时，用完清零) ──HKDF(info="citizenapp.cid-data-root"‖cid)──► 数据根
-/// ```
-///
-/// 这样设计的硬约束来自三条同时成立的要求：
-/// 1. 云端只存已加密业务数据，不存任何形态的密钥材料 → 服务端不能托管数据根；
-/// 2. 换绑不得触发业务数据全量重加密 → 数据根必须与绑定账户解耦（换绑起因常是
-///    旧私钥泄漏/丢失，且投票竞选身份链端强制走注册局换绑，届时旧 child 根本拿不到）；
-/// 3. 换设备靠助记词恢复 → 数据根必须能被重新算出，不能是服务端下发的随机值。
-///
-/// 代价：助记词丢失即数据永久不可恢复，服务端无从协助。
-///
-/// 钱包账户只负责**包装**数据根（本地缓存）与链上签名授权；换绑只需用新账户的
-/// child 重新包装这 32 字节，业务密文一律不动。
+/// 数据根不从任何钱包助记词、账户 child 或设备密钥派生。否则旧钱包完全丢失后，
+/// 新钱包只能得到另一把数据根，无法接管该 CID 的旧密文。当前绑定账户只负责链上
+/// 签名授权和本机 KEK 包装；独立恢复层按 finalized 当前绑定向新账户发放**同一把**
+/// 数据根，业务密文一律不动。
 class CidDataRoot {
   const CidDataRoot(this.bytes);
 
   final Uint8List bytes;
-
-  /// 由母种子与 CID 号确定性派生数据根。
-  ///
-  /// [masterSeed] 由调用方在录入助记词时临时派生，**用完必须立即清零**：本端为无根模型，
-  /// 绝不持久化母种子或助记词。同一助记词 + 同一 CID 永远得到同一数据根，
-  /// 因此换设备、换绑账户、注册局代办换绑之后都能重新算出，无需服务端参与。
-  static Future<CidDataRoot> deriveFromMasterSeed({
-    required List<int> masterSeed,
-    required String cidNumber,
-  }) async {
-    if (masterSeed.isEmpty) {
-      throw const LocalCipherException('母种子为空，无法派生 CID 数据根');
-    }
-    if (cidNumber.trim().isEmpty) {
-      throw const LocalCipherException('CID 号为空，无法派生 CID 数据根');
-    }
-    final key = await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
-      secretKey: SecretKey(masterSeed),
-      nonce: _rootSalt,
-      info: utf8.encode('$_rootDomain/${cidNumber.trim()}'),
-    );
-    return CidDataRoot(Uint8List.fromList(await key.extractBytes()));
-  }
-
-  static const String _rootDomain = 'citizenapp.cid-data-root';
-  static final List<int> _rootSalt = utf8.encode('citizenapp.cid/root');
 
   /// 按用途派生 32 字节子钥。数据根本身已是随机主钥，salt 只承担域隔离。
   Future<Uint8List> subkey(LocalKeyPurpose purpose) async {
@@ -170,9 +133,9 @@ class CidDataRootBinding {
 ///                                     各业务用途子钥
 /// ```
 ///
-/// 本金库只是**本地派生结果的缓存**：数据根的真源是助记词（见
-/// [CidDataRoot.deriveFromMasterSeed]），服务端不参与、不持有。金库存在的意义是让日常
-/// 使用不必反复要求用户输入助记词。
+/// 本金库只保存当前账户可解开的本地包装。数据根真源属于 CID，由独立恢复层密封；
+/// 只有 finalized 当前绑定账户通过一次性签名挑战才能取得。恢复响应另用一次性 X25519
+/// 会话钥加密，HTTP JSON 不出现明文数据根。
 ///
 /// 写新包装、读回验证、落激活标记之后才删低版本包装；换绑只重新包装这 32 字节，
 /// 业务密文一律不动。
@@ -197,8 +160,8 @@ class CidDataRootVault {
 
   /// 用当前绑定账户的 child 包装并缓存 CID 数据根。
   ///
-  /// [expectedDataRootHash] 是**本地自校验**：由调用方对同一份数据根算出，用来挡住
-  /// 参数错配与包装/读回不一致，不代表任何服务端授权。
+  /// [expectedDataRootHash] 来自当前绑定恢复授权；本机先核验数据根摘要，再以同一摘要
+  /// 验证新包装读回，防止响应、绑定参数或安全存储落地错配。
   ///
   /// 新包装读回验证成功并写入激活标记后，才删除此前版本的包装；清理失败不回滚已激活的新绑定。
   Future<CidDataRoot> installForCurrentBinding({

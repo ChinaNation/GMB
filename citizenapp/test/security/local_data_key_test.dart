@@ -41,61 +41,6 @@ void main() {
     dataRootHash = await CidDataRootVault.dataRootHash(dataRoot);
   });
 
-  group('数据根由母种子确定性派生', () {
-    // 助记词 → 母种子 → 数据根，是这套设计的根：服务端不生成、不托管、不下发，
-    // 所以换设备、换绑账户、注册局代办换绑之后都靠「重新算一遍」恢复。
-    const seedA = <int>[1, 2, 3, 4, 5, 6, 7, 8];
-    const seedB = <int>[9, 9, 9, 9, 9, 9, 9, 9];
-    const cidA = 'CN220-CTZN2-198805200-2026';
-    const cidB = 'CN220-CTZN2-199001010-2026';
-
-    test('同一母种子 + 同一 CID 恒等，换设备可重算', () async {
-      final first =
-          await CidDataRoot.deriveFromMasterSeed(masterSeed: seedA, cidNumber: cidA);
-      final second =
-          await CidDataRoot.deriveFromMasterSeed(masterSeed: seedA, cidNumber: cidA);
-      expect(first.bytes, hasLength(32));
-      expect(first.bytes, second.bytes);
-    });
-
-    test('CID 不同则数据根不同：同一助记词下多个身份互不解密', () async {
-      final a =
-          await CidDataRoot.deriveFromMasterSeed(masterSeed: seedA, cidNumber: cidA);
-      final b =
-          await CidDataRoot.deriveFromMasterSeed(masterSeed: seedA, cidNumber: cidB);
-      expect(a.bytes, isNot(b.bytes));
-    });
-
-    test('母种子不同则数据根不同：别人的助记词解不开你的数据', () async {
-      final a =
-          await CidDataRoot.deriveFromMasterSeed(masterSeed: seedA, cidNumber: cidA);
-      final b =
-          await CidDataRoot.deriveFromMasterSeed(masterSeed: seedB, cidNumber: cidA);
-      expect(a.bytes, isNot(b.bytes));
-    });
-
-    test('CID 号前后空白不影响结果：占号与本地缓存可能带不同修饰', () async {
-      final plain =
-          await CidDataRoot.deriveFromMasterSeed(masterSeed: seedA, cidNumber: cidA);
-      final padded = await CidDataRoot.deriveFromMasterSeed(
-        masterSeed: seedA,
-        cidNumber: '  $cidA  ',
-      );
-      expect(plain.bytes, padded.bytes);
-    });
-
-    test('空母种子或空 CID 一律拒绝，不产出弱密钥', () async {
-      await expectLater(
-        CidDataRoot.deriveFromMasterSeed(masterSeed: const [], cidNumber: cidA),
-        throwsA(isA<LocalCipherException>()),
-      );
-      await expectLater(
-        CidDataRoot.deriveFromMasterSeed(masterSeed: seedA, cidNumber: '   '),
-        throwsA(isA<LocalCipherException>()),
-      );
-    });
-  });
-
   group('CID 数据根安装', () {
     test('当前账户独立安装并读回，不需要此前账户输入', () async {
       final installed = await vault.installForCurrentBinding(
@@ -270,6 +215,32 @@ void main() {
         ),
         throwsA(isA<LocalCipherException>()),
       );
+    });
+
+    test('新包装校验失败时旧包装与旧激活标记保持完整', () async {
+      await vault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: 1,
+        accountId: firstAccountId,
+        accountSecret: firstSecret,
+        dataRoot: dataRoot,
+        expectedDataRootHash: dataRootHash,
+      );
+      final previous = (await vault.readActiveBinding())!;
+      await expectLater(
+        vault.installForCurrentBinding(
+          cidNumber: cidNumber,
+          bindingRevision: 2,
+          accountId: secondAccountId,
+          accountSecret: secondSecret,
+          dataRoot: dataRoot,
+          expectedDataRootHash: '0' * 64,
+        ),
+        throwsA(isA<LocalCipherException>()),
+      );
+      expect(
+          (await vault.readActiveBinding())?.wrapperKey, previous.wrapperKey);
+      expect(store.entries[previous.wrapperKey], isNotNull);
     });
 
     test('同一 revision 不允许账户或数据根摘要冲突', () async {

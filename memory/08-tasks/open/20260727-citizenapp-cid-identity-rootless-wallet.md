@@ -54,8 +54,8 @@ citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本�
 ### 第 2 步完成记录（2026-07-29）
 
 - Worker 新增按 `cid_number` 唯一存储的稳定数据根，服务端以
-  `CID_DATA_ROOT_MASTER_KEY` + 创世哈希/CID AAD 密封；同一 CID 换绑前后数据根与
-  `data_root_hash` 不变，激活版本只允许单调推进。
+  只存在于 Secret 的 `CID_DATA_ROOT_RECOVERY_KEY` 按创世、CID 与密钥版本派生 KEK
+  后密封；同一 CID 换绑前后数据根与 `data_root_hash` 不变，激活版本只允许单调推进。
 - 接管接口使用当前 finalized 新账户的一次性挑战签名；挑战绑定创世哈希、CID、
   `account_id`、`binding_revision`、随机 challenge 和过期时间，且在验签前后两次读取
   finalized 绑定。旧挑战、旧 revision、错误账户和重复消费全部失败关闭。
@@ -75,6 +75,14 @@ citizenwallet 的注册局扫码签名联动已在 S4+S6 交接卡完成，本�
   内存 SQLite 实际执行通过。CitizenApp
   `flutter analyze` 通过，Flutter 1036 项通过、5 项因本机无原生 smoldot 条件性跳过、
   0 项失败。未修改 runtime，未创世、未推送、未触发 CI、未部署。
+
+#### 2026-07-31 复审纠正
+
+提交 `87d97365` 曾错误地把稳定数据根改为由钱包母种子派生，导致旧钱包完全丢失后新
+钱包无法接管旧密文；本轮已恢复上面的独立恢复层终态，并删除助记词补录、旧账户解包
+和旧设备依赖。当前实现与验收结果以任务卡
+`20260731-cid-data-root-user-owned-keys.md` 的完成记录为准；此前关于母种子派生或“服务端
+不持有任何恢复密钥材料”的阶段性说明全部作废。
 
 ### 第 3 步完成记录（2026-07-29）
 
@@ -419,9 +427,10 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 - **C1(CRITICAL)换绑后旧账户云端凭证失效**：2026-07-29 最终方案以 finalized
   `AccountIdByCid + CidByAccountId + BindingRevisionByCid` 作为唯一控制权转移事实。
   客户端旧账户签名 outbox、换绑后吊销 API 和专用 revoker 已删除，不得恢复第二授权协议。
-  Worker 只允许可信 finalized 绑定版本消费者调用内部幂等
-  `purgeFinalizedOldAccountCredentials`，删除旧账户级登录/设备/Chat 凭证；动态、文章、
-  粉丝、关注、通讯录、会员和实时对象继续归 CID，不删除、不迁移。
+  App 先由 finalized 当前新账户恢复同一 CID 数据根、验证新包装并安装用途子钥，再登记
+  新钱包设备子钥；Worker 确认新子钥落库后才删除旧账户级登录/设备/Chat 凭证并关闭旧
+  实时连接。动态、文章、粉丝、关注、通讯录、会员和 CID 稳定数据根继续归 CID，
+  不删除、不迁移。
 - **C2(CRITICAL)Finalized 后崩溃窗口**：最终改为 finalized 四元组对账。
   `IdentitySyncedAccountStore` 只在数据根安装、设备登记和广播全部成功后写
   `(cid_number, binding_revision, account_id, data_root_hash)`；未完成则由

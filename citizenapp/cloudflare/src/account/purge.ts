@@ -1,10 +1,7 @@
 import type { Env, MediaAssetRow } from '../types';
 import { uploadObjectKeys } from '../storage/r2_keys';
 import { deleteProviderAsset } from '../media/cloudflare_assets';
-import {
-  clearIdentityAccountSessions,
-  clearIdentitySessions
-} from '../auth/session_index';
+import { clearIdentitySessions } from '../auth/session_index';
 import { closeChatRealtime } from '../chat/realtime';
 import { storedMediaReleaseStatements } from '../limits/usage';
 import { HttpError } from '../shared/http';
@@ -114,6 +111,7 @@ export async function purgeIdentity(
     env.DB.prepare(`DELETE FROM square_device_subkeys WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_sessions WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_login_challenges WHERE cid_number = ?`).bind(cidNumber),
+    env.DB.prepare(`DELETE FROM cid_data_roots WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_uploads WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_posts WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_media_assets WHERE cid_number = ?`).bind(cidNumber),
@@ -144,44 +142,6 @@ export async function purgeIdentity(
     deleted_r2_objects: deletedR2,
     deleted_rows: deletedRows
   };
-}
-
-/// finalized CID 绑定版本推进后，删除**旧身份账户**在 Cloudflare 的鉴权敏感数据
-/// (Chat 端到端材料、设备子钥、登录挑战、会话)，使已解绑账户无法再建立旧鉴权上下文。
-/// 本 helper 不接收 HTTP 请求或旧账户签名；后续只能由可信 finalized 链事件消费者调用。
-///
-/// **不删** posts / media / memberships / follows / 通讯录 —— 这些随 CID 迁到新账户(「永不丢失」),
-/// 由身份迁移单独处理,不属吊销范围。也不关闭按 CID 命名的实时 DO、不删 CID 级
-/// `chat_device_binding_nonces`,否则会误伤换绑后的新账户连接和设备状态。幂等:重复调用为
-/// 安全空操作。
-export async function purgeFinalizedOldAccountCredentials(
-  env: Env,
-  cidNumber: string,
-  accountId: string
-): Promise<{ deleted_rows: number }> {
-  // 通讯录密文、实时 DO 与绑定 nonce 均按 cid_number 归属，换绑后继续由新账户使用；
-  // 本函数只按“旧 CID + 旧 account_id”交集删除账户级材料。旧账户释放后可能已绑定
-  // 另一 CID，禁止延迟到达的旧版本事件误删其新身份凭证。
-  const statements = [
-    env.DB.prepare(
-      `DELETE FROM chat_keypackages WHERE cid_number = ? AND account_id = ?`
-    ).bind(cidNumber, accountId),
-    env.DB.prepare(
-      `DELETE FROM chat_devices WHERE cid_number = ? AND account_id = ?`
-    ).bind(cidNumber, accountId),
-    env.DB.prepare(
-      `DELETE FROM square_login_challenges WHERE cid_number = ? AND account_id = ?`
-    ).bind(cidNumber, accountId),
-    // 设备子钥放最后；finalized 事件消费者重放同一版本事件时仍保持幂等。
-    env.DB.prepare(
-      `DELETE FROM square_device_subkeys WHERE cid_number = ? AND account_id = ?`
-    ).bind(cidNumber, accountId)
-  ];
-  const results = await env.DB.batch(statements);
-  const deletedRows = results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);
-  await env.SQUARE_CACHE.delete(`square_identity:${accountId}`);
-  await clearIdentityAccountSessions(env, cidNumber, accountId);
-  return { deleted_rows: deletedRows };
 }
 
 /// 翻页硬删除某 R2 前缀下全部对象。

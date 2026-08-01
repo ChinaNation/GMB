@@ -494,20 +494,27 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
     `POST /v1/square/identity/takeover/challenge` 与
     `POST /v1/square/identity/takeover`。Worker 必须在挑战前和验签后两次读取 finalized
     `cid_number + account_id + binding_revision`；挑战正文绑定创世哈希、CID、当前账户、
-    revision、随机 challenge 与过期时间，并使用现有 `OP_SIGN_SQUARE_ACTION` 签名域。
-    挑战只能消费一次。当前新账户验签通过后取得同一 CID 稳定数据根；服务端只保存
-    按 CID 密封的数据根与单调激活版本，不得接收任何此前账户材料。
-  - Worker 保留纯内部 `purgeFinalizedOldAccountCredentials` 幂等 helper，供后续 finalized
-    绑定版本消费者删除同一 CID 下旧 `account_id` 的 `chat_keypackages`、`chat_devices`、
-    `square_login_challenges`、`square_device_subkeys`、Worker 会话与账户身份缓存；该 helper
-    不接收 HTTP 请求或旧账户签名。`ChatRealtimeObject` 和
-    `chat_device_binding_nonces` 均按 `cid_number` 归属，不得整体关闭/删除；通讯录、动态、
-    媒体、关注、会员等 CID 数据也一律保留。
+    revision、临时 X25519 接收公钥、随机 challenge 与过期时间，并使用现有
+    `OP_SIGN_SQUARE_ACTION` 签名域。挑战有专用 `cidt_` 前缀并以 D1 条件更新原子消费，
+    不得与 `sqc_` 登录挑战交叉使用。当前新账户验签通过后取得同一 CID 稳定数据根；
+    响应只返回 X25519 + HKDF + AES-256-GCM 加密信封，AAD 绑定完整接管上下文和摘要，
+    HTTP JSON 不得出现明文数据根。
+  - 每个 CID 的稳定数据根首次随机生成；Worker Secret `CID_DATA_ROOT_RECOVERY_KEY` 只作
+    恢复层基础密钥，按创世、CID 与密钥版本派生独立 KEK 后密封数据根。D1 只保存
+    `recovery_ciphertext`、`recovery_nonce`、`recovery_key_version`、摘要和当前激活绑定。
+    该 Secret 是集中恢复信任边界，泄漏会影响全部 CID，必须独立轮换、审计且禁止写入
+    仓库、日志或普通业务表；恢复接口不得接收任何此前账户、助记词或设备材料。
+  - App 必须先完成“解密及摘要校验 → 当前新账户包装写入并读回 → 激活精确绑定 →
+    落 CID 缓存和用途子钥 → 清旧本地包装”，再登记当前新钱包的设备子钥。Worker 只有
+    在该新子钥成功写入后，才删除同一 CID 下旧 revision / 旧 `account_id` 的
+    `square_login_challenges`、`chat_keypackages`、`chat_devices`、
+    `square_device_subkeys` 和 Session，并关闭旧账户实时连接；清理函数不接收旧账户签名。
+    通讯录、动态、媒体、关注、会员、CID 稳定数据根和其它 CID 业务数据一律保留。
   - P-256 设备子钥的跨端文本编码统一带 `0x`（ADR-041，§0.3）：`p256_public_key` = `^0x04[0-9a-f]{128}$`，`signature` / `binding_signature` / `x-device-signature` = `^0x[0-9a-f]{128}$`；Worker 边界一次 require 0x + strip，内部 SCALE 签名消息 / D1 存储 / `device_key_hash` preimage 继续裸字节（逐字节不变）。禁止裸或「两端都收」。
   - Worker 只能把钱包签名证明用于登录和上传授权，不得托管钱包私钥。
   - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由 CID 稳定数据根域隔离派生；Worker
     不得接收通讯录用途子钥，也不得记录联系人明文。Worker 仅可为当前 finalized 绑定
-    账户发放该 CID 的稳定数据根，并以服务端主密钥密封保存。
+    账户发放该 CID 的稳定数据根，并按上条恢复层契约密封保存。
   - manifest 与图片必须经同域 Worker 有界读取并验证 P-256 设备签名；视频 TUS 地址必须绑定 `account_id`、`upload_id`、精确字节和最长时长。
   - CitizenApp 必须先用 finalized 余额确认钱包至少保留 `1.21 元`（ED 1.11 元 + 发布费 0.1 元），余额不足不得进入 Worker prepare 或媒体上传。
   - CitizenApp 必须在链上扣费交易入块后才上传 manifest 与主媒体；链上未入块不得占用 R2 / Images / Stream 存储，只能保存本地草稿。

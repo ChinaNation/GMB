@@ -3,6 +3,10 @@ import {
   deleteAccountChallengeRoute,
   deleteAccountRoute,
 } from "./account/service";
+import {
+  cidTakeoverChallengeRoute,
+  cidTakeoverRoute,
+} from "./account/cid_data_root";
 import { createLoginChallenge, createSession, registerDeviceSubkey } from "./auth/service";
 import { chainBootstrapRoute } from "./chain/bootstrap";
 import { constitutionRoute } from "./chain/constitution";
@@ -118,6 +122,18 @@ export async function routeRequest(
   }
   if (request.method === "POST" && path === "/v1/square/account/delete") {
     return deleteAccountRoute(request, env);
+  }
+  if (
+    request.method === "POST" &&
+    path === "/v1/square/identity/takeover/challenge"
+  ) {
+    return cidTakeoverChallengeRoute(request, env);
+  }
+  if (
+    request.method === "POST" &&
+    path === "/v1/square/identity/takeover"
+  ) {
+    return cidTakeoverRoute(request, env);
   }
   // 稳定币充值购买公民币:App(config/submit/status)+ 本地部署控制台结算(settlement/*)。
   if (isTopupPath(path)) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/area_path_formatter.dart';
@@ -10,6 +11,7 @@ import 'package:citizenapp/citizen/public/data/public_provinces.dart';
 import 'package:citizenapp/citizen/cid/cid_generator.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import 'identity_account_resolver.dart';
@@ -108,6 +110,7 @@ class MyIdService {
     IdentityBadgeSnapshotStore? badgeSnapshotStore,
     IdentityAccountResolver? identityResolver,
     CitizenIdentityRpc? identityRpc,
+    SquareApiClient? squareApiClient,
     DateTime Function()? nowProvider,
     int Function()? cidYearProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
@@ -124,6 +127,7 @@ class MyIdService {
               chainRpc: chainRpc,
               walletManager: walletManager,
             ),
+        _squareApiClient = squareApiClient ?? SquareApiClient(),
         _chainRpc = chainRpc ?? ChainRpc(),
         _nowProvider = nowProvider ?? _beijingNow,
         _cidYearProvider = cidYearProvider ?? _utcYear;
@@ -133,6 +137,7 @@ class MyIdService {
   final IdentityBadgeSnapshotStore _badgeSnapshotStore;
   final IdentityAccountResolver _identityResolver;
   final CitizenIdentityRpc _identityRpc;
+  final SquareApiClient _squareApiClient;
 
   /// 子钥懒绑定的并发去重:五处门禁可能同时挂载,只允许一次真正执行。
   Future<void>? _subkeyBindInflight;
@@ -359,10 +364,8 @@ class MyIdService {
   /// 故不在建钱包时做（那时账户还没有 CID），而由 `IdentityRegistrationGate` 在用户
   /// 初次进入上述页面时调用本方法。只用钱包和交易的用户永远不会走到这里。
   ///
-  /// 数据根由用户助记词派生、服务端不持有，其就位逻辑见
-  /// [WalletManager.ensureCidDataRootReady]；本机确实拿不到时抛
-  /// [CidDataRootMnemonicRequiredException]，由界面引导补录助记词。
-  /// 子钥绑定会触发一次生物识别。
+  /// 数据根属于 CID 且不从钱包派生。本机没有当前绑定包装时，由 finalized 当前账户
+  /// 签一次性恢复挑战取得同一数据根；子钥绑定会再触发一次当前账户验证。
   ///
   /// 并发去重:五处门禁可能同时挂载,用 [_subkeyBindInflight] 保证同一时刻只跑一次,
   /// 其余调用等同一个 Future。失败向上抛,由门禁按 fail-closed 拦住功能页并给重试。
@@ -385,22 +388,65 @@ class MyIdService {
   }
 
   /// 全步幂等：数据根已激活到同一三元组、子钥已登记时都不重复执行。
+  /// 正确顺序是恢复授权 → 新账户包装读回 → 用途子钥落地/旧本地包装清理 →
+  /// 新设备子钥登记/旧服务端凭证清理。
   Future<void> _ensureBindingReady(ResolvedIdentity resolved) async {
     final snapshot = resolved.snapshot;
     if (snapshot == null) {
       throw const WalletAuthException('当前无已注册身份，无法完成设备绑定');
     }
-    await _walletManager.ensureCidDataRootReady(
-      cidNumber: snapshot.cidNumber,
-      bindingRevision: snapshot.bindingRevision,
-      accountId: resolved.accountId,
-    );
+    try {
+      await _walletManager.ensureCidDataRootReady(
+        cidNumber: snapshot.cidNumber,
+        bindingRevision: snapshot.bindingRevision,
+        accountId: resolved.accountId,
+      );
+    } on CidDataRootRecoveryRequiredException {
+      final genesisHash = await _chainRpc.fetchGenesisHash();
+      if (genesisHash.length != 32) {
+        throw const WalletAuthException('创世哈希无效，禁止恢复 CID 数据根');
+      }
+      final grant = await _squareApiClient.takeoverCidDataRoot(
+        cidNumber: snapshot.cidNumber,
+        bindingRevision: snapshot.bindingRevision,
+        accountId: resolved.accountId,
+        expectedGenesisHash: '0x${_bytesToHex(genesisHash)}',
+        signAction: (message) async => _signatureHex(
+          await _walletManager.signForAccountId(resolved.accountId, message),
+        ),
+      );
+      try {
+        await _walletManager.installCidDataRootForCurrentBinding(
+          cidNumber: grant.cidNumber,
+          bindingRevision: grant.bindingRevision,
+          accountId: grant.accountId,
+          dataRoot: CidDataRoot(grant.dataRoot),
+          dataRootHash: grant.dataRootHash,
+        );
+      } finally {
+        grant.dataRoot.fillRange(0, grant.dataRoot.length, 0);
+      }
+    }
     await _walletManager.bindDeviceSubkeyToCurrentBinding(
       cidNumber: snapshot.cidNumber,
       bindingRevision: snapshot.bindingRevision,
       accountId: resolved.accountId,
     );
     WalletManager.notifyIdentityBindingChanged();
+  }
+
+  static String _signatureHex(Uint8List signature) =>
+      '0x${_bytesToHex(signature)}';
+
+  static String _bytesToHex(List<int> bytes) {
+    const alphabet = '0123456789abcdef';
+    final output = StringBuffer();
+    for (final byte in bytes) {
+      output
+        ..write(alphabet[(byte >> 4) & 0x0f])
+        ..write(alphabet[byte & 0x0f]);
+    }
+    return output.toString();
   }
 
   Future<ResolvedIdentity> _requireFinalizedBinding({

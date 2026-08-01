@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as hashes;
+import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:citizenapp/8964/models/square_models.dart';
@@ -9,7 +11,8 @@ import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/services/square_post_store.dart';
 import 'package:citizenapp/chat/chat_media_limits.dart';
 import 'package:citizenapp/signer/signing.dart';
-import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
+import 'package:citizenapp/wallet/core/device_subkey.dart'
+    show bytesToHex, hexToBytes;
 import 'package:citizenapp/8964/services/square_request_signer.dart';
 
 class SquareApiException implements Exception {
@@ -345,6 +348,21 @@ typedef SquareLoginSigner = Future<String> Function(Uint8List loginMessage);
 typedef SquareActionSigner = Future<String> Function(Uint8List actionMessage);
 
 /// finalized CID 当前绑定账户取得的稳定数据根授权。
+class CidDataRootGrant {
+  const CidDataRootGrant({
+    required this.cidNumber,
+    required this.bindingRevision,
+    required this.accountId,
+    required this.dataRoot,
+    required this.dataRootHash,
+  });
+
+  final String cidNumber;
+  final int bindingRevision;
+  final String accountId;
+  final Uint8List dataRoot;
+  final String dataRootHash;
+}
 
 class SquareApiConfig {
   const SquareApiConfig._();
@@ -532,8 +550,229 @@ class SquareApiClient
 
   /// 由 finalized 当前绑定账户独立接管 CID 稳定数据根。
   ///
-  /// 防重放由一次性 challenge、过期时间、创世哈希、CID、绑定版本和当前账户共同绑定；
-  /// 客户端钉死动作签名域。请求与响应均不包含此前账户或此前设备。
+  /// 当前账户签名绑定创世、CID、版本、账户、一次性挑战、过期时间和本次 X25519
+  /// 接收公钥。Worker 返回的数据根再用该临时公钥加密；请求与响应均不包含此前账户、
+  /// 此前助记词或此前设备。
+  Future<CidDataRootGrant> takeoverCidDataRoot({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required String expectedGenesisHash,
+    required SquareActionSigner signAction,
+  }) async {
+    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(expectedGenesisHash)) {
+      throw const SquareApiException('本地创世哈希格式无效');
+    }
+    final x25519 = X25519();
+    final recipientKeyPair = await x25519.newKeyPair();
+    try {
+      final recipientPublicKey = await recipientKeyPair.extractPublicKey();
+      final recipientPublicKeyHex = '0x${bytesToHex(recipientPublicKey.bytes)}';
+      final challenge = await _postJson(
+        '/v1/square/identity/takeover/challenge',
+        <String, Object?>{
+          'cid_number': cidNumber,
+          'account_id': accountId,
+          'recovery_public_key': recipientPublicKeyHex,
+        },
+      );
+      _requireTakeoverBinding(
+        challenge,
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        expectedGenesisHash: expectedGenesisHash,
+      );
+      final signingPayloadHex = challenge['signing_payload_hex'];
+      final challengeId = challenge['challenge_id'];
+      if (signingPayloadHex is! String ||
+          challengeId is! String ||
+          !challengeId.startsWith('cidt_')) {
+        throw const SquareApiException('CID 接管挑战响应不完整');
+      }
+      final message = signingMessage(
+        opTag: kOpSignSquareAction,
+        scalePayload: hexToBytes(signingPayloadHex),
+      );
+      final signature = await signAction(message);
+      final granted = await _postJson(
+        '/v1/square/identity/takeover',
+        <String, Object?>{
+          'cid_number': cidNumber,
+          'binding_revision': bindingRevision,
+          'account_id': accountId,
+          'recovery_public_key': recipientPublicKeyHex,
+          'challenge_id': challengeId,
+          'signature': signature,
+        },
+      );
+      _requireTakeoverBinding(
+        granted,
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        expectedGenesisHash: expectedGenesisHash,
+      );
+      final responseRecipientPublicKey =
+          granted['recovery_recipient_public_key'];
+      final senderPublicKey = granted['recovery_sender_public_key'];
+      final nonceBase64 = granted['recovery_nonce_base64'];
+      final encryptedRootBase64 = granted['encrypted_cid_data_root_base64'];
+      final dataRootHash = granted['data_root_hash'];
+      if (responseRecipientPublicKey != recipientPublicKeyHex ||
+          senderPublicKey is! String ||
+          !RegExp(r'^0x[0-9a-f]{64}$').hasMatch(senderPublicKey) ||
+          nonceBase64 is! String ||
+          encryptedRootBase64 is! String ||
+          dataRootHash is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(dataRootHash)) {
+        throw const SquareApiException('CID 数据根加密授权响应不完整');
+      }
+      final dataRoot = await _decryptCidDataRootGrant(
+        recipientKeyPair: recipientKeyPair,
+        recipientPublicKeyHex: recipientPublicKeyHex,
+        senderPublicKeyHex: senderPublicKey,
+        nonceBase64: nonceBase64,
+        encryptedRootBase64: encryptedRootBase64,
+        genesisHash: expectedGenesisHash,
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        challengeId: challengeId,
+        dataRootHash: dataRootHash,
+      );
+      if (hashes.sha256.convert(dataRoot).toString() != dataRootHash) {
+        dataRoot.fillRange(0, dataRoot.length, 0);
+        throw const SquareApiException('CID 数据根摘要校验失败');
+      }
+      return CidDataRootGrant(
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        dataRoot: dataRoot,
+        dataRootHash: dataRootHash,
+      );
+    } finally {
+      recipientKeyPair.destroy();
+    }
+  }
+
+  static Future<Uint8List> _decryptCidDataRootGrant({
+    required SimpleKeyPair recipientKeyPair,
+    required String recipientPublicKeyHex,
+    required String senderPublicKeyHex,
+    required String nonceBase64,
+    required String encryptedRootBase64,
+    required String genesisHash,
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required String challengeId,
+    required String dataRootHash,
+  }) async {
+    try {
+      final senderPublicKeyBytes = hexToBytes(senderPublicKeyHex);
+      final nonce = base64Decode(nonceBase64);
+      final sealed = base64Decode(encryptedRootBase64);
+      if (senderPublicKeyBytes.length != 32 ||
+          nonce.length != 12 ||
+          sealed.length != 48) {
+        throw const SquareApiException('CID 数据根加密信封长度无效');
+      }
+      final sharedSecret = await X25519().sharedSecretKey(
+        keyPair: recipientKeyPair,
+        remotePublicKey: SimplePublicKey(
+          senderPublicKeyBytes,
+          type: KeyPairType.x25519,
+        ),
+      );
+      try {
+        final envelopeKey =
+            await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
+          secretKey: sharedSecret,
+          nonce: utf8.encode(_cidRecoverySalt(
+            genesisHash: genesisHash,
+            cidNumber: cidNumber,
+            bindingRevision: bindingRevision,
+            accountId: accountId,
+            challengeId: challengeId,
+          )),
+          info: utf8.encode(_cidRecoveryDomain),
+        );
+        try {
+          final cipherText = sealed.sublist(0, sealed.length - 16);
+          final mac = Mac(sealed.sublist(sealed.length - 16));
+          final cleartext = await AesGcm.with256bits().decrypt(
+            SecretBox(cipherText, nonce: nonce, mac: mac),
+            secretKey: envelopeKey,
+            aad: utf8.encode(_cidRecoveryAad(
+              genesisHash: genesisHash,
+              cidNumber: cidNumber,
+              bindingRevision: bindingRevision,
+              accountId: accountId,
+              challengeId: challengeId,
+              recipientPublicKeyHex: recipientPublicKeyHex,
+              senderPublicKeyHex: senderPublicKeyHex,
+              dataRootHash: dataRootHash,
+            )),
+          );
+          if (cleartext.length != 32) {
+            throw const SquareApiException('CID 数据根长度无效');
+          }
+          return Uint8List.fromList(cleartext);
+        } finally {
+          envelopeKey.destroy();
+        }
+      } finally {
+        sharedSecret.destroy();
+      }
+    } on FormatException {
+      throw const SquareApiException('CID 数据根加密信封编码无效');
+    } on SecretBoxAuthenticationError {
+      throw const SquareApiException('CID 数据根加密信封认证失败');
+    }
+  }
+
+  static void _requireTakeoverBinding(
+    Map<String, dynamic> value, {
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required String expectedGenesisHash,
+  }) {
+    if (value['cid_number'] != cidNumber ||
+        value['binding_revision'] != bindingRevision ||
+        value['account_id'] != accountId ||
+        value['chain_genesis_hash'] != expectedGenesisHash) {
+      throw const SquareApiException('CID 接管响应与 finalized 当前绑定不一致');
+    }
+  }
+
+  static const String _cidRecoveryDomain =
+      'citizenapp.cid-data-root/recovery-grant';
+
+  static String _cidRecoverySalt({
+    required String genesisHash,
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required String challengeId,
+  }) =>
+      '$_cidRecoveryDomain/salt|$genesisHash|$cidNumber|$bindingRevision|'
+      '$accountId|$challengeId';
+
+  static String _cidRecoveryAad({
+    required String genesisHash,
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required String challengeId,
+    required String recipientPublicKeyHex,
+    required String senderPublicKeyHex,
+    required String dataRootHash,
+  }) =>
+      '$_cidRecoveryDomain|$genesisHash|$cidNumber|$bindingRevision|$accountId|'
+      '$challengeId|$recipientPublicKeyHex|$senderPublicKeyHex|$dataRootHash';
 
   /// 账户敏感动作签名往返：取挑战 → 客户端**钉死** op_tag 重算摘要并签 → 提交确认。
   /// 绝不采信服务端下发的 op_tag（固定 [kOpSignSquareAction]），防被诱导跨域签名。

@@ -185,6 +185,7 @@ const routeLimits: readonly RouteLimit[] = [
   route('GET', /^\/v1\/square\/membership$/),
   route('POST', /^\/v1\/square\/membership\/confirm$/),
   route('POST', /^\/v1\/square\/account\/delete(?:\/challenge)?$/),
+  route('POST', /^\/v1\/square\/identity\/takeover(?:\/challenge)?$/),
   route('GET', /^\/v1\/square\/topup\/config$/),
   route('POST', /^\/v1\/square\/topup\/intent$/),
   route('POST', /^\/v1\/square\/topup\/confirm$/),

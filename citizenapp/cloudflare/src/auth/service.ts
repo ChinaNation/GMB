@@ -7,10 +7,12 @@ import { sha256Hex } from '../shared/hash';
 import { verifyTurnstile } from '../security/turnstile';
 import { verifyWalletSignature } from './wallet_signature';
 import {
+  clearStaleIdentitySessions,
   indexIdentitySession,
   rollbackIdentitySession,
   sessionCacheKey
 } from './session_index';
+import { closeStaleChatRealtime } from '../chat/realtime';
 import { fetchChainIdentityState } from '../chain/identity';
 import {
   assertP256PublicKeyHex,
@@ -121,7 +123,11 @@ export async function createLoginChallenge(request: Request, env: Env): Promise<
 
 export async function createSession(request: Request, env: Env): Promise<Response> {
   const body = await readJson<SessionRequest>(request);
-  if (typeof body.challenge_id !== 'string' || typeof body.signature !== 'string') {
+  if (
+    typeof body.challenge_id !== 'string'
+    || !body.challenge_id.startsWith('sqc_')
+    || typeof body.signature !== 'string'
+  ) {
     throw new HttpError(400, 'invalid_session_request', '登录请求缺少挑战或签名');
   }
 
@@ -345,9 +351,51 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
     throw new HttpError(409, 'stale_device_binding', '设备绑定证明已使用或早于当前绑定');
   }
 
+  // 新账户的设备子钥已经由当前账户签名并成功落库，证明新鉴权钥已经上岗；此后才清理
+  // 旧 revision / 旧账户凭证。数据根恢复和本机用途子钥安装在 App 中先于本接口完成，
+  // 因而清理失败只会让本次登记重试，不会留下“旧钥已删、新钥未上岗”的断层。
+  await revokeStaleBindingCredentials(
+    env,
+    cidNumber,
+    identity.binding_revision,
+    accountId,
+  );
+
   return jsonResponse({
     ok: true,
     cid_number: cidNumber,
     binding_revision: identity.binding_revision,
   });
+}
+
+/// finalized 当前绑定的新设备登记成功后，收敛全部可撤销的旧鉴权材料。
+/// CID 业务数据、稳定数据根、通讯录密文、动态、文章和订阅均不在删除范围。
+async function revokeStaleBindingCredentials(
+  env: Env,
+  cidNumber: string,
+  bindingRevision: number,
+  accountId: string,
+): Promise<void> {
+  await clearStaleIdentitySessions(env, cidNumber, bindingRevision, accountId);
+  await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM square_login_challenges
+        WHERE cid_number = ? AND (binding_revision <> ? OR account_id <> ?)`,
+    ).bind(cidNumber, bindingRevision, accountId),
+    env.DB.prepare(
+      `DELETE FROM chat_keypackages
+        WHERE cid_number = ? AND (binding_revision <> ? OR account_id <> ?)`,
+    ).bind(cidNumber, bindingRevision, accountId),
+    env.DB.prepare(
+      `DELETE FROM chat_devices
+        WHERE cid_number = ? AND (binding_revision <> ? OR account_id <> ?)`,
+    ).bind(cidNumber, bindingRevision, accountId),
+    env.DB.prepare(
+      `DELETE FROM square_device_subkeys
+        WHERE cid_number = ? AND (binding_revision <> ? OR account_id <> ?)`,
+    ).bind(cidNumber, bindingRevision, accountId),
+  ]);
+  // CID 展示缓存不是授权真源，但主动失效可避免 UI 在 45 秒 TTL 内展示旧账户。
+  await env.SQUARE_CACHE.delete(`square_identity_cid:${cidNumber}`);
+  await closeStaleChatRealtime(env, cidNumber, bindingRevision, accountId);
 }

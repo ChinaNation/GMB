@@ -561,10 +561,10 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   `AccountIdByCid` 与 `BindingRevisionByCid`，首次占号只接受目标账户且 revision=1，
   换绑只接受新账户且 revision 精确等于签名前 revision+1，核验通过前不得迁移 MyId
   本地数据或广播身份变化。CitizenApp 不保存旧账户签名清理 outbox，也不存在客户端
-  换绑后吊销 API；finalized 后新账户即取得 CID 控制权，旧账户云端凭证只能由
-  finalized 绑定版本事件驱动撤销。Worker 的
-  `purgeFinalizedOldAccountCredentials` 仅是供该事件消费者复用的内部幂等 helper，不构成
-  客户端授权接口。
+  换绑后吊销 API；finalized 后新账户即取得 CID 控制权。App 先用当前新账户恢复并验证
+  CID 数据根、安装用途子钥，再登记新钱包 P-256 子钥；Worker 只有确认新子钥成功落库后，
+  才按 CID + 当前 revision/account 清旧 Session、设备子钥、Chat 设备、KeyPackage 和旧
+  实时连接。清理不是第二套控制权授权，也不接收任何旧账户材料。
 - App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
 - 本人已发布内容以 `SquareLocalPostEntity` / `SquarePostStore` 保存规范 manifest 原始字节和
   不可变发布锚，归属主键为 `cid_number`，不保存媒体文件或公共 feed。发布确认成功后立即
@@ -737,33 +737,36 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   判据存 `IdentitySyncedAccountStore`，五处门禁并发挂载用 in-flight Future 去重，绑定
   失败不放行且不影响钱包/交易。占号与绑定相距往往只有几秒而身份缓存 45 秒，故
   `device/register` 读到「无 CID」时旁路缓存回源核实一次，不拿占号前的空值拒绝刚上链的身份。
-- 设备子钥生命周期归属整只热钱包：CID 换绑继续复用同一 `walletIndex` 子钥并重签归属
-  证明；删除非末账户不得删除。整钱包删除、末账户级联删除或 `clearWallet()` 必须同时
-  清除账户 child、钱包 KEK 及 P-256 设备子钥；仅当被删账户是本机已激活 CID 的当前
-  绑定账户时，才清除该 CID 数据根包装、缓存和用途子钥。清理逐项尝试，不能因一个
-  安全存储错误跳过后续密钥，最后以 `WalletLocalCleanupException` 汇总残留。
+- 设备子钥生命周期归属产生它的热钱包。CID 换绑到同一热钱包内的其它账户时可复用该
+  `walletIndex` 子钥；换绑到另一只钱包时必须使用新账户所属钱包自己的子钥，不得读取
+  旧钱包。整钱包删除、末账户级联删除或 `clearWallet()` 必须同时清除账户 child、钱包
+  KEK 及其 P-256 设备子钥；仅当被删账户是本机已激活 CID 的当前绑定账户时，才清除
+  该 CID 数据根本地包装、缓存和用途子钥。清理逐项尝试，不能因一个安全存储错误跳过
+  后续密钥，最后以 `WalletLocalCleanupException` 汇总残留。
 - CID 私有数据密钥采用三层模型：业务数据永久归 `cid_number`；每个 CID 只有一把稳定
-  `CidDataRoot`；当前 `account_id` 的 child 只派生 KEK 包装该数据根。
-  **数据根由用户助记词的母种子确定性派生**（`CidDataRoot.deriveFromMasterSeed`）：
+  `CidDataRoot`；当前 `account_id` 的 child 只派生本机 KEK 包装该数据根。数据根首次由
+  恢复层使用 CSPRNG 随机生成，**不从任何钱包助记词、账户 child 或设备密钥派生**：
 
   ```text
-  数据根 = HKDF(母种子, salt="citizenapp.cid/root",
-                info="citizenapp.cid-data-root/<cid_number>")
+  CID 永久业务数据 ──用途 HKDF──► Chat / MLS / 通讯录 / 草稿子钥
+          ▲
+    稳定 CidDataRoot（每 CID 一把、换绑不变）
+          ▲                            ▲
+  Worker Secret 按创世+CID 密封       当前账户 child 派生本机 KEK 包装
   ```
 
-  母种子只在录入助记词的瞬间临时派生，用完立即清零，本端从不落盘（保持 ROOTLESS）。
-  **服务端不生成、不托管、不持有、不下发任何形态的密钥材料**；云端只存已加密的业务数据，
-  在密码学上无法解开任何一条。三条硬约束共同决定了这个设计：云端零知识；换绑不得触发
-  业务数据全量重加密（用户数据可达数十上百 GB）；换设备靠助记词恢复。
-  代价是**助记词丢失即数据永久不可恢复**，服务端救不了——这是拆掉中心化后门的必然结果。
-- 数据根就位（`WalletManager.ensureCidDataRootReady`）三条路径，前两条对用户完全无感：
-  金库已激活到同一 `(cid_number, binding_revision, account_id)` → 直接可用；同一 CID 的
-  此前绑定包装仍在本机且其账户 child 也在（同设备换绑常态）→ 用旧 child 解包这 32 字节、
-  用新账户 child 重新包装，业务密文一律不动；都不满足（新设备、注册局代办换绑、绑定账户
-  尚未导入本机）→ 抛 `CidDataRootMnemonicRequiredException`，由门禁引导走既有
-  「＋ → 添加指定账户 / 导入钱包」补录助记词，在该流程内顺手派生（`ImportWalletPage.dataRootRequest`）。
-  数据根不依赖绑定账户是必需的：换绑的典型起因就是旧私钥泄漏或丢失，且投票/竞选身份链端
-  强制走注册局换绑（`CivicRebindRequiresRegistrar`），此时用户不在自己设备上、更不持有旧 child。
+  Worker 只在 Secret 中保存恢复密钥，D1 只保存按创世与 CID 域隔离后的 AES-256-GCM
+  密封值；因此 D1 泄漏不能直接恢复数据根。该 Secret 是明确的集中恢复信任边界：一旦
+  泄漏会影响全部 CID 数据根，必须只存在于 Cloudflare Secret、独立轮换和审计，禁止写入
+  仓库、日志或普通业务表。没有这个独立恢复层，在旧钱包、旧助记词和旧设备全部不可用时，
+  新钱包不可能取得同一把数据根。
+- 数据根就位（`WalletManager.ensureCidDataRootReady`）只接受精确
+  `(cid_number, binding_revision, account_id)` 的当前账户包装。没有或损坏时抛
+  `CidDataRootRecoveryRequiredException`，由 `MyIdService` 使用 finalized 当前账户签
+  一次性挑战；Worker 双读 finalized 绑定，并把稳定数据根封装给 App 的临时 X25519
+  接收公钥。App 校验摘要，以当前新账户 child 写入包装并读回，再派生用途子钥；至此才
+  清旧本地包装并登记新钱包设备子钥，Worker 确认新子钥上岗后清旧会话和旧设备凭证。
+  全流程没有旧账户、旧钱包、旧助记词、旧设备或旧缓存输入，业务密文一律不重加密。
 - 注册身份前的余额闸：门槛 = 链上 `OnchainTransaction.OnchainMinFee + Balances.ExistentialDeposit`，
   两个数现取自链上 metadata。**交易费常量的真源恒为区块链常量库 `primitives::fee_policy`，
   runtime 只把它转发到 metadata（`OnchainMinFee` / `OnchainFeeRate` / `VoteFlatFee`），

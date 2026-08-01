@@ -77,12 +77,36 @@ interface StoredSubkey {
 // created_at, updated_at)。
 class DeviceStmt {
   private binds: unknown[] = [];
-  constructor(private readonly rows: Map<string, StoredSubkey>) {}
+  constructor(
+    private readonly rows: Map<string, StoredSubkey>,
+    private readonly sql: string,
+    private readonly deletes: string[],
+  ) {}
   bind(...args: unknown[]): DeviceStmt {
     this.binds = args;
     return this;
   }
   async run(): Promise<{ meta: { changes: number } }> {
+    if (this.sql.startsWith('DELETE FROM')) this.deletes.push(this.sql);
+    if (this.sql.includes('DELETE FROM square_device_subkeys')) {
+      const cidNumber = this.binds[0] as string;
+      const bindingRevision = this.binds[1] as number;
+      const accountId = this.binds[2] as string;
+      let changes = 0;
+      for (const [key, row] of this.rows) {
+        if (
+          row.cid_number === cidNumber &&
+          (row.binding_revision !== bindingRevision || row.account_id !== accountId)
+        ) {
+          this.rows.delete(key);
+          changes++;
+        }
+      }
+      return { meta: { changes } };
+    }
+    if (this.sql.startsWith('DELETE FROM')) {
+      return { meta: { changes: 0 } };
+    }
     const cidNumber = this.binds[0] as string;
     const deviceId = this.binds[1] as string;
     const key = `${cidNumber}:${deviceId}`;
@@ -108,13 +132,27 @@ class DeviceStmt {
     });
     return { meta: { changes: 1 } };
   }
+  async all<T>(): Promise<{ results: T[] }> {
+    return { results: [] };
+  }
 }
 
 class DeviceDb {
   readonly rows = new Map<string, StoredSubkey>();
-  prepare(): DeviceStmt {
-    return new DeviceStmt(this.rows);
+  readonly deletes: string[] = [];
+  prepare(sql: string): DeviceStmt {
+    return new DeviceStmt(this.rows, sql, this.deletes);
   }
+  async batch(statements: DeviceStmt[]): Promise<Array<{ meta: { changes: number } }>> {
+    return Promise.all(statements.map((statement) => statement.run()));
+  }
+}
+
+function deviceEnv(db = new DeviceDb()): Env {
+  return {
+    DB: db,
+    SQUARE_CACHE: { delete: async () => undefined },
+  } as unknown as Env;
 }
 
 function registerRequest(issuedAt: number, publicKey = `0x04${'a'.repeat(128)}`): Request {
@@ -224,7 +262,7 @@ describe('registerDeviceSubkey 原子单调更新', () => {
 
   it('同设备严格单调更新,新设备独立成行', async () => {
     const db = new DeviceDb();
-    const env = { DB: db } as unknown as Env;
+    const env = deviceEnv(db);
     const now = Date.now();
     const pubA = `04${'a'.repeat(128)}`;
     const pubB = `04${'b'.repeat(128)}`;
@@ -254,7 +292,7 @@ describe('registerDeviceSubkey 原子单调更新', () => {
   });
 
   it('拒绝非安全整数以及超出五分钟窗口的时间戳', async () => {
-    const env = { DB: new DeviceDb() } as unknown as Env;
+    const env = deviceEnv();
     await expect(
       registerDeviceSubkey(registerRequest(Date.now() - DEVICE_SKEW_MS - 1), env)
     ).rejects.toMatchObject({ code: 'invalid_issued_at' });
@@ -264,5 +302,24 @@ describe('registerDeviceSubkey 原子单调更新', () => {
     await expect(
       registerDeviceSubkey(registerRequest(Number.MAX_SAFE_INTEGER + 1), env)
     ).rejects.toMatchObject({ code: 'invalid_issued_at' });
+  });
+
+  it('当前新设备上岗后才清理同一 CID 的旧 revision/旧账户子钥', async () => {
+    const db = new DeviceDb();
+    db.rows.set('old', {
+      cid_number: TEST_CID,
+      device_id: 'old',
+      binding_revision: 0,
+      account_id: `0x${'2'.repeat(64)}`,
+      p256_public_key: `04${'c'.repeat(128)}`,
+      issued_at: 1,
+      created_at: 1,
+      updated_at: 1,
+    });
+    await registerDeviceSubkey(registerRequest(Date.now()), deviceEnv(db));
+    expect([...db.rows.values()].some((row) => row.device_id === 'old')).toBe(false);
+    expect([...db.rows.values()]).toHaveLength(1);
+    expect([...db.rows.values()][0]?.account_id).toBe(DEVICE_BIND_INPUT.account_id);
+    expect(db.deletes.join('\n')).toContain('DELETE FROM square_login_challenges');
   });
 });

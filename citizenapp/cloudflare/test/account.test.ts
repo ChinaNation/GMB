@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Miniflare } from 'miniflare';
 
 vi.mock('../src/auth/wallet_signature', () => ({
   verifyWalletSignature: vi.fn()
@@ -43,10 +46,11 @@ import {
   issueActionChallenge,
   releaseActionChallenge
 } from '../src/account/action_challenge';
+import { purgeIdentity } from '../src/account/purge';
 import {
-  purgeFinalizedOldAccountCredentials,
-  purgeIdentity
-} from '../src/account/purge';
+  cidTakeoverChallengeRoute,
+  cidTakeoverRoute
+} from '../src/account/cid_data_root';
 import { deleteAccountChallengeRoute } from '../src/account/service';
 import { routeRequest } from '../src/routes';
 import type { Env, MediaAssetRow } from '../src/types';
@@ -62,12 +66,12 @@ const PURGE_CURRENT_SESSION_HASH =
   'a90ed5c348b900e30228ac7217a09522dd841c05ab06ace750e5e14802715957';
 const PURGE_OLD_SESSION_HASH =
   '065cb6f72e61c32ae129ad1aa939b1ba3b6d8b5c75f0c66665a38b5633b97f91';
-const OLD_SESSION_HASH =
-  '7d3911076a691bc7e94304f8dfcdeba33679c38254f49871de9eb4b76625b143';
-const NEW_SESSION_HASH =
-  '7a416ea32777f5cc8a9c801db1aab6005a8680fc12efd037b0291cc3929815fb';
 const CURRENT_SESSION_HASH =
   'ef6036bfacfc26e4d8f0ea4199e6c1a4571376f5e9949854a07ef59530d5d50b';
+const SCHEMA_SQL = readFileSync(
+  resolve(process.cwd(), 'schema/citizenapp.sql'),
+  'utf8'
+);
 
 interface ChallengeRecord {
   challenge_id: string;
@@ -131,6 +135,476 @@ function challengeEnv(): { env: Env; db: ChallengeDb } {
   const db = new ChallengeDb();
   return { env: { DB: db } as unknown as Env, db };
 }
+
+interface DataRootRecord {
+  cid_number: string;
+  recovery_ciphertext: string;
+  recovery_nonce: string;
+  recovery_key_version: number;
+  data_root_hash: string;
+  active_binding_revision: number;
+  active_account_id: string;
+  created_at: number;
+  updated_at: number;
+}
+
+class TakeoverStmt {
+  private binds: unknown[] = [];
+  constructor(private readonly db: TakeoverDb, private readonly sql: string) {}
+  bind(...args: unknown[]): TakeoverStmt {
+    this.binds = args;
+    return this;
+  }
+  async first<T>(): Promise<T | null> {
+    if (this.sql.includes('FROM square_login_challenges')) {
+      return (this.db.challenges.get(this.binds[0] as string) as T) ?? null;
+    }
+    if (this.sql.includes('FROM cid_data_roots')) {
+      return (this.db.roots.get(this.binds[0] as string) as T) ?? null;
+    }
+    return null;
+  }
+  async all<T>(): Promise<{ results: T[] }> {
+    return { results: [] };
+  }
+  async run(): Promise<{ meta: { changes: number } }> {
+    if (this.sql.includes('INSERT INTO square_login_challenges')) {
+      this.db.challenges.set(this.binds[0] as string, {
+        challenge_id: this.binds[0] as string,
+        cid_number: this.binds[1] as string,
+        binding_revision: this.binds[2] as number,
+        account_id: this.binds[3] as string,
+        signing_payload: this.binds[4] as string,
+        expires_at: this.binds[5] as number,
+        used_at: null
+      });
+      return { meta: { changes: 1 } };
+    }
+    if (this.sql.includes('SET used_at = NULL')) {
+      const row = this.db.challenges.get(this.binds[0] as string);
+      if (row) row.used_at = null;
+      return { meta: { changes: row ? 1 : 0 } };
+    }
+    if (
+      this.sql.includes('UPDATE square_login_challenges') &&
+      this.sql.includes('SET used_at = ?')
+    ) {
+      const row = this.db.challenges.get(this.binds[1] as string);
+      const canConsume =
+        row !== undefined &&
+        row.cid_number === this.binds[2] &&
+        row.binding_revision === this.binds[3] &&
+        row.account_id === this.binds[4] &&
+        row.used_at === null &&
+        row.expires_at > (this.binds[5] as number);
+      if (canConsume) row!.used_at = this.binds[0] as number;
+      return { meta: { changes: canConsume ? 1 : 0 } };
+    }
+    if (this.sql.includes('INSERT INTO cid_data_roots')) {
+      const cidNumber = this.binds[0] as string;
+      if (!this.db.roots.has(cidNumber)) {
+        this.db.roots.set(cidNumber, {
+          cid_number: cidNumber,
+          recovery_ciphertext: this.binds[1] as string,
+          recovery_nonce: this.binds[2] as string,
+          recovery_key_version: this.binds[3] as number,
+          data_root_hash: this.binds[4] as string,
+          active_binding_revision: this.binds[5] as number,
+          active_account_id: this.binds[6] as string,
+          created_at: this.binds[7] as number,
+          updated_at: this.binds[8] as number
+        });
+        return { meta: { changes: 1 } };
+      }
+      return { meta: { changes: 0 } };
+    }
+    if (this.sql.includes('UPDATE cid_data_roots')) {
+      const row = this.db.roots.get(this.binds[3] as string);
+      const canAdvance =
+        row !== undefined &&
+        row.active_binding_revision <= (this.binds[4] as number);
+      if (canAdvance) {
+        row!.active_binding_revision = this.binds[0] as number;
+        row!.active_account_id = this.binds[1] as string;
+        row!.updated_at = this.binds[2] as number;
+      }
+      return { meta: { changes: canAdvance ? 1 : 0 } };
+    }
+    return { meta: { changes: 0 } };
+  }
+}
+
+class TakeoverDb {
+  readonly challenges = new Map<string, ChallengeRecord>();
+  readonly roots = new Map<string, DataRootRecord>();
+  prepare(sql: string): TakeoverStmt {
+    return new TakeoverStmt(this, sql);
+  }
+}
+
+function takeoverEnv(): { env: Env; db: TakeoverDb } {
+  const db = new TakeoverDb();
+  const env = {
+    DB: db,
+    CHAIN_GENESIS_HASH: `0x${'12'.repeat(32)}`,
+    CID_DATA_ROOT_RECOVERY_KEY: `0x${'34'.repeat(32)}`
+  } as unknown as Env;
+  return { env, db };
+}
+
+function jsonPost(body: Record<string, unknown>): Request {
+  const encoded = JSON.stringify(body);
+  return new Request('http://worker.test/v1/square/identity/takeover', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'content-length': String(new TextEncoder().encode(encoded).length)
+    },
+    body: encoded
+  });
+}
+
+function routeJsonPost(path: string, body: Record<string, unknown>): Request {
+  const encoded = JSON.stringify(body);
+  return new Request(`http://worker.test${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'content-length': String(new TextEncoder().encode(encoded).length),
+      'cf-connecting-ip': '127.0.0.1'
+    },
+    body: encoded
+  });
+}
+
+async function applySchema(db: D1Database): Promise<void> {
+  const statements = SCHEMA_SQL
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n')
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+  for (const statement of statements) await db.prepare(statement).run();
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value: unknown): Uint8Array {
+  if (typeof value !== 'string') throw new Error('base64 expected');
+  const binary = atob(value);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}
+
+function hex(bytes: Uint8Array): string {
+  return `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+async function decryptTakeoverGrant(
+  env: Env,
+  recipientKeyPair: CryptoKeyPair,
+  recipientPublicKey: string,
+  challengeId: string,
+  granted: Record<string, unknown>,
+): Promise<Uint8Array> {
+  const senderPublicKey = granted.recovery_sender_public_key;
+  const dataRootHash = granted.data_root_hash;
+  if (typeof senderPublicKey !== 'string' || typeof dataRootHash !== 'string') {
+    throw new Error('grant fields missing');
+  }
+  const sender = await crypto.subtle.importKey(
+    'raw',
+    Uint8Array.from(senderPublicKey.slice(2).match(/../g)!, (part) => Number.parseInt(part, 16)),
+    { name: 'X25519' },
+    false,
+    []
+  );
+  const shared = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'X25519', public: sender },
+    recipientKeyPair.privateKey,
+    256
+  ));
+  try {
+    const baseKey = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+    const salt = new TextEncoder().encode(
+      `citizenapp.cid-data-root/recovery-grant/salt|${env.CHAIN_GENESIS_HASH}|`
+      + `${STANDARD_CID}|${finalizedBinding.revision}|${finalizedBinding.accountId}|${challengeId}`
+    );
+    const key = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode('citizenapp.cid-data-root/recovery-grant') },
+      baseKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+    const aad = new TextEncoder().encode(
+      `citizenapp.cid-data-root/recovery-grant|${env.CHAIN_GENESIS_HASH}|${STANDARD_CID}|`
+      + `${finalizedBinding.revision}|${finalizedBinding.accountId}|${challengeId}|`
+      + `${recipientPublicKey}|${senderPublicKey}|${dataRootHash}`
+    );
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: arrayBuffer(base64ToBytes(granted.recovery_nonce_base64)),
+        additionalData: arrayBuffer(aad),
+        tagLength: 128,
+      },
+      key,
+      arrayBuffer(base64ToBytes(granted.encrypted_cid_data_root_base64))
+    );
+    return new Uint8Array(decrypted);
+  } finally {
+    shared.fill(0);
+  }
+}
+
+describe('CID finalized 新账户接管', () => {
+  beforeEach(() => {
+    mockVerify.mockReset();
+    mockVerify.mockResolvedValue(true);
+    finalizedBinding.accountId = ACCOUNT_ID;
+    finalizedBinding.revision = 1;
+  });
+
+  async function issueAndTakeover(env: Env, cidNumber = STANDARD_CID) {
+    const generated = await crypto.subtle.generateKey(
+      { name: 'X25519' },
+      true,
+      ['deriveBits']
+    );
+    if (!('privateKey' in generated)) throw new Error('X25519 key pair expected');
+    const recipientPublicKey = hex(new Uint8Array(
+      await crypto.subtle.exportKey('raw', generated.publicKey)
+    ));
+    const challengeResponse = await cidTakeoverChallengeRoute(
+      jsonPost({
+        cid_number: cidNumber,
+        account_id: finalizedBinding.accountId,
+        recovery_public_key: recipientPublicKey
+      }),
+      env
+    );
+    const challenge = await challengeResponse.json<Record<string, unknown>>();
+    const takeoverResponse = await cidTakeoverRoute(
+      jsonPost({
+        cid_number: cidNumber,
+        binding_revision: finalizedBinding.revision,
+        account_id: finalizedBinding.accountId,
+        recovery_public_key: recipientPublicKey,
+        challenge_id: challenge.challenge_id,
+        signature: '0xsignature'
+      }),
+      env
+    );
+    const granted = await takeoverResponse.json<Record<string, unknown>>();
+    return {
+      challenge,
+      granted,
+      recipientPublicKey,
+      dataRoot: await decryptTakeoverGrant(
+        env,
+        generated,
+        recipientPublicKey,
+        challenge.challenge_id as string,
+        granted
+      )
+    };
+  }
+
+  it('挑战完整绑定且数据根只以 X25519 加密信封返回，并只消费一次', async () => {
+    const { env } = takeoverEnv();
+    const { challenge, granted, dataRoot } = await issueAndTakeover(env);
+    expect(challenge.cid_number).toBe(STANDARD_CID);
+    expect(challenge.binding_revision).toBe(1);
+    expect(challenge.account_id).toBe(ACCOUNT_ID);
+    expect(granted).not.toHaveProperty('cid_data_root_base64');
+    expect(base64ToBytes(granted.encrypted_cid_data_root_base64)).toHaveLength(48);
+    expect(dataRoot).toHaveLength(32);
+    expect(granted.data_root_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(mockVerify).toHaveBeenCalledTimes(1);
+
+    await expect(
+      cidTakeoverRoute(
+        jsonPost({
+          cid_number: STANDARD_CID,
+          binding_revision: 1,
+          account_id: ACCOUNT_ID,
+          recovery_public_key: challenge.recovery_public_key,
+          challenge_id: challenge.challenge_id,
+          signature: '0xsignature'
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'used_challenge' });
+  });
+
+  it('通过完整 Worker 路由与真实本地 D1/KV binding 完成加密接管', async () => {
+    const miniflare = new Miniflare({
+      modules: true,
+      script: 'export default { fetch() { return new Response("test"); } }',
+      // 测试随仓库锁定的 workerd 最高只支持到 2026-07-29；生产配置仍为 2026-07-23。
+      compatibilityDate: '2026-07-29',
+      d1Databases: ['DB'],
+      kvNamespaces: ['SQUARE_CACHE'],
+      bindings: {
+        HASH_KEY: 'cid-data-root-rate-limit-test-key',
+        CHAIN_GENESIS_HASH: `0x${'12'.repeat(32)}`,
+        CID_DATA_ROOT_RECOVERY_KEY: `0x${'34'.repeat(32)}`
+      }
+    });
+    try {
+      const env = await miniflare.getBindings<Env>();
+      await applySchema(env.DB);
+      const generated = await crypto.subtle.generateKey(
+        { name: 'X25519' },
+        true,
+        ['deriveBits']
+      );
+      if (!('privateKey' in generated)) throw new Error('X25519 key pair expected');
+      const recipientPublicKey = hex(new Uint8Array(
+        await crypto.subtle.exportKey('raw', generated.publicKey)
+      ));
+      const challengeResponse = await routeRequest(
+        routeJsonPost('/v1/square/identity/takeover/challenge', {
+          cid_number: STANDARD_CID,
+          account_id: ACCOUNT_ID,
+          recovery_public_key: recipientPublicKey
+        }),
+        env
+      );
+      expect(challengeResponse.status).toBe(200);
+      const challenge = await challengeResponse.json<Record<string, unknown>>();
+      const takeoverResponse = await routeRequest(
+        routeJsonPost('/v1/square/identity/takeover', {
+          cid_number: STANDARD_CID,
+          binding_revision: 1,
+          account_id: ACCOUNT_ID,
+          recovery_public_key: recipientPublicKey,
+          challenge_id: challenge.challenge_id,
+          signature: '0xsignature'
+        }),
+        env
+      );
+      expect(takeoverResponse.status).toBe(200);
+      const granted = await takeoverResponse.json<Record<string, unknown>>();
+      expect(await decryptTakeoverGrant(
+        env,
+        generated,
+        recipientPublicKey,
+        challenge.challenge_id as string,
+        granted
+      )).toHaveLength(32);
+      const row = await env.DB.prepare(
+        `SELECT recovery_ciphertext, recovery_nonce, data_root_hash
+          FROM cid_data_roots WHERE cid_number = ?`
+      ).bind(STANDARD_CID).first<{
+        recovery_ciphertext: string;
+        recovery_nonce: string;
+        data_root_hash: string;
+      }>();
+      expect(row?.recovery_ciphertext).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+      expect(row?.recovery_nonce).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+      expect(row?.data_root_hash).toBe(granted.data_root_hash);
+      expect(row).not.toHaveProperty('cid_data_root');
+    } finally {
+      await miniflare.dispose();
+    }
+  });
+
+  it('旧钱包与旧设备完全不参与，revision 推进后新账户取得同一数据根', async () => {
+    const { env, db } = takeoverEnv();
+    const first = await issueAndTakeover(env);
+    finalizedBinding.accountId = NEW_ACCOUNT_ID;
+    finalizedBinding.revision = 2;
+    const second = await issueAndTakeover(env);
+
+    expect(second.dataRoot).toEqual(first.dataRoot);
+    expect(second.granted.data_root_hash).toBe(first.granted.data_root_hash);
+    expect(db.roots.get(STANDARD_CID)?.active_binding_revision).toBe(2);
+    expect(db.roots.get(STANDARD_CID)?.active_account_id).toBe(NEW_ACCOUNT_ID);
+    expect(mockVerify).toHaveBeenLastCalledWith(
+      expect.any(Uint8Array),
+      '0xsignature',
+      NEW_ACCOUNT_ID
+    );
+  });
+
+  it('替换临时接收公钥、跨创世重放或 finalized 绑定变化全部失败关闭', async () => {
+    const { env } = takeoverEnv();
+    const generated = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+    if (!('privateKey' in generated)) throw new Error('X25519 key pair expected');
+    const recipientPublicKey = hex(new Uint8Array(await crypto.subtle.exportKey('raw', generated.publicKey)));
+    const response = await cidTakeoverChallengeRoute(
+      jsonPost({ cid_number: STANDARD_CID, account_id: ACCOUNT_ID, recovery_public_key: recipientPublicKey }),
+      env
+    );
+    const challenge = await response.json<Record<string, unknown>>();
+
+    await expect(cidTakeoverRoute(jsonPost({
+      cid_number: STANDARD_CID,
+      binding_revision: 1,
+      account_id: ACCOUNT_ID,
+      recovery_public_key: `0x${'56'.repeat(32)}`,
+      challenge_id: challenge.challenge_id,
+      signature: '0xsignature'
+    }), env)).rejects.toMatchObject({ code: 'takeover_payload_mismatch' });
+
+    env.CHAIN_GENESIS_HASH = `0x${'99'.repeat(32)}`;
+    await expect(cidTakeoverRoute(jsonPost({
+      cid_number: STANDARD_CID,
+      binding_revision: 1,
+      account_id: ACCOUNT_ID,
+      recovery_public_key: recipientPublicKey,
+      challenge_id: challenge.challenge_id,
+      signature: '0xsignature'
+    }), env)).rejects.toMatchObject({ code: 'takeover_payload_mismatch' });
+
+    env.CHAIN_GENESIS_HASH = `0x${'12'.repeat(32)}`;
+    finalizedBinding.accountId = NEW_ACCOUNT_ID;
+    finalizedBinding.revision = 2;
+    await expect(cidTakeoverRoute(jsonPost({
+      cid_number: STANDARD_CID,
+      binding_revision: 1,
+      account_id: ACCOUNT_ID,
+      recovery_public_key: recipientPublicKey,
+      challenge_id: challenge.challenge_id,
+      signature: '0xsignature'
+    }), env)).rejects.toMatchObject({ code: 'cid_binding_changed' });
+  });
+
+  it('过期挑战在验签前拒绝', async () => {
+    const { env, db } = takeoverEnv();
+    const generated = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+    if (!('privateKey' in generated)) throw new Error('X25519 key pair expected');
+    const recipientPublicKey = hex(new Uint8Array(await crypto.subtle.exportKey('raw', generated.publicKey)));
+    const response = await cidTakeoverChallengeRoute(
+      jsonPost({ cid_number: STANDARD_CID, account_id: ACCOUNT_ID, recovery_public_key: recipientPublicKey }),
+      env
+    );
+    const challenge = await response.json<Record<string, unknown>>();
+    db.challenges.get(challenge.challenge_id as string)!.expires_at = 1;
+    await expect(cidTakeoverRoute(jsonPost({
+      cid_number: STANDARD_CID,
+      binding_revision: 1,
+      account_id: ACCOUNT_ID,
+      recovery_public_key: recipientPublicKey,
+      challenge_id: challenge.challenge_id,
+      signature: '0xsignature'
+    }), env)).rejects.toMatchObject({ code: 'expired_challenge' });
+    expect(mockVerify).not.toHaveBeenCalled();
+  });
+});
 
 describe('consumeActionSignature', () => {
   beforeEach(() => mockVerify.mockReset());
@@ -362,9 +836,6 @@ class PurgeDb {
     cid_number: string;
     account_id: string;
   }> = [];
-  chatDeviceRows: Array<{ cid_number: string; account_id: string }> = [];
-  chatKeyPackageRows: Array<{ cid_number: string; account_id: string }> = [];
-  deviceSubkeyRows: Array<{ cid_number: string; account_id: string }> = [];
   postWithoutUpload: { post_id: string } | null = null;
   readonly deletes: string[] = [];
   readonly batches: string[][] = [];
@@ -377,47 +848,6 @@ class PurgeDb {
   }
   execute(statement: PurgeStmt): { meta: { changes: number } } {
     this.deletes.push(statement.sql);
-    const deleteCredentialRows = (
-      rows: Array<{ cid_number: string; account_id: string }>
-    ): {
-      kept: Array<{ cid_number: string; account_id: string }>;
-      changes: number;
-    } => {
-      const cidNumber = statement.binds[0] as string;
-      const accountId = statement.binds[1] as string;
-      const kept = rows.filter(
-        (row) =>
-          row.cid_number !== cidNumber || row.account_id !== accountId
-      );
-      return { kept, changes: rows.length - kept.length };
-    };
-    if (
-      statement.sql.includes(
-        'DELETE FROM chat_devices WHERE cid_number = ? AND account_id = ?'
-      )
-    ) {
-      const result = deleteCredentialRows(this.chatDeviceRows);
-      this.chatDeviceRows = result.kept;
-      return { meta: { changes: result.changes } };
-    }
-    if (
-      statement.sql.includes(
-        'DELETE FROM chat_keypackages WHERE cid_number = ? AND account_id = ?'
-      )
-    ) {
-      const result = deleteCredentialRows(this.chatKeyPackageRows);
-      this.chatKeyPackageRows = result.kept;
-      return { meta: { changes: result.changes } };
-    }
-    if (
-      statement.sql.includes(
-        'DELETE FROM square_device_subkeys WHERE cid_number = ? AND account_id = ?'
-      )
-    ) {
-      const result = deleteCredentialRows(this.deviceSubkeyRows);
-      this.deviceSubkeyRows = result.kept;
-      return { meta: { changes: result.changes } };
-    }
     if (statement.sql.includes('DELETE FROM square_sessions WHERE cid_number = ?')) {
       const cidNumber = statement.binds[0] as string;
       const accountId = statement.sql.includes('AND account_id = ?')
@@ -715,134 +1145,6 @@ describe('注销入口默认拒（不再匿名对任意账户发起挑战）', (
     await expect(
       deleteAccountChallengeRoute(request, env)
     ).rejects.toMatchObject({ code: 'delete_account_mismatch' });
-  });
-});
-
-describe('purgeFinalizedOldAccountCredentials', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it('只删旧账户鉴权敏感数据(Chat/设备子钥/挑战/会话),不碰随身份迁移数据(通讯录/动态/会员/关注)', async () => {
-    const db = new PurgeDb();
-    const kv = new FakeKv();
-    db.sessionRows = [
-      {
-        session_token_hash: OLD_SESSION_HASH,
-        cid_number: STANDARD_CID,
-        account_id: ACCOUNT_ID
-      },
-      {
-        session_token_hash: NEW_SESSION_HASH,
-        cid_number: STANDARD_CID,
-        account_id: NEW_ACCOUNT_ID
-      }
-    ];
-    kv.store.set(`square_identity:${ACCOUNT_ID}`, '{"identity_level":"voting"}');
-    kv.store.set(
-      `square_session:${OLD_SESSION_HASH}`,
-      JSON.stringify({ cid_number: STANDARD_CID, account_id: ACCOUNT_ID })
-    );
-    kv.store.set(
-      `square_session:${NEW_SESSION_HASH}`,
-      JSON.stringify({ cid_number: STANDARD_CID, account_id: NEW_ACCOUNT_ID })
-    );
-    const env = { DB: db, SQUARE_CACHE: kv } as unknown as Env;
-
-    const result = await purgeFinalizedOldAccountCredentials(
-      env,
-      STANDARD_CID,
-      ACCOUNT_ID
-    );
-
-    const joined = db.deletes.join('\n');
-    // 账户级鉴权敏感数据全删(Chat 端到端材料/登录挑战/设备子钥)。
-    expect(joined).toContain(
-      'DELETE FROM chat_keypackages WHERE cid_number = ? AND account_id = ?'
-    );
-    expect(joined).toContain(
-      'DELETE FROM chat_devices WHERE cid_number = ? AND account_id = ?'
-    );
-    expect(joined).toContain(
-      'DELETE FROM square_login_challenges WHERE cid_number = ? AND account_id = ?'
-    );
-    expect(joined).toContain(
-      'DELETE FROM square_device_subkeys WHERE cid_number = ? AND account_id = ?'
-    );
-    // 换绑后这些 CID 级状态由新账户继续使用，绝不能随旧账户吊销。
-    expect(joined).not.toContain('chat_device_binding_nonces');
-    // 随 CID 迁到新账户的数据(永不丢失)绝不删——R4 起通讯录密文亦按 cid 归属,一并保留。
-    expect(joined).not.toContain('square_contacts');
-    expect(joined).not.toContain('square_posts');
-    expect(joined).not.toContain('square_memberships');
-    expect(joined).not.toContain('square_follows');
-    expect(joined).not.toContain('square_media_assets');
-    // 身份缓存清除 + 会话清空(旧私钥泄漏也无法重建旧会话)。
-    expect(kv.store.has(`square_identity:${ACCOUNT_ID}`)).toBe(false);
-    expect(kv.store.has(`square_session:${OLD_SESSION_HASH}`)).toBe(false);
-    expect(kv.store.has(`square_session:${NEW_SESSION_HASH}`)).toBe(true);
-    expect(db.sessionRows).toEqual([
-      {
-        session_token_hash: NEW_SESSION_HASH,
-        cid_number: STANDARD_CID,
-        account_id: NEW_ACCOUNT_ID
-      }
-    ]);
-    expect(result.deleted_rows).toBeGreaterThan(0);
-  });
-
-  it('延迟旧 CID 事件不删除已复用同一账户的新 CID 凭证', async () => {
-    const reusedCid = 'CN220-CTZN2-199001010-2026';
-    const db = new PurgeDb();
-    db.chatDeviceRows = [
-      { cid_number: STANDARD_CID, account_id: ACCOUNT_ID },
-      { cid_number: reusedCid, account_id: ACCOUNT_ID },
-      { cid_number: STANDARD_CID, account_id: NEW_ACCOUNT_ID }
-    ];
-    db.chatKeyPackageRows = [...db.chatDeviceRows];
-    db.deviceSubkeyRows = [...db.chatDeviceRows];
-    db.sessionRows = [
-      {
-        session_token_hash: OLD_SESSION_HASH,
-        cid_number: STANDARD_CID,
-        account_id: ACCOUNT_ID
-      },
-      {
-        session_token_hash: NEW_SESSION_HASH,
-        cid_number: reusedCid,
-        account_id: ACCOUNT_ID
-      }
-    ];
-    const kv = new FakeKv();
-    kv.store.set(
-      `square_session:${OLD_SESSION_HASH}`,
-      JSON.stringify({ cid_number: STANDARD_CID, account_id: ACCOUNT_ID })
-    );
-    kv.store.set(
-      `square_session:${NEW_SESSION_HASH}`,
-      JSON.stringify({ cid_number: reusedCid, account_id: ACCOUNT_ID })
-    );
-    const env = { DB: db, SQUARE_CACHE: kv } as unknown as Env;
-
-    await purgeFinalizedOldAccountCredentials(
-      env,
-      STANDARD_CID,
-      ACCOUNT_ID
-    );
-
-    const expectedRows = [
-      { cid_number: reusedCid, account_id: ACCOUNT_ID },
-      { cid_number: STANDARD_CID, account_id: NEW_ACCOUNT_ID }
-    ];
-    expect(db.chatDeviceRows).toEqual(expectedRows);
-    expect(db.chatKeyPackageRows).toEqual(expectedRows);
-    expect(db.deviceSubkeyRows).toEqual(expectedRows);
-    expect(db.sessionRows).toEqual([
-      {
-        session_token_hash: NEW_SESSION_HASH,
-        cid_number: reusedCid,
-        account_id: ACCOUNT_ID
-      }
-    ]);
-    expect(kv.store.has(`square_session:${NEW_SESSION_HASH}`)).toBe(true);
   });
 });
 

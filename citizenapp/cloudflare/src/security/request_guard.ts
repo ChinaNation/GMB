@@ -113,6 +113,12 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
     await enforceRateLimit(env, `topup:${ipKey}`, 60, 60);
     return;
   }
+  // CID 数据根接管发生在新设备建立会话之前，不能要求旧会话或旧设备。handler 用
+  // finalized 当前账户签名 + 一次性 X25519 接收公钥完成授权；这里只做 IP 量控。
+  if (path.startsWith('/v1/square/identity/takeover')) {
+    await enforceRateLimit(env, `cid_takeover:${ipKey}`, 20, 60);
+    return;
+  }
   // 注销(account/delete 挑战+确认)现走默认拒:客户端已携带广场会话 Bearer(移动端同轮改)。
   // 强制会话后,只能对"自己已登录的账户"发起注销挑战,从源头杜绝对任意账户的匿名挑战枚举;
   // 确认阶段仍由钱包签名(op_tag 0x1D)自证,会话与签名双门。device proof 仍豁免(见 requiresDeviceProof)。

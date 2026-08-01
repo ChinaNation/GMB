@@ -74,10 +74,11 @@
   fail-closed；客户端不得再提交第二份旧账户签名证明。
 - CitizenApp 已删除旧账户换绑授权 outbox、启动重试和客户端换绑后吊销调用；
   Worker 不提供对应 HTTP endpoint、路由资源登记或外部请求模型，不得恢复。
-- Worker 只保留内部 `purgeFinalizedOldAccountCredentials` 幂等 helper，输入来自可信
-  finalized 绑定版本消费者。它只删除同一 CID 下旧 `account_id` 的
-  `chat_keypackages`、`chat_devices`、`square_login_challenges`、
-  `square_device_subkeys`、旧会话和账户身份缓存。
+- App 先按 finalized 当前绑定完成稳定数据根恢复、新账户包装读回、用途子钥安装和新
+  钱包设备子钥登记；Worker 只有确认新子钥成功落库后，才按 CID + 当前
+  revision/account 清理旧 `chat_keypackages`、`chat_devices`、
+  `square_device_subkeys`、旧登录挑战、旧会话和实时连接。该清理不接收旧账户签名，
+  也不构成第二授权。
 - `ChatRealtimeObject`、`chat_device_binding_nonces`、通讯录、动态、文章、粉丝、
   关注、媒体和会员均按 CID 归属，换绑时不得整体关闭、删除或迁移。
 - 连续 A→B→C 换绑由链上单调 revision 串行化；每笔授权都绑定创世哈希、预期旧/新账户、
@@ -97,10 +98,11 @@ P0 真实链验收发现续费若发生在 finalize 后阶段会被 NodeGuard �
 
 ### 4. 通讯录孤儿密文累积（2026-07-29 已按 CID 终态解决）
 
-通讯录关系、稳定联系人 ID、备注与云端密文归属已经改为 CID；换绑时新绑定账户派生新的
-本地数据根并接管同一 CID 数据，新密钥成功解密/重加密后清理旧账户派生材料，不要求旧账户、
-旧私钥或旧设备参与。联系人当前账户由 finalized 链上正向映射、绑定版本与反向映射双重闭包
-刷新，不再用账户派生联系人身份，也不会因联系人换绑新增另一条关系。
+通讯录关系、稳定联系人 ID、备注与云端密文归属已经改为 CID；换绑时 finalized 当前新账户
+通过独立恢复层取得**同一把 CID 稳定数据根**，只用自己的 child 重包这 32 字节，不派生新
+数据根、不重加密业务密文，也不要求旧账户、旧私钥或旧设备参与。联系人当前账户由 finalized
+链上正向映射、绑定版本与反向映射双重闭包刷新，不再用账户派生联系人身份，也不会因联系人
+换绑新增另一条关系。
 
 ## P2 — 文档回写(CLAUDE.md 要求「必须回写 memory/、ADR 或相关文档」)
 
