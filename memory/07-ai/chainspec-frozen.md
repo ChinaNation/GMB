@@ -84,7 +84,7 @@
 ## 当前唯一正式创世锚点（2026-08-01）
 
 - runtime 源提交：`9c2ec97b91b3236c6268ddd3057a4700a4591cd2`；冻结资产提交：
-  **本次创世资产提交，提交完成后回填完整 SHA**；GitHub `CitizenChain WASM` run：
+  `7cea3885783064b5c02850e23d48e41e1fce7065`；GitHub `CitizenChain WASM` run：
   `30721127038`，artifact：`8824990228`，artifact digest：
   `sha256:e2dfbd037d62e032a45d2dea00b72112308b7e79ccd26ca2cebfe55e000a33fb`。
 - `genesis_hash`：

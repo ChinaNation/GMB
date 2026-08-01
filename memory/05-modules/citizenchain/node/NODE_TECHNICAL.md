@@ -165,7 +165,8 @@
   chainspec 本地物化块 0，并在进入运行态前核验创世哈希；preview 或 release
   `genesis-state` 都不得进入四平台安装包。release 状态包只作为正式创世审计制品保留。
 - 当前唯一正式创世锚点（2026-08-01，runtime 源提交
-  `9c2ec97b91b3236c6268ddd3057a4700a4591cd2`，冻结资产为本次创世提交，GitHub
+  `9c2ec97b91b3236c6268ddd3057a4700a4591cd2`，冻结资产提交
+  `7cea3885783064b5c02850e23d48e41e1fce7065`，GitHub
   `CitizenChain WASM` run `30721127038`）：
   `genesis_hash=0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
   `state_root=0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`、

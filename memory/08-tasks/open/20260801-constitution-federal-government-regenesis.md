@@ -18,7 +18,7 @@
 | `bake-chainspec.sh --finalize` | ✅ CI WASM，131 秒，创世/宪法/跨端锚点全绿 |
 | 四平台 CI + 三台节点重装 | 待办 |
 | Worker 重部署 + App 发版 | 待办 |
-| 回写 `chainspec-frozen.md` 等文档 | ✅ 新锚点已回写，冻结资产提交 SHA 待提交后补齐 |
+| 回写 `chainspec-frozen.md` 等文档 | ✅ 新锚点与冻结资产提交 `7cea3885...` 已回写 |
 
 ### 宪法文件实测变化
 

@@ -130,7 +130,7 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
   只保留为历史冻结记录，已被 2026-07-26 正式创世替代。
 - 当前 49,593 个公权机构的唯一正式创世基线由 runtime 源提交
   `9c2ec97b91b3236c6268ddd3057a4700a4591cd2`、GitHub `CitizenChain WASM` run
-  `30721127038` 和本次创世资产提交生成：
+  `30721127038` 和冻结资产提交 `7cea3885783064b5c02850e23d48e41e1fce7065` 生成：
   `genesis_hash=0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
   `state_root=0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`、
   `runtime_wasm_hash=2b329862be596f8844457452c37f0beac89c80fec22b101132b35e1b04324a36`、
