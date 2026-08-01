@@ -1369,6 +1369,7 @@ class WalletManager {
     required String accountId,
     required CidDataRoot dataRoot,
   }) async {
+    final previous = await _cidDataRootVault.readActiveBinding();
     final account = await getAccountByAccountId(accountId);
     if (account == null) {
       throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
@@ -1391,6 +1392,17 @@ class WalletManager {
         cidNumber,
         await _deriveContactKeys(cidNumber, installed),
       );
+      // 新根与派生钥都已验证落地后，旧账户级命名只作为清理目标，不参与就位。
+      for (final removedAccountId in <String>{
+        accountId,
+        if (previous != null) previous.accountId,
+      }) {
+        await _contactKeyStore.delete(_legacyContactKeyName(removedAccountId));
+        await _contactKeyStore
+            .delete('citizenapp_contacts_key_$removedAccountId');
+        await _contactKeyStore
+            .delete('citizenapp_local_data_key_cache_$removedAccountId');
+      }
       return installed;
     } finally {
       child.fillRange(0, child.length, 0);
@@ -1425,71 +1437,6 @@ class WalletManager {
     } finally {
       seed.fillRange(0, seed.length, 0);
     }
-  }
-
-  /// 用 finalized 新绑定账户安装 CID 层发放的稳定数据根。
-  ///
-  /// 正确顺序是：新账户包装并读回校验 → 激活精确绑定 → 写 CID 缓存与派生钥。金库在
-  /// 激活成功后自行清理低版本包装；本方法没有此前账户参数，也不依赖此前设备在线。
-  Future<void> installCidDataRootForCurrentBinding({
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required CidDataRoot dataRoot,
-    required String dataRootHash,
-  }) async {
-    final previous = await _cidDataRootVault.readActiveBinding();
-    final account = await getAccountByAccountId(accountId);
-    if (account == null) {
-      throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
-    }
-    final profile = await _requireHotWalletProfileByMasterId(account.masterId);
-    final childHex =
-        await _readAccountKeyOrThrow(profile.walletIndex, accountId);
-    final child = Uint8List.fromList(_hexToBytes(childHex));
-    try {
-      final verified = await _cidDataRootVault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: bindingRevision,
-        accountId: accountId,
-        accountSecret: child,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
-      );
-      await _writeCachedCidDataRoot(cidNumber, verified);
-      await _writeContactKeys(
-        cidNumber,
-        await _deriveContactKeys(cidNumber, verified),
-      );
-      // 新根与派生钥都已验证落地后，旧账户级命名只作为清理目标，不参与接管。
-      for (final removedAccountId in <String>{
-        accountId,
-        if (previous != null) previous.accountId,
-      }) {
-        await _contactKeyStore.delete(_legacyContactKeyName(removedAccountId));
-        await _contactKeyStore
-            .delete('citizenapp_contacts_key_$removedAccountId');
-        await _contactKeyStore
-            .delete('citizenapp_local_data_key_cache_$removedAccountId');
-      }
-    } finally {
-      child.fillRange(0, child.length, 0);
-    }
-  }
-
-  /// 只读核对本机数据根金库是否已激活精确 finalized 绑定，不触发私钥读取。
-  Future<bool> hasInstalledCidDataRootBinding({
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required String dataRootHash,
-  }) async {
-    final active = await _cidDataRootVault.readActiveBinding();
-    return active != null &&
-        active.cidNumber == cidNumber &&
-        active.bindingRevision == bindingRevision &&
-        active.accountId == accountId &&
-        active.dataRootHash == dataRootHash;
   }
 
   Future<CidDataRootBinding> _requireActiveCidBinding(

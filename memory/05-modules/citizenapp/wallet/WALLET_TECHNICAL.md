@@ -364,10 +364,19 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
   `citizenapp.cid/contacts-local` 与 `citizenapp.cid/contacts-cloud`。业务层只能读取
   派生后的 `ContactKeyMaterial`，不能接触当前账户 child，也不能用通讯录密钥签名或
   恢复钱包。
-- 当前 finalized 绑定账户的 child 只派生 KEK，用于包装该 CID 的稳定数据根。首次绑定
-  或换绑后的正确接管顺序是：当前账户签一次性挑战领取同一数据根 → 新包装写入并读回
-  摘要校验 → 激活精确绑定标记 → 派生 CID 用途子钥 → 清理低版本包装。不得读取或要求
-  此前账户私钥、公钥、签名或设备。
+- 稳定 `CidDataRoot` 由**用户助记词的母种子**确定性派生
+  （`HKDF(母种子, info="citizenapp.cid-data-root/<cid>")`），与绑定的是哪个钱包账户无关；
+  母种子用完即清零，本端不落盘。服务端不参与、不持有任何密钥材料。
+- 当前 finalized 绑定账户的 child 只派生 KEK，把这 32 字节数据根包装进本机金库——
+  金库是**本地派生结果的缓存**，让日常使用不必反复要求输入助记词，不是权威来源。
+  就位顺序：派生或解包得到数据根 → 新包装写入并读回摘要自校验 → 激活精确绑定标记 →
+  派生 CID 用途子钥 → 清理低版本包装与旧账户级命名残留。换绑只重包这 32 字节，
+  业务密文一律不动。本机确实拿不到时抛 `CidDataRootMnemonicRequiredException`，
+  由界面引导补录助记词，绝不向服务端索取。
+- 设备子钥登记（`bindDeviceSubkeyToCurrentBinding`）按
+  `(cid_number, binding_revision, account_id)` 三元组落本机幂等标记：登记要签名、签名要弹
+  生物识别，不挡住重复调用就会每次进入需 CID 页面都弹一次。标记落在钱包层而不是调用方——
+  `MyIdService` 非单例，五处门禁各持一份，进程内去重形同虚设。登记失败不写标记，下次重试。
 - 删除钱包必须清除该钱包的账户 child 和设备子钥；只有被删账户拥有本机当前激活 CID
   绑定时，才清理对应的数据根包装、缓存和用途子钥。删除本地钱包不得删除 CID 业务数据。
 - 助记词不持久化，仅创建时一次性展示

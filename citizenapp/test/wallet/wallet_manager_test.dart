@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/isar/app_isar.dart';
-import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
@@ -153,13 +152,11 @@ void main() {
       const cidNumber = 'GD-CTZN1-TEST';
       const currentKey = 'citizenapp_cid_contacts_key_GD-CTZN1-TEST';
       contactBlobStore.values[legacyKey] = '旧派生密钥';
-      final root = CidDataRoot(Uint8List(32));
-      await manager.installCidDataRootForCurrentBinding(
+      await manager.installCidDataRootFromMnemonic(
+        mnemonic: _mnemonicA,
         cidNumber: cidNumber,
         bindingRevision: 1,
         accountId: accountId,
-        dataRoot: root,
-        dataRootHash: await CidDataRootVault.dataRootHash(root),
       );
 
       final material =
@@ -225,13 +222,11 @@ void main() {
         _mnemonicA,
       );
 
-      final root = CidDataRoot(Uint8List(32));
-      await manager.installCidDataRootForCurrentBinding(
+      await manager.installCidDataRootFromMnemonic(
+        mnemonic: _mnemonicA,
         cidNumber: 'GD-CTZN1-TEST',
         bindingRevision: 1,
         accountId: account1.accountId,
-        dataRoot: root,
-        dataRootHash: await CidDataRootVault.dataRootHash(root),
       );
       const contactKey = 'contact_book_by_cid:GD-CTZN1-TEST';
       await WalletIsar.instance.writeTxn((isar) async {
@@ -269,13 +264,11 @@ void main() {
       final manager = WalletManager();
       final hot = await manager.importWallet(_mnemonicA);
       final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x44));
-      final root = CidDataRoot(Uint8List(32));
-      await manager.installCidDataRootForCurrentBinding(
+      await manager.installCidDataRootFromMnemonic(
+        mnemonic: _mnemonicA,
         cidNumber: 'GD-CTZN1-TEST',
         bindingRevision: 1,
         accountId: hot.accountId,
-        dataRoot: root,
-        dataRootHash: await CidDataRootVault.dataRootHash(root),
       );
 
       await manager.clearWallet();
@@ -420,6 +413,67 @@ void main() {
       expect(seenCidNumber, 'CN220-CTZN2-198805200-2026');
       expect(seenBindingRevision, 1);
       expect(seenAccountId, created.profile.accountId);
+    });
+
+    test('同一绑定重复调用只登记一次；换绑改变版本或账户即重新登记', () async {
+      var registrations = 0;
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      WalletManager.subkeyRegistrar = ({
+        required int walletIndex,
+        required String cidNumber,
+        required int bindingRevision,
+        required String accountId,
+        required Future<String> Function(Uint8List bindingMessage) signBinding,
+      }) async {
+        registrations++;
+        await signBinding(Uint8List(32));
+      };
+      Future<void> bind(int revision) =>
+          manager.bindDeviceSubkeyToCurrentBinding(
+            cidNumber: 'CN220-CTZN2-198805200-2026',
+            bindingRevision: revision,
+            accountId: created.profile.accountId,
+          );
+
+      // 登记要签名、签名要弹生物识别。五处门禁各自持有一个 MyIdService 实例，
+      // 进程内去重挡不住，只有落本机的标记才能保证不重复弹。
+      await bind(1);
+      await bind(1);
+      await bind(1);
+      expect(registrations, 1);
+
+      // 换绑推进 binding_revision → 标记名随之改变 → 必须重新登记。
+      await bind(2);
+      expect(registrations, 2);
+    });
+
+    test('登记失败不写标记，下次仍会重试', () async {
+      var registrations = 0;
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      WalletManager.subkeyRegistrar = ({
+        required int walletIndex,
+        required String cidNumber,
+        required int bindingRevision,
+        required String accountId,
+        required Future<String> Function(Uint8List bindingMessage) signBinding,
+      }) async {
+        registrations++;
+        if (registrations == 1) throw Exception('后端登记失败');
+      };
+      Future<void> bind() => manager.bindDeviceSubkeyToCurrentBinding(
+            cidNumber: 'CN220-CTZN2-198805200-2026',
+            bindingRevision: 1,
+            accountId: created.profile.accountId,
+          );
+
+      await expectLater(bind(), throwsA(isA<Exception>()));
+      await bind();
+      expect(registrations, 2);
+      // 第二次成功后标记落地，第三次不再登记。
+      await bind();
+      expect(registrations, 2);
     });
   });
 

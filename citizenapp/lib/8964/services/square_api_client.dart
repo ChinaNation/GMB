@@ -345,21 +345,6 @@ typedef SquareLoginSigner = Future<String> Function(Uint8List loginMessage);
 typedef SquareActionSigner = Future<String> Function(Uint8List actionMessage);
 
 /// finalized CID 当前绑定账户取得的稳定数据根授权。
-class CidDataRootGrant {
-  const CidDataRootGrant({
-    required this.cidNumber,
-    required this.bindingRevision,
-    required this.accountId,
-    required this.dataRoot,
-    required this.dataRootHash,
-  });
-
-  final String cidNumber;
-  final int bindingRevision;
-  final String accountId;
-  final Uint8List dataRoot;
-  final String dataRootHash;
-}
 
 class SquareApiConfig {
   const SquareApiConfig._();

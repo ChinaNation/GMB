@@ -75,7 +75,7 @@ void main() {
       expect(wallet.subkeyRebindCalls, 0);
     });
 
-    test('首次进入需 CID 页面时绑定一次并推进标记;再次进入不重复弹窗', () async {
+    test('进入需 CID 页面时按 finalized 真值委派数据根就位与子钥登记', () async {
       final wallet = _FakeWalletManager(const _AliceWallet());
       final service = MyIdService(
         walletManager: wallet,
@@ -88,11 +88,10 @@ void main() {
       await service.ensureDeviceSubkeyBound();
       expect(wallet.subkeyRebindCalls, 1);
       expect(wallet.dataRootReady.single.accountId, _validAccountId);
-
-      // 幂等性下沉到钱包层（数据根按激活绑定短路、子钥按本机标记短路），
-      // 这里断言再次进入不会额外触发一次生物识别登记。
-      await service.ensureDeviceSubkeyBound();
-      expect(wallet.subkeyRebindCalls, 1);
+      // 顺序不可颠倒：数据根先就位，再登记子钥。
+      expect(wallet.subkeyRebindTargets, [_validAccountId]);
+      // 重复进入不弹第二次生物识别的幂等性由钱包层的本机标记保证，
+      // 在 wallet_manager_test 覆盖真实实现，此处不用假件替它模拟。
     });
 
     test('本机拿不到数据根时上抛待补录助记词信号,不伪造绑定完成', () async {

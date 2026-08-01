@@ -743,10 +743,27 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   绑定账户时，才清除该 CID 数据根包装、缓存和用途子钥。清理逐项尝试，不能因一个
   安全存储错误跳过后续密钥，最后以 `WalletLocalCleanupException` 汇总残留。
 - CID 私有数据密钥采用三层模型：业务数据永久归 `cid_number`；每个 CID 只有一把稳定
-  `CidDataRoot`；当前 `account_id` 的 child 只派生 KEK 包装该数据根。绑定 finalized 后，
-  当前新账户凭一次性挑战领取同一数据根，完成“新包装写入 → 读回摘要校验 → 激活精确
-  `(cid_number, binding_revision, account_id, data_root_hash)` 标记”后才删除低版本包装。
-  全过程不读取、不要求此前账户私钥、公钥、签名或设备。
+  `CidDataRoot`；当前 `account_id` 的 child 只派生 KEK 包装该数据根。
+  **数据根由用户助记词的母种子确定性派生**（`CidDataRoot.deriveFromMasterSeed`）：
+
+  ```text
+  数据根 = HKDF(母种子, salt="citizenapp.cid/root",
+                info="citizenapp.cid-data-root/<cid_number>")
+  ```
+
+  母种子只在录入助记词的瞬间临时派生，用完立即清零，本端从不落盘（保持 ROOTLESS）。
+  **服务端不生成、不托管、不持有、不下发任何形态的密钥材料**；云端只存已加密的业务数据，
+  在密码学上无法解开任何一条。三条硬约束共同决定了这个设计：云端零知识；换绑不得触发
+  业务数据全量重加密（用户数据可达数十上百 GB）；换设备靠助记词恢复。
+  代价是**助记词丢失即数据永久不可恢复**，服务端救不了——这是拆掉中心化后门的必然结果。
+- 数据根就位（`WalletManager.ensureCidDataRootReady`）三条路径，前两条对用户完全无感：
+  金库已激活到同一 `(cid_number, binding_revision, account_id)` → 直接可用；同一 CID 的
+  此前绑定包装仍在本机且其账户 child 也在（同设备换绑常态）→ 用旧 child 解包这 32 字节、
+  用新账户 child 重新包装，业务密文一律不动；都不满足（新设备、注册局代办换绑、绑定账户
+  尚未导入本机）→ 抛 `CidDataRootMnemonicRequiredException`，由门禁引导走既有
+  「＋ → 添加指定账户 / 导入钱包」补录助记词，在该流程内顺手派生（`ImportWalletPage.dataRootRequest`）。
+  数据根不依赖绑定账户是必需的：换绑的典型起因就是旧私钥泄漏或丢失，且投票/竞选身份链端
+  强制走注册局换绑（`CivicRebindRequiresRegistrar`），此时用户不在自己设备上、更不持有旧 child。
 - 注册身份前的余额闸：门槛 = 链上 `OnchainTransaction.OnchainMinFee + Balances.ExistentialDeposit`，
   两个数现取自链上 metadata。**交易费常量的真源恒为区块链常量库 `primitives::fee_policy`，
   runtime 只把它转发到 metadata（`OnchainMinFee` / `OnchainFeeRate` / `VoteFlatFee`），

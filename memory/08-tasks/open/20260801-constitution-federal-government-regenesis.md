@@ -1,6 +1,41 @@
 # 公民宪法联邦政府改名 + reward-bind 去出块门槛 + 章节标题纳入修宪判定（重新创世）
 
-状态：open（2026-08-01 开工，用户逐条确认改动内容后执行）
+状态：open（2026-08-01；**代码改动三项已完成，全 workspace build/test/clippy 全绿**，
+下一步推 tag → WASM CI → `bake --finalize` → 节点重装）
+
+## 进度
+
+| 步骤 | 状态 |
+| --- | --- |
+| ① 宪法 8 处改名 | ✅ 完成 |
+| ② reward-bind 去出块门槛 | ✅ 完成 |
+| ③ 章/节标题纳入档位判定 | ✅ 完成 |
+| 单 crate 测试（legislation-yuan + fullnode-issuance） | ✅ 59 个全绿，含 8 条新增 |
+| clippy `-D warnings`（两 crate） | ✅ 零 error 零 warning |
+| 创世宪法 SCALE 自检 | ✅ `constitution SCALE self-test ok` |
+| 全 workspace build / test / clippy | ✅ 83 个测试二进制 1334 passed 0 failed；build/test/clippy 三段 exit=0；0 error 0 rustc warning |
+| 推候选 tag → WASM CI | 待办 |
+| `bake-chainspec.sh --finalize` | 待办 |
+| 四平台 CI + 三台节点重装 | 待办 |
+| Worker 重部署 + App 发版 | 待办 |
+| 回写 `chainspec-frozen.md` 等文档 | 待办 |
+
+### 宪法文件实测变化
+
+`226,398 → 226,257` 字节（-141）；SHA256
+`3408748b0a17c8fc638f246887ffaf03…` → `a51c6f33a33f5eb4643107e894404314…`。
+改写工具输出：字段改写 14 次、剩余「国家联邦政府」4 处、结构逐层比对相等、回读 decode 一致。
+中英完全对称：「国家联邦政府」11→4、`national federal government` 11→4、
+「总统府」10→9、`Presidential Office` 10→9（只少节标题那 1 处，条文内 9 处全留）。
+
+### 实施方法（供将来复用）
+
+`constitution.scale` 无源文本无生成器。改法为在 `legislation-yuan/src/tests/cases.rs` 内
+临时加一个 `#[test] #[ignore]` 的 round-trip 工具：用 `ChaptersOf::<Test>::decode` 解码
+（mock Config 的 6 个 Bounded 常量与生产 `configs.rs` 完全一致）→ 按「章序号/节序号/条号/
+款号」精确定位改字符串 → `encode()` 写回 `CARGO_MANIFEST_DIR/src/constitution.scale`。
+工具内置三道断言：结构快照逐项相等、剩余关键词计数精确、回读 decode 与改写结果一致。
+**验证通过后该临时工具已从 `cases.rs` 删除**（无残桩死规则）。
 
 ## 背景
 
