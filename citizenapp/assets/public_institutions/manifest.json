@@ -5,7 +5,7 @@
   "snapshot_block_hash": "0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa",
   "genesis_hash": "0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa",
   "state_root": "0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2",
-  "chainspec_hash": "f1e949e2bba4bfbc242722da9a76630c7dd97c143ba79393c0f60e47842ca415",
+  "chainspec_hash": "9cb95a69368199f79172724e41ee1afa7593ece796cdbb5f58da3004d7fc8a19",
   "public_institution_root": "c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f",
   "version": "0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa:c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f",
   "shard_hashes": {

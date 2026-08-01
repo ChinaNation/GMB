@@ -47,10 +47,6 @@ import {
   purgeFinalizedOldAccountCredentials,
   purgeIdentity
 } from '../src/account/purge';
-import {
-  cidTakeoverChallengeRoute,
-  cidTakeoverRoute
-} from '../src/account/cid_data_root';
 import { deleteAccountChallengeRoute } from '../src/account/service';
 import { routeRequest } from '../src/routes';
 import type { Env, MediaAssetRow } from '../src/types';
@@ -136,17 +132,6 @@ function challengeEnv(): { env: Env; db: ChallengeDb } {
   return { env: { DB: db } as unknown as Env, db };
 }
 
-interface DataRootRecord {
-  cid_number: string;
-  sealed_data_root: string;
-  seal_nonce: string;
-  data_root_hash: string;
-  active_binding_revision: number;
-  active_account_id: string;
-  created_at: number;
-  updated_at: number;
-}
-
 class TakeoverStmt {
   private binds: unknown[] = [];
   constructor(private readonly db: TakeoverDb, private readonly sql: string) {}
@@ -157,9 +142,6 @@ class TakeoverStmt {
   async first<T>(): Promise<T | null> {
     if (this.sql.includes('FROM square_login_challenges')) {
       return (this.db.challenges.get(this.binds[0] as string) as T) ?? null;
-    }
-    if (this.sql.includes('FROM cid_data_roots')) {
-      return (this.db.roots.get(this.binds[0] as string) as T) ?? null;
     }
     return null;
   }
@@ -199,42 +181,12 @@ class TakeoverStmt {
       if (canConsume) row!.used_at = this.binds[0] as number;
       return { meta: { changes: canConsume ? 1 : 0 } };
     }
-    if (this.sql.includes('INSERT INTO cid_data_roots')) {
-      const cidNumber = this.binds[0] as string;
-      if (!this.db.roots.has(cidNumber)) {
-        this.db.roots.set(cidNumber, {
-          cid_number: cidNumber,
-          sealed_data_root: this.binds[1] as string,
-          seal_nonce: this.binds[2] as string,
-          data_root_hash: this.binds[3] as string,
-          active_binding_revision: this.binds[4] as number,
-          active_account_id: this.binds[5] as string,
-          created_at: this.binds[6] as number,
-          updated_at: this.binds[7] as number
-        });
-        return { meta: { changes: 1 } };
-      }
-      return { meta: { changes: 0 } };
-    }
-    if (this.sql.includes('UPDATE cid_data_roots')) {
-      const row = this.db.roots.get(this.binds[3] as string);
-      const canAdvance =
-        row !== undefined &&
-        row.active_binding_revision <= (this.binds[4] as number);
-      if (canAdvance) {
-        row!.active_binding_revision = this.binds[0] as number;
-        row!.active_account_id = this.binds[1] as string;
-        row!.updated_at = this.binds[2] as number;
-      }
-      return { meta: { changes: canAdvance ? 1 : 0 } };
-    }
     return { meta: { changes: 0 } };
   }
 }
 
 class TakeoverDb {
   readonly challenges = new Map<string, ChallengeRecord>();
-  readonly roots = new Map<string, DataRootRecord>();
   prepare(sql: string): TakeoverStmt {
     return new TakeoverStmt(this, sql);
   }
@@ -248,8 +200,7 @@ function takeoverEnv(): { env: Env; db: TakeoverDb } {
   const env = {
     DB: db,
     SQUARE_CACHE: { delete: async () => undefined },
-    CHAIN_GENESIS_HASH: `0x${'12'.repeat(32)}`,
-    CID_DATA_ROOT_MASTER_KEY: `0x${'34'.repeat(32)}`
+    CHAIN_GENESIS_HASH: `0x${'12'.repeat(32)}`
   } as unknown as Env;
   return { env, db };
 }
@@ -261,106 +212,6 @@ function jsonPost(body: Record<string, unknown>): Request {
     body: JSON.stringify(body)
   });
 }
-
-describe('CID finalized 新账户接管', () => {
-  beforeEach(() => {
-    mockVerify.mockReset();
-    mockVerify.mockResolvedValue(true);
-    finalizedBinding.accountId = ACCOUNT_ID;
-    finalizedBinding.revision = 1;
-  });
-
-  async function issueAndTakeover(env: Env, cidNumber = STANDARD_CID) {
-    const challengeResponse = await cidTakeoverChallengeRoute(
-      jsonPost({ cid_number: cidNumber, account_id: finalizedBinding.accountId }),
-      env
-    );
-    const challenge = await challengeResponse.json<Record<string, unknown>>();
-    const takeoverResponse = await cidTakeoverRoute(
-      jsonPost({
-        cid_number: cidNumber,
-        binding_revision: finalizedBinding.revision,
-        account_id: finalizedBinding.accountId,
-        challenge_id: challenge.challenge_id,
-        signature: '0xsignature'
-      }),
-      env
-    );
-    return {
-      challenge,
-      granted: await takeoverResponse.json<Record<string, unknown>>()
-    };
-  }
-
-  it('挑战绑定 CID、创世、revision 与当前新账户，并只消费一次', async () => {
-    const { env } = takeoverEnv();
-    const { challenge, granted } = await issueAndTakeover(env);
-    expect(challenge.cid_number).toBe(STANDARD_CID);
-    expect(challenge.binding_revision).toBe(1);
-    expect(challenge.account_id).toBe(ACCOUNT_ID);
-    expect(granted.binding_revision).toBe(1);
-    expect(Buffer.from(granted.cid_data_root_base64 as string, 'base64')).toHaveLength(32);
-    expect(granted.data_root_hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(mockVerify).toHaveBeenCalledTimes(1);
-
-    await expect(
-      cidTakeoverRoute(
-        jsonPost({
-          cid_number: STANDARD_CID,
-          binding_revision: 1,
-          account_id: ACCOUNT_ID,
-          challenge_id: challenge.challenge_id,
-          signature: '0xsignature'
-        }),
-        env
-      )
-    ).rejects.toMatchObject({ code: 'used_challenge' });
-  });
-
-  it('revision 推进后新账户取得同一 CID 数据根，旧账户不参与', async () => {
-    const { env, db } = takeoverEnv();
-    const first = await issueAndTakeover(env);
-    finalizedBinding.accountId = NEW_ACCOUNT_ID;
-    finalizedBinding.revision = 2;
-    const second = await issueAndTakeover(env);
-
-    expect(second.granted.cid_data_root_base64).toBe(
-      first.granted.cid_data_root_base64
-    );
-    expect(second.granted.data_root_hash).toBe(first.granted.data_root_hash);
-    expect(db.roots.get(STANDARD_CID)?.active_binding_revision).toBe(2);
-    expect(db.roots.get(STANDARD_CID)?.active_account_id).toBe(NEW_ACCOUNT_ID);
-    expect(mockVerify).toHaveBeenLastCalledWith(
-      expect.any(Uint8Array),
-      '0xsignature',
-      NEW_ACCOUNT_ID
-    );
-  });
-
-  it('挑战签发后 finalized revision 变化时拒绝旧版本接管', async () => {
-    const { env } = takeoverEnv();
-    const response = await cidTakeoverChallengeRoute(
-      jsonPost({ cid_number: STANDARD_CID, account_id: ACCOUNT_ID }),
-      env
-    );
-    const challenge = await response.json<Record<string, unknown>>();
-    finalizedBinding.accountId = NEW_ACCOUNT_ID;
-    finalizedBinding.revision = 2;
-    await expect(
-      cidTakeoverRoute(
-        jsonPost({
-          cid_number: STANDARD_CID,
-          binding_revision: 1,
-          account_id: ACCOUNT_ID,
-          challenge_id: challenge.challenge_id,
-          signature: '0xsignature'
-        }),
-        env
-      )
-    ).rejects.toMatchObject({ code: 'cid_binding_changed' });
-    expect(mockVerify).not.toHaveBeenCalled();
-  });
-});
 
 describe('consumeActionSignature', () => {
   beforeEach(() => mockVerify.mockReset());

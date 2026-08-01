@@ -54,9 +54,9 @@
 - 第三方依赖版本不属于项目版本归零范围，不得修改。
 - Substrate runtime API trait 的协议版本用于框架 API 协商，不属于项目升级计数，不得为了本规则修改。
 - 当前正式创世哈希为
-  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`，
+  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`，
   状态根为
-  `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`。
+  `0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`。
 - 正式创世以后，runtime、Node 或 storage 发生真实升级时，才按对应升级规则递增版本并
   对既有正式链状态执行必要的原子迁移；禁止重新烘焙创世、双读、双写或保留旧协议兼容分支。
 

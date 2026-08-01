@@ -138,15 +138,18 @@ pub mod pallet {
         RewardAccountCannotBeMiner,
         /// 新奖励接收账户必须不同于当前绑定账户。
         RewardAccountUnchanged,
-        /// 矿工身份尚未在链上产生过真实出块记录。
-        MinerNeverAuthoredBlock,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 由矿工身份账户（powr 对应账户）发起一次性绑定。
         ///
-        /// 注意：绑定资格来自链上真实出块记录，不读取任何节点本地 keystore。
+        /// 语义为「预绑定」：不要求矿工已经出过块。新装节点的 powr 账户由首启自动生成，
+        /// 而能否抢到 PoW 出块是概率事件（本链交易池为空时还会跳过挖矿），若以出块记录
+        /// 作为绑定门槛，算力弱的节点将长期甚至永远无法配置收款账户，且其首个区块的
+        /// 全节点手续费分成必然按 `RewardAccountUnbound` 销毁。绑定表只在出块时被
+        /// `get(&author)` 读取，未出块账户登记的记录读不到、不产生任何效果，故该门槛
+        /// 收益为零而代价实在。防垃圾登记由交易手续费本身承担。
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::bind_reward_account())]
         pub fn bind_reward_account(
@@ -161,10 +164,6 @@ pub mod pallet {
             ensure!(
                 reward_account_id != miner_account_id,
                 Error::<T>::RewardAccountCannotBeMiner
-            );
-            ensure!(
-                LastAuthoredBlockByMiner::<T>::contains_key(&miner_account_id),
-                Error::<T>::MinerNeverAuthoredBlock
             );
 
             // 绑定表只决定奖励接收账户，不改变出块作者身份本身。

@@ -12,28 +12,25 @@ const _bootnodeA =
     '/dns4/nrcgch.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS';
 const _bootnodeB =
     '/dns4/prczss.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv';
-const _bootnodeHbs =
-    '/dns4/prchbs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWMXQoZ9F6nxMuoC2ZnzxEKAn4z2qPKAugP2CZFEcXDqkT';
+const _bootnodeGzs =
+    '/dns4/prcgzs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWC7t4V1Z2aQWS9HikBdXQgXEaTqeZ5YD78cnxtYBDn31M';
 const _bootnodeHes =
     '/dns4/prches.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWSkKBEJ2KZXckFhzLvrqqbhpq4PVKeFuWsxdTF7hfzoGc';
-const _bootnodeSds =
-    '/dns4/prcsds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWFgD8cFDqherjpiuRkHwHfAcCwaqXcBjTS2G3LkwUBTsq';
-const _bootnodeSxs =
-    '/dns4/prcsxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWQY3DEaJy9wEBE2bQ9gG1B8XByfVaz839jf1ov75kRmD9';
+const _bootnodeHbs =
+    '/dns4/prchbs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWMXQoZ9F6nxMuoC2ZnzxEKAn4z2qPKAugP2CZFEcXDqkT';
 // 启动清单协议夹具使用合成状态根，避免复制真实冻结锚点。
 const _stateRoot =
     '0x4444444444444444444444444444444444444444444444444444444444444444';
 
 void main() {
-  test('安装包 chainspec 只登记当前六个已部署 bootnode', () async {
+  test('安装包 chainspec 只登记当前五个已部署 bootnode', () async {
     final spec = jsonDecode(await File('assets/chainspec.json').readAsString())
         as Map<String, dynamic>;
 
     expect(spec['bootNodes'], [
       _bootnodeA,
       _bootnodeB,
-      _bootnodeSds,
-      _bootnodeSxs,
+      _bootnodeGzs,
       _bootnodeHes,
       _bootnodeHbs,
     ]);

@@ -63,6 +63,9 @@ class CitizenIdentityChainReader {
   ///
   /// 每条结果都同时验证 `AccountIdByCid`、`CidRegistry Active`、
   /// `BindingRevisionByCid` 与反向 `CidByAccountId`，任一不闭环就不返回该 CID。
+  ///
+  /// 任一条 `CidRegistry` 布局无法解析则整批上抛：解析器与链端结构不同步时，
+  /// 整批失败让用户重试，好过静默把全部联系人判成「无有效绑定」。
   Future<Map<String, CitizenBindingChainSnapshot>> readBindingsByCidNumbers(
     Iterable<String> cidNumbers,
   ) async {
@@ -318,22 +321,46 @@ class CitizenIdentityChainReader {
   }
 
   /// 解码 `CidRecord` 到 status 字段；只接受 `Active = 0`。
+  ///
+  /// 严格区分「解析成功但没有有效登记」与「读不准」,绝不把后者压成未注册:
+  /// - 记录不存在、状态为 `Revoked`、状态与 `revoked_at` 自相矛盾 → `false`
+  ///   (结论可信:该 CID 确实没有有效登记)。
+  /// - SCALE 布局无法解析(截断 / 长度非法 / 尾随字节)→ 抛 [FormatException],
+  ///   交调用方按链读失败处理(门禁落 queryFailed 让用户重试)。吞成 `false` 会让
+  ///   解析器与链端结构不同步时全体用户静默变访客。
+  ///
+  /// `residence_province_code` / `residence_city_code` 恒为空:创世
+  /// `initial_cid_bindings`、`self_occupy_cid` 与注册局占号都写
+  /// `AreaCodeBound::default()`,换绑只 clone 旧值。故必须 `allowEmpty: true`。
   static bool cidRecordIsActive(Uint8List? data) {
     if (data == null) return false;
-    try {
-      var offset = _readBoundedBytes(data, 0, 32).nextOffset;
-      offset += 32; // commitment
-      if (offset > data.length) return false;
-      offset = _readBoundedBytes(data, offset, 16).nextOffset;
-      offset = _readBoundedBytes(data, offset, 16).nextOffset;
-      if (offset + 1 + 4 + 1 > data.length || data[offset] != 0) {
+    var offset = _readBoundedBytes(data, 0, 32).nextOffset;
+    offset += 32; // commitment
+    if (offset > data.length) {
+      throw const FormatException('CidRecord commitment 越界');
+    }
+    offset = _readBoundedBytes(data, offset, 16, allowEmpty: true).nextOffset;
+    offset = _readBoundedBytes(data, offset, 16, allowEmpty: true).nextOffset;
+    // status(1) + registered_at(4) + revoked_at 标记(1) 必须齐全。
+    if (offset + 1 + 4 + 1 > data.length) {
+      throw const FormatException('CidRecord 尾部截断');
+    }
+    if (data[offset] != 0) return false; // CidRecordStatus::Revoked
+    offset += 1 + 4;
+    switch (data[offset]) {
+      case 0: // revoked_at = None
+        if (offset + 1 != data.length) {
+          throw const FormatException('CidRecord 尾随字节非法');
+        }
+        return true;
+      case 1: // revoked_at = Some(BlockNumber)
+        if (offset + 1 + 4 != data.length) {
+          throw const FormatException('CidRecord 尾随字节非法');
+        }
+        // Active 却带撤销块号:自相矛盾,fail-closed 判非 Active。
         return false;
-      }
-      offset += 1 + 4;
-      // Active 记录必须没有撤销块号；状态与 revoked_at 自相矛盾时 fail-closed。
-      return data[offset] == 0 && offset + 1 == data.length;
-    } catch (_) {
-      return false;
+      default:
+        throw const FormatException('CidRecord revoked_at 标记非法');
     }
   }
 

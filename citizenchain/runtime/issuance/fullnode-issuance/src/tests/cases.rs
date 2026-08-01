@@ -38,15 +38,25 @@ fn bind_rejects_miner_reward_account() {
     });
 }
 
+/// 预绑定:未出过块的矿工账户也能绑定奖励接收账户。
+///
+/// 绑定表只在出块时被 `get(&author)` 读取,未出块账户的登记读不到、不产生任何效果,
+/// 故不以出块记录作为门槛;否则新装节点在抢到首个 PoW 区块之前无法配置收款账户,
+/// 且首块的全节点手续费分成会按 `RewardAccountUnbound` 销毁。
 #[test]
-fn bind_rejects_never_authored_miner() {
+fn bind_succeeds_for_miner_that_never_authored() {
     new_test_ext().execute_with(|| {
         let miner = account(5);
         let reward_account_id = account(6);
 
-        assert_noop!(
-            FullnodeIssuance::bind_reward_account(RuntimeOrigin::signed(miner), reward_account_id),
-            Error::<Test>::MinerNeverAuthoredBlock
+        assert_ok!(FullnodeIssuance::bind_reward_account(
+            RuntimeOrigin::signed(miner.clone()),
+            reward_account_id.clone()
+        ));
+        assert_eq!(
+            RewardAccountIdByMiner::<Test>::get(&miner),
+            Some(reward_account_id),
+            "未出块也应完成绑定"
         );
     });
 }

@@ -8,6 +8,7 @@ import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/wallet/pages/import_wallet_page.dart';
 
 enum _GateStatus {
   loading,
@@ -16,6 +17,7 @@ enum _GateStatus {
   queryFailed,
   noWallet,
   bindFailed,
+  mnemonicRequired,
 }
 
 /// 设备子钥按需绑定器(测试可注入);默认走 [MyIdService.ensureDeviceSubkeyBound]。
@@ -86,6 +88,9 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
   late final IdentityAccountResolver _resolver = _createResolver();
   late final DeviceSubkeyBinder _binder = _createSubkeyBinder();
   _GateStatus _status = _GateStatus.loading;
+
+  /// [_GateStatus.mnemonicRequired] 时待恢复的数据根参数，由链上 finalized 绑定取得。
+  CidDataRootRequest? _dataRootRequest;
 
   /// 单调递增的判定代际:仅最新一次 resolve 的结果可落地,旧响应(乱序返回 / 瞬断)
   /// 直接丢弃,防止注册成功后被一次迟到的失败覆盖回 queryFailed。
@@ -160,6 +165,16 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
         try {
           await _binder();
           next = _GateStatus.registered;
+        } on CidDataRootMnemonicRequiredException catch (error) {
+          // 本机没有该 CID 的数据根，且此前绑定账户的私钥也不在本机（新设备、
+          // 注册局代办换绑）。服务端从不持有密钥，只能由用户补录助记词重新派生。
+          AppLog.d('identity gate needs mnemonic: $error');
+          _dataRootRequest = CidDataRootRequest(
+            cidNumber: error.cidNumber,
+            bindingRevision: resolved.snapshot?.bindingRevision ?? 0,
+            accountId: error.accountId,
+          );
+          next = _GateStatus.mnemonicRequired;
         } on Object catch (error) {
           AppLog.d('identity gate subkey bind failed: $error');
           next = _GateStatus.bindFailed;
@@ -176,6 +191,18 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
     // 仅最新代际、仍挂载时落地。
     if (!mounted || generation != _resolveGeneration) return;
     setState(() => _status = next);
+  }
+
+  /// 补录助记词恢复数据密钥：复用既有导入页，导入成功后在同一份助记词还在手上时
+  /// 顺手派生本 CID 的数据根（见 [ImportWalletPage.dataRootRequest]），返回即重判。
+  Future<void> _importMnemonic() async {
+    final request = _dataRootRequest;
+    if (request == null) return _retry();
+    await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => ImportWalletPage(dataRootRequest: request),
+    ));
+    if (!mounted) return;
+    await _retry();
   }
 
   Future<void> _retry() async {
@@ -230,6 +257,17 @@ class _IdentityRegistrationGateState extends State<IdentityRegistrationGate> {
           actionLabel: '重试',
           actionIcon: Icons.refresh,
           onAction: _retry,
+        ),
+      _GateStatus.mnemonicRequired => _GateView(
+          icon: Icons.key_outlined,
+          title: '需要导入你的钱包助记词',
+          body: '本设备上没有你的数据密钥。$featureLabel的数据只由你自己的钱包加密，'
+              '服务端不持有任何密钥，只能由你导入助记词后在本机重新生成。',
+          bannerTitle: '本设备缺少数据密钥',
+          bannerBody: '导入助记词即可恢复;钱包与交易功能不受影响。',
+          actionLabel: '导入助记词',
+          actionIcon: Icons.download_outlined,
+          onAction: _importMnemonic,
         ),
       _GateStatus.bindFailed => _GateView(
           icon: Icons.phonelink_lock_outlined,

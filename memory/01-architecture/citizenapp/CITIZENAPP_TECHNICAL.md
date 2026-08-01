@@ -32,10 +32,10 @@ iOS 最低系统版本统一为 16.0；Runner、RunnerTests 与全部 CocoaPods 
 - 外部接口：Cloudflare Worker 承接聊天控制面、广场、会员、支付、媒体资源和端到端加密通讯录密文。通讯录账户与私人名称明文只在设备；公民、机构、管理员与清算行身份统一由 smoldot 读取 finalized runtime storage。
 - 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/onchina/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 OnChina 联网更新行政区。
 - 公权机构包：安装包内置 `assets/public_institutions/`。生成器在同一个 finalized 块分页读取 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts`，生成 43 省、49,593 条机构的本地查询索引。manifest 保存块号、块哈希、创世哈希、状态根、分片哈希和机构根，Isar 只缓存该链快照。绑定、付款和权限判断必须精确读取当前 finalized 链状态。
-- 2026-07-25 正式创世资产已同源冻结：App
-  `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
-  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
-  `light_sync_state_hash=95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`、
+- 2026-07-31 正式创世资产已同源冻结：App
+  `genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`、
+  `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`、
+  `light_sync_state_hash=a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`、
   `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
   Cloudflare 三环境仅同步这份创世哈希和状态根，不成为链状态真源。
 
@@ -600,9 +600,10 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - Cloudflare 链上游统一为 `chain.crcfrcn.com` 的 Access 保护路径，经 `nrcgch-rpc`
   Tunnel 到达国储会服务器 `127.0.0.1:18080` 网关，再由网关按固定 JSON-RPC 方法转发
   本机节点。唯一 production Worker 使用 `CitizenChain` Service Auth 凭据组，Secret
-  由 CitizenConsole 管理并同步到 Cloudflare。固定 RPC 已返回正式创世
-  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`；
-  节点重建不改变 Tunnel、Access、域名或网关地址。
+  由 CitizenConsole 管理并同步到 Cloudflare。固定 RPC 必须返回当前正式创世
+  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`；
+  节点重建不改变 Tunnel、Access、域名或网关地址。2026-07-31 重新创世后国储会节点已按新
+  锚点重建，Tunnel 链路需在部署收口时重新实测确认返回该创世。
 - Cloudflare 唯一 API 入口为 `https://www.crcfrcn.com/api`。2026-07-26 已把配置收敛为
   单一 production Worker，远端只保留 production D1、KV、两个 R2 桶、通知队列和 16 项
   Worker Secret；staging Worker、路由、Access 应用、D1、KV、两个 R2 桶和队列已彻底
@@ -618,9 +619,10 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   27 项、`square-post` 23 项、runtime SquarePost 集成 4 项，共 292 项测试全部通过；
   前后余额、nonce 和生产业务表计数不变。用户明确不执行真实购买，本轮没有唤起外部钱包、
   账户签名、USDC/USDT 支出、发币或订阅交易。当前钱包禁止被后续清理动作删除或覆盖。
-- Cloudflare DNS 严格保留 8 条：`www`、`chain`、`nrcgch`、`prchbs`、`prches`、
-  `prcsds`、`prcsxs`、`prczss`。唯一 API 复用 `www` 的 `/api/*` 路由，不创建额外
-  API DNS。
+- Cloudflare DNS 严格保留 7 条：`www`、`chain`、`nrcgch`、`prczss`、`prcgzs`、
+  `prches`、`prchbs`。唯一 API 复用 `www` 的 `/api/*` 路由，不创建额外
+  API DNS。2026-07-31 起 bootnode 由山东 `prcsds` / 山西 `prcsxs` 改为贵州 `prcgzs`，
+  DNS 须同步删旧增新。
 - production 每日 UTC 03:00 在平台/创作者订阅 finalized 对账成功后，使用该轮
   finalized 区块 `Timestamp.Now` 作为**唯一触发时钟**：仅当平台会员状态为
   `cancelled/terminated` 且链时间已到 `paid_until`，才按 CID 分批硬删除广场正文、
@@ -831,9 +833,10 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   重置、覆盖或卸载。用户最终要求不执行真实购买，因此本阶段只完成无资金测试；验收工具
   不得代存或输出助记词。
 - 第8.3D只读收口审计确认 CitizenApp chainspec、light-sync checkpoint、公权机构分片和
-  Cloudflare 链身份仍统一指向正式创世
+  Cloudflare 链身份仍统一指向当时的正式创世
   `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`；
-  本机正式链 best/finalized 均为 block #6。本次没有操作手机、钱包、付款或链上交易。
+  本机正式链 best/finalized 均为 block #6。本次没有操作手机、钱包、付款或链上交易。该
+  审计属于 2026-07-26 那次创世的历史记录，四组资产已随 2026-07-31 重新创世同源更新。
 
 ### 4.6 二维码模块
 
@@ -929,7 +932,7 @@ CitizenApp --HTTPS--------> Cloudflare Worker --> 聊天、广场、启动清单
 
 ### 6.2 Bootnode 来源与端口
 
-- 当前 chainspec 只登记 6 个已部署 bootnode：`nrcgch`、`prczss`、`prchbs`、`prches`、`prcsds`、`prcsxs`；未部署节点不得写入 App 安装包或 Cloudflare 启动清单。
+- 当前 chainspec 只登记 5 个已部署 bootnode：`nrcgch`、`prczss`、`prcgzs`、`prches`、`prchbs`；未部署节点不得写入 App 安装包或 Cloudflare 启动清单。bootNodes 不进创世状态，增删只改 `chainspec_hash`，`genesis_hash` 与 `state_root` 不变；改动必须同步 node plain SSOT、App 轻形态、`wrangler.toml`、`worker-configuration.d.ts` 四处并回写公权机构 manifest 的 `chainspec_hash`。
 - App 安装包内置 chainspec 和 light sync state；Cloudflare bootstrap 可补充同一网络的 bootnodes，但不能替换本地信任锚。
 - 已部署 bootnode 对公网只开放 `30333/TCP` WSS/libp2p。RPC `9944` 只监听服务器回环地址，不写入 App、不写入 bootstrap，也不作为 App 的节点列表。
 - Cloudflare 不运行 CitizenChain 节点；Worker 只通过独立 Tunnel 访问受控链入口，App 通过 6 个已部署 bootnode 进入 P2P 网络。

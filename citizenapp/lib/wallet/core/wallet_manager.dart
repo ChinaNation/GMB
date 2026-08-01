@@ -10,6 +10,7 @@ import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/security/local_cipher.dart';
 import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
@@ -94,6 +95,45 @@ class WalletAuthException implements Exception {
 
   @override
   String toString() => 'WalletAuthException: $message';
+}
+
+/// 补录助记词时需要的 CID 数据根派生参数。
+///
+/// 由门禁从链上 finalized 绑定取得，透传给导入页，导入成功后在母种子还在手上的
+/// 那一刻完成派生。
+class CidDataRootRequest {
+  const CidDataRootRequest({
+    required this.cidNumber,
+    required this.bindingRevision,
+    required this.accountId,
+  });
+
+  final String cidNumber;
+  final int bindingRevision;
+  final String accountId;
+}
+
+/// 本机拿不到该 CID 的数据根，必须由用户补录助记词后重新派生。
+///
+/// 不是错误，是**待补录**信号：新设备首次使用、注册局代办换绑、绑定账户尚未导入本机
+/// 都会走到这里。界面据此拉起既有「添加指定账户 / 导入钱包」流程，用户录完即恢复，
+/// 服务端全程不参与。
+class CidDataRootMnemonicRequiredException implements Exception {
+  const CidDataRootMnemonicRequiredException({
+    required this.cidNumber,
+    required this.accountId,
+  });
+
+  /// 待恢复数据根所属的 CID 号。
+  final String cidNumber;
+
+  /// 需要用户导入本机的当前 finalized 绑定账户。
+  final String accountId;
+
+  @override
+  String toString() =>
+      'CidDataRootMnemonicRequiredException: 需导入账户 $accountId 以恢复 '
+      'CID $cidNumber 的数据根';
 }
 
 /// 钱包事实数据已经删除，但一个或多个本机安全存储条目清理失败。
@@ -1248,6 +1288,145 @@ class WalletManager {
     }
   }
 
+  /// 让当前 finalized 绑定的数据根在本机就位，返回是否需要用户补录助记词。
+  ///
+  /// 三条路径，前两条对用户完全无感：
+  /// 1. 金库已激活到同一 (CID, 版本, 账户) → 直接可用；
+  /// 2. 同一 CID 的**此前绑定包装仍在本机**且其账户 child 也在（同设备换绑 A→B 的常态，
+  ///    换绑只改链上绑定、不删钱包账户）→ 用旧 child 解包出这 32 字节，
+  ///    再用新账户 child 重新包装。业务密文一律不动，无需全量重加密；
+  /// 3. 都不满足（新设备、注册局代办换绑、账户不在本机）→ 抛
+  ///    [CidDataRootMnemonicRequiredException]，由界面引导走既有
+  ///    「＋ → 添加指定账户 / 导入钱包」录助记词，在该流程内顺手派生。
+  Future<CidDataRoot> ensureCidDataRootReady({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) async {
+    final active = await _cidDataRootVault.readActiveBinding();
+    if (active != null &&
+        active.cidNumber == cidNumber &&
+        active.bindingRevision == bindingRevision &&
+        active.accountId == accountId) {
+      return ensureCidDataRootForCurrentBinding(accountId);
+    }
+    if (active != null && active.cidNumber == cidNumber) {
+      final root = await _readCidDataRootWithPreviousBinding(active);
+      if (root != null) {
+        return _installCidDataRoot(
+          cidNumber: cidNumber,
+          bindingRevision: bindingRevision,
+          accountId: accountId,
+          dataRoot: root,
+        );
+      }
+    }
+    throw CidDataRootMnemonicRequiredException(
+      cidNumber: cidNumber,
+      accountId: accountId,
+    );
+  }
+
+  /// 用此前绑定账户的 child 解包出数据根；该账户已不在本机时返回 null（不是错误，
+  /// 属情形 3，由调用方转入助记词补录）。
+  Future<CidDataRoot?> _readCidDataRootWithPreviousBinding(
+    CidDataRootBinding previous,
+  ) async {
+    final account = await getAccountByAccountId(previous.accountId);
+    if (account == null) return null;
+    final WalletProfile profile;
+    try {
+      profile = await _requireHotWalletProfileByMasterId(account.masterId);
+    } on WalletAuthException {
+      return null;
+    }
+    final String childHex;
+    try {
+      childHex =
+          await _readAccountKeyOrThrow(profile.walletIndex, previous.accountId);
+    } on WalletAuthException {
+      return null;
+    }
+    final child = Uint8List.fromList(_hexToBytes(childHex));
+    try {
+      return await _cidDataRootVault.readForCurrentBinding(
+        cidNumber: previous.cidNumber,
+        bindingRevision: previous.bindingRevision,
+        accountId: previous.accountId,
+        accountSecret: child,
+      );
+    } on LocalCipherException {
+      return null;
+    } finally {
+      child.fillRange(0, child.length, 0);
+    }
+  }
+
+  /// 用当前绑定账户 child 包装数据根并写好缓存与通讯录派生钥。
+  Future<CidDataRoot> _installCidDataRoot({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+    required CidDataRoot dataRoot,
+  }) async {
+    final account = await getAccountByAccountId(accountId);
+    if (account == null) {
+      throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
+    }
+    final profile = await _requireHotWalletProfileByMasterId(account.masterId);
+    final childHex =
+        await _readAccountKeyOrThrow(profile.walletIndex, accountId);
+    final child = Uint8List.fromList(_hexToBytes(childHex));
+    try {
+      final installed = await _cidDataRootVault.installForCurrentBinding(
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        accountSecret: child,
+        dataRoot: dataRoot,
+        expectedDataRootHash: await CidDataRootVault.dataRootHash(dataRoot),
+      );
+      await _writeCachedCidDataRoot(cidNumber, installed);
+      await _writeContactKeys(
+        cidNumber,
+        await _deriveContactKeys(cidNumber, installed),
+      );
+      return installed;
+    } finally {
+      child.fillRange(0, child.length, 0);
+    }
+  }
+
+  /// 用助记词派生并安装当前 CID 的数据根。
+  ///
+  /// 数据根由母种子与 CID 号确定性派生，与绑定账户无关，因此换设备、换绑账户、
+  /// 注册局代办换绑之后都能重新算出，服务端不参与、也不持有任何密钥材料。
+  /// 母种子只在本方法内临时存在，返回前清零；本端为无根模型，绝不持久化母种子。
+  ///
+  /// 调用时机：钱包导入 / 添加账户等**用户本就要录入助记词**的流程，
+  /// 以及本机缺少该 CID 数据根包装时的按需补齐，不额外增加交互。
+  Future<CidDataRoot> installCidDataRootFromMnemonic({
+    required String mnemonic,
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) async {
+    final seed = await _mnemonicToMiniSecret(mnemonic);
+    try {
+      return await _installCidDataRoot(
+        cidNumber: cidNumber,
+        bindingRevision: bindingRevision,
+        accountId: accountId,
+        dataRoot: await CidDataRoot.deriveFromMasterSeed(
+          masterSeed: seed,
+          cidNumber: cidNumber,
+        ),
+      );
+    } finally {
+      seed.fillRange(0, seed.length, 0);
+    }
+  }
+
   /// 用 finalized 新绑定账户安装 CID 层发放的稳定数据根。
   ///
   /// 正确顺序是：新账户包装并读回校验 → 激活精确绑定 → 写 CID 缓存与派生钥。金库在
@@ -1516,6 +1695,17 @@ class WalletManager {
     if (registrar == null) {
       return;
     }
+    // 幂等标记按 (CID, finalized 版本, 账户) 三元组落本机：登记要签名、签名要弹生物识别，
+    // 不挡住重复调用就会每次进入需 CID 页面都弹一次。标记落在这一层而不是调用方，
+    // 因为调用方 MyIdService 非单例，五处门禁各持一份，进程内去重形同虚设。
+    final markerName = _subkeyBoundMarkerName(
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
+    if (await _contactKeyStore.read(markerName) != null) {
+      return;
+    }
     final wallet = await getDefaultWallet();
     if (wallet == null) {
       throw const WalletAuthException('无热钱包,无法重绑设备子钥');
@@ -1530,7 +1720,18 @@ class WalletManager {
         return '0x${_toHex(signature.toList(growable: false))}';
       },
     );
+    // 只有登记真正成功才写标记；失败不写，下次仍会重试。
+    await _contactKeyStore.write(markerName, '1');
   }
+
+  /// 本设备子钥已登记标记名；换绑改变版本或账户即换名，自然触发重新登记。
+  static String _subkeyBoundMarkerName({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) =>
+      'citizenapp_cid_subkey_bound_${Uri.encodeComponent(cidNumber)}_'
+      '${bindingRevision}_$accountId';
 
   /// 前置检查：设备必须有锁屏（生物识别 / 数字 / 图案 / PIN），否则拒绝
   /// 创建 / 导入热钱包（D3 fail-closed）。

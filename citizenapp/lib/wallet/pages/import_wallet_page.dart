@@ -14,7 +14,14 @@ import 'package:citizenapp/rpc/chain_tx_monitor.dart';
 /// 本页、助记词保留在输入框（仅成功路径 clear），用户可直接重试。设备子钥不在导入时
 /// 注册——改由进入需 CID 页面时由门禁按需绑定（换机导入的账户可能已有 CID）。
 class ImportWalletPage extends StatefulWidget {
-  const ImportWalletPage({super.key});
+  const ImportWalletPage({super.key, this.dataRootRequest});
+
+  /// 非空时，导入成功后**用同一份助记词**顺手派生该 CID 的数据根并缓存。
+  ///
+  /// 由需 CID 页面的门禁在本机拿不到数据根时带入（新设备、注册局代办换绑等）。
+  /// 派生必须在此完成：母种子只在导入这一刻存在，本端不落盘，出了这个页面就没了。
+  /// 派生失败**不回滚**已导入的钱包（钱包本身可用），错误上抛由用户重试。
+  final CidDataRootRequest? dataRootRequest;
 
   @override
   State<ImportWalletPage> createState() => _ImportWalletPageState();
@@ -31,8 +38,17 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
       _isImporting = true;
     });
     try {
-      final profile =
-          await WalletManager().importWallet(_mnemonicController.text);
+      final mnemonic = _mnemonicController.text;
+      final profile = await WalletManager().importWallet(mnemonic);
+      final request = widget.dataRootRequest;
+      if (request != null) {
+        await WalletManager().installCidDataRootFromMnemonic(
+          mnemonic: mnemonic,
+          cidNumber: request.cidNumber,
+          bindingRevision: request.bindingRevision,
+          accountId: request.accountId,
+        );
+      }
       unawaited(ChainTxMonitor.instance.initBaselineBalance(
         profile.ss58Address,
         profile.accountId,

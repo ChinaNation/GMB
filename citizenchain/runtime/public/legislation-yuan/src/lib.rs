@@ -1091,7 +1091,7 @@ pub mod pallet {
         /// 判定宪法修改的改动范围(第十九条章→档位):对新旧全文逐条 diff 得变更条号,
         /// 取核心章条号(旧∪新,覆盖增/删/改核心条),交
         /// [`primitives::constitution::classify`] 判定。runtime 与节点守卫共用该判定单源。
-        fn constitution_amendment_scope(
+        pub(crate) fn constitution_amendment_scope(
             current_chapters: &ChaptersOf<T>,
             new_chapters: &ChaptersOf<T>,
         ) -> AmendmentScope {
@@ -1109,7 +1109,100 @@ pub mod pallet {
             // 核心章条号 = 第一章总则(旧∪新):新增条落入首章亦视为触碰核心章。
             let mut core = Self::core_chapter_article_numbers(current_chapters);
             core.extend(Self::core_chapter_article_numbers(new_chapters));
-            constitution::classify(&changed, &core, &IMMUTABLE_CONSTITUTION_ARTICLES)
+            let article_scope =
+                constitution::classify(&changed, &core, &IMMUTABLE_CONSTITUTION_ARTICLES);
+            let title_scope = Self::title_amendment_scope(current_chapters, new_chapters);
+            Self::stricter_scope(article_scope, title_scope)
+        }
+
+        /// 章/节标题变更单独判定的档位。
+        ///
+        /// 章节标题是承载条文的目录结构,本身没有条号,故不能并入逐条 diff 的 `changed`
+        /// 交由 [`constitution::classify`] 判定——那样会因所辖条号命中禁改清单而误判为
+        /// [`AmendmentScope::ImmutableViolation`]。第十九条禁改保护的对象是**条**本身,
+        /// 不是它所在的标题:只要禁改条内容逐字未变(由
+        /// [`Self::ensure_immutable_articles_unchanged`] 在档位判定之前独立守卫),改动其
+        /// 所在章节标题只按所属章走档位。
+        ///
+        /// 判定:核心章(第一章总则)的章标题或其下任一节标题变更 → `CoreChapter`;
+        /// 第二章及以后 → `GeneralOnly`;均未变更 → `NoChange`。
+        /// 章、节按 `number` 对齐而非下标,避免增删章节导致错位比对。
+        fn title_amendment_scope(
+            current_chapters: &ChaptersOf<T>,
+            new_chapters: &ChaptersOf<T>,
+        ) -> AmendmentScope {
+            let core_number = current_chapters
+                .get(CONSTITUTION_CORE_CHAPTER_INDEX)
+                .or_else(|| new_chapters.get(CONSTITUTION_CORE_CHAPTER_INDEX))
+                .map(|c| c.number);
+            let mut general = false;
+            let mut numbers: Vec<u32> = current_chapters.iter().map(|c| c.number).collect();
+            numbers.extend(new_chapters.iter().map(|c| c.number));
+            numbers.sort_unstable();
+            numbers.dedup();
+            for n in numbers {
+                let old = current_chapters.iter().find(|c| c.number == n);
+                let new = new_chapters.iter().find(|c| c.number == n);
+                let changed = match (old, new) {
+                    // 章新增或删除:目录结构变更,按该章位置计入。
+                    (None, Some(_)) | (Some(_), None) => true,
+                    (Some(o), Some(w)) => {
+                        o.title != w.title
+                            || o.title_en != w.title_en
+                            || Self::section_titles_changed(o, w)
+                    }
+                    (None, None) => false,
+                };
+                if !changed {
+                    continue;
+                }
+                if Some(n) == core_number {
+                    return AmendmentScope::CoreChapter;
+                }
+                general = true;
+            }
+            if general {
+                AmendmentScope::GeneralOnly
+            } else {
+                AmendmentScope::NoChange
+            }
+        }
+
+        /// 同一章内节标题(含英文)是否变更;节按 `number` 对齐,增删节亦记为变更。
+        fn section_titles_changed(old: &Chapter<T>, new: &Chapter<T>) -> bool {
+            let mut numbers: Vec<u32> = old.sections.iter().map(|s| s.number).collect();
+            numbers.extend(new.sections.iter().map(|s| s.number));
+            numbers.sort_unstable();
+            numbers.dedup();
+            numbers.into_iter().any(|n| {
+                let o = old.sections.iter().find(|s| s.number == n);
+                let w = new.sections.iter().find(|s| s.number == n);
+                match (o, w) {
+                    (None, Some(_)) | (Some(_), None) => true,
+                    (Some(a), Some(b)) => a.title != b.title || a.title_en != b.title_en,
+                    (None, None) => false,
+                }
+            })
+        }
+
+        /// 取两个档位中更严的一档。严格性:
+        /// `ImmutableViolation` > `CoreChapter` > `GeneralOnly` > `NoChange`。
+        /// 同批改动只要触及更严的一档即按更严处理,与
+        /// [`constitution::classify`] 内部的优先级语义一致。
+        fn stricter_scope(a: AmendmentScope, b: AmendmentScope) -> AmendmentScope {
+            fn rank(s: AmendmentScope) -> u8 {
+                match s {
+                    AmendmentScope::NoChange => 0,
+                    AmendmentScope::GeneralOnly => 1,
+                    AmendmentScope::CoreChapter => 2,
+                    AmendmentScope::ImmutableViolation => 3,
+                }
+            }
+            if rank(a) >= rank(b) {
+                a
+            } else {
+                b
+            }
         }
 
         /// 宪法修改专用校验(第十九条章→档位强制),供提案入口与提交层复校验共用,

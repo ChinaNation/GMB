@@ -81,32 +81,36 @@
 8. 无头服务器下载对应平台软件，停服务安装后保留节点身份密钥和 GRANDPA keystore；
    新数据目录由安装包内 release 状态包初始化，既有链数据库不得被覆盖。
 
-## 当前唯一正式创世锚点（2026-07-26）
+## 当前唯一正式创世锚点（2026-07-31）
 
-- runtime 源提交：`ac6de21b2432f52f45f1767f88f4e6833a2c79d0`；冻结资产提交：
-  `a5204a39b90bf83daab8b91d83da6dd150269d9a`；GitHub `CitizenChain WASM`
-  run：`30190068925`，artifact：`8628330093`。
+- runtime 源提交：`9f61e986`（轻量候选 tag
+  `genesis-wasm-candidate-20260731-9f61e986` 直接指向该提交）；冻结资产提交：
+  `369cbc5a9a453dc3015aa19116e3382098a8d3bb`；GitHub `CitizenChain WASM`
+  run：`30593994910`。
 - `genesis_hash`：
-  `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`。
+  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`。
 - `state_root`：
-  `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`。
-- `runtime_wasm_hash`：
-  `a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`。
+  `0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`。
+- `runtime_wasm_hash`（compressed WASM SHA-256）：
+  `eecd43eb87815e2fe7601ef02856717b3ba7a1204f59998321887a3388fa4e91`；
+  Blake2-256 为
+  `8d92e92ccd52693bce9ae915bae74600d58f6581d8e800396ef9bcfbf0b5f93e`。
 - 全节点 `chainspec_hash`：
-  `3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`。
+  `ce353fb3a7b078dce9a6da0c065a4a883df8892882a498336890aea5d04e29b5`。
 - CitizenApp `chainspec_hash`：
-  `6d5fce5d349d99c8521a5a8aa690cdb038d6594003cebf55ce01cc7825861310`。
+  `9cb95a69368199f79172724e41ee1afa7593ece796cdbb5f58da3004d7fc8a19`。
 - `light_sync_state_hash`：
-  `95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`。
+  `a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`。
 - `public_institution_root`：
   `c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`，
   43 省共 49,593 个公权机构。
 
+冻结前后两次 CI 的 compressed WASM 逐字节一致（Blake2-256 与 SHA-256 均相同），构建
+可复现性成立；该 CI compressed WASM 是正式创世唯一权威输入，本机 WASM 不参与冻结。
 同一次 release bake 生成的节点 plain SSOT、创世状态包、CitizenApp 轻形态 chainspec、
-light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉校验通过。2026-07-26
-本机正式节点与固定远端 RPC 均返回上述创世哈希和状态根；本机正式链审计时 best/finalized
-均为 block #6、`isSyncing=false`。正式创世已经完成，不得再次执行 `--finalize` 覆盖上述
-锚点；后续 runtime 升级只能通过正式链 `system.setCode`，除非用户另行明确批准正式硬分叉。
+light-sync checkpoint、43 个公权机构分片和 Cloudflare 链身份已经交叉校验通过。正式创世
+已经完成，不得再次执行 `--finalize` 覆盖上述锚点；后续 runtime 升级只能通过正式链
+`system.setCode`，除非用户另行明确批准正式硬分叉。
 
 ## S7A 重新创世源码 preview（2026-07-30，已被 CI-WASM preview 取代）
 
@@ -149,7 +153,7 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
   字节或创世结果不一致时必须先停止并核对提交、锁文件、工具链、runtime 版本和 API，
   不能直接执行 release `--finalize`。
 
-## S7B-B GitHub CI-WASM preview（2026-07-30，当前候选、尚未正式冻结）
+## S7B-B GitHub CI-WASM preview（2026-07-30，已被 2026-07-31 正式冻结取代）
 
 - 轻量候选 tag：
   `genesis-wasm-candidate-20260730-b77ca3c1`，直接指向提交
@@ -182,7 +186,7 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
   - `state_root`：
     `0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`
   - `chainspec_hash`：
-    `df2e5a28d99084ec5bcbed28db21ec3eecacbf364b421ce1fb47628c897387fe`
+    `ce353fb3a7b078dce9a6da0c065a4a883df8892882a498336890aea5d04e29b5`
   - `light_sync_state_hash`：
     `a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`
   - `public_institution_root`：
@@ -208,6 +212,22 @@ light-sync checkpoint、公权机构分片和 Cloudflare 链身份已经交叉�
   workflow 现在同时执行 `cargo metadata --locked` 与 `cargo build --locked`，并记录
   runner image、工具链/系统依赖版本、Cargo.lock SHA-256 和 action SHA。上述改动必须
   随新候选 tag 重跑成功后，才能产生可用于正式冻结的新 CI artifact。
+
+## 历史冻结锚点（2026-07-26，已被 2026-07-31 正式创世替代）
+
+- runtime 源提交：`ac6de21b2432f52f45f1767f88f4e6833a2c79d0`；冻结资产提交：
+  `a5204a39b90bf83daab8b91d83da6dd150269d9a`；GitHub `CitizenChain WASM`
+  run：`30190068925`，artifact：`8628330093`。
+- `genesis_hash`：`0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`。
+- `state_root`：`0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`。
+- `runtime_wasm_hash`：`a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`。
+- 全节点 `chainspec_hash`：`3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`。
+- CitizenApp `chainspec_hash`：`6d5fce5d349d99c8521a5a8aa690cdb038d6594003cebf55ce01cc7825861310`。
+- `light_sync_state_hash`：`95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`。
+- `public_institution_root`：`c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`，43 省共 49,593 个公权机构。
+
+该锚点在 2026-07-26 至 2026-07-31 之间是仓库唯一正式创世；2026-07-31 重新创世后只保留为
+历史记录，不得作为部署、网络连接、资产校验或重新创世依据。
 
 ## 历史冻结锚点（2026-07-16，已被正式创世替代）
 

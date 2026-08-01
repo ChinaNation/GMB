@@ -4,13 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/citizen/cid/cid_generator.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
-import 'package:citizenapp/my/myid/identity_synced_account_store.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
@@ -53,7 +51,6 @@ void main() {
       ),
       divisionStore: _FakeDivisionStore(),
       badgeSnapshotStore: _FakeBadgeStore(),
-      squareApiClient: _FakeSquareApi(),
       nowProvider: () => now ?? DateTime.utc(2026, 6, 1),
     );
   }
@@ -70,8 +67,7 @@ void main() {
         chainRpc: _FakeChainRpc(),
         divisionStore: _FakeDivisionStore(),
         badgeSnapshotStore: _FakeBadgeStore(),
-        squareApiClient: _FakeSquareApi(),
-      );
+        );
       await expectLater(
         service.ensureDeviceSubkeyBound(),
         throwsA(isA<WalletAuthException>()),
@@ -88,18 +84,34 @@ void main() {
         chainRpc: _FakeChainRpc(),
         divisionStore: _FakeDivisionStore(),
         badgeSnapshotStore: _FakeBadgeStore(),
-        squareApiClient: _FakeSquareApi(),
-      );
+        );
       await service.ensureDeviceSubkeyBound();
       expect(wallet.subkeyRebindCalls, 1);
-      expect(
-        (await IdentitySyncedAccountStore().read())?.accountId,
-        _validAccountId,
-      );
+      expect(wallet.dataRootReady.single.accountId, _validAccountId);
 
-      // 标记已与身份账户一致 → 直接短路,不再绑、不再弹生物识别。
+      // 幂等性下沉到钱包层（数据根按激活绑定短路、子钥按本机标记短路），
+      // 这里断言再次进入不会额外触发一次生物识别登记。
       await service.ensureDeviceSubkeyBound();
       expect(wallet.subkeyRebindCalls, 1);
+    });
+
+    test('本机拿不到数据根时上抛待补录助记词信号,不伪造绑定完成', () async {
+      final wallet = _FakeWalletManager(const _AliceWallet())
+        ..needsMnemonic = true;
+      final service = MyIdService(
+        walletManager: wallet,
+        identityResolver:
+            _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+        chainRpc: _FakeChainRpc(),
+        divisionStore: _FakeDivisionStore(),
+        badgeSnapshotStore: _FakeBadgeStore(),
+      );
+      await expectLater(
+        service.ensureDeviceSubkeyBound(),
+        throwsA(isA<CidDataRootMnemonicRequiredException>()),
+      );
+      // 数据根没就位就绝不登记子钥：否则会留下「已绑定但读不了数据」的半截状态。
+      expect(wallet.subkeyRebindCalls, 0);
     });
 
     test('绑定失败不推进标记,下次仍会重试', () async {
@@ -112,18 +124,13 @@ void main() {
         chainRpc: _FakeChainRpc(),
         divisionStore: _FakeDivisionStore(),
         badgeSnapshotStore: _FakeBadgeStore(),
-        squareApiClient: _FakeSquareApi(),
-      );
+        );
       await expectLater(
           service.ensureDeviceSubkeyBound(), throwsA(isA<Object>()));
-      expect(await IdentitySyncedAccountStore().read(), isNull);
 
       await service.ensureDeviceSubkeyBound();
       expect(wallet.subkeyRebindCalls, 2);
-      expect(
-        (await IdentitySyncedAccountStore().read())?.accountId,
-        _validAccountId,
-      );
+      expect(wallet.subkeyRebindTargets, [_validAccountId]);
     });
   });
 
@@ -320,7 +327,6 @@ void main() {
       identityResolver: _FakeIdentityResolver(
         _registeredIdentity(_validAccountId, cidNumber: expected),
       ),
-      squareApiClient: _FakeSquareApi(),
       cidYearProvider: () => 2026,
     );
 
@@ -348,7 +354,6 @@ void main() {
       _registeredIdentity(_validAccountId),
       _registeredIdentity(newAccount.accountId, bindingRevision: 2),
     ]);
-    final squareApi = _FakeSquareApi();
     final service = MyIdService(
       walletManager: fakeWallet,
       chainRpc: _FakeChainRpc(),
@@ -356,7 +361,6 @@ void main() {
       badgeSnapshotStore: _FakeBadgeStore(),
       identityRpc: fakeRpc,
       identityResolver: resolver,
-      squareApiClient: squareApi,
     );
 
     await service.rebindCidTo(
@@ -370,18 +374,14 @@ void main() {
     expect(fakeRpc.reboundNew, newAccount.accountId);
     // runtime 调用参数仍包含当前绑定账户，证明自主换绑授权没有被接管阶段替代。
     expect(fakeRpc.reboundOld, _validAccountId);
-    // 接管请求与本地安装只出现新账户及新版本，没有任何旧账户输入。
-    expect(squareApi.takeovers.single.accountId, newAccount.accountId);
-    expect(squareApi.takeovers.single.bindingRevision, 2);
-    expect(fakeWallet.installs.single.accountId, newAccount.accountId);
-    expect(fakeWallet.installs.single.bindingRevision, 2);
+    // 数据根就位与子钥登记只出现新账户及新版本；数据根本身不变，
+    // 换绑只重新包装 32 字节，业务密文不做全量重加密。
+    expect(fakeWallet.dataRootReady.single.accountId, newAccount.accountId);
+    expect(fakeWallet.dataRootReady.single.bindingRevision, 2);
     expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
-    final marker = await IdentitySyncedAccountStore().read();
-    expect(marker?.accountId, newAccount.accountId);
-    expect(marker?.bindingRevision, 2);
   });
 
-  test('新账户设备登记中断：完整标记不推进，对账按 finalized 版本重试', () async {
+  test('新账户设备登记中断：不留半截绑定，下次进入需 CID 页面按 finalized 版本补齐', () async {
     final newAccount = Account(
       masterId: _validAccountId,
       accountIndex: 5,
@@ -395,13 +395,6 @@ void main() {
       failFirstSubkeyRebind: true,
     );
     final resolver = _MutableResolver(_validAccountId);
-    await IdentitySyncedAccountStore().write(const IdentitySyncedBinding(
-      cidNumber: 'GD-CTZN1-8F3A2B',
-      bindingRevision: 1,
-      accountId: _validAccountId,
-      dataRootHash:
-          '66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925',
-    ));
     final service = MyIdService(
       walletManager: fakeWallet,
       chainRpc: _FakeChainRpc(),
@@ -412,7 +405,6 @@ void main() {
             resolver.setAccountId(newAccount.accountId, bindingRevision: 2),
       ),
       identityResolver: resolver,
-      squareApiClient: _FakeSquareApi(),
     );
 
     // 换绑链上成功,但设备子钥重绑首次失败 → 本地重建中断上抛。
@@ -423,18 +415,14 @@ void main() {
       ),
       throwsA(isA<StateError>()),
     );
-    expect(
-      (await IdentitySyncedAccountStore().read())?.accountId,
-      _validAccountId,
-    );
+    // 登记失败即不登记任何账户，不伪造完成态。
+    expect(fakeWallet.subkeyRebindTargets, isEmpty);
 
+    // 下次进入需 CID 页面时按链上 finalized 真值补齐，无需此前账户或此前设备参与。
     resolver.setAccountId(newAccount.accountId, bindingRevision: 2);
-    await service.reconcileFinalizedBindingTakeover();
+    await service.ensureDeviceSubkeyBound();
     expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
-    expect(
-      (await IdentitySyncedAccountStore().read())?.accountId,
-      newAccount.accountId,
-    );
+    expect(fakeWallet.dataRootReady.last.bindingRevision, 2);
   });
 
   test('换绑 extrinsic finalized 但目标状态未确认时绝不迁移本地数据', () async {
@@ -457,7 +445,6 @@ void main() {
       ),
       identityResolver:
           _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
-      squareApiClient: _FakeSquareApi(),
     );
 
     await expectLater(
@@ -469,8 +456,7 @@ void main() {
     );
 
     expect(fakeWallet.subkeyRebindTargets, isEmpty);
-    expect(fakeWallet.installs, isEmpty);
-    expect(await IdentitySyncedAccountStore().read(), isNull);
+    expect(fakeWallet.dataRootReady, isEmpty);
   });
 
   test('换绑目标 == 当前身份账户时拒', () async {
@@ -580,7 +566,6 @@ void main() {
       identityResolver: _FakeIdentityResolver(
         _registeredIdentity(acc5.accountId, cidNumber: expected),
       ),
-      squareApiClient: _FakeSquareApi(),
       cidYearProvider: () => 2026,
     );
 
@@ -687,13 +672,12 @@ class _FakeWalletManager extends WalletManager {
   int subkeyRebindCalls = 0;
   final List<String> subkeyRebindTargets = <String>[];
 
-  final List<
-      ({
-        String cidNumber,
-        int bindingRevision,
-        String accountId,
-        String dataRootHash,
-      })> installs = [];
+  /// 数据根就位调用记录（本地派生/重包，无服务端参与）。
+  final List<({String cidNumber, int bindingRevision, String accountId})>
+      dataRootReady = [];
+
+  /// 置真时模拟「本机拿不到数据根」：新设备、注册局代办换绑等。
+  bool needsMnemonic = false;
 
   @override
   Future<WalletProfile?> getDefaultWallet() async => _wallet;
@@ -715,33 +699,24 @@ class _FakeWalletManager extends WalletManager {
       Uint8List(64);
 
   @override
-  Future<void> installCidDataRootForCurrentBinding({
+  Future<CidDataRoot> ensureCidDataRootReady({
     required String cidNumber,
     required int bindingRevision,
     required String accountId,
-    required CidDataRoot dataRoot,
-    required String dataRootHash,
   }) async {
-    installs.add((
+    if (needsMnemonic) {
+      throw CidDataRootMnemonicRequiredException(
+        cidNumber: cidNumber,
+        accountId: accountId,
+      );
+    }
+    dataRootReady.add((
       cidNumber: cidNumber,
       bindingRevision: bindingRevision,
       accountId: accountId,
-      dataRootHash: dataRootHash,
     ));
+    return CidDataRoot(Uint8List(32));
   }
-
-  @override
-  Future<bool> hasInstalledCidDataRootBinding({
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required String dataRootHash,
-  }) async =>
-      installs.any((item) =>
-          item.cidNumber == cidNumber &&
-          item.bindingRevision == bindingRevision &&
-          item.accountId == accountId &&
-          item.dataRootHash == dataRootHash);
 
   @override
   Future<void> bindDeviceSubkeyToCurrentBinding({
@@ -754,37 +729,6 @@ class _FakeWalletManager extends WalletManager {
       throw StateError('设备子钥重绑首次失败(模拟网络抖动)');
     }
     subkeyRebindTargets.add(accountId);
-  }
-}
-
-class _FakeSquareApi extends SquareApiClient {
-  _FakeSquareApi() : super(baseUrl: 'http://127.0.0.1:8787');
-
-  static const _hash =
-      '66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925';
-  final List<({String cidNumber, int bindingRevision, String accountId})>
-      takeovers = [];
-
-  @override
-  Future<CidDataRootGrant> takeoverCidDataRoot({
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required SquareActionSigner signAction,
-  }) async {
-    await signAction(Uint8List(32));
-    takeovers.add((
-      cidNumber: cidNumber,
-      bindingRevision: bindingRevision,
-      accountId: accountId,
-    ));
-    return CidDataRootGrant(
-      cidNumber: cidNumber,
-      bindingRevision: bindingRevision,
-      accountId: accountId,
-      dataRoot: Uint8List(32),
-      dataRootHash: _hash,
-    );
   }
 }
 

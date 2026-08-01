@@ -939,3 +939,101 @@ fn genesis_seeds_constitution_as_law_zero() {
         }
     });
 }
+
+use primitives::constitution::AmendmentScope;
+
+// ───────────── 章/节标题变更纳入第十九条档位判定 ─────────────
+//
+// 标题是承载条文的目录结构、本身没有条号，故不并入逐条 diff 的 changed
+// （那样会因所辖条号命中禁改清单而误判违宪）。第十九条禁改保护的对象是
+// **条**本身：只要禁改条内容逐字未变，改其所在章节标题只按所属章走档位。
+
+/// 改核心章(第一章)章标题 → 特别案档位。
+#[test]
+fn core_chapter_title_change_requires_special() {
+    let core = vec![article(1, b"core-1"), article(5, b"core-5")];
+    let general = vec![article(60, b"gen-60")];
+    let current = chapters_core_general(core.clone(), general.clone());
+    let mut new = current.clone();
+    new[0].title = title("第一章 总则(修订)".as_bytes());
+    assert_eq!(
+        crate::pallet::Pallet::<Test>::constitution_amendment_scope(&current, &new),
+        AmendmentScope::CoreChapter
+    );
+}
+
+/// 改核心章内的节标题 → 特别案档位。
+#[test]
+fn core_section_title_change_requires_special() {
+    let current = chapters_core_general(vec![article(1, b"core-1")], vec![article(60, b"gen-60")]);
+    let mut new = current.clone();
+    new[0].sections[0].title = title("第一节 国家的定义".as_bytes());
+    assert_eq!(
+        crate::pallet::Pallet::<Test>::constitution_amendment_scope(&current, &new),
+        AmendmentScope::CoreChapter
+    );
+}
+
+/// 改一般章(第二章)的节标题 → 重要案档位。修复前会被误判为 NoChange 而拒收提案。
+#[test]
+fn general_section_title_change_requires_major() {
+    let current = chapters_core_general(vec![article(1, b"core-1")], vec![article(60, b"gen-60")]);
+    let mut new = current.clone();
+    new[1].sections[0].title = title("第一节 联邦政府".as_bytes());
+    assert_eq!(
+        crate::pallet::Pallet::<Test>::constitution_amendment_scope(&current, &new),
+        AmendmentScope::GeneralOnly
+    );
+}
+
+/// 节标题英文变更同样计入(中英任一变更即算)。
+#[test]
+fn section_title_en_change_counts() {
+    let current = chapters_core_general(vec![article(1, b"core-1")], vec![article(60, b"gen-60")]);
+    let mut new = current.clone();
+    new[1].sections[0].title_en = Some(title("Section 1 Federal Government".as_bytes()));
+    assert_eq!(
+        crate::pallet::Pallet::<Test>::constitution_amendment_scope(&current, &new),
+        AmendmentScope::GeneralOnly
+    );
+}
+
+/// 禁改条所在节的标题可以改：只要禁改条本身逐字未变，就不是违宪，按所属章走档位。
+/// 第 1 条是禁改条且位于核心章，故为特别案而非 ImmutableViolation。
+#[test]
+fn title_change_over_immutable_article_is_not_violation() {
+    let current = chapters_core_general(vec![article(1, b"core-1")], vec![article(60, b"gen-60")]);
+    let mut new = current.clone();
+    new[0].sections[0].title = title("第一节(改名)".as_bytes());
+    let scope = crate::pallet::Pallet::<Test>::constitution_amendment_scope(&current, &new);
+    assert_eq!(scope, AmendmentScope::CoreChapter, "按所属章判档");
+    assert_ne!(
+        scope,
+        AmendmentScope::ImmutableViolation,
+        "改标题不等于改禁改条"
+    );
+}
+
+/// 标题与条文都未变 → 空改动，仍应拒。
+#[test]
+fn no_title_no_article_change_is_no_change() {
+    let current = chapters_core_general(vec![article(1, b"core-1")], vec![article(60, b"gen-60")]);
+    let new = current.clone();
+    assert_eq!(
+        crate::pallet::Pallet::<Test>::constitution_amendment_scope(&current, &new),
+        AmendmentScope::NoChange
+    );
+}
+
+/// 一般章标题变更 + 核心章条文变更同批提交 → 取更严的一档(特别案)。
+#[test]
+fn mixed_change_takes_stricter_scope() {
+    let current = chapters_core_general(vec![article(5, b"core-5")], vec![article(60, b"gen-60")]);
+    let mut new = current.clone();
+    new[1].sections[0].title = title("第一节 联邦政府".as_bytes());
+    new[0].sections[0].articles[0] = article(5, b"core-5-amended");
+    assert_eq!(
+        crate::pallet::Pallet::<Test>::constitution_amendment_scope(&current, &new),
+        AmendmentScope::CoreChapter
+    );
+}

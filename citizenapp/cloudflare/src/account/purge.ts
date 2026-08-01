@@ -134,7 +134,6 @@ export async function purgeIdentity(
     env.DB.prepare(`DELETE FROM square_browse_days WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_notify_reads WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_request_nonces WHERE cid_number = ?`).bind(cidNumber),
-    env.DB.prepare(`DELETE FROM cid_data_roots WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_rate_windows WHERE rate_key LIKE ?`).bind(`%:cid_number:${cidNumber}`)
   ];
   const results = await env.DB.batch(statements);

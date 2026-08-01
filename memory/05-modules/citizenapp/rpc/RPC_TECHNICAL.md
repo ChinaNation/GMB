@@ -64,11 +64,11 @@ lib/rpc/
 - 公权机构唯一真源是链上 `PublicManage`；CitizenApp 内置快照和 Isar 只服务目录首屏，不是授权真源。身份、绑定、付款和权限操作必须精确读取 finalized storage。
 - `assets/light_sync_state.json` 是安装包签名保护的 finalized 信任锚；当前锚点是创世块 `#0`，不是会随 Worker 响应静默变化的运行时配置。
 - 安装包 checkpoint 永久固定 `#0`，不随链高更新。新用户只要 peer finalized 高于 `#0` 就 GRANDPA warp；已安装用户先从原生验证采用的本机 finalized database 高度 `H` 启动，peer finalized 高于 `H` 时再 warp。
-- 2026-07-25 正式 `#0` 安装包锚点为
-  `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
-  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`；
+- 2026-07-31 正式 `#0` 安装包锚点为
+  `genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`、
+  `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`；
   `light_sync_state` SHA-256 为
-  `95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`。
+  `a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`。
 
 ## 5. 连接与同步策略
 

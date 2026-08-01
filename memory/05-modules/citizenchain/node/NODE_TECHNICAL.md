@@ -95,6 +95,54 @@
 ### 3.1 权威引导节点网络基线
 
 - 44 个权威引导节点使用同一套安装包和 P2P 端口策略，第 1 个为国储会权威节点。
+- **当前已部署 3 个节点（2026-07-31）**，全部运行同一 CI 产物 `citizenchain 1.0.0 arm64`
+  （CitizenChain CI run `30594736478`，head SHA `369cbc5a`，deb SHA-256
+  `4c3516f98901aaa11a6aa7d26f2224b0924b31fffde57b1241b6f36440306a60`），三台创世哈希
+  均为 `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`，PeerId 与
+  catalog 及 chainspec bootNodes 逐字节一致，实测三台 30333 全网状互连：
+
+  | 节点 | 域名 | 规格 | 系统用户/数据目录 |
+  |---|---|---|---|
+  | 国储会 | `nrcgch.crcfrcn.com` | A1 4核/23GB/193GB | `guo` / `/opt/guo/data` |
+  | 中枢省储会 | `prczss.crcfrcn.com` | A1 1核/5.8GB/96GB | `prczss` / `/opt/prczss/data` |
+  | 贵州省储会 | `prcgzs.crcfrcn.com` | A1 1核/5.8GB/96GB | `prcgzs` / `/opt/prcgzs/data` |
+
+  河南 `prches`、河北 `prchbs` 仍在 chainspec bootNodes 中但尚未部署；连不上会被 libp2p
+  跳过，不影响网络。新节点部署命名规则：**系统用户、`/opt/<APP>` 目录与 systemd 服务名
+  一律取 catalog `domain` 的短名**（如 `prczss-node.service`），国储会的 `guo` 是历史命名。
+- 新节点部署口径：deb 安装 → 建同名系统用户与 `/opt/<APP>/data/node-key` → 写入
+  **64 位 hex 文本**格式的 `secret_ed25519`（600，属主为节点用户；不是 32 字节二进制）→
+  落 `citizenchain/scripts/citizenchain-node.service` 改路径后的 unit → 放行 30333/TCP →
+  `systemctl enable --now`。1 核机器物化块 0 约需数分钟，期间 RPC 未就绪属正常。
+  节点规格低于 5.1 节建议值（2 核）时仍可运行，但 `--mining-threads` 需按负载复核。
+- 节点身份唯一真源是 `citizenchain/node/src/settings/institution-catalog.json`（只存
+  `peerId` + `grandpa_public_key` + `domain` 公钥侧）；libp2p node-key 私钥由各节点运营方
+  自持，桌面端 `settings/bootnodes_address.rs` 负责绑定后写入 `node-key/secret_ed25519`。
+- **取私钥必须以 catalog 的 `domain` 为准，不得信任外部部署清单的省份标注。** 2026-07-31
+  核验判定：**catalog 正确，线下《GMB 44节点官方部署清单》有 4 处「域名 ↔ 省份」标注
+  错误**，密钥材料本身无误（44 把私钥全部自洽，两份 PeerId 集合完全相同）。
+
+  | 私钥推出的 PeerId | 清单标注（错） | catalog（正确） |
+  |---|---|---|
+  | `12D3KooWE69n…` | `prcbhs`/滨海省 | `prchas`/海滨省 |
+  | `12D3KooWHS6G…` | `prchas`/湖南省 | `prchus`/湖南省 |
+  | `12D3KooWS2WY…` | `prchus`/湖北省 | `prchis`/湖北省 |
+  | `12D3KooWG8Zy…` | `prctss`/天山省 | `prcyls`/伊犁省 |
+
+  判据（三条独立证据，不得据清单反向"修正"代码）：catalog 的 43 个省名与行政区唯一真源
+  `china.sqlite` 的 `provinces` 表 **43/43 全部命中**；清单的「滨海省」「天山省」在该真源
+  **不存在**（真源为海滨省、伊犁省）；清单独有的域名 `prcbhs`、`prctss` 在仓库代码中
+  **零引用**。域名短名规则为 `prc` + 省名前两字拼音首字母 + `s`，冲突时顺延取字
+  （海南占 `hn` → 湖南用 `hu`、河南用 `he`；河北占 `hb` → 湖北用 `hi`、海滨用 `ha`）。
+
+  按清单省份名取私钥会拿错，PeerId 与 chainspec/catalog 对不上，现象是「节点正常运行但
+  0 peer」，极难定位。已部署的 `nrcgch`、`prczss`、`prcgzs`、`prches`、`prchbs` 五台两边
+  一致，不受影响。
+
+  **处置结果**：2026-07-31 已按 catalog 修复该线下清单（以 PeerId 为锚重写标注，44 把
+  私钥一把未动），另修正「国储会1」→「国家储委会1」与一条域名残缺、缺 `wss` 的
+  Multiaddr。复验 44 条私钥→PeerId 自洽 44/44、域名与省名对 catalog 44/44，零差异。
+  清单不进 git，此处只记录判定与规则；今后仍以 catalog 为唯一裁决依据。
 - 唯一固定公网业务入口为 `/ip4/0.0.0.0/tcp/30333/wss`；当前链没有 UDP/QUIC P2P 监听，因此不开放 `30333/UDP`。
 - 云节点显式限制 `in_peers=32`、`in_peers_light=100`、`out_peers=8`、`max_parallel_downloads=5`；这些数值是当前 SDK 默认安全基线，扩容前必须压测。
 - Prometheus 默认关闭，OnChina 不随节点自动启动；没有运维需求时不得开放 SSH、OnChina 或数据库端口。
@@ -110,19 +158,19 @@
 主网创世后,chainspec 与创世链状态包都必须永久冻结。公权机构唯一真源是链上
 `genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
-- 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、当前 6 个已部署 bootnode、token 属性和协议 ID；44 个权威节点是规划身份目录，不得把未部署节点写入当前联网基线。
+- 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、当前 5 个已部署 bootnode（`nrcgch`、`prczss`、`prcgzs`、`prches`、`prchbs`）、token 属性和协议 ID；44 个权威节点是规划身份目录，不得把未部署节点写入当前联网基线。bootNodes 不进创世状态，增删只改 `chainspec_hash`，不改 `genesis_hash` 与 `state_root`。
 - 创世配置：正式安装包只内置冻结 plain chainspec，不携带 RocksDB。首启必须从该
   chainspec 本地物化块 0，并在进入运行态前核验创世哈希；preview 或 release
   `genesis-state` 都不得进入四平台安装包。release 状态包只作为正式创世审计制品保留。
-- 当前唯一正式创世锚点（2026-07-26，runtime 源提交
-  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0`，冻结资产提交
-  `a5204a39b90bf83daab8b91d83da6dd150269d9a`，GitHub
-  `CitizenChain WASM` run `30190068925`）：
-  `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
-  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
-  `runtime_wasm_hash=a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`、
-  `chainspec_hash=3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`、
-  `light_sync_state_hash=95beb873cce95ca1744193c0aa0c7023a4b4070346b8ba68758d7a140d8a61c0`、
+- 当前唯一正式创世锚点（2026-07-31，runtime 源提交
+  `9f61e986`，冻结资产提交
+  `369cbc5a9a453dc3015aa19116e3382098a8d3bb`，GitHub
+  `CitizenChain WASM` run `30593994910`）：
+  `genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`、
+  `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`、
+  `runtime_wasm_hash=eecd43eb87815e2fe7601ef02856717b3ba7a1204f59998321887a3388fa4e91`、
+  `chainspec_hash=ce353fb3a7b078dce9a6da0c065a4a883df8892882a498336890aea5d04e29b5`、
+  `light_sync_state_hash=a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`、
   `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
 - 同一次正式 bake 已通过公民宪法创世校验并在 50 秒完成物化；正式包的仓库外隔离副本使用默认内嵌链规范真实启动后，RPC 返回上述 block#0/state root、`isSyncing=false`，进程正常退出。正式包目录禁止直接作为 `--base-path`，避免写入节点密钥和网络运行状态。旧管理员 storage 布局及旧创世锚点不再作为当前发布基线。
 - 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON；启动流程优先安装 release 创世状态包，随后仍由 `GenesisBlockBuilder` 对同一块 0 规格进行一致性校验。
@@ -191,7 +239,8 @@
 - 新进程真实监听 `127.0.0.1:9944`；RPC 返回 block #0
   `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
   state root `0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`，
-  finalized head 为 block #0、`isSyncing=false`，证明轻量安装包首启合同成立。
+  finalized head 为 block #0、`isSyncing=false`，证明轻量安装包首启合同成立。该段哈希是
+  2026-07-26 那次验收的历史实测值，已被 2026-07-31 正式创世替代，不得作为当前锚点使用。
 - 本步骤没有转入基金会费用账户或 CitizenConsole 发币账户资金，没有连接、清理或部署
   国储会服务器。国储会负责方完成部署后，Cloudflare 固定加密 Tunnel RPC 已返回同一
   正式创世；节点重建没有改变 Tunnel、Access、域名或本机网关端口。

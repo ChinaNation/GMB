@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/area_path_formatter.dart';
@@ -11,12 +10,10 @@ import 'package:citizenapp/citizen/public/data/public_provinces.dart';
 import 'package:citizenapp/citizen/cid/cid_generator.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
-import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import 'identity_account_resolver.dart';
 import 'identity_badge_snapshot_store.dart';
-import 'identity_synced_account_store.dart';
 
 /// 身份页身份档。
 ///
@@ -111,17 +108,12 @@ class MyIdService {
     IdentityBadgeSnapshotStore? badgeSnapshotStore,
     IdentityAccountResolver? identityResolver,
     CitizenIdentityRpc? identityRpc,
-    SquareApiClient? squareApiClient,
-    IdentitySyncedAccountStore? syncedAccountStore,
     DateTime Function()? nowProvider,
     int Function()? cidYearProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
         _divisionStore = divisionStore ?? IsarAdminDivisionStore(),
         _badgeSnapshotStore =
             badgeSnapshotStore ?? IdentityBadgeSnapshotStore(),
-        _squareApiClient = squareApiClient ?? SquareApiClient(),
-        _syncedAccountStore =
-            syncedAccountStore ?? IdentitySyncedAccountStore(),
         _identityResolver = identityResolver ??
             IdentityAccountResolver(
               walletManager: walletManager,
@@ -141,15 +133,11 @@ class MyIdService {
   final IdentityBadgeSnapshotStore _badgeSnapshotStore;
   final IdentityAccountResolver _identityResolver;
   final CitizenIdentityRpc _identityRpc;
-  final SquareApiClient _squareApiClient;
-  final IdentitySyncedAccountStore _syncedAccountStore;
-  final ChainRpc _chainRpc;
-
-  /// finalized 绑定接管的并发去重：直触发与冷启动对账共享一次新账户接管。
-  Future<void>? _takeoverInflight;
 
   /// 子钥懒绑定的并发去重:五处门禁可能同时挂载,只允许一次真正执行。
   Future<void>? _subkeyBindInflight;
+
+  final ChainRpc _chainRpc;
 
   final DateTime Function() _nowProvider;
   final int Function() _cidYearProvider;
@@ -184,10 +172,6 @@ class MyIdService {
       // 无热钱包 → 无身份账户 → 访客(引导创建钱包)。
       return const MyIdState(tier: MyIdTier.visitor, errorMessage: '请先创建钱包');
     }
-
-    // 按 finalized 精确绑定对账：CID、版本、账户、数据根摘要任一不一致即由当前账户
-    // 重新执行接管；不依赖换绑意图，也不读取此前账户或此前设备。
-    await _reconcileFinalizedBindingTakeover(resolved);
 
     final identityAccountId = resolved.accountId;
     final chainIdentity = resolved.snapshot;
@@ -303,7 +287,7 @@ class MyIdService {
       cidNumber: cid,
       accountId: resolvedBindAccountId,
     );
-    await _runBindingTakeover(finalized);
+    await _ensureBindingReady(finalized);
     return cid;
   }
 
@@ -346,31 +330,7 @@ class MyIdService {
       cidNumber: cidNumber,
       accountId: newAccount.accountId,
     );
-    await _runBindingTakeover(finalized);
-  }
-
-  /// 对账 finalized 精确绑定；CID、revision 或当前账户任一变化都重新接管。
-  Future<void> _reconcileFinalizedBindingTakeover(
-    ResolvedIdentity resolved,
-  ) async {
-    final snapshot = resolved.snapshot;
-    if (snapshot == null) return;
-    final IdentitySyncedBinding? synced;
-    try {
-      synced = await _syncedAccountStore.read();
-    } catch (e) {
-      AppLog.d('identity synced marker read failed: $e');
-      return;
-    }
-    if (await _isBindingTakeoverComplete(resolved, synced)) {
-      return;
-    }
-    try {
-      await _runBindingTakeover(resolved);
-    } catch (e) {
-      // 失败时不写完成标记，下次按同一 finalized 真值继续补齐。
-      AppLog.d('identity binding takeover deferred: $e');
-    }
+    await _ensureBindingReady(finalized);
   }
 
   /// 注册身份前的自付能力测算:返回门槛与该账户当前余额(均为**分**)。
@@ -393,17 +353,19 @@ class MyIdService {
     );
   }
 
-  /// 确保本设备 P-256 子钥已绑定到当前身份账户;未绑则绑(触发一次生物识别)。
+  /// 确保当前 finalized 绑定在本机就位：CID 数据根 + 本设备 P-256 子钥。
   ///
-  /// **懒绑定**:子钥只服务广场 / 聊天 / 通讯录 / 创作者 / 会员这些需 CID 的场景,故不在
-  /// 建钱包时注册(那时账户还没有 CID,后端也不收),而由 `IdentityRegistrationGate` 在用户
+  /// **懒执行**：两者只服务广场 / 聊天 / 通讯录 / 创作者 / 会员这些需 CID 的场景，
+  /// 故不在建钱包时做（那时账户还没有 CID），而由 `IdentityRegistrationGate` 在用户
   /// 初次进入上述页面时调用本方法。只用钱包和交易的用户永远不会走到这里。
   ///
-  /// 判据是 CID、binding_revision、当前账户、数据根摘要四元组；仅账户相同不能证明
-  /// 当前版本已经接管。
+  /// 数据根由用户助记词派生、服务端不持有，其就位逻辑见
+  /// [WalletManager.ensureCidDataRootReady]；本机确实拿不到时抛
+  /// [CidDataRootMnemonicRequiredException]，由界面引导补录助记词。
+  /// 子钥绑定会触发一次生物识别。
   ///
-  /// 并发去重:五处 gate 可能同时挂载,用 [_subkeyBindInflight] 保证同一时刻只跑一次,
-  /// 其余调用等同一个 Future。失败向上抛,由 gate 按 fail-closed 拦住功能页并给重试。
+  /// 并发去重:五处门禁可能同时挂载,用 [_subkeyBindInflight] 保证同一时刻只跑一次,
+  /// 其余调用等同一个 Future。失败向上抛,由门禁按 fail-closed 拦住功能页并给重试。
   Future<void> ensureDeviceSubkeyBound() {
     final inflight = _subkeyBindInflight;
     if (inflight != null) return inflight;
@@ -419,94 +381,26 @@ class MyIdService {
       // 无热钱包或尚未占到 CID:后端不收未绑 CID 账户的子钥,此处不做无谓尝试。
       throw const WalletAuthException('当前无已注册身份,无法绑定设备');
     }
-    final synced = await _syncedAccountStore.read();
-    if (await _isBindingTakeoverComplete(resolved, synced)) return;
-    await _runBindingTakeover(resolved);
+    await _ensureBindingReady(resolved);
   }
 
-  Future<bool> _isBindingTakeoverComplete(
-    ResolvedIdentity resolved,
-    IdentitySyncedBinding? synced,
-  ) async {
-    final snapshot = resolved.snapshot;
-    return snapshot != null &&
-        synced != null &&
-        synced.cidNumber == snapshot.cidNumber &&
-        synced.bindingRevision == snapshot.bindingRevision &&
-        synced.accountId == resolved.accountId &&
-        await _walletManager.hasInstalledCidDataRootBinding(
-          cidNumber: synced.cidNumber,
-          bindingRevision: synced.bindingRevision,
-          accountId: synced.accountId,
-          dataRootHash: synced.dataRootHash,
-        );
-  }
-
-  /// 供 App 生命周期 / 测试显式触发一次对账;自行解析当前身份账户。
-  Future<void> reconcileFinalizedBindingTakeover() async {
-    final ResolvedIdentity? resolved;
-    try {
-      resolved = await _identityResolver.resolve();
-    } catch (e) {
-      AppLog.d('identity reconcile resolve failed: $e');
-      return;
-    }
-    if (resolved == null) return;
-    await _reconcileFinalizedBindingTakeover(resolved);
-  }
-
-  /// finalized 后的新账户接管；全步幂等且没有此前账户输入。
-  Future<void> _runBindingTakeover(ResolvedIdentity resolved) {
-    final inflight = _takeoverInflight;
-    if (inflight != null) return inflight;
-    final future = _doRunBindingTakeover(resolved)
-        .whenComplete(() => _takeoverInflight = null);
-    _takeoverInflight = future;
-    return future;
-  }
-
-  /// 接管顺序：新账户签一次性挑战 → 包装并读回 CID 稳定数据根 → 派生用途钥 →
-  /// 登记新账户设备子钥 → 写完整完成标记。任何一步失败都不伪造接管完成。
-  Future<void> _doRunBindingTakeover(ResolvedIdentity resolved) async {
+  /// 全步幂等：数据根已激活到同一三元组、子钥已登记时都不重复执行。
+  Future<void> _ensureBindingReady(ResolvedIdentity resolved) async {
     final snapshot = resolved.snapshot;
     if (snapshot == null) {
-      throw const WalletAuthException('当前无已注册身份，无法接管');
+      throw const WalletAuthException('当前无已注册身份，无法完成设备绑定');
     }
-    final grant = await _squareApiClient.takeoverCidDataRoot(
+    await _walletManager.ensureCidDataRootReady(
       cidNumber: snapshot.cidNumber,
       bindingRevision: snapshot.bindingRevision,
       accountId: resolved.accountId,
-      signAction: (message) async => _signatureHex(
-        await _walletManager.signForAccountId(resolved.accountId, message),
-      ),
-    );
-    await _walletManager.installCidDataRootForCurrentBinding(
-      cidNumber: grant.cidNumber,
-      bindingRevision: grant.bindingRevision,
-      accountId: grant.accountId,
-      dataRoot: CidDataRoot(grant.dataRoot),
-      dataRootHash: grant.dataRootHash,
     );
     await _walletManager.bindDeviceSubkeyToCurrentBinding(
-      cidNumber: grant.cidNumber,
-      bindingRevision: grant.bindingRevision,
-      accountId: grant.accountId,
+      cidNumber: snapshot.cidNumber,
+      bindingRevision: snapshot.bindingRevision,
+      accountId: resolved.accountId,
     );
     WalletManager.notifyIdentityBindingChanged();
-    await _writeSyncedMarker(IdentitySyncedBinding(
-      cidNumber: grant.cidNumber,
-      bindingRevision: grant.bindingRevision,
-      accountId: grant.accountId,
-      dataRootHash: grant.dataRootHash,
-    ));
-  }
-
-  Future<void> _writeSyncedMarker(IdentitySyncedBinding binding) async {
-    try {
-      await _syncedAccountStore.write(binding);
-    } catch (e) {
-      AppLog.d('identity synced marker write failed: $e');
-    }
   }
 
   Future<ResolvedIdentity> _requireFinalizedBinding({
@@ -522,14 +416,6 @@ class MyIdService {
       throw const WalletAuthException('finalized CID 当前绑定与预期不一致');
     }
     return resolved;
-  }
-
-  static String _signatureHex(Uint8List signature) {
-    final buffer = StringBuffer('0x');
-    for (final byte in signature) {
-      buffer.write(byte.toRadixString(16).padLeft(2, '0'));
-    }
-    return buffer.toString();
   }
 
   /// 列出可作换绑目标的本地账户(当前身份账户以外的全部账户)。

@@ -10,12 +10,13 @@
     "types:check": "sh -c 'before=$(shasum -a 256 worker-configuration.d.ts | cut -d \" \" -f 1); npm run generate:types >/dev/null; after=$(shasum -a 256 worker-configuration.d.ts | cut -d \" \" -f 1); if [ \"$before\" != \"$after\" ]; then echo \"worker-configuration.d.ts 已过期，请运行 npm run generate:types\" >&2; exit 1; fi'",
     "typecheck": "npm run generate:types && tsc --noEmit",
     "test": "vitest run",
-    "db:local": "wrangler d1 execute citizenapp-square-db --local --file migrations/0001_square_core.sql",
-    "db:production": "wrangler d1 execute citizenapp-square-db-production --remote --file migrations/0001_square_core.sql",
+    "db:local": "wrangler d1 execute citizenapp-square-db --local --file schema/citizenapp.sql",
+    "db:production": "wrangler d1 execute citizenapp-square-db-production --remote --file schema/citizenapp.sql",
     "deploy:production": "wrangler deploy"
   },
   "dependencies": {
-    "@polkadot/util-crypto": "^14.0.3"
+    "@polkadot/util-crypto": "^14.0.3",
+    "aws4fetch": "^1.0.20"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

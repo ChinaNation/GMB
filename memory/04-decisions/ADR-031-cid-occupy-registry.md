@@ -127,13 +127,15 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
   `genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`
   只保留为历史冻结记录，已被 2026-07-26 正式创世替代。
 - 当前 49,593 个公权机构的唯一正式创世基线由 runtime 源提交
-  `ac6de21b2432f52f45f1767f88f4e6833a2c79d0`、GitHub `CitizenChain WASM` run
-  `30190068925` 和冻结资产提交 `a5204a39b90bf83daab8b91d83da6dd150269d9a`
-  生成：`genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`、
-  `state_root=0xbdc2593a538b7010717ac475b0b59973dd57c77d35683c4e7d9b8058b9ae18f9`、
-  `runtime_wasm_hash=a838dd763c1c7003aca1edf177738d85b64936bbc1ba98dda7da348cc57d0d1a`、
-  `chainspec_hash=3e79942fabad332fee5e8692b503c393005730bc5b2d85b9d38694833fada652`、
+  `9f61e986`、GitHub `CitizenChain WASM` run
+  `30593994910` 和冻结资产提交 `369cbc5a9a453dc3015aa19116e3382098a8d3bb`
+  生成：`genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`、
+  `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`、
+  `runtime_wasm_hash=eecd43eb87815e2fe7601ef02856717b3ba7a1204f59998321887a3388fa4e91`、
+  `chainspec_hash=ce353fb3a7b078dce9a6da0c065a4a883df8892882a498336890aea5d04e29b5`、
   `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
+  2026-07-26 的 `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`
+  同样只保留为历史冻结记录，已被 2026-07-31 正式创世替代。
 
 ### 4.4 规模账(终态)
 
