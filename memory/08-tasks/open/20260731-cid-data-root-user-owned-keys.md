@@ -304,12 +304,18 @@
 
 ### 第七步：冻结提交与其他软件 CI
 
-状态：in progress（冻结资产与文档已生成并通过本地门禁，等待提交、推送和远端 CI）
+状态：in progress（冻结资产已推送；正在修复 CitizenChain 门禁并重跑最终软件 CI）
 
 - 只提交本次冻结的节点 plain SSOT、CitizenApp 链锚点、公权机构 manifest、Cloudflare
   配置/类型、一次性 CI 名称清理和文档；`citizenchain/runtime/` 无 diff。
 - 推送 `main` 后重新等待 CitizenChain、CitizenApp/Cloudflare、CitizenWallet 软件 CI
   全部成功；冻结前曾运行的软件 CI 不替代本次冻结后的最终结果。
+- 冻结提交已推送：`7cea3885783064b5c02850e23d48e41e1fce7065` 与
+  `582632ed0f4b3ed17293d31b148f8e0cabe2be4f`。CitizenChain run `30722952346` 的
+  `guardrails` job `91429584677` 暴露出 GitHub runner 调用了被 Git 忽略的本机
+  `scripts/check-startup-acceptance.sh`，因此以退出码 127 失败；本次把同一组启动协议断言
+  收口到已跟踪的 `.github/scripts/check-ai-guardrails.sh`，不跟踪本机脚本、不放开根
+  `scripts/` 私有边界、不改变业务或 runtime。
 - 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
 
 ## 第一步预计修改目录

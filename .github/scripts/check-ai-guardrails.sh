@@ -35,7 +35,62 @@ if [[ "${#changed_files[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-bash scripts/check-startup-acceptance.sh --ci
+# 中文注释：GitHub runner 不能读取被 Git 忽略的本机脚本，因此门禁直接验证已跟踪的启动协议真源。
+require_startup_file() {
+  local path="$1"
+
+  if [[ ! -e "$path" ]]; then
+    echo "缺少启动协议文件：$path" >&2
+    exit 1
+  fi
+}
+
+require_startup_symlink_target() {
+  local path="$1"
+  local target="$2"
+  local actual
+
+  if [[ ! -L "$path" ]]; then
+    echo "根目录入口必须保持为软链接：$path" >&2
+    exit 1
+  fi
+
+  actual="$(readlink "$path")"
+  if [[ "$actual" != "$target" ]]; then
+    echo "根目录入口指向错误：$path -> $actual（期望 $target）" >&2
+    exit 1
+  fi
+}
+
+require_startup_text() {
+  local path="$1"
+  local expected_text="$2"
+
+  if ! grep -Fq "$expected_text" "$path"; then
+    echo "启动协议缺少关键语句：$path -> $expected_text" >&2
+    exit 1
+  fi
+}
+
+require_startup_file "memory/AGENTS.md"
+require_startup_file "memory/CODEX.md"
+require_startup_file "memory/CLAUDE.md"
+require_startup_file "memory/07-ai/chat-protocol.md"
+require_startup_file "memory/07-ai/startup-acceptance.md"
+require_startup_file "memory/07-ai/document-boundaries.md"
+
+require_startup_symlink_target "AGENTS.md" "memory/AGENTS.md"
+require_startup_symlink_target "CODEX.md" "memory/CODEX.md"
+require_startup_symlink_target "CLAUDE.md" "memory/CLAUDE.md"
+
+require_startup_text "memory/AGENTS.md" "第一轮必须先做需求分析"
+require_startup_text "memory/AGENTS.md" "任务卡"
+require_startup_text "memory/AGENTS.md" "检查为什么报错"
+require_startup_text "memory/CODEX.md" "第一轮必须输出需求分析"
+require_startup_text "memory/CODEX.md" "检查为什么报错"
+require_startup_text "memory/07-ai/chat-protocol.md" "需求分析"
+require_startup_text "memory/07-ai/chat-protocol.md" "检查为什么报错"
+echo "启动协议检查通过。"
 
 doc_regex='^(memory/|docs/|README\.md$|GMB_TECHNICAL\.md$|CLAUDE\.md$|\.github/pull_request_template\.md$|.*_TECHNICAL\.md$)'
 code_regex='^(\.github/workflows/|scripts/|citizenchain/|citizenapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
