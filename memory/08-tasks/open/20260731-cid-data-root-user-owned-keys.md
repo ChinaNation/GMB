@@ -319,6 +319,10 @@
   的独立 guardrails job 已通过；同一 run `30723124152` 随后又发现全工程 job 仍直接调用
   该本机脚本。本次进一步让全工程 job 调用已跟踪 guard 的 `--startup-only` 模式，消除第二个
   同源调用点并保持单一检查真源。
+- CitizenChain run `30723252901` 已通过两层 AI 启动协议门禁，随后在宪法 SCALE 自检因
+  runner 没有无关的 Python `xxhash` 包而失败。`--self-test` 不计算 storage key，本次把
+  `xxhash` 延迟到完整 chainspec/RPC 校验真正调用 `twox_128` 时加载；宪法结构断言、完整
+  创世校验和 Substrate storage key 算法均不改变。
 - 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
 
 ## 第一步预计修改目录

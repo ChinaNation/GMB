@@ -20,8 +20,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import xxhash
-
 PALLET = b"LegislationYuan"
 CONSTITUTION_LAW_ID = 0
 GENESIS_VERSION = 1
@@ -32,6 +30,12 @@ CODE_KEY = "0x3a636f6465"
 
 
 def twox_128(data: bytes) -> bytes:
+    # 完整创世校验才需要计算 Substrate storage key；纯 SCALE 自检不得依赖第三方包。
+    try:
+        import xxhash
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("完整创世校验需要安装 Python xxhash 包") from exc
+
     return (
         xxhash.xxh64(data, seed=0).intdigest().to_bytes(8, "little")
         + xxhash.xxh64(data, seed=1).intdigest().to_bytes(8, "little")

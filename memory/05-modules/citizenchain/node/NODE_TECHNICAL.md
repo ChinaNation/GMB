@@ -199,6 +199,8 @@
 2. 取 `citizenchain.compact.compressed.wasm` 作为创世 `:code` 字节源。
 3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>`；公权机构分片及根必须由脚本从同一块 0 直接生成，不接受外部参数。
 4. 脚本必须通过 `check-constitution-genesis.py --expect-code-file <CI_WASM>` 校验,确认 `:code` 字节等于 CI WASM,公民宪法 `law_id=0`、v1 直接生效且无待生效版。
+   `--self-test` 只验证内置 SCALE 解码与章、节、条三层唯一性，不加载第三方包；读取
+   chainspec 或 RPC 的完整模式在计算 Substrate storage key 时才要求 Python `xxhash`。
 5. 脚本原子准备全节点 plain、release 状态包、CitizenApp chainspec/checkpoint、43 个
    公权机构分片以及 Cloudflare 各环境链身份锚点，并在覆盖正式文件前完成交叉校验。
 6. `prepack.sh` / `prepack.ps1` 必须删除任何旧 `node/resources/genesis-state` 残留；
