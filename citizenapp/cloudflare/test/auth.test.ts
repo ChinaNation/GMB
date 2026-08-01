@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLoginChallenge, createSession } from '../src/auth/service';
 import { cleanupExpiredSessionIndexes } from '../src/auth/session_index';
-import { fetchChainIdentityState } from '../src/chain/identity';
+import {
+  fetchChainIdentityState,
+  fetchChainIdentityStateByCid,
+} from '../src/chain/identity';
+import { guardRequest } from '../src/security/request_guard';
 import { hexToBytes, signingMessage } from '../src/shared/signing_message';
 import { sha256Hex } from '../src/shared/hash';
 import type { Env } from '../src/types';
@@ -18,6 +22,15 @@ vi.mock('../src/chain/identity', () => ({
     has_voting_identity: false,
     has_candidate_identity: false,
     cid_number: 'CN220-CTZN2-198805200-2026',
+    checked_at: 0
+  })),
+  fetchChainIdentityStateByCid: vi.fn(async (_env: unknown, cidNumber: string) => ({
+    account_id: ACCOUNT_ID,
+    binding_revision: 1,
+    identity_level: 'visitor',
+    has_voting_identity: false,
+    has_candidate_identity: false,
+    cid_number: cidNumber,
     checked_at: 0
   }))
 }));
@@ -154,8 +167,10 @@ class AuthDb {
 class FakeKv {
   store = new Map<string, string>();
   failNextPut = false;
-  async get(key: string): Promise<string | null> {
-    return this.store.get(key) ?? null;
+  async get<T>(key: string, type?: 'json'): Promise<T | string | null> {
+    const value = this.store.get(key);
+    if (value == null) return null;
+    return type === 'json' ? JSON.parse(value) as T : value;
   }
   async put(key: string, value: string): Promise<void> {
     if (this.failNextPut) {
@@ -438,5 +453,40 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     await cleanupExpiredSessionIndexes(env, 1000);
 
     expect([...db.sessions.keys()]).toEqual(['b'.repeat(64)]);
+  });
+});
+
+describe('受保护请求 finalized 绑定复查', () => {
+  it('CID 已换绑时拒绝此前 binding_revision/account_id 的残留会话', async () => {
+    const db = new AuthDb();
+    const kv = new FakeKv();
+    const env = { DB: db, SQUARE_CACHE: kv } as unknown as Env;
+    const token = 'stale-session-token';
+    kv.store.set(
+      `square_session:${await sha256Hex(token)}`,
+      JSON.stringify({
+        cid_number: TEST_CID,
+        binding_revision: 1,
+        account_id: ACCOUNT_ID,
+        device_key_hash: 'a'.repeat(64),
+        created_at: Date.now(),
+        expires_at: Date.now() + 60_000
+      })
+    );
+    vi.mocked(fetchChainIdentityStateByCid).mockResolvedValueOnce({
+      account_id: `0x${'2'.repeat(64)}`,
+      binding_revision: 2,
+      identity_level: 'visitor',
+      has_voting_identity: false,
+      has_candidate_identity: false,
+      cid_number: TEST_CID,
+      checked_at: Date.now()
+    });
+    const request = new Request('https://worker.test/v1/square/feed/recommended', {
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    await expect(guardRequest(request, env, '/v1/square/feed/recommended'))
+      .rejects.toMatchObject({ status: 401, code: 'cid_binding_changed' });
   });
 });

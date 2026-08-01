@@ -1,13 +1,11 @@
 # Wallet 模块技术文档（当前实现态）
 
-> ⚠️ **2026-07-27 model B**：下文"扁平单账户 / seed 存储 / `fromSeed(miniSecret)` 直接派生"为**旧态**，已被 model B 全 `//index` 无根派生取代（账户0=`//0`，无 bare 根；派生真源 [ADR-022 §2](../../../04-decisions/ADR-022-unified-pqc-crypto.md)）。citizenapp 无根多账户存储改造见 `memory/08-tasks/open/20260727-citizenapp-cid-identity-rootless-wallet.md`（Step 2）；**派生核心已改 `//index`（下文已更新）**，存储/多账户段落以 Step 2 卡为准。
-
 ## 1. 模块目标
 
 `lib/wallet` 是钱包能力唯一收口模块，负责：
 
 - 钱包创建/导入/删除/切换（热钱包 + 冷钱包）
-- 本地机密材料读取（热钱包 seed）
+- 本地账户 child mini-secret 的硬件金库读写；不持久化母种子或助记词
 - 登录签名编排（签名执行由 `lib/signer` 负责）
 - 转账/提案/投票所需钱包上下文输出（地址、公钥、算法、机构角色）
 - finalized 余额查询（通过 `lib/rpc/` 直连链上节点）
@@ -39,7 +37,9 @@ lib/
 └── wallet/
     ├── wallet.dart
     ├── core/
-    │   ├── wallet_manager.dart         ← 钱包生命周期 + seed 读取守卫
+    │   ├── wallet_manager.dart         ← 钱包生命周期 + 账户 child 读取守卫
+    │   ├── secure_seed_store.dart      ← 账户 child 硬件金库抽象
+    │   ├── hardware_bound_seed_vault.dart
     │   └── wallet_secure_keys.dart
     ├── capabilities/
     │   ├── attestation_service.dart
@@ -151,19 +151,20 @@ const int kGmbSs58Prefix = 2027;   // 对齐链端 primitives::core_const::SS58_
 ### 4.1 创建热钱包
 
 1. 生成 `bip39` 助记词
-2. 派生 mini-secret：`mnemonic → entropy → PBKDF2(substrate_bip39) → 64 字节 → 前 32 字节`
+2. 在内存中派生母 mini-secret：`mnemonic → entropy → substrate_bip39`，再硬派生账户0
+   `//0` 的 child mini-secret
 3. 用 `Keyring.sr25519.fromSeed(child_N)` 派生 SS58(2027) 地址与公钥（model B：`child_N`=助记词`//N` 硬派生，账户0=`//0`，无 bare 根）
 4. 钱包元信息通过 `WalletIsar.instance.writeTxn()` 写入 Isar（`signMode: 'local'`）
-5. seed（32 字节 hex）写入 secure storage
+5. 只把账户0 child mini-secret 经硬件 KEK 加密后的 blob 写入 Secure Storage；母种子清零
 6. 创建流程立即复读 Isar 与 secure storage；校验失败必须回滚钱包记录和机密材料，不能展示助记词后留下空钱包列表
 7. 助记词一次性展示给用户
 
 ### 4.2 导入热钱包
 
 1. 校验助记词合法性
-2. 派生 seed → 地址/公钥
+2. 在内存中派生母 mini-secret，再硬派生账户0 child、地址与公钥
 3. 钱包元信息通过 `WalletIsar.instance.writeTxn()` 写入 Isar（`signMode: 'local'`），并在同一事务内分配 `walletIndex` 与更新当前激活钱包
-4. seed 写入 secure storage
+4. 只保存账户0 child 的硬件加密 blob，母种子与助记词不落盘
 5. 导入流程立即复读 Isar 与 secure storage；校验失败必须回滚钱包记录和机密材料
 6. 设为当前激活钱包
 
@@ -204,11 +205,12 @@ const int kGmbSs58Prefix = 2027;   // 对齐链端 primitives::core_const::SS58_
 3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；普通链上转账备注写入 `remark`；不再单独保存 `direction`。
 4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / multisig_transfer`；列表方向由金额正负号推导。
 5. 区块事件记录唯一键为 `accountId:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `accountId:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
-6. 删除非0账户时同步删除该 `account_id` 的账户行、硬件金库 child、`LocalTxEntity`、
-   `WalletTxSyncCursorEntity`、通讯录密钥与本机缓存；菜单点击后直接执行，不再弹二次确认。
+6. 删除非0账户时同步删除该 `account_id` 的账户行、硬件金库 child、`LocalTxEntity` 和
+   `WalletTxSyncCursorEntity`；CID 通讯录与聊天密文归永久 CID，不得因删除非当前账户或
+   换绑前账户而删除。
 7. 删除账户0即删除整只热钱包：必须先显示危险提示，再用账户0对本机一次性随机挑战签名并
    本地验签；只有验签通过才能删除。删除时覆盖该钱包全部账户的账户行、硬件金库 child、
-   交易记录、同步游标、清算行缓存、通讯录密钥与本机缓存。再次导入同一链上账户从新的本机
+   交易记录、同步游标和本机 CID 隐私数据。再次导入同一链上账户从新的本机
    导入时刻重新记录。
 8. 流水同步遇到本地 Isar/MDBX 繁忙时直接让路到下一轮，不和钱包列表、余额刷新、治理页面抢写锁。
 9. 交易页 `签名交易` 下方的四个状态只统计当前交易钱包的转出记录；账户详情页和完整交易记录页才展示该账户全部收支流水。
@@ -226,8 +228,9 @@ const int kGmbSs58Prefix = 2027;   // 对齐链端 primitives::core_const::SS58_
    查看页面不得要求输入助记词，也不得静默生成新 KEK 冒充恢复。
 5. App 不保存助记词或母种子。KEK 缺失后，现有账户私钥密文无法在本机反解，必须
    fail-closed；任何重新导入属于独立的钱包生命周期操作，不能嵌入查看私钥流程。
-6. 硬件金库生成的账户密文 blob、通讯录域隔离密钥、PIN 哈希、设备锁设置与短期
-   attestation token 均通过 `appSecureStorage` 静默持久化；新增调用不得绕开该单源。
+6. 硬件金库生成的账户 child 密文 blob、PIN 哈希、设备锁设置与短期 attestation token
+   通过 `appSecureStorage` 静默持久化；Chat 与通讯录用途子钥禁止持久化。新增安全存储
+   调用不得绕开该单源。
 
 ### 4.5.3 账户卡片扫码签名
 
@@ -255,7 +258,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 ### 4.7 链上支付签名（由 onchain 调用）
 
 - **热钱包**：`WalletManager.signWithWallet()` 签名回调注入 `OnchainPaymentService`
-  （seed 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其转换得到的
+  （账户 child 不出 WalletManager）；签名前必须重新派生本地公钥，并校验其转换得到的
   AccountId 与当前 `WalletProfile.accountId` 完全一致，不一致直接拒绝签名。
 - **冷钱包**：构造 `QR_V1 k=1` 签名请求 → 导航到 `QrSignSessionPage` → 展示请求二维码
   → 用户用 CitizenWallet 离线设备扫码签名（离线端按 `a+d` 独立解码 payload）→
@@ -284,11 +287,14 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 ## 5. 存储设计（当前）
 
-### 5.1 机密层（flutter_secure_storage）
+### 5.1 机密层（硬件金库 + flutter_secure_storage）
 
-- `wallet.secret.<wallet_id>.seed_hex.v1` — 热钱包 32 字节 seed（hex 编码）
-- `wallet.session.<scope>.token.v1`
-- `wallet.session.<scope>.key.v1`（预留）
+- `account_child_key_<account_id>`：账户 child mini-secret 的硬件 KEK 加密 blob；同一热钱包
+  的账户共享 `walletIndex` KEK，但各 `account_id` 独立保存密文
+- `wallet.session.<scope>.token.v1`：短期会话 token
+- PIN、设备锁和 attestation 所需最小状态
+
+禁止保存助记词、母种子、Chat/通讯录用途子钥或预留的用户数据主钥。
 
 ### 5.2 业务层（Isar）
 
@@ -358,38 +364,39 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 
 ## 7. 安全边界
 
-- seed 不写入 Isar/Postgres/日志
-- **seed 不出 WalletManager**：所有签名操作通过 `signWithWallet()` / `signUtf8WithWallet()` 完成，seed 仅在方法内短暂存在，签名后立即清零
-- 通讯录本地与云端子钥都从 CID 稳定 `CidDataRoot` 派生，域固定为
-  `citizenapp.cid/contacts-local` 与 `citizenapp.cid/contacts-cloud`。业务层只能读取
-  派生后的 `ContactKeyMaterial`，不能接触当前账户 child，也不能用通讯录密钥签名或
-  恢复钱包。
-- 稳定 `CidDataRoot` 是每个 CID 首次用 CSPRNG 随机生成、换绑永远不变的 32 字节主钥；
-  禁止从钱包助记词、账户 child 或设备密钥派生。独立恢复层以只存在于 Worker Secret
-  的恢复密钥按创世与 CID 域隔离密封，D1 只保存 AES-256-GCM 密文、nonce、密钥版本
-  和摘要。该 Secret 是集中恢复信任边界，泄漏会影响全部 CID，必须独立轮换和审计。
-- 当前 finalized 绑定账户的 child 只派生本机 KEK，把稳定数据根包装进安全金库。
-  `ensureCidDataRootReady` 只读精确 `(cid_number, binding_revision, account_id)` 包装；缺失
-  或损坏即要求 finalized 当前账户签一次性挑战，由临时 X25519 会话加密领取同一数据根。
-  正确顺序：校验授权摘要 → 新包装写入并读回 → 激活精确绑定 → 落 CID 缓存和用途子钥
-  → 清理低版本本地包装 → 登记当前新钱包设备子钥 → Worker 清旧凭证。全过程不读取旧
-  账户、旧私钥、旧助记词、旧设备或旧缓存，业务密文一律不动。
+- 助记词、母种子和账户 child 明文不写入 Isar/Postgres/日志
+- **账户 child 不出 WalletManager**：身份账户签名统一走 `signForAccountId()`，账户0资金/
+  治理签名走 `signWithWallet()`；账户 child 只在硬件解密、派生或签名期间短暂存在
+- 通讯录本地与云端子钥都由 CID 当前链上绑定钱包账户的 child mini-secret 直接派生，
+  域固定为 `citizenapp.account-data/contacts-local` 与
+  `citizenapp.account-data/contacts-cloud`。业务层只能读取派生后的
+  `ContactKeyMaterial`，不能接触当前账户 child，也不能用通讯录密钥签名或恢复钱包。
+- 私有数据不另设稳定主钥、随机 CID 密钥、Worker 密钥或节点密钥。唯一派生输入是当前
+  钱包账户 child mini-secret；HKDF salt 绑定 `genesis_hash + cid_number +
+  binding_revision + account_id`，info 绑定用途和可选 context。用途密钥只在内存中使用，
+  不写入 Isar、D1、R2、Worker Secret 或日志。
+- `activateAccountDataBinding` 先读取当前账户 child 并实际派生验证钥，成功后才单调写入
+  公开 `AccountDataBinding` 元数据；`deriveDataKeyForCurrentBinding` 只对该精确绑定派生。
+  同一账户在新设备导入后能重新派生相同密钥；换绑后的新账户直接接管 CID 并派生新的
+  用途密钥，不能直接解密换绑前当前账户加密的历史私有数据。只有同次换绑取得当前账户
+  签名时，客户端才对 Chat 与通讯录执行端内重加密；无签名换绑不读取此前账户、私钥、
+  助记词、设备或缓存。
 - 设备子钥登记（`bindDeviceSubkeyToCurrentBinding`）按
   `(cid_number, binding_revision, account_id)` 三元组落本机幂等标记：登记要签名、签名要弹
   生物识别，不挡住重复调用就会每次进入需 CID 页面都弹一次。标记落在钱包层而不是调用方——
   `MyIdService` 非单例，五处门禁各持一份，进程内去重形同虚设。登记失败不写标记，下次重试。
 - 删除钱包必须清除该钱包的账户 child 和设备子钥；只有被删账户拥有本机当前激活 CID
-  绑定时，才清理对应的数据根包装、缓存和用途子钥。删除本地钱包不得删除 CID 业务数据。
+  绑定时，才清理对应的公开绑定元数据和内存用途子钥。删除本地钱包不得删除 CID 业务数据。
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
-- 授权分层（2026-07-06 定）：`authenticateForSigning()`（生物识别/设备密码）**只**用于「动钱 / 换身份」——转账、充值、提现、清算行绑定、多签、个人账户、投票、以及**切换默认用户钱包**；Chat 登录和设备绑定使用硬件 P-256 子钥静默签名，发帖按链上最低费用自动扣 0.1 元入块。发帖前仍做余额校验（够 ED + 0.1 元才发）。
-- `signWithWallet()` / `signUtf8WithWallet()` 内含 `_authenticateIfSupported()`（会弹）；`signWithWalletNoAuth()` 只读 seed 不弹。调用方按上条策略选用。seed 读取后做格式校验，异常立即抛错。
-- 设备未启用锁屏时硬拒绝访问，不再跳过验证（`isDeviceSupported()` 返回 false 时抛出异常）
-- 热钱包创建/导入入口前置设备锁检查（`_ensureDeviceSecure()`），未启用锁屏的设备无法创建或导入热钱包
-- seed 读取后进行格式校验（64 位 hex），异常数据立即抛错
-- `wallet.secret.*` 与 `wallet.session.*` 统一命名，避免散落硬编码
-- `getLatestWalletSecret()` / `getWalletSecretByIndex()` 已标记 `@Deprecated`，新代码禁止使用
+- 账户 child 每次读取都由硬件金库触发强生物识别，取消、锁定、密钥失效或密文缺失均
+  fail-closed；不存在预认证窗口、无认证读取或设备密码回退入口。
+- Chat 与广场后台登录只使用不可导出的 P-256 设备子钥静默签名，不读取账户 child。
+- 热钱包创建/导入入口先确认强生物识别可用；账户 child 读取后校验 64 位十六进制格式并
+  在签名或派生完成后清零。
+- 账户 child 密文键只允许由 `HardwareBoundSeedVault` 生成；Session 键只允许由
+  `WalletSecureKeys` 生成，禁止业务代码散落硬编码
 - walletIndex 分配与 profile 写入在同一 Isar 事务中完成（`_appendHotWalletAtomic` / `_appendColdWalletAtomic`），防止并发创建/导入时 index 冲突导致密钥覆盖；secure storage 写入在事务成功后执行
 
 ## 8. 主要接口（对外）
@@ -397,11 +404,11 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 - `WalletManager`
   - `createWallet / importWallet / importColdWallet`
   - `deleteWallet / setActiveWallet`
-  - `signWithWallet(walletIndex, payload)` — 热钱包 sr25519 签名（seed 不出类）
-  - `signUtf8WithWallet(walletIndex, message)` — 热钱包 UTF-8 签名（返回 `WalletSignResult`）
+  - `signForAccountId(accountId, payload)` — CID 当前账户 sr25519 签名
+  - `signWithWallet(walletIndex, payload)` — 热钱包账户0 sr25519 签名
+  - `walletIndexForAccountId(accountId)` — 定位当前账户实际所属热钱包，供设备子钥使用
   - `ensureContactKeyMaterialForAccountId(accountId)` — 返回身份账户 child 域隔离的
     通讯录加密钥和索引钥，必要时从硬件金库一次性派生
-  - ~~`getLatestWalletSecret / getWalletSecretByIndex`~~ — 已弃用
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchFinalizedBalance` / `fetchFinalizedBalances` / `fetchFinalizedTotalBalance` — 直连节点查询 finalized 链上余额
 - `ChainTxMonitor`（`lib/rpc/chain_tx_monitor.dart`）
@@ -410,9 +417,9 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 ## 9. 测试覆盖（当前）
 
 - `test/wallet/wallet_manager_test.dart`
-  - 热钱包创建/导入/删除/seed 存储联动
-  - 冷钱包导入/删除/无 seed 存储
-  - seed key 移除后不再读取
+  - 热钱包创建/导入/删除/账户 child 硬件密文联动
+  - 冷钱包导入/删除/无账户 child 存储
+  - 当前 `account_id` 到所属 `walletIndex` 的精确定位
 - `test/wallet/seed_derivation_test.dart`
   - 验证 `fromSeed` 与 `fromMnemonic` 产出一致公钥
 - `test/wallet/attestation_service_test.dart`
@@ -422,7 +429,7 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
   - 挑战解析、签名、防重放、钱包匹配
 - `test/wallet/wallet_manager_reorder_test.dart`
   - `reorderWallets()` 写入 `sortOrder` 后，`getWallets()` 按新顺序返回
-  - 旧钱包首次进入时按原 `walletIndex` 顺序初始化 `sortOrder`
+  - 尚未写入 `sortOrder` 的钱包按原 `walletIndex` 顺序初始化
 - `test/wallet/pages/wallet_list_tile_test.dart`
   - 钱包卡片 UI 渲染契约
   - `reorderWalletProfiles()` 支持 fixed-length 钱包列表，且不改写原列表

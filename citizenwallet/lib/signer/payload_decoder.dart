@@ -41,13 +41,13 @@ class DecodedPayload {
 /// 注册局首次绑定/换绑域签名 QR 中的完整授权模板。
 ///
 /// 生成端把待绑定账户槽写成 32 字节零；钱包只能在严格解码全部字段且无尾字节后，
-/// 把所选账户填回原槽位。禁止沿用旧协议把账户简单追加到 payload 末尾。
+/// 把所选账户填回原槽位。禁止恢复已经删除的末尾拼接载荷。
 class DecodedCidAccountAuthorizationTemplate {
   DecodedCidAccountAuthorizationTemplate._({
     required Uint8List payload,
     required this.genesisHash,
     required this.cidNumber,
-    required this.expectedOldAccountId,
+    required this.currentAccountId,
     required this.expectedBindingRevision,
     required this.expiresAt,
     required int accountOffset,
@@ -58,7 +58,7 @@ class DecodedCidAccountAuthorizationTemplate {
   final int _accountOffset;
   final String genesisHash;
   final String cidNumber;
-  final String? expectedOldAccountId;
+  final String? currentAccountId;
   final int expectedBindingRevision;
   final int expiresAt;
 
@@ -67,9 +67,9 @@ class DecodedCidAccountAuthorizationTemplate {
   /// 换绑时新账户不得等于当前绑定账户；失败返回 null，调用端必须红色拒绝。
   Uint8List? materialize(Uint8List accountId) {
     if (accountId.length != 32) return null;
-    final oldAccountId = expectedOldAccountId;
-    if (oldAccountId != null &&
-        oldAccountId == PayloadDecoder._bytesToLowerHex(accountId)) {
+    final chainCurrentAccountId = currentAccountId;
+    if (chainCurrentAccountId != null &&
+        chainCurrentAccountId == PayloadDecoder._bytesToLowerHex(accountId)) {
       return null;
     }
     final out = Uint8List.fromList(_payload);
@@ -2672,7 +2672,7 @@ class PayloadDecoder {
     if (expiresAt <= 0) return null;
     offset += 8;
 
-    // occupy_signature / rebind_signature:BoundedVec = Compact(len=64) ++ 64 字节。
+    // occupy_signature / new_account_signature:BoundedVec = Compact(len=64) ++ 64 字节。
     final (signatureLen, signatureLenSize) = _decodeCompactU32(bytes, offset);
     if (signatureLenSize == 0 || signatureLen != 64) return null;
     offset += signatureLenSize;
@@ -3818,7 +3818,7 @@ class PayloadDecoder {
       payload: bytes,
       genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
       cidNumber: cidRead.$1,
-      expectedOldAccountId: null,
+      currentAccountId: null,
       expectedBindingRevision: expectedBindingRevision,
       expiresAt: expiresAt,
       accountOffset: accountOffset,
@@ -3826,7 +3826,7 @@ class PayloadDecoder {
   }
 
   /// 严格读取 `CidRebindAuthorization` 模板:
-  /// genesis_hash + cid_number + old_account + new_account(零槽) + revision + expires_at。
+  /// genesis_hash + cid_number + current_account_id + new_account_id(零槽) + revision + expires_at。
   static DecodedCidAccountAuthorizationTemplate?
       readCidRebindAuthorizationTemplate(Uint8List bytes) {
     if (bytes.length < 65 || (bytes[32] & 0x03) != 0) return null;
@@ -3835,7 +3835,7 @@ class PayloadDecoder {
     if (cidRead == null) return null;
     offset = cidRead.$2;
     if (offset + 32 > bytes.length) return null;
-    final expectedOldAccountId = bytes.sublist(offset, offset + 32);
+    final currentAccountId = bytes.sublist(offset, offset + 32);
     offset += 32;
     final accountOffset = offset;
     if (!_hasZeroAccountSlot(bytes, accountOffset)) return null;
@@ -3849,7 +3849,7 @@ class PayloadDecoder {
       payload: bytes,
       genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
       cidNumber: cidRead.$1,
-      expectedOldAccountId: _bytesToLowerHex(expectedOldAccountId),
+      currentAccountId: _bytesToLowerHex(currentAccountId),
       expectedBindingRevision: expectedBindingRevision,
       expiresAt: expiresAt,
       accountOffset: accountOffset,

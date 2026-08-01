@@ -48,7 +48,7 @@
     - expected_binding_revision
     - expires_at
 
-# 注册局代办换绑钱包——新钱包解析锁定旧账户/revision/过期时间的完整授权模板。
+# 注册局代办换绑钱包——新钱包解析锁定当前账户/revision/过期时间的完整授权模板。
 - action_key: citizen_rebind
   action_code: 11
   action_label_zh: 注册局换绑账户确认
@@ -62,7 +62,7 @@
   required_fields:
     - genesis_hash
     - cid_number
-    - expected_old_account_id
+    - current_account_id
     - expected_binding_revision
     - expires_at
 

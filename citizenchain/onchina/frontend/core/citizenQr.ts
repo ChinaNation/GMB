@@ -42,6 +42,8 @@ export interface SignRequestBody {
 export interface SignResponseBody {
   account_id: string;
   signature: string;
+  current_account_id?: string;
+  current_account_signature?: string;
 }
 
 export interface UserContactBody {
@@ -171,12 +173,25 @@ function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
 }
 
 function parseSignResponseBody(b: Record<string, unknown>): SignResponseBody {
-  requireExactKeys(b, ['u', 's'], 'b');
+  requireExactKeys(b, ['u', 's', 'o', 'r'], 'b');
   const u = requireCompactB64(b, 'u');
   const s = requireCompactB64(b, 's');
+  const hasCurrentAccount = Object.prototype.hasOwnProperty.call(b, 'o');
+  const hasCurrentAccountSignature = Object.prototype.hasOwnProperty.call(b, 'r');
+  if (hasCurrentAccount !== hasCurrentAccountSignature) {
+    throw new QrParseError('b.o / b.r 必须同时出现或同时省略');
+  }
+  const currentAccountId = hasCurrentAccount
+    ? b64ToHex(requireCompactB64(b, 'o'), 32, 'b.o')
+    : undefined;
+  const currentAccountSignature = hasCurrentAccountSignature
+    ? b64ToHex(requireCompactB64(b, 'r'), 64, 'b.r')
+    : undefined;
   return {
     account_id: b64ToHex(u, 32, 'b.u'),
     signature: b64ToHex(s, 64, 'b.s'),
+    ...(currentAccountId ? { current_account_id: currentAccountId } : {}),
+    ...(currentAccountSignature ? { current_account_signature: currentAccountSignature } : {}),
   };
 }
 

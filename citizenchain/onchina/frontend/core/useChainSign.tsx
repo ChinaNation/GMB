@@ -15,7 +15,12 @@ import { CitizenSignatureModal } from './CitizenSignatureModal';
 import { notice } from '../utils/notice';
 import { adminHeaders, request } from '../utils/http';
 
-export type ChainSignResult = { account_id: string; signature: string };
+export type ChainSignResult = {
+  account_id: string;
+  signature: string;
+  current_account_id?: string;
+  current_account_signature?: string;
+};
 
 /** 所有 OnChina 链交易 prepare 接口共用的最小返回结构。 */
 export type ChainSignPrepare = { request_id: string; sign_request: string };
@@ -94,7 +99,12 @@ export function useChainSign(title = '管理员公民钱包签名'): UseChainSig
         if (!signed.account_id) {
           throw new Error('签名响应缺少 account_id');
         }
-        pending.resolve({ account_id: signed.account_id, signature: signed.signature });
+        pending.resolve({
+          account_id: signed.account_id,
+          signature: signed.signature,
+          current_account_id: signed.current_account_id,
+          current_account_signature: signed.current_account_signature,
+        });
         setPending(null);
       } catch (err) {
         pending.reject(err);

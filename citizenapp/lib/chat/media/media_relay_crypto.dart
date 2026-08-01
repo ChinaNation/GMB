@@ -138,4 +138,97 @@ class MediaRelayCrypto {
       await sink.close();
     }
   }
+
+  /// 把一个长期缓存密文逐块改用 [newKey] 加密，明文只短暂存在单块内存。
+  ///
+  /// [destPath] 必须与源文件不同；任一旧 tag 校验失败都会删除未完成目标文件，源密文
+  /// 完全不动。用于 CID 钱包换绑时的附件密钥交接，不生成中间明文文件。
+  static Future<void> reencryptFile({
+    required String sourcePath,
+    required String destPath,
+    required List<int> currentKey,
+    required List<int> newKey,
+  }) async {
+    if (sourcePath == destPath) {
+      throw ArgumentError('附件重加密源路径与目标路径不得相同');
+    }
+    final source = await File(sourcePath).open();
+    final target = File(destPath);
+    await target.parent.create(recursive: true);
+    final sink = target.openWrite();
+    try {
+      final total = await source.length();
+      var pos = 0;
+      var index = 0;
+      while (pos < total) {
+        await source.setPosition(pos);
+        final header = await source.read(_frameHeaderBytes);
+        if (header.length < _frameHeaderBytes) {
+          throw const FormatException('附件换绑密文帧头截断');
+        }
+        final frameLen = ByteData.sublistView(Uint8List.fromList(header))
+            .getUint32(0, Endian.big);
+        await source.setPosition(pos + _frameHeaderBytes);
+        final frame = await source.read(frameLen);
+        if (frame.length < frameLen) {
+          throw const FormatException('附件换绑密文帧截断');
+        }
+        final plaintext = await decryptChunk(currentKey, index, frame);
+        final List<int> reencrypted;
+        try {
+          reencrypted = await encryptChunk(newKey, index, plaintext);
+        } finally {
+          plaintext.fillRange(0, plaintext.length, 0);
+        }
+        final nextHeader = ByteData(_frameHeaderBytes)
+          ..setUint32(0, reencrypted.length, Endian.big);
+        sink.add(nextHeader.buffer.asUint8List());
+        sink.add(reencrypted);
+        pos += _frameHeaderBytes + frameLen;
+        index += 1;
+      }
+    } catch (_) {
+      await sink.close();
+      await source.close();
+      if (await target.exists()) await target.delete();
+      rethrow;
+    }
+    await source.close();
+    await sink.close();
+    // 目标文件逐块用新钥认证后才算暂存成功；不生成明文文件，5GB 仍只占一块内存。
+    await verifyEncryptedFile(path: destPath, key: newKey);
+  }
+
+  /// 流式认证整份长期密文；用于换绑暂存后的新钥回读验证。
+  static Future<void> verifyEncryptedFile({
+    required String path,
+    required List<int> key,
+  }) async {
+    final source = await File(path).open();
+    try {
+      final total = await source.length();
+      var pos = 0;
+      var index = 0;
+      while (pos < total) {
+        await source.setPosition(pos);
+        final header = await source.read(_frameHeaderBytes);
+        if (header.length < _frameHeaderBytes) {
+          throw const FormatException('附件新账户密文帧头截断');
+        }
+        final frameLen = ByteData.sublistView(Uint8List.fromList(header))
+            .getUint32(0, Endian.big);
+        await source.setPosition(pos + _frameHeaderBytes);
+        final frame = await source.read(frameLen);
+        if (frame.length < frameLen) {
+          throw const FormatException('附件新账户密文帧截断');
+        }
+        final plaintext = await decryptChunk(key, index, frame);
+        plaintext.fillRange(0, plaintext.length, 0);
+        pos += _frameHeaderBytes + frameLen;
+        index += 1;
+      }
+    } finally {
+      await source.close();
+    }
+  }
 }

@@ -273,7 +273,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
 /// 签名做绑定证明；后端复用 sr25519 验签确认子钥归属，再由链上绑定解析出身份主键
 /// cid_number，落库主键 (cid_number, device_id)：同一身份可多设备并存（各一行），
 /// 同设备（同 P-256 公钥）重注册按 issued_at 单调覆盖 = 轮换/续期。子钥属生成它的
-/// 钱包 account_id；换绑后旧账户子钥由每请求链上绑定复查自然失效。此后登录挑战改由
+/// 钱包 account_id；换绑后此前账户子钥由每请求链上绑定复查自然失效。此后登录挑战改由
 /// 该子钥静默签名。
 export async function registerDeviceSubkey(request: Request, env: Env): Promise<Response> {
   const body = await readJson<DeviceRegisterRequest>(request);
@@ -351,9 +351,9 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
     throw new HttpError(409, 'stale_device_binding', '设备绑定证明已使用或早于当前绑定');
   }
 
-  // 新账户的设备子钥已经由当前账户签名并成功落库，证明新鉴权钥已经上岗；此后才清理
-  // 旧 revision / 旧账户凭证。数据根恢复和本机用途子钥安装在 App 中先于本接口完成，
-  // 因而清理失败只会让本次登记重试，不会留下“旧钥已删、新钥未上岗”的断层。
+  // 新账户的设备子钥已经由新账户签名并成功落库，证明新鉴权钥已经上岗；此后才清理
+  // 此前 revision / 此前账户凭证。App 已先用当前钱包账户派生并验证用途子钥，因而清理
+  // 失败只会让本次登记重试，不会留下“旧钥已删、新钥未上岗”的断层。
   await revokeStaleBindingCredentials(
     env,
     cidNumber,
@@ -369,7 +369,7 @@ export async function registerDeviceSubkey(request: Request, env: Env): Promise<
 }
 
 /// finalized 当前绑定的新设备登记成功后，收敛全部可撤销的旧鉴权材料。
-/// CID 业务数据、稳定数据根、通讯录密文、动态、文章和订阅均不在删除范围。
+/// CID 公开业务数据、通讯录此前版本密文、动态、文章和订阅均不在删除范围。
 async function revokeStaleBindingCredentials(
   env: Env,
   cidNumber: string,
@@ -395,7 +395,7 @@ async function revokeStaleBindingCredentials(
         WHERE cid_number = ? AND (binding_revision <> ? OR account_id <> ?)`,
     ).bind(cidNumber, bindingRevision, accountId),
   ]);
-  // CID 展示缓存不是授权真源，但主动失效可避免 UI 在 45 秒 TTL 内展示旧账户。
+  // CID 展示缓存不是授权真源，但主动失效可避免 UI 在 45 秒 TTL 内展示此前账户。
   await env.SQUARE_CACHE.delete(`square_identity_cid:${cidNumber}`);
   await closeStaleChatRealtime(env, cidNumber, bindingRevision, accountId);
 }

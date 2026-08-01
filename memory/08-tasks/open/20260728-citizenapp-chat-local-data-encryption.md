@@ -12,8 +12,8 @@
 
 ## 已确认边界
 
-- 业务用途子钥从 CID 稳定数据根域隔离派生；当前身份账户 child 只包装数据根，必须覆盖
-  发放、包装、读取、换绑接管和删除生命周期。
+- 业务用途子钥只从 CID 当前链上绑定钱包账户的 child mini-secret 直接派生，必须覆盖
+  派生、读取、换绑激活和删除生命周期；不得建立额外主钥或服务端密钥。
 - Isar 社区版不提供库级加密，本任务采用字段级/文件级信封加密。
 - Cloudflare Chat 不保存消息或普通附件；大媒体中转继续只承载端到端密文。
 - 每一步必须先提交技术方案，用户确认后才能执行。
@@ -34,8 +34,8 @@
 - OpenMLS 状态迁移失败会导致历史群状态不可读，必须使用临时文件、认证成功后原子替换。
 - HMAC 索引会泄露相同 token 的频率关系；不得保存明文 token。
 - 媒体展示期间可能产生临时明文字节，必须限定生命周期并在异常路径清理。
-- CID 换绑不得重写业务密文，也不得依赖此前账户密钥；当前新账户必须领取同一 CID
-  数据根并用自己的 child 包装。
+- CID 换绑不得重写业务密文，也不得依赖此前账户密钥；当前新账户使用自己的 child
+  派生新用途子钥，不能解密此前账户加密的历史私有数据。
 
 ## 实施记录
 
@@ -45,34 +45,28 @@
 
 ### 第 1 步：本地静止态加密基座（2026-07-29 完成，提交 bf017a8e）
 
-**最终设计：CID 稳定数据根信封。** 业务密钥不能直接由钱包账户 child 决定，否则换绑
-会改变全部用途子钥。目标模型为：
+**最终设计纠正：当前绑定钱包账户直接派生。** CID 是唯一身份和数据归属主键，当前
+链上绑定钱包账户是唯一控制凭证和私有数据密钥来源。目标模型为：
 
 ```text
-CID 永久业务数据 ──► CID 稳定数据根(32B，换绑不变)
-                            │ HKDF(info=cid 用途域)
-                            ├─ chat / chat-index / mls / attachment
-                            ├─ contacts-local / contacts-cloud
-                            └─ drafts
-
-当前绑定账户 child
-      │ HKDF(info="citizenapp.cid-data-root/kek",
-      │      salt=sha256(cid|revision|account))
-      ▼
-    KEK ── AES-256-GCM wrap/unwrap ──► CID 稳定数据根
+当前绑定账户 child mini-secret
+      + sha256(genesis_hash|cid_number|binding_revision|account_id)
+      + HKDF info=用途域/context
+      ├─ chat / chat-index / mls / attachment
+      ├─ contacts-local / contacts-cloud
+      └─ drafts
 ```
 
-绑定 finalized 后，当前新账户通过一次性挑战取得同一数据根，完成新包装写入和读回摘要
-校验后激活精确绑定标记，再删除低版本包装。已落盘密文不重写；此前账户、此前私钥和此前
-设备都不是输入。钱包创建/导入阶段不得生成 CID 数据根，因为当时尚无 CID。
+绑定 finalized 后，当前新账户先实际派生验证钥，再激活精确绑定公开元数据。已落盘密文
+不重写；此前账户、此前私钥和此前设备都不是输入。新账户不能解密旧账户加密的历史密文。
 
 - 新增 `lib/security/local_cipher.dart`（AES-256-GCM，12B 随机 nonce，
   单串 `base64(nonce||ct||mac)`，**AAD 必填**防串位重放；错误密钥/AAD 不符/篡改/
   非法 base64/长度不足一律抛 `LocalCipherException`，绝不静默返回空）
-- `lib/security/local_data_key.dart` 提供 `CidDataRoot`、七个 CID 用途域和
-  `CidDataRootVault`；文件名沿用现有安全基座路径，类型与协议语义已全部 CID 化。
-- `lib/wallet/core/wallet_manager.dart` 只在 finalized 精确绑定接管时安装数据根，
-  钱包创建/导入不再生成根；日常读取走已验证的 CID 缓存。
+- `lib/security/local_data_key.dart` 提供 `AccountDataBinding`、七个用途域和
+  `AccountDataKeyDeriver`；文件名沿用现有安全基座路径。
+- `lib/wallet/core/wallet_manager.dart` 只在 finalized 精确绑定激活后从当前账户 child
+  派生，安全存储只保存公开绑定元数据。
 - 验收：analyze 零问题；`test/security/` 25/25；`test/security/ + test/wallet/` 169/169
 
 ### 第 2 步：MLS 私钥与群秘密加密（2026-07-29 完成）
@@ -99,7 +93,7 @@ CID 永久业务数据 ──► CID 稳定数据根(32B，换绑不变)
 - `rust/Cargo.toml` 显式加 `aes-gcm`（RustCrypto 官方实现，禁自造 AEAD）+ `base64`；
   两者本已在 lock 中，无新增下载。
 - Dart：`mls_state_store.dart` 增 `stateKey`/`stateKeyHex` 并加密 pending 队列；
-  `mls_native.dart` 9 处 payload 下传密钥；`chat_runtime.dart` 从 CID 数据根取 mls 子钥。
+  `mls_native.dart` 9 处 payload 下传密钥；`chat_runtime.dart` 从当前绑定账户派生 mls 子钥。
 - 验收：`cargo test` **13/13**（含真实三方群会话往返、信封往返、错误密钥/错误 AAD/
   篡改拒绝、nonce 随机、旧明文清除、原子写不留临时文件）；
   `flutter analyze lib/ test/` 零问题；`flutter test test/security/ test/chat/` **186 通过**。
@@ -134,15 +128,15 @@ CID 永久业务数据 ──► CID 稳定数据根(32B，换绑不变)
   `app_isar.g.dart` 已重新生成。
 - **`envelopeBytesHex` 刻意不加密**：其内容是 MLS 端到端密文，且随附元数据
   （sender/recipient/conversation）本就是明文列，再套一层不减少泄露面。
-- 新增 `lib/chat/storage/chat_crypto.dart`：`ChatCrypto`（按 accountId 缓存子钥、
-  加解密、分词、`tokenize` 静态方法便于单测）。含测试专用 `debugFixedCidDataRoot`
-  测试注入口，仿 `WalletManager.debugSeedStore` 惯例。
+- 新增 `lib/chat/storage/chat_crypto.dart`：`ChatCrypto`（按精确绑定版本缓存子钥、
+  加解密、分词、`tokenize` 静态方法便于单测）。测试使用按用途注入的
+  `debugFixedKeys` 入口，仿 `WalletManager.debugSeedStore` 惯例。
 - `lib/chat/storage/chat_store.dart`：4 个写入路径改为**事务外预加密**
   （不让密码学运算占住 Isar 写事务）；2 个读取路径解密；`searchMessages` 两段式重写；
   两个 mapper 改为接收已解密文本。
 
-**测试策略**：`test/support/isar_test_env.dart` 注入固定 CID 数据根。这是
-**换密钥来源、不绕过加密**——测试仍走真实 AES-GCM 与真实 HMAC 索引，
+**测试策略**：`test/support/isar_test_env.dart` 按用途注入固定测试密钥。这是
+**替换测试密钥来源、不绕过加密**——测试仍走真实 AES-GCM 与真实 HMAC 索引，
 否则加密就成了测试盲区。
 
 **验收（实跑）**
@@ -210,11 +204,11 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
 `contact_pending_by_cid:` / `contact_sync_by_cid:`）的值使用 AES-256-GCM。
 加解密收敛在 `_readKv` / `_writeKv` / `_writeSnapshot` 三处，上层模型与 UI 零改动。
 
-- **用途域严格分开**：本地用 CID 数据根的 `contactsLocal` 子钥，云端用同一根的
-  `contactsCloud` 子钥。两者不复用，当前账户 child 只负责包装根——
+- **用途域严格分开**：本地用当前账户派生的 `contactsLocal` 子钥，云端用同一账户派生的
+  `contactsCloud` 子钥。两者不复用——
   否则本地密文一旦被拿到就等于同时暴露云端密文。
-- 属主 CID 直接从业务上下文取得；当前绑定账户只用于领取并解包同一 CID 稳定数据根，
-  子钥按 `cid_number + 当前账户` 的已验证上下文缓存，不改变密文归属。
+- 属主 CID 直接从业务上下文取得；当前绑定账户直接派生用途子钥，子钥按
+  `cid_number + binding_revision + account_id` 的已验证上下文缓存，不改变密文归属。
 - AAD 绑完整 KV 键名，防三份密文被互换。
 - 加密在 Isar 事务**外**完成（与聊天同一原则）。
 - `_readKv` 解密失败**直接抛错，不静默返回 null**——静默会被上层当成"本地无缓存"
@@ -246,8 +240,8 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
 | 11 附件本地缓存 | 第 5 步 | ✅ 密文缓存 + 前台存活明文 |
 | 12 通讯录本地副本 | 第 6 步 | ✅ 本地 KV 密文 |
 
-全部业务密钥出自 CID 稳定数据根，各用途域隔离；CID 换绑由当前新账户重新包装同一根，
-已落盘密文无需重写。
+全部业务密钥由 finalized 当前绑定账户 child 直接派生，各用途域隔离；CID 换绑由当前
+新账户派生新钥，已落盘密文无需重写但不能由新账户解密。
 
 **仍未覆盖的明文面（须知悉，不在本卡范围）**：iOS 端 `HardwareBoundSeedVault`
 无原生桥（线程 B 负责），故 iOS 上 child mini-secret 的硬件保护弱于 Android，
@@ -258,20 +252,18 @@ AES-256-GCM）；缺的是**下载解密后直接明文写进长期附件缓存*
 按 `memory/07-ai/audit-recipe.md` 对本卡六步产出做自审,发现 **1 个 CRITICAL + 1 个
 HIGH + 1 个 MEDIUM**,均已修复。
 
-#### 🔴 A(CRITICAL,最终修复)账户信封曾被误当成身份数据根
+#### 🔴 A(CRITICAL,最终修复)曾错误增加账户之外的私有数据主钥
 
-旧实现把随机根与账户绑定，并试图在换绑时依赖此前账户解包再重封装；此前账户私钥或设备
-不可用时会导致全部本地密文不可读。最终修复改为三层模型：数据永久归 CID，稳定数据根
-由 CID 层按当前 finalized 绑定发放，当前账户仅包装。接管顺序固定为：
+最终修复不保留随机主钥或账户间重封装：数据永久归 CID，私有数据用途密钥只由 finalized
+当前绑定账户 child 直接派生。接管顺序固定为：
 
-1. 当前新账户签一次性挑战；
-2. Worker 前后两次核验 finalized `cid + revision + account`；
-3. 新账户包装同一根并读回校验；
-4. 派生 CID 用途子钥并登记当前设备；
-5. 写完整接管标记后清低版本包装。
+1. 读取 finalized `genesis_hash + cid_number + binding_revision + account_id`；
+2. 当前新账户派生验证钥并激活公开绑定元数据；
+3. 派生各用途子钥并登记当前设备；
+4. 清理旧内存钥和旧凭证，不读取旧账户材料。
 
-测试覆盖此前账户零输入、错误新账户 secret、摘要不符、revision 回退/冲突、同 CID 子钥
-稳定、旧密文换绑后可解和低版本包装清理。
+测试覆盖此前账户零输入、错误当前账户、revision 回退/冲突、同账户跨设备稳定、用途隔离
+以及新账户不能解密旧账户历史密文。
 
 #### 🟠 B(HIGH,已修)打开会话会解密该会话全部媒体
 
@@ -285,13 +277,13 @@ HIGH + 1 个 MEDIUM**,均已修复。
 
 #### 🟡 C(MEDIUM,已修)`ChatCrypto.evict` 死代码
 
-零调用点。核验确认**不是正确性问题**：缓存按当前绑定校验，且换绑后 CID 数据根与
-五把子钥都不变,无陈旧风险。按「无残桩」死规则删除,并留注释说明为何不需要。
+零调用点。缓存现按完整绑定版本校验；换绑后新账户得到不同子钥。按「无残桩」死规则
+删除死代码，换绑清理由当前绑定生命周期统一处理。
 
 #### 最终订正
 
-早期“账户间重包装即可接管”的方案已撤销。O(1) 的正确含义是：当前新账户从 CID 层领取
-同一稳定数据根并创建自己的包装，不扫描或重写业务密文，也不要求此前账户参与。
+早期账户间重包装方案已撤销。当前新账户只从自己的 child 派生新用途子钥，不扫描或重写
+业务密文，也不要求此前账户参与；旧账户历史私有密文不保证可由新账户解密。
 
 #### 根因反思(给后续 auditor)
 

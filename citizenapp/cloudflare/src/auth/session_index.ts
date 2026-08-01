@@ -67,7 +67,7 @@ export async function clearIdentitySessions(
   }
 }
 
-/// 换绑吊销只失效同一 CID 下由旧账户签发的会话，新账户会话必须保留。
+/// 换绑吊销只失效同一 CID 下由此前账户签发的会话，新账户会话必须保留。
 export async function clearIdentityAccountSessions(
   env: Env,
   cidNumber: string,

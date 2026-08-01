@@ -32,6 +32,11 @@ class ChatCloudTransport implements ChatTransport {
   final Duration requestTimeout;
   final http.Client _httpClient;
 
+  /// 当前绑定失效时关闭该上下文持有的 HTTP 连接池。
+  void dispose() {
+    _httpClient.close();
+  }
+
   @override
   ChatTransportType get type => ChatTransportType.cloudflare;
 

@@ -835,7 +835,7 @@ void main() {
       ]);
       final rebind =
           PayloadDecoder.readCidRebindAuthorizationTemplate(rebindTemplate);
-      expect(rebind?.expectedOldAccountId, '0x${'55' * 32}');
+      expect(rebind?.currentAccountId, '0x${'55' * 32}');
       expect(rebind?.expectedBindingRevision, 7);
       expect(rebind?.materialize(selectedAccount), isNotNull);
       expect(

@@ -35,8 +35,8 @@ connector 没跟着装回。Tunnel `242190b5-…` 两端无 connector，边缘�
 ## 影响
 
 1. 设备子钥绑定失败 → 聊天/广场落 `IdentityRegistrationGate` 的 `bindFailed`
-   「设备绑定未完成」。链路：`ensureDeviceSubkeyBound` → `takeoverCidDataRoot`
-   → Worker `requireCurrentFinalizedBinding` 读链拿不到当前 CID 绑定 →
+   「设备绑定未完成」。链路：`ensureDeviceSubkeyBound` → Worker 设备登记
+   → `requireCurrentFinalizedBinding` 读链拿不到当前 CID 绑定 →
    401 `cid_binding_changed`（或 CHAIN_URL 未配时 503 `chain_rpc_not_configured`）。
 2. `smoldot_client.dart` 的 `_bootstrapMatchesLocalSpec` 因 state_root 不匹配，
    每次启动都走「链启动清单与本地 chainspec 不一致，跳过远端 bootnodes」，

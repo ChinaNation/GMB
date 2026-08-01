@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { listContactsRoute, putContactRoute } from '../src/contacts/service';
+import {
+  deleteContactRoute,
+  listContactsRoute,
+  putContactRoute
+} from '../src/contacts/service';
 import { getMembership } from '../src/membership/service';
 import type { Env, MembershipRow, SessionState } from '../src/types';
 
-// R6 门禁核心:换绑前后同一身份主键 cid_number 的社交数据不丢。
+// R6 门禁核心：有当前钱包签名时，换绑前后同一身份主键 cid_number 的云端私有数据不丢。
 // 模型:cid = 稳定身份主键(用户不可改);account_id = 控制该身份的钱包账户(可换绑)。
-// worker 所有用户数据按 cid 归属,故账户 A 写入的数据,换绑到账户 B(同一 cid)后仍可取回。
+// Worker 只保存绑定版本隔离的密文；端侧在换绑前用当前账户解密、用新账户重加密。
 const CID_X = 'CN220-CTZN2-198805200-2026';
+const GENESIS_HASH = `0x${'12'.repeat(32)}`;
 const ACCOUNT_A = '0x1111111111111111111111111111111111111111111111111111111111111111';
 const ACCOUNT_B = '0x2222222222222222222222222222222222222222222222222222222222222222';
-const CONTACT_ID = 'ab'.repeat(32); // 64 位小写 hex
-const STABLE_CID_DATA_ROOT = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
+const CONTACT_ID_A = 'ab'.repeat(32); // 换绑前当前账户索引钥派生的不透明 ID
+const CONTACT_ID_B = 'cd'.repeat(32); // 新账户索引钥派生的不透明 ID
+const ACCOUNT_SECRET_A = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
+const ACCOUNT_SECRET_B = Uint8Array.from({ length: 32 }, (_, index) => index + 65);
 const CONTACT_PLAINTEXT = new TextEncoder().encode(
   JSON.stringify({ owner_cid_number: CID_X, cid_number: 'CN220-CTZN2-198805201-2026' })
 );
@@ -50,6 +57,8 @@ function sessionKv(): KVNamespace {
 
 interface ContactRow {
   cid_number: string;
+  binding_revision: number;
+  account_id: string;
   contact_id: string;
   ciphertext: string;
   nonce: string;
@@ -57,7 +66,7 @@ interface ContactRow {
   updated_at: number;
 }
 
-/// 通讯录密文表 mock,按身份主键 cid_number 归属(对齐 R4 真实 schema)。
+/// 通讯录密文表 mock,按 CID + 绑定版本 + 当前账户隔离(对齐真实 schema)。
 class ContactsDb {
   readonly rows = new Map<string, ContactRow>();
   prepare(sql: string): ContactsStmt {
@@ -76,23 +85,36 @@ class ContactsStmt {
     if (this.sql.includes('INSERT INTO square_contacts')) {
       const row: ContactRow = {
         cid_number: this.binds[0] as string,
-        contact_id: this.binds[1] as string,
-        ciphertext: this.binds[2] as string,
-        nonce: this.binds[3] as string,
-        mac: this.binds[4] as string,
-        updated_at: this.binds[5] as number
+        binding_revision: this.binds[1] as number,
+        account_id: this.binds[2] as string,
+        contact_id: this.binds[3] as string,
+        ciphertext: this.binds[4] as string,
+        nonce: this.binds[5] as string,
+        mac: this.binds[6] as string,
+        updated_at: this.binds[7] as number
       };
-      this.db.rows.set(`${row.cid_number}:${row.contact_id}`, row);
+      const key = `${row.cid_number}:${row.binding_revision}:${row.account_id}:${row.contact_id}`;
+      this.db.rows.set(key, row);
       return { meta: { changes: 1 } };
+    }
+    if (this.sql.includes('DELETE FROM square_contacts')) {
+      const key = `${this.binds[0] as string}:${this.binds[1] as number}:` +
+        `${this.binds[2] as string}:${this.binds[3] as string}`;
+      return { meta: { changes: this.db.rows.delete(key) ? 1 : 0 } };
     }
     return { meta: { changes: 0 } };
   }
   async all<T>(): Promise<{ results: T[] }> {
     if (this.sql.includes('FROM square_contacts')) {
       const cidNumber = this.binds[0] as string;
+      const bindingRevision = this.binds[1] as number;
+      const accountId = this.binds[2] as string;
       const limit = this.binds[this.binds.length - 1] as number;
       const rows = [...this.db.rows.values()]
-        .filter((row) => row.cid_number === cidNumber)
+        .filter((row) =>
+          row.cid_number === cidNumber &&
+          row.binding_revision === bindingRevision &&
+          row.account_id === accountId)
         .slice(0, limit);
       return { results: rows as T[] };
     }
@@ -106,13 +128,33 @@ function env(db: ContactsDb): Env {
 
 function putRequest(
   token: string,
-  encrypted: { ciphertext: string; nonce: string; mac: string }
+  contactId: string,
+  encrypted: {
+    binding_revision: number;
+    account_id: string;
+    ciphertext: string;
+    nonce: string;
+    mac: string;
+  }
 ): Request {
-  return new Request(`https://worker.test/v1/square/contacts/${CONTACT_ID}`, {
+  return new Request(`https://worker.test/v1/square/contacts/${contactId}`, {
     method: 'PUT',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ ...encrypted, updated_at: 1_000 })
   });
+}
+
+function deleteRequest(
+  token: string,
+  contactId: string,
+  bindingRevision: number,
+  accountId: string
+): Request {
+  return new Request(
+    `https://worker.test/v1/square/contacts/${contactId}` +
+      `?binding_revision=${bindingRevision}&account_id=${accountId}`,
+    { method: 'DELETE', headers: { authorization: `Bearer ${token}` } }
+  );
 }
 
 function listRequest(token: string): Request {
@@ -142,20 +184,28 @@ function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
   ) as ArrayBuffer;
 }
 
-async function contactCloudKey(dataRoot: Uint8Array): Promise<CryptoKey> {
+async function contactCloudKey(
+  accountSecret: Uint8Array,
+  accountId: string,
+  bindingRevision: number
+): Promise<CryptoKey> {
   const baseKey = await crypto.subtle.importKey(
     'raw',
-    arrayBuffer(dataRoot),
+    arrayBuffer(accountSecret),
     'HKDF',
     false,
     ['deriveKey']
   );
+  const saltMaterial = new TextEncoder().encode(
+    `citizenapp.account-data/binding|${GENESIS_HASH}|${CID_X}|${bindingRevision}|${accountId}`
+  );
+  const salt = await crypto.subtle.digest('SHA-256', arrayBuffer(saltMaterial));
   return crypto.subtle.deriveKey(
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      salt: new TextEncoder().encode('citizenapp.cid/subkey'),
-      info: new TextEncoder().encode('citizenapp.cid/contacts-cloud')
+      salt,
+      info: new TextEncoder().encode('citizenapp.account-data/contacts-cloud')
     },
     baseKey,
     { name: 'AES-GCM', length: 256 },
@@ -164,29 +214,44 @@ async function contactCloudKey(dataRoot: Uint8Array): Promise<CryptoKey> {
   );
 }
 
-async function encryptContactWithStableRoot(): Promise<{
+async function encryptContact(
+  plaintext: Uint8Array,
+  accountSecret: Uint8Array,
+  accountId: string,
+  bindingRevision: number,
+  nonceOffset: number
+): Promise<{
+  binding_revision: number;
+  account_id: string;
   ciphertext: string;
   nonce: string;
   mac: string;
 }> {
-  const nonce = Uint8Array.from({ length: 12 }, (_, index) => index + 17);
+  const nonce = Uint8Array.from({ length: 12 }, (_, index) => index + nonceOffset);
   const sealed = new Uint8Array(await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: arrayBuffer(nonce), tagLength: 128 },
-    await contactCloudKey(STABLE_CID_DATA_ROOT),
-    arrayBuffer(CONTACT_PLAINTEXT)
+    await contactCloudKey(accountSecret, accountId, bindingRevision),
+    arrayBuffer(plaintext)
   ));
   return {
+    binding_revision: bindingRevision,
+    account_id: accountId,
     ciphertext: bytesToBase64Url(sealed.slice(0, -16)),
     nonce: bytesToBase64Url(nonce),
     mac: bytesToBase64Url(sealed.slice(-16))
   };
 }
 
-async function decryptContactWithStableRoot(encrypted: {
+async function decryptContactWithCurrentAccount(
+  encrypted: {
   ciphertext: string;
   nonce: string;
   mac: string;
-}): Promise<Uint8Array> {
+  },
+  accountSecret: Uint8Array,
+  accountId: string,
+  bindingRevision: number
+): Promise<Uint8Array> {
   const ciphertext = base64UrlToBytes(encrypted.ciphertext);
   const mac = base64UrlToBytes(encrypted.mac);
   const sealed = new Uint8Array(ciphertext.length + mac.length);
@@ -198,24 +263,59 @@ async function decryptContactWithStableRoot(encrypted: {
       iv: arrayBuffer(base64UrlToBytes(encrypted.nonce)),
       tagLength: 128
     },
-    await contactCloudKey(STABLE_CID_DATA_ROOT),
+    await contactCloudKey(accountSecret, accountId, bindingRevision),
     arrayBuffer(sealed)
   ));
 }
 
 describe('换绑不丢:同一 cid_number 的社交数据跨账户存续', () => {
-  it('账户 A 写入的通讯录密文,换绑到账户 B(同一 cid)后仍可取回', async () => {
+  it('当前钱包签名时端侧重加密，新钱包接管后可解密且此前版本被清理', async () => {
     const db = new ContactsDb();
-    const encrypted = await encryptContactWithStableRoot();
+    const encryptedA = await encryptContact(
+      CONTACT_PLAINTEXT,
+      ACCOUNT_SECRET_A,
+      ACCOUNT_A,
+      1,
+      17
+    );
 
-    // 账户 A 使用 CID 稳定数据根派生 contacts-cloud 子钥并写入真实 AES-GCM 密文。
-    const putResponse = await putContactRoute(putRequest('tok-a', encrypted), env(db), CONTACT_ID);
+    // 账户 A 直接派生 contacts-cloud 子钥并写入真实 AES-GCM 密文。
+    const putResponse = await putContactRoute(
+      putRequest('tok-a', CONTACT_ID_A, encryptedA),
+      env(db),
+      CONTACT_ID_A
+    );
     expect(((await putResponse.json()) as { applied: boolean }).applied).toBe(true);
-    // 数据按身份主键 cid_number 归属(非账户 A)。
-    expect(db.rows.has(`${CID_X}:${CONTACT_ID}`)).toBe(true);
-    expect(db.rows.get(`${CID_X}:${CONTACT_ID}`)?.cid_number).toBe(CID_X);
+    expect(db.rows.has(`${CID_X}:1:${ACCOUNT_A}:${CONTACT_ID_A}`)).toBe(true);
 
-    // 换绑:同一 cid 现绑定账户 B。账户 B 的会话拉取通讯录仍按 cid_number 命中同一密文。
+    // 同一个换绑确认流程内：当前账户先解密，新账户立即重加密并只在客户端暂存。
+    const plaintext = await decryptContactWithCurrentAccount(
+      encryptedA,
+      ACCOUNT_SECRET_A,
+      ACCOUNT_A,
+      1
+    );
+    const encryptedB = await encryptContact(
+      plaintext,
+      ACCOUNT_SECRET_B,
+      ACCOUNT_B,
+      2,
+      41
+    );
+    await expect(putContactRoute(
+      putRequest('tok-a', CONTACT_ID_B, encryptedB),
+      env(db),
+      CONTACT_ID_B
+    )).rejects.toMatchObject({ code: 'contact_binding_not_allowed' });
+    expect(db.rows.has(`${CID_X}:2:${ACCOUNT_B}:${CONTACT_ID_B}`)).toBe(false);
+
+    // 链上换绑 finalized 后，账户 B 的当前会话上传暂存密文，再回读并成功解密。
+    const uploaded = await putContactRoute(
+      putRequest('tok-b', CONTACT_ID_B, encryptedB),
+      env(db),
+      CONTACT_ID_B
+    );
+    expect(((await uploaded.json()) as { applied: boolean }).applied).toBe(true);
     const listResponse = await listContactsRoute(listRequest('tok-b'), env(db));
     const body = (await listResponse.json()) as {
       items: Array<{
@@ -226,14 +326,37 @@ describe('换绑不丢:同一 cid_number 的社交数据跨账户存续', () => 
       }>;
     };
     expect(body.items).toHaveLength(1);
-    expect(body.items[0].contact_id).toBe(CONTACT_ID);
-    expect(body.items[0].ciphertext).toBe(encrypted.ciphertext);
-    // B 不使用 A 的钱包密钥，只凭该 CID 接管后的同一稳定数据根即可解开 A 时期密文。
-    expect(Array.from(await decryptContactWithStableRoot(body.items[0])))
-      .toEqual(Array.from(CONTACT_PLAINTEXT));
-    // 响应不下发属主键(cid_number/account_id 均不出现在联系人项)。
+    expect(body.items[0].contact_id).toBe(CONTACT_ID_B);
+    expect(body.items[0].ciphertext).toBe(encryptedB.ciphertext);
+    expect(Array.from(await decryptContactWithCurrentAccount(
+      body.items[0],
+      ACCOUNT_SECRET_B,
+      ACCOUNT_B,
+      2
+    ))).toEqual(Array.from(CONTACT_PLAINTEXT));
+    await expect(decryptContactWithCurrentAccount(
+      body.items[0],
+      ACCOUNT_SECRET_A,
+      ACCOUNT_A,
+      1
+    )).rejects.toThrow();
+
+    // 新账户确认接管后清理此前绑定版本；源密文只在新版本可用之后删除。
+    const deleted = await deleteContactRoute(
+      deleteRequest('tok-b', CONTACT_ID_A, 1, ACCOUNT_A),
+      env(db),
+      CONTACT_ID_A
+    );
+    expect(((await deleted.json()) as { deleted: boolean }).deleted).toBe(true);
+    expect(db.rows.has(`${CID_X}:1:${ACCOUNT_A}:${CONTACT_ID_A}`)).toBe(false);
+    expect(db.rows.has(`${CID_X}:2:${ACCOUNT_B}:${CONTACT_ID_B}`)).toBe(true);
+    expect(((await (await listContactsRoute(listRequest('tok-a'), env(db))).json()) as {
+      items: unknown[];
+    }).items).toEqual([]);
+
+    // 响应不下发属主 CID；账户和 revision 是解密所需的公开绑定上下文。
     expect(Object.keys(body.items[0]).sort()).toEqual([
-      'ciphertext', 'contact_id', 'mac', 'nonce', 'updated_at'
+      'account_id', 'binding_revision', 'ciphertext', 'contact_id', 'mac', 'nonce', 'updated_at'
     ]);
   });
 

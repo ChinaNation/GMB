@@ -32,7 +32,7 @@
 7. `b.d` 解码为非空 `review_payload`
 8. 普通动作要求当前钱包 `account_id` 等于规范化后的 `b.u`；当前 sr25519
    `AccountId32` 直接取签名公钥 32 字节。占号/换绑则要求完整模板严格解码、外层
-   `e == expires_at`，并禁止换绑新旧账户相同
+   `e == expires_at`，并禁止换绑当前账户与新账户相同
 
 业务识别:
 
@@ -46,7 +46,7 @@
 8. `citizen_occupy` 必须严格解码
    `genesis_hash + bounded cid + 32B 零 account 槽 + revision=0 + expires_at`；
    `citizen_rebind` 必须严格解码
-   `genesis_hash + bounded cid + expected_old_account_id + 32B 零 new_account 槽`
+   `genesis_hash + bounded cid + current_account_id + 32B 零 new_account 槽`
    `+ nonzero revision + expires_at`。零槽污染、尾字节或旧 CID-only 载荷一律拒签。
 
 签名字节:
@@ -181,7 +181,7 @@ UTF-8 和重复账户一律红色拒签。
 - `citizenapp/lib/signer/square_action_sign_service.dart` 在触发钱包私钥签名前完成 action 登记、中文动作名、payload 中文展示、账户匹配和冷钱包边界校验。任一失败只返回拒绝,不得触发签名。
 - `citizenapp/lib/signer/qr_signer.dart` 与
   `citizenapp/lib/signer/citizen_occupy_sign_service.dart` 严格解码注册局授权模板、核对
-  零槽/revision/内外过期时间/无尾字节并原位填入账户；确认页展示创世哈希、CID、旧账户
+  零槽/revision/内外过期时间/无尾字节并原位填入账户；确认页展示创世哈希、CID、当前账户
   （换绑）、绑定版本、过期时间和所选账户。
 - `citizenapp/lib/qr/scan_dispatch_flow.dart` 和 `citizenapp/lib/qr/pages/qr_sign_response_page.dart` 只展示中文动作名和中文字段列表,不得恢复英文 action key、动作数字或原始 payload 展示。
 

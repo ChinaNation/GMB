@@ -302,7 +302,7 @@ void main() {
       expect(actual, viaPrimitive);
     });
 
-    test('完整模板解码展示创世、旧账户、revision 和 expires', () {
+    test('完整模板解码展示创世、当前账户、revision 和 expires', () {
       const cid = 'CN220-CTZN2-198805200-2026';
       final occupy = QrSigner.decodeCidAccountAuthorizationTemplate(
         action: QrActions.citizenOccupy,
@@ -311,7 +311,7 @@ void main() {
       );
       expect(occupy?.genesisHash, '0x${'44' * 32}');
       expect(occupy?.cidNumber, cid);
-      expect(occupy?.expectedOldAccountId, isNull);
+      expect(occupy?.currentAccountId, isNull);
       expect(occupy?.expectedBindingRevision, BigInt.zero);
       expect(occupy?.expiresAt, BigInt.from(1800000000));
 
@@ -322,7 +322,7 @@ void main() {
       );
       expect(rebind?.genesisHash, '0x${'44' * 32}');
       expect(rebind?.cidNumber, cid);
-      expect(rebind?.expectedOldAccountId, '0x${'55' * 32}');
+      expect(rebind?.currentAccountId, '0x${'55' * 32}');
       expect(rebind?.expectedBindingRevision, BigInt.from(7));
       expect(rebind?.expiresAt, BigInt.from(1800000000));
     });

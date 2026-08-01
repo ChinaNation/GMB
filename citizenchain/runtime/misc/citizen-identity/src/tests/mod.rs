@@ -40,13 +40,13 @@ fn cid_authorization_scale_contract_keeps_canonical_field_order() {
 
     let genesis_hash = sp_core::H256::repeat_byte(0x11);
     let cid_number: CidNumberBound = b"CID-AUTH".to_vec().try_into().expect("authorization CID");
-    let old_account_id = [0x22u8; 32];
+    let current_account_id = [0x22u8; 32];
     let new_account_id = [0x33u8; 32];
 
     let rebind = CidRebindAuthorization {
         genesis_hash,
         cid_number: cid_number.clone(),
-        expected_old_account_id: old_account_id,
+        current_account_id: current_account_id,
         new_account_id,
         expected_binding_revision: 7,
         expires_at: 8,
@@ -56,7 +56,7 @@ fn cid_authorization_scale_contract_keeps_canonical_field_order() {
         (
             genesis_hash,
             cid_number.clone(),
-            old_account_id,
+            current_account_id,
             new_account_id,
             7u64,
             8u64,
@@ -409,7 +409,7 @@ fn rebind_signature_bytes(account_id: &u64, payload: &[u8]) -> [u8; 32] {
 
 fn rebind_authorization(
     cid_number: &[u8],
-    old_account_id: u64,
+    current_account_id: u64,
     new_account_id: u64,
     expected_binding_revision: u64,
     expires_at: u64,
@@ -417,7 +417,7 @@ fn rebind_authorization(
     CidRebindAuthorization {
         genesis_hash: System::block_hash(0),
         cid_number: cid(cid_number),
-        expected_old_account_id: old_account_id,
+        current_account_id: current_account_id,
         new_account_id,
         expected_binding_revision,
         expires_at,
@@ -427,14 +427,14 @@ fn rebind_authorization(
 fn rebind_signature(
     signer_account_id: u64,
     cid_number: &[u8],
-    old_account_id: u64,
+    current_account_id: u64,
     new_account_id: u64,
     expected_binding_revision: u64,
     expires_at: u64,
 ) -> pallet::SignatureOf<Test> {
     let payload = rebind_authorization(
         cid_number,
-        old_account_id,
+        current_account_id,
         new_account_id,
         expected_binding_revision,
         expires_at,
@@ -685,7 +685,7 @@ fn self_rebind_cid_account_id_moves_binding_to_new_account_id() {
             cid(&cid_bytes),
         ));
         let expires_at = rebind_expires_at();
-        // 新账户 2 作 origin(证新账户受控),旧账户 1 授权签名。
+        // 新账户 2 作 origin(证新账户受控)，当前账户 1 授权签名。
         assert_ok!(CitizenIdentity::self_rebind_cid_account_id(
             RuntimeOrigin::signed(2),
             cid(&cid_bytes),
@@ -693,7 +693,7 @@ fn self_rebind_cid_account_id_moves_binding_to_new_account_id() {
             expires_at,
             rebind_signature(1, &cid_bytes, 1, 2, 1, expires_at),
         ));
-        // 换绑后:cid 绑新账户 2,旧账户 1 反向索引清除。
+        // 换绑后：CID 绑定新账户 2，此前账户 1 的反向索引清除。
         assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(2));
         assert_eq!(CidByAccountId::<Test>::get(2), Some(cid(&cid_bytes)));
         assert_eq!(CidByAccountId::<Test>::get(1), None);
@@ -718,7 +718,7 @@ fn self_rebind_cid_account_id_rejects_unoccupied_cid() {
 }
 
 #[test]
-fn self_rebind_cid_account_id_rejects_invalid_old_signature() {
+fn self_rebind_cid_account_id_rejects_invalid_current_account_signature() {
     new_test_ext().execute_with(|| {
         let cid_bytes = citizen_cid_number("rebind2");
         assert_ok!(CitizenIdentity::self_occupy_cid(
@@ -2301,8 +2301,8 @@ fn revoked_cid_rejects_self_and_admin_rebind_without_state_changes() {
         let cid_bytes = citizen_cid_number("RV-REBIND");
         occupy_tag_as("RV-REBIND", 1);
         let expires_at = rebind_expires_at();
-        let old_self_authorization = rebind_signature(1, &cid_bytes, 1, 2, 1, expires_at);
-        let old_admin_authorization = rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at);
+        let previous_self_authorization = rebind_signature(1, &cid_bytes, 1, 2, 1, expires_at);
+        let previous_admin_authorization = rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at);
 
         assert_ok!(CitizenIdentity::revoke_cid(
             RuntimeOrigin::signed(100),
@@ -2320,7 +2320,7 @@ fn revoked_cid_rejects_self_and_admin_rebind_without_state_changes() {
                 cid_number.clone(),
                 1,
                 expires_at,
-                old_self_authorization,
+                previous_self_authorization,
             ),
             Error::<Test>::CidAlreadyRevoked
         );
@@ -2333,7 +2333,7 @@ fn revoked_cid_rejects_self_and_admin_rebind_without_state_changes() {
                 2,
                 1,
                 expires_at,
-                old_admin_authorization,
+                previous_admin_authorization,
             ),
             Error::<Test>::CidAlreadyRevoked
         );

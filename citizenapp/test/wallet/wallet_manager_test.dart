@@ -28,22 +28,20 @@ String _coldSs58(int byte) =>
 String _hex(List<int> b) =>
     b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 
-CidDataRoot _recoveredDataRoot() => CidDataRoot(
-    Uint8List.fromList(List<int>.generate(32, (index) => index + 7)));
+const _genesisHash =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
 
-Future<void> _installRecoveredDataRoot(
+Future<void> _activateAccountDataBinding(
   WalletManager manager, {
   required String cidNumber,
   required int bindingRevision,
   required String accountId,
 }) async {
-  final dataRoot = _recoveredDataRoot();
-  await manager.installCidDataRootForCurrentBinding(
+  await manager.activateAccountDataBinding(
+    genesisHash: _genesisHash,
     cidNumber: cidNumber,
     bindingRevision: bindingRevision,
     accountId: accountId,
-    dataRoot: dataRoot,
-    dataRootHash: await CidDataRootVault.dataRootHash(dataRoot),
   );
 }
 
@@ -165,15 +163,12 @@ void main() {
   });
 
   group('WalletManager — 热钱包创建/导入/删除（ROOTLESS）', () {
-    test('通讯录密钥只读写新域并主动删除旧命名残留', () async {
+    test('通讯录密钥只由当前钱包派生且不落安全存储', () async {
       final manager = WalletManager();
       final created = await manager.importWallet(_mnemonicA);
       final accountId = created.accountId;
-      final legacyKey = 'wallet_contacts_key_v1_$accountId';
       const cidNumber = 'GD-CTZN1-TEST';
-      const currentKey = 'citizenapp_cid_contacts_key_GD-CTZN1-TEST';
-      contactBlobStore.values[legacyKey] = '旧派生密钥';
-      await _installRecoveredDataRoot(
+      await _activateAccountDataBinding(
         manager,
         cidNumber: cidNumber,
         bindingRevision: 1,
@@ -185,8 +180,12 @@ void main() {
 
       expect(material.encryptionKey, hasLength(32));
       expect(material.indexKey, hasLength(32));
-      expect(contactBlobStore.values, isNot(contains(legacyKey)));
-      expect(contactBlobStore.values, contains(currentKey));
+      expect(material.encryptionKey, isNot(material.indexKey));
+      expect(
+        contactBlobStore.values.keys,
+        [AccountDataBindingStore.activeBindingKey],
+        reason: '安全存储只允许保存公开绑定元数据，不保存派生密钥',
+      );
     });
 
     test('create/import/delete 只存账户0 child，不存种子/助记词', () async {
@@ -242,8 +241,13 @@ void main() {
         wallet.accountId,
         _mnemonicA,
       );
+      expect(
+        await manager.walletIndexForAccountId(account1.accountId),
+        wallet.walletIndex,
+        reason: '设备子钥必须按当前 account_id 定位其实际所属热钱包',
+      );
 
-      await _installRecoveredDataRoot(
+      await _activateAccountDataBinding(
         manager,
         cidNumber: 'GD-CTZN1-TEST',
         bindingRevision: 1,
@@ -266,7 +270,7 @@ void main() {
           (isar) => isar.appKvEntitys.getByKey(contactKey),
         ),
         isNotNull,
-        reason: '删除换绑后的旧账户不得删除永久 CID 的本机数据',
+        reason: '删除换绑后的此前账户不得删除永久 CID 的本机数据',
       );
 
       await manager.deleteWallet(wallet.walletIndex);
@@ -285,7 +289,7 @@ void main() {
       final manager = WalletManager();
       final hot = await manager.importWallet(_mnemonicA);
       final cold = await manager.importColdWallet(ss58Address: _coldSs58(0x44));
-      await _installRecoveredDataRoot(
+      await _activateAccountDataBinding(
         manager,
         cidNumber: 'GD-CTZN1-TEST',
         bindingRevision: 1,
@@ -360,48 +364,55 @@ void main() {
       expect(def.isHotWallet, isTrue);
     });
 
-    test('A/B 助记词完全不同且 A 全部秘密已删，B 仍用同一 CID 根解密旧密文', () async {
+    test('换绑到不同钱包后新账户不能直接解密此前账户历史私有密文', () async {
       const cidNumber = 'CN220-CTZN2-198805200-2026';
       final aad = '${LocalKeyPurpose.chat.domain}|message-before-rebind';
       final manager = WalletManager();
       final walletA = await manager.importWallet(_mnemonicA);
-      await _installRecoveredDataRoot(
+      await _activateAccountDataBinding(
         manager,
         cidNumber: cidNumber,
         bindingRevision: 1,
         accountId: walletA.accountId,
       );
-      final keyA = await _recoveredDataRoot().subkey(LocalKeyPurpose.chat);
+      final keyA = await manager.deriveDataKeyForCurrentBinding(
+        walletA.accountId,
+        LocalKeyPurpose.chat,
+      );
       final oldCiphertext = await LocalCipher.encryptString(
         key: keyA,
         plaintext: 'A 钱包时期的 CID 私有数据',
         aad: aad,
       );
 
-      // 模拟旧钱包、旧设备和旧缓存全部不可用：删除 A 整只热钱包及其本机数据根包装。
+      // 删除 A 整只热钱包后只剩此前密文；系统没有可供 B 领取的额外数据密钥。
       await manager.deleteWallet(walletA.walletIndex);
       expect(fakeStore.accountKeys, isEmpty);
       expect(
-        contactBlobStore.values[CidDataRootVault.activeBindingKey],
+        contactBlobStore.values[AccountDataBindingStore.activeBindingKey],
         isNull,
       );
 
       final walletB = await manager.importWallet(_mnemonicB);
       expect(walletB.accountId, isNot(walletA.accountId));
-      await _installRecoveredDataRoot(
+      await _activateAccountDataBinding(
         manager,
         cidNumber: cidNumber,
         bindingRevision: 2,
         accountId: walletB.accountId,
       );
-      final keyB = await _recoveredDataRoot().subkey(LocalKeyPurpose.chat);
-      expect(
-        await LocalCipher.decryptString(
+      final keyB = await manager.deriveDataKeyForCurrentBinding(
+        walletB.accountId,
+        LocalKeyPurpose.chat,
+      );
+      expect(keyB, isNot(keyA));
+      await expectLater(
+        LocalCipher.decryptString(
           key: keyB,
           blob: oldCiphertext,
           aad: aad,
         ),
-        'A 钱包时期的 CID 私有数据',
+        throwsA(isA<LocalCipherException>()),
       );
       expect(fakeStore.accountKeys.containsKey(walletA.accountId), isFalse);
     });

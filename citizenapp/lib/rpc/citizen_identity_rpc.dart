@@ -19,13 +19,13 @@ import 'signed_extrinsic_builder.dart';
 class SelfRebindAuthorizationContext {
   const SelfRebindAuthorizationContext({
     required this.genesisHash,
-    required this.expectedOldAccountId,
+    required this.currentAccountId,
     required this.expectedBindingRevision,
     required this.expiresAt,
   });
 
   final Uint8List genesisHash;
-  final String expectedOldAccountId;
+  final String currentAccountId;
   final BigInt expectedBindingRevision;
 
   /// Unix 秒。由 finalized `Timestamp.Now` 推导，不信任设备墙钟。
@@ -37,8 +37,8 @@ class SelfRebindAuthorizationContext {
 /// 两条 call 均由用户本人钱包自签、自付最低链上费(immortal、tip 0),不经注册局:
 /// - `self_occupy_cid`(call 5):一笔自签占一个 CN 前缀匿名 CID + 占即绑本账户。
 ///   account_id 由 origin 派生,commitment 链上算,client 只送 cid_number。
-/// - `self_rebind_cid_account_id`(call 9):把 CID 从旧账户换绑到新账户。origin = 新账户
-///   (自签即证新账户受控),另附旧账户对创世、当前绑定、绑定修订号与时效的域分离授权签名。
+/// - `self_rebind_cid_account_id`(call 9):把 CID 换绑到新账户。origin = 新账户
+///   (自签即证新账户受控),另附当前账户对创世、当前绑定、绑定修订号与时效的域分离授权签名。
 ///
 /// SCALE 布局逐字节镜像 citizenchain `runtime/misc/citizen-identity/src/lib.rs`;
 /// CID 编码为 `CidNumberBound = BoundedVec<u8, ConstU32<32>>`,签名编码为
@@ -103,43 +103,34 @@ class CitizenIdentityRpc {
     return result;
   }
 
-  /// 提交 `self_rebind_cid_account_id`:匿名 CID 从旧账户换绑到新账户。
+  /// 提交 `self_rebind_cid_account_id`:匿名 CID 换绑到新账户。
   ///
   /// 先在同一 finalized 区块读取当前绑定账户、`BindingRevisionByCid` 与链上时间，
-  /// 并读取 block 0 创世哈希；只有读出的旧账户仍等于 [oldAccountId] 才签名。旧账户签
-  /// `CidRebindAuthorization`，新账户作为 origin 自签提交。修订号、旧账户、创世与过期
-  /// 时间共同阻断旧授权在后续 A→B→A 或跨链场景重放。
+  /// 并读取 block 0 创世哈希；只有读出的链上账户仍等于 [currentAccountId] 才签名。当前
+  /// 账户签 `CidRebindAuthorization`，新账户作为 origin 自签提交。修订号、当前账户、
+  /// 创世与过期时间共同阻断此前授权在后续 A→B→A 或跨链场景重放。
   Future<({String txHash, int usedNonce, String blockHashHex})>
       selfRebindCidAccount({
     required String cidNumber,
     required String newAccountId,
-    required String oldAccountId,
+    required String currentAccountId,
     required String newFromSs58Address,
+    required SelfRebindAuthorizationContext context,
+    required Uint8List currentAccountSignature,
   }) async {
-    final context = await fetchSelfRebindAuthorizationContext(cidNumber);
-    if (context.expectedOldAccountId != oldAccountId) {
+    if (context.currentAccountId != currentAccountId) {
       throw StateError('CID 当前绑定账户已经变化，请刷新身份后重试');
     }
-    // 旧账户对冻结防重放上下文的授权：sr25519 签 32 字节 signing_message 摘要。
-    final digest = buildRebindSigningDigest(
-      genesisHash: context.genesisHash,
-      cidNumber: cidNumber,
-      expectedOldAccountId: context.expectedOldAccountId,
-      newAccountId: newAccountId,
-      expectedBindingRevision: context.expectedBindingRevision,
-      expiresAt: context.expiresAt,
-    );
-    final oldSignature = await _wallet.signForAccountId(oldAccountId, digest);
-    if (oldSignature.length != _signatureBytes) {
+    if (currentAccountSignature.length != _signatureBytes) {
       throw StateError(
-        '旧账户换绑授权签名长度必须为 $_signatureBytes 字节,当前 ${oldSignature.length}',
+        '当前账户换绑授权签名长度必须为 $_signatureBytes 字节,当前 ${currentAccountSignature.length}',
       );
     }
     final callData = buildSelfRebindCidAccountCall(
       cidNumber: cidNumber,
       expectedBindingRevision: context.expectedBindingRevision,
       expiresAt: context.expiresAt,
-      oldAccountSignature: oldSignature,
+      currentAccountSignature: currentAccountSignature,
     );
     final result = await SignedExtrinsicBuilder(
       chainRpc: _rpc,
@@ -152,7 +143,7 @@ class CitizenIdentityRpc {
       waitForFinalized: true,
     );
     // 交易即使 Dispatch Failed 也会进入 finalized 区块；必须按该精确区块的存储确认
-    // 新账户与 revision+1 已生效，MyIdService 才能让当前新账户接管 CID 数据根与设备子钥。
+    // 新账户与 revision+1 已生效，MyIdService 才能激活新账户派生密钥与设备子钥。
     await verifyFinalizedBindingState(
       cidNumber: cidNumber,
       expectedAccountId: newAccountId,
@@ -190,13 +181,13 @@ class CitizenIdentityRpc {
       _rpc.fetchStorageAtBlock(_hex(timestampKey), finalizedHash),
     ]);
     final genesisHash = rows[0] as Uint8List;
-    final oldAccountId = rows[1] as Uint8List?;
+    final currentAccountId = rows[1] as Uint8List?;
     final revisionRaw = rows[2] as Uint8List?;
     final timestampRaw = rows[3] as Uint8List?;
     if (genesisHash.length != 32) {
       throw const FormatException('创世块哈希必须为 32 字节');
     }
-    if (oldAccountId == null || oldAccountId.length != 32) {
+    if (currentAccountId == null || currentAccountId.length != 32) {
       throw StateError('CID 当前没有有效绑定账户');
     }
     final revision = _decodeU64(revisionRaw, 'BindingRevisionByCid');
@@ -211,8 +202,8 @@ class CitizenIdentityRpc {
         BigInt.from(_authorizationTtlSeconds);
     return SelfRebindAuthorizationContext(
       genesisHash: Uint8List.fromList(genesisHash),
-      expectedOldAccountId:
-          '0x${SignedExtrinsicBuilder.hexEncode(oldAccountId)}',
+      currentAccountId:
+          '0x${SignedExtrinsicBuilder.hexEncode(currentAccountId)}',
       expectedBindingRevision: revision,
       expiresAt: expiresAt,
     );
@@ -274,17 +265,17 @@ class CitizenIdentityRpc {
 
   /// `self_rebind_cid_account_id` call data:
   /// `[10][9][BoundedVec(cid)][revision:u64 LE][expires_at:u64 LE]`
-  /// `[BoundedVec(old_signature=64B)]`。
+  /// `[BoundedVec(current_account_signature=64B)]`。
   @visibleForTesting
   static Uint8List buildSelfRebindCidAccountCall({
     required String cidNumber,
     required BigInt expectedBindingRevision,
     required BigInt expiresAt,
-    required Uint8List oldAccountSignature,
+    required Uint8List currentAccountSignature,
   }) {
-    if (oldAccountSignature.length != _signatureBytes) {
+    if (currentAccountSignature.length != _signatureBytes) {
       throw ArgumentError(
-        'sr25519 旧账户签名必须为 $_signatureBytes 字节,当前 ${oldAccountSignature.length}',
+        'sr25519 当前账户签名必须为 $_signatureBytes 字节,当前 ${currentAccountSignature.length}',
       );
     }
     final output = ByteOutput()
@@ -295,24 +286,23 @@ class CitizenIdentityRpc {
     output.write(_u64LittleEndian(expiresAt));
     // SignatureOf = BoundedVec<u8, MaxCitizenSignatureLength> = compact(len) ++ 字节。
     output.write(CompactBigIntCodec.codec
-        .encode(BigInt.from(oldAccountSignature.length)));
-    output.write(oldAccountSignature);
+        .encode(BigInt.from(currentAccountSignature.length)));
+    output.write(currentAccountSignature);
     return output.toBytes();
   }
 
-  /// 旧账户在自助换绑时需要签名的 32 字节摘要。
+  /// 当前账户在自助换绑时需要签名的 32 字节摘要。
   ///
   /// `payload = SCALE(CidRebindAuthorization)`，字段顺序固定为：
-  /// `genesis_hash(H256 raw32) ++ cid(BoundedVec) ++ expected_old(AccountId32)`
+  /// `genesis_hash(H256 raw32) ++ cid(BoundedVec) ++ current_account_id(AccountId32)`
   /// `++ new(AccountId32) ++ expected_revision(u64 LE) ++ expires_at(u64 LE)`；
   /// `digest  = signing_message(OP_SIGN_CID_REBIND, payload)`
   ///         `= blake2_256( GMB(3B) ++ [0x11] ++ payload )`。
   /// 逐字节对齐链端 `CidRebindAuthorization::encode()` 与 `verify_rebind_signature`。
-  @visibleForTesting
   static Uint8List buildRebindSigningDigest({
     required Uint8List genesisHash,
     required String cidNumber,
-    required String expectedOldAccountId,
+    required String currentAccountId,
     required String newAccountId,
     required BigInt expectedBindingRevision,
     required BigInt expiresAt,
@@ -323,7 +313,7 @@ class CitizenIdentityRpc {
     final payload = <int>[
       ...genesisHash,
       ..._encodedCid(cidNumber),
-      ..._accountId32(expectedOldAccountId),
+      ..._accountId32(currentAccountId),
       ..._accountId32(newAccountId),
       ..._u64LittleEndian(expectedBindingRevision),
       ..._u64LittleEndian(expiresAt),

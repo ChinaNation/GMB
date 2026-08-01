@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/security/local_cipher.dart';
 import 'package:citizenapp/security/local_data_key.dart';
 
-/// 内存版 blob 落地层，避免单测触碰真实 flutter_secure_storage。
 class _MemoryStore implements LocalKeyBlobStore {
   final Map<String, String> entries = <String, String>{};
 
@@ -20,6 +20,8 @@ class _MemoryStore implements LocalKeyBlobStore {
 }
 
 void main() {
+  const genesisHash =
+      '0x1111111111111111111111111111111111111111111111111111111111111111';
   const cidNumber = 'GD-CTZN1-8F3A2B';
   const firstAccountId =
       '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -28,254 +30,252 @@ void main() {
   final firstSecret = Uint8List.fromList(List<int>.generate(32, (i) => i));
   final secondSecret =
       Uint8List.fromList(List<int>.generate(32, (i) => 100 + i));
-  final dataRoot =
-      CidDataRoot(Uint8List.fromList(List<int>.generate(32, (i) => 200 - i)));
+  const firstBinding = AccountDataBinding(
+    genesisHash: genesisHash,
+    cidNumber: cidNumber,
+    bindingRevision: 1,
+    accountId: firstAccountId,
+  );
+  const secondBinding = AccountDataBinding(
+    genesisHash: genesisHash,
+    cidNumber: cidNumber,
+    bindingRevision: 2,
+    accountId: secondAccountId,
+  );
 
-  late _MemoryStore store;
-  late CidDataRootVault vault;
-  late String dataRootHash;
+  group('当前钱包绑定元数据', () {
+    late _MemoryStore store;
+    late AccountDataBindingStore bindingStore;
 
-  setUp(() async {
-    store = _MemoryStore();
-    vault = CidDataRootVault(store);
-    dataRootHash = await CidDataRootVault.dataRootHash(dataRoot);
-  });
+    setUp(() {
+      store = _MemoryStore();
+      bindingStore = AccountDataBindingStore(store);
+    });
 
-  group('CID 数据根安装', () {
-    test('当前账户独立安装并读回，不需要此前账户输入', () async {
-      final installed = await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 1,
-        accountId: firstAccountId,
-        accountSecret: firstSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
-      );
-      expect(installed.bytes, dataRoot.bytes);
-      final active = await vault.readActiveBinding();
+    test('只保存公开绑定字段，不保存任何派生密钥', () async {
+      await bindingStore.activate(firstBinding);
+      final active = await bindingStore.readActiveBinding();
+      expect(active?.genesisHash, genesisHash);
       expect(active?.cidNumber, cidNumber);
       expect(active?.bindingRevision, 1);
       expect(active?.accountId, firstAccountId);
-      expect(store.entries[active!.wrapperKey], isNotNull);
+      expect(store.entries.length, 1);
       expect(
-        store.entries[active.wrapperKey],
-        isNot(contains(String.fromCharCodes(dataRoot.bytes))),
-      );
-      final reopened = await vault.readForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 1,
-        accountId: firstAccountId,
-        accountSecret: firstSecret,
-      );
-      expect(reopened.bytes, dataRoot.bytes);
+          store.entries.values.single, isNot(contains(firstSecret.join(','))));
     });
 
-    test('摘要不匹配时拒绝且不落任何激活状态', () async {
+    test('绑定版本禁止回退，同版本字段冲突失败关闭', () async {
+      await bindingStore.activate(secondBinding);
       await expectLater(
-        vault.installForCurrentBinding(
+        bindingStore.activate(firstBinding),
+        throwsA(isA<AccountDataKeyException>()),
+      );
+      await expectLater(
+        bindingStore.activate(const AccountDataBinding(
+          genesisHash: genesisHash,
+          cidNumber: cidNumber,
+          bindingRevision: 2,
+          accountId: firstAccountId,
+        )),
+        throwsA(isA<AccountDataKeyException>()),
+      );
+    });
+
+    test('直接构造的无效链上绑定字段也失败关闭', () async {
+      const invalidBindings = <AccountDataBinding>[
+        AccountDataBinding(
+          genesisHash: '0x01',
           cidNumber: cidNumber,
           bindingRevision: 1,
           accountId: firstAccountId,
-          accountSecret: firstSecret,
-          dataRoot: dataRoot,
-          expectedDataRootHash: '0' * 64,
         ),
-        throwsA(isA<LocalCipherException>()),
-      );
-      expect(await vault.readActiveBinding(), isNull);
+        AccountDataBinding(
+          genesisHash: genesisHash,
+          cidNumber: '123456789012345678901234567890123',
+          bindingRevision: 1,
+          accountId: firstAccountId,
+        ),
+        AccountDataBinding(
+          genesisHash: genesisHash,
+          cidNumber: cidNumber,
+          bindingRevision: 0,
+          accountId: firstAccountId,
+        ),
+        AccountDataBinding(
+          genesisHash: genesisHash,
+          cidNumber: cidNumber,
+          bindingRevision: 1,
+          accountId: '0x01',
+        ),
+      ];
+      for (final binding in invalidBindings) {
+        await expectLater(
+          bindingStore.activate(binding),
+          throwsA(isA<AccountDataKeyException>()),
+        );
+        await expectLater(
+          AccountDataKeyDeriver.derive(
+            accountSecret: firstSecret,
+            binding: binding,
+            purpose: LocalKeyPurpose.chat,
+          ),
+          throwsA(isA<AccountDataKeyException>()),
+        );
+      }
       expect(store.entries, isEmpty);
     });
 
-    test('错误的新账户私钥不能解包', () async {
-      await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 1,
-        accountId: firstAccountId,
-        accountSecret: firstSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
+    test('换绑交接日志只保存相邻版本的公开绑定上下文并可清除', () async {
+      await bindingStore.writePendingHandover(
+        source: firstBinding,
+        target: secondBinding,
       );
-      await expectLater(
-        vault.readForCurrentBinding(
-          cidNumber: cidNumber,
-          bindingRevision: 1,
-          accountId: firstAccountId,
-          accountSecret: secondSecret,
+      final pending = await bindingStore.readPendingHandover();
+      expect(pending?.source.accountId, firstAccountId);
+      expect(pending?.target.accountId, secondAccountId);
+      expect(pending?.target.bindingRevision, 2);
+      expect(store.entries.keys, <String>[
+        AccountDataBindingStore.pendingHandoverKey,
+      ]);
+      expect(
+          store.entries.values.single, isNot(contains(firstSecret.join(','))));
+      expect(
+          store.entries.values.single, isNot(contains(secondSecret.join(','))));
+
+      await bindingStore.clearPendingHandover();
+      expect(await bindingStore.readPendingHandover(), isNull);
+      expect(store.entries, isEmpty);
+    });
+
+    test('换绑交接拒绝跨 CID、跨创世、跳版本和同账户目标', () async {
+      final invalidTargets = <AccountDataBinding>[
+        const AccountDataBinding(
+          genesisHash: genesisHash,
+          cidNumber: 'GD-CTZN1-OTHER',
+          bindingRevision: 2,
+          accountId: secondAccountId,
         ),
-        throwsA(isA<LocalCipherException>()),
+        const AccountDataBinding(
+          genesisHash:
+              '0x2222222222222222222222222222222222222222222222222222222222222222',
+          cidNumber: cidNumber,
+          bindingRevision: 2,
+          accountId: secondAccountId,
+        ),
+        const AccountDataBinding(
+          genesisHash: genesisHash,
+          cidNumber: cidNumber,
+          bindingRevision: 3,
+          accountId: secondAccountId,
+        ),
+        const AccountDataBinding(
+          genesisHash: genesisHash,
+          cidNumber: cidNumber,
+          bindingRevision: 2,
+          accountId: firstAccountId,
+        ),
+      ];
+      for (final target in invalidTargets) {
+        await expectLater(
+          bindingStore.writePendingHandover(
+            source: firstBinding,
+            target: target,
+          ),
+          throwsA(isA<AccountDataKeyException>()),
+        );
+      }
+      expect(store.entries, isEmpty);
+    });
+
+    test('已落盘交接记录被篡改成跳版本时读取也失败关闭', () async {
+      await bindingStore.writePendingHandover(
+        source: firstBinding,
+        target: secondBinding,
+      );
+      final decoded = jsonDecode(
+        store.entries[AccountDataBindingStore.pendingHandoverKey]!,
+      ) as Map<String, dynamic>;
+      (decoded['target'] as Map<String, dynamic>)['binding_revision'] = 3;
+      store.entries[AccountDataBindingStore.pendingHandoverKey] =
+          jsonEncode(decoded);
+
+      await expectLater(
+        bindingStore.readPendingHandover(),
+        throwsA(isA<AccountDataKeyException>()),
       );
     });
   });
 
-  group('用途子钥域隔离', () {
-    test('全部用途派生出互不相同的稳定子钥', () async {
-      final keys = <LocalKeyPurpose, Uint8List>{};
+  group('当前钱包账户用途子钥', () {
+    test('同一账户同一绑定跨设备派生结果一致', () async {
+      final first = await AccountDataKeyDeriver.derive(
+        accountSecret: firstSecret,
+        binding: firstBinding,
+        purpose: LocalKeyPurpose.chat,
+      );
+      final anotherDevice = await AccountDataKeyDeriver.derive(
+        accountSecret: Uint8List.fromList(firstSecret),
+        binding: firstBinding,
+        purpose: LocalKeyPurpose.chat,
+      );
+      expect(anotherDevice, first);
+    });
+
+    test('全部用途域互相隔离', () async {
+      final values = <String>{};
       for (final purpose in LocalKeyPurpose.values) {
-        keys[purpose] = await dataRoot.subkey(purpose);
-      }
-      expect(keys.length, LocalKeyPurpose.values.length);
-      for (final key in keys.values) {
-        expect(key.length, 32);
-      }
-      final distinct = keys.values.map((k) => k.join(',')).toSet();
-      expect(
-        distinct.length,
-        LocalKeyPurpose.values.length,
-        reason: '任意两个用途的子钥都不得相同',
-      );
-    });
-
-    test('数据根相同则换绑前后用途钥和密文均不变', () async {
-      final key = await dataRoot.subkey(LocalKeyPurpose.chat);
-      final blob = await LocalCipher.encryptString(
-        key: key,
-        plaintext: '换绑前聊天正文',
-        aad: '${LocalKeyPurpose.chat.domain}|msg-1',
-      );
-      await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 1,
-        accountId: firstAccountId,
-        accountSecret: firstSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
-      );
-      final after = await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 2,
-        accountId: secondAccountId,
-        accountSecret: secondSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
-      );
-      expect(await after.subkey(LocalKeyPurpose.chat), key);
-      expect(
-        await LocalCipher.decryptString(
-          key: await after.subkey(LocalKeyPurpose.chat),
-          blob: blob,
-          aad: '${LocalKeyPurpose.chat.domain}|msg-1',
-        ),
-        '换绑前聊天正文',
-      );
-    });
-  });
-
-  group('绑定版本接管', () {
-    test('新账户验证上岗后清理低版本包装', () async {
-      await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 1,
-        accountId: firstAccountId,
-        accountSecret: firstSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
-      );
-      final oldWrapper = (await vault.readActiveBinding())!.wrapperKey;
-      await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 2,
-        accountId: secondAccountId,
-        accountSecret: secondSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
-      );
-      final active = await vault.readActiveBinding();
-      expect(active?.bindingRevision, 2);
-      expect(active?.accountId, secondAccountId);
-      expect(store.entries[oldWrapper], isNull);
-      expect(
-        (await vault.readForCurrentBinding(
-          cidNumber: cidNumber,
-          bindingRevision: 2,
-          accountId: secondAccountId,
-          accountSecret: secondSecret,
-        ))
-            .bytes,
-        dataRoot.bytes,
-      );
-    });
-
-    test('本机绑定版本禁止回退', () async {
-      await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 2,
-        accountId: secondAccountId,
-        accountSecret: secondSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
-      );
-      await expectLater(
-        vault.installForCurrentBinding(
-          cidNumber: cidNumber,
-          bindingRevision: 1,
-          accountId: firstAccountId,
+        final key = await AccountDataKeyDeriver.derive(
           accountSecret: firstSecret,
-          dataRoot: dataRoot,
-          expectedDataRootHash: dataRootHash,
-        ),
-        throwsA(isA<LocalCipherException>()),
-      );
+          binding: firstBinding,
+          purpose: purpose,
+        );
+        expect(key, hasLength(32));
+        values.add(key.join(','));
+      }
+      expect(values.length, LocalKeyPurpose.values.length);
     });
 
-    test('新包装校验失败时旧包装与旧激活标记保持完整', () async {
-      await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 1,
-        accountId: firstAccountId,
+    test('同一用途的 encryption 与 index 上下文互相隔离', () async {
+      final encryptionKey = await AccountDataKeyDeriver.derive(
         accountSecret: firstSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
+        binding: firstBinding,
+        purpose: LocalKeyPurpose.contactsCloud,
+        context: 'encryption',
       );
-      final previous = (await vault.readActiveBinding())!;
-      await expectLater(
-        vault.installForCurrentBinding(
-          cidNumber: cidNumber,
-          bindingRevision: 2,
-          accountId: secondAccountId,
-          accountSecret: secondSecret,
-          dataRoot: dataRoot,
-          expectedDataRootHash: '0' * 64,
-        ),
-        throwsA(isA<LocalCipherException>()),
-      );
-      expect(
-          (await vault.readActiveBinding())?.wrapperKey, previous.wrapperKey);
-      expect(store.entries[previous.wrapperKey], isNotNull);
-    });
-
-    test('同一 revision 不允许账户或数据根摘要冲突', () async {
-      await vault.installForCurrentBinding(
-        cidNumber: cidNumber,
-        bindingRevision: 1,
-        accountId: firstAccountId,
+      final indexKey = await AccountDataKeyDeriver.derive(
         accountSecret: firstSecret,
-        dataRoot: dataRoot,
-        expectedDataRootHash: dataRootHash,
+        binding: firstBinding,
+        purpose: LocalKeyPurpose.contactsCloud,
+        context: 'index',
       );
+      expect(indexKey, isNot(encryptionKey));
+    });
+
+    test('没有当前账户签名交接时，新钱包不能直接解密此前钱包历史私有密文', () async {
+      final currentKey = await AccountDataKeyDeriver.derive(
+        accountSecret: firstSecret,
+        binding: firstBinding,
+        purpose: LocalKeyPurpose.chat,
+      );
+      final oldCiphertext = await LocalCipher.encryptString(
+        key: currentKey,
+        plaintext: '此前钱包历史私有数据',
+        aad: '${LocalKeyPurpose.chat.domain}|message-before-rebind',
+      );
+      final newKey = await AccountDataKeyDeriver.derive(
+        accountSecret: secondSecret,
+        binding: secondBinding,
+        purpose: LocalKeyPurpose.chat,
+      );
+      expect(newKey, isNot(currentKey));
       await expectLater(
-        vault.installForCurrentBinding(
-          cidNumber: cidNumber,
-          bindingRevision: 1,
-          accountId: secondAccountId,
-          accountSecret: secondSecret,
-          dataRoot: dataRoot,
-          expectedDataRootHash: dataRootHash,
+        LocalCipher.decryptString(
+          key: newKey,
+          blob: oldCiphertext,
+          aad: '${LocalKeyPurpose.chat.domain}|message-before-rebind',
         ),
         throwsA(isA<LocalCipherException>()),
       );
     });
-  });
-
-  test('clearActiveBinding 清除当前包装与激活标记', () async {
-    await vault.installForCurrentBinding(
-      cidNumber: cidNumber,
-      bindingRevision: 1,
-      accountId: firstAccountId,
-      accountSecret: firstSecret,
-      dataRoot: dataRoot,
-      expectedDataRootHash: dataRootHash,
-    );
-    await vault.clearActiveBinding();
-    expect(store.entries, isEmpty);
   });
 }

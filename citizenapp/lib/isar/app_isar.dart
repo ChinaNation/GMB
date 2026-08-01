@@ -623,6 +623,13 @@ class ChatConversationEntity {
   )
   late String ownerCidNumber;
 
+  /// 只标识该条密文由哪个 finalized 绑定版本产生，不参与会话归属或唯一键。
+  /// 钱包换绑但没有此前账户签名时，新账户据此跳过无法认证的此前密文。
+  late int bindingRevision;
+
+  /// 加密该条密文时 CID 链上绑定的账户；不是聊天身份主键。
+  late String accountId;
+
   /// 会话 ID，对应 MLS group id。
   late String conversationId;
 
@@ -662,6 +669,12 @@ class ChatMessageEntity {
     replace: true,
   )
   late String ownerCidNumber;
+
+  /// 只标识该条密文由哪个 finalized 绑定版本产生，不参与消息归属或唯一键。
+  late int bindingRevision;
+
+  /// 加密该条密文时 CID 链上绑定的账户；不是聊天身份主键。
+  late String accountId;
 
   late String envelopeId;
 

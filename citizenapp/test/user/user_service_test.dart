@@ -32,13 +32,18 @@ const _ownerCidNumber = 'CN220-CTZN2-198805200-2026';
 const _contactCidNumber = 'CN220-CTZN2-100000001-2026';
 
 class _FakeWalletManager extends WalletManager {
-  /// CID 稳定数据根：固定值，避免测试触碰硬件金库/平台通道。
-  /// 只换密钥来源,**不绕过加密**——通讯录本地 KV 仍走真实 AES-256-GCM。
+  /// 固定当前钱包用途子钥，避免测试触碰硬件金库或平台通道。
+  /// 只替换密钥来源，通讯录本地 KV 仍走真实 AES-256-GCM。
   @override
-  Future<CidDataRoot> ensureCidDataRootForCurrentBinding(
+  Future<Uint8List> deriveDataKeyForCurrentBinding(
     String accountId,
-  ) async =>
-      CidDataRoot(Uint8List.fromList(List<int>.generate(32, (i) => i + 1)));
+    LocalKeyPurpose purpose, {
+    String? context,
+  }) async =>
+      Uint8List.fromList(List<int>.generate(
+        32,
+        (i) => (i + purpose.index + (context?.length ?? 0) + 1) % 256,
+      ));
 
   @override
   Future<WalletProfile?> getDefaultWallet() async => WalletProfile(
@@ -85,9 +90,10 @@ class _FakeIdentityCache extends IdentityAccountCache {
 }
 
 class _FixedIdentityCache extends IdentityAccountCache {
-  _FixedIdentityCache(this.boundAccountId);
+  _FixedIdentityCache(this.boundAccountId, {this.bindingRevision = 2});
 
   final String boundAccountId;
+  final int bindingRevision;
 
   @override
   Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
@@ -98,7 +104,7 @@ class _FixedIdentityCache extends IdentityAccountCache {
         snapshot: CitizenIdentityChainSnapshot(
           cidNumber: _ownerCidNumber,
           accountId: Uint8List(32),
-          bindingRevision: 2,
+          bindingRevision: bindingRevision,
           votingIdentity: null,
         ),
       );
@@ -141,8 +147,136 @@ class _FakeApi extends SquareApiClient {
   Future<void> deleteEncryptedContact({
     required SquareSession session,
     required String contactId,
+    int? bindingRevision,
+    String? accountId,
   }) async {
     cloud.remove(contactId);
+  }
+}
+
+class _HandoverWalletManager extends WalletManager {
+  Uint8List _key(
+    String accountId,
+    LocalKeyPurpose purpose, {
+    String? context,
+  }) {
+    final accountByte = int.parse(accountId.substring(2, 4), radix: 16);
+    return Uint8List.fromList(List<int>.generate(
+      32,
+      (index) =>
+          (accountByte + purpose.index * 17 + (context?.length ?? 0) + index) &
+          0xff,
+    ));
+  }
+
+  @override
+  Future<Uint8List> deriveDataKeyForCurrentBinding(
+    String accountId,
+    LocalKeyPurpose purpose, {
+    String? context,
+  }) async =>
+      _key(accountId, purpose, context: context);
+
+  @override
+  Future<List<Uint8List>> deriveDataKeysForBinding(
+    AccountDataBinding binding,
+    List<({String? context, LocalKeyPurpose purpose})> requests,
+  ) async =>
+      requests
+          .map((request) => _key(
+                binding.accountId,
+                request.purpose,
+                context: request.context,
+              ))
+          .toList(growable: false);
+
+  @override
+  Future<ContactKeyMaterial> ensureContactKeyMaterialForAccountId(
+    String accountId,
+  ) async =>
+      ContactKeyMaterial(
+        encryptionKey: _key(accountId, LocalKeyPurpose.contactsCloud),
+        indexKey: _key(
+          accountId,
+          LocalKeyPurpose.contactsCloud,
+          context: 'index',
+        ),
+      );
+
+  @override
+  Future<ContactKeyMaterial> contactKeyMaterialForBinding(
+    AccountDataBinding binding,
+  ) =>
+      ensureContactKeyMaterialForAccountId(binding.accountId);
+}
+
+class _HandoverSessionProvider extends SquareSessionProvider {
+  _HandoverSessionProvider({
+    required this.sourceAccountId,
+    required this.targetAccountId,
+  });
+
+  final String sourceAccountId;
+  final String targetAccountId;
+
+  SquareSession _session(String accountId, int revision) => SquareSession(
+        sessionToken: 'token-$revision',
+        cidNumber: _ownerCidNumber,
+        bindingRevision: revision,
+        accountId: accountId,
+        expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
+      );
+
+  @override
+  Future<SquareSession?> ensureSession() async => _session(sourceAccountId, 1);
+
+  @override
+  Future<SquareSession?> ensureSessionForAccountId(String accountId) async =>
+      accountId == targetAccountId ? _session(targetAccountId, 2) : null;
+}
+
+class _HandoverApi extends SquareApiClient {
+  _HandoverApi() : super(baseUrl: 'https://contacts.test');
+
+  final Map<String, SquareEncryptedContact> cloud =
+      <String, SquareEncryptedContact>{};
+
+  String _key(SquareEncryptedContact contact) =>
+      '${contact.bindingRevision}:${contact.accountId}:${contact.contactId}';
+
+  @override
+  Future<({List<SquareEncryptedContact> items, String? nextCursor})>
+      fetchEncryptedContacts({
+    required SquareSession session,
+    String? cursor,
+    int limit = 100,
+  }) async =>
+          (
+            items: cloud.values
+                .where((contact) =>
+                    contact.bindingRevision == session.bindingRevision &&
+                    contact.accountId == session.accountId)
+                .toList(growable: false),
+            nextCursor: null,
+          );
+
+  @override
+  Future<void> putEncryptedContact({
+    required SquareSession session,
+    required SquareEncryptedContact contact,
+  }) async {
+    cloud[_key(contact)] = contact;
+  }
+
+  @override
+  Future<void> deleteEncryptedContact({
+    required SquareSession session,
+    required String contactId,
+    int? bindingRevision,
+    String? accountId,
+  }) async {
+    cloud.remove('${bindingRevision ?? session.bindingRevision}:'
+        '${accountId ?? session.accountId}:$contactId');
   }
 }
 
@@ -325,10 +459,18 @@ void main() {
     test('AES-GCM 可跨设备解密且篡改 MAC 后失败', () async {
       final keys = await _FakeWalletManager()
           .ensureContactKeyMaterialForAccountId(_accountId);
-      final deviceA =
-          ContactCryptor(ownerCidNumber: _ownerCidNumber, keys: keys);
-      final deviceB =
-          ContactCryptor(ownerCidNumber: _ownerCidNumber, keys: keys);
+      final deviceA = ContactCryptor(
+        ownerCidNumber: _ownerCidNumber,
+        bindingRevision: 1,
+        accountId: _accountId,
+        keys: keys,
+      );
+      final deviceB = ContactCryptor(
+        ownerCidNumber: _ownerCidNumber,
+        bindingRevision: 1,
+        accountId: _accountId,
+        keys: keys,
+      );
       final contact = UserContact(
         cidNumber: _contactCidNumber,
         accountId: UserContactService.accountIdFromSs58(_contactA),
@@ -343,6 +485,8 @@ void main() {
       expect(decrypted.cidNumber, _contactCidNumber);
       expect(decrypted.contactRemark, '张三');
       final broken = SquareEncryptedContact(
+        bindingRevision: encrypted.bindingRevision,
+        accountId: encrypted.accountId,
         contactId: encrypted.contactId,
         ciphertext: encrypted.ciphertext,
         nonce: encrypted.nonce,
@@ -352,11 +496,15 @@ void main() {
       await expectLater(deviceB.decrypt(broken), throwsFormatException);
     });
 
-    test('contact_id 只由永久 CID 和索引钥决定，不随账户换绑改变', () async {
+    test('同一钱包绑定内 contact_id 由联系人 CID 和索引钥稳定确定', () async {
       final keys = await _FakeWalletManager()
           .ensureContactKeyMaterialForAccountId(_accountId);
-      final cryptor =
-          ContactCryptor(ownerCidNumber: _ownerCidNumber, keys: keys);
+      final cryptor = ContactCryptor(
+        ownerCidNumber: _ownerCidNumber,
+        bindingRevision: 1,
+        accountId: _accountId,
+        keys: keys,
+      );
 
       final before = await cryptor.contactId(_contactCidNumber);
       final after = await cryptor.contactId(_contactCidNumber);
@@ -527,29 +675,138 @@ void main() {
       expect(contacts.single.contactRemark, '李四');
     });
 
-    test('同一 CID 换绑新账户后直接读取原通讯录，不依赖旧账户', () async {
+    test('当前钱包签名换绑先本地暂存新密文，finalized 后新钱包上传并清理此前版本', () async {
       const newAccountId =
           '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-      final oldBinding = UserContactService(
-        walletManager: _FakeWalletManager(),
-        identityAccountCache: _FixedIdentityCache(_accountId),
+      const genesisHash =
+          '0x1111111111111111111111111111111111111111111111111111111111111111';
+      final wallet = _HandoverWalletManager();
+      final api = _HandoverApi();
+      final sessions = _HandoverSessionProvider(
+        sourceAccountId: _accountId,
+        targetAccountId: newAccountId,
+      );
+      final currentBinding = UserContactService(
+        walletManager: wallet,
+        identityAccountCache:
+            _FixedIdentityCache(_accountId, bindingRevision: 1),
+        sessionProvider: sessions,
+        apiClient: api,
         autoSync: false,
       );
-      await oldBinding.addContact(
+      await currentBinding.addContact(
         cidNumber: _contactCidNumber,
         ss58Address: _contactA,
         contactRemark: '换绑后仍保留',
       );
+      await currentBinding.sync();
+      expect(api.cloud.values.single.bindingRevision, 1);
+
+      final source = AccountDataBinding(
+        genesisHash: genesisHash,
+        cidNumber: _ownerCidNumber,
+        bindingRevision: 1,
+        accountId: _accountId,
+      );
+      const target = AccountDataBinding(
+        genesisHash: genesisHash,
+        cidNumber: _ownerCidNumber,
+        bindingRevision: 2,
+        accountId: newAccountId,
+      );
+      await currentBinding.stageAccountHandover(source: source, target: target);
+      expect(api.cloud.values.map((record) => record.bindingRevision).toSet(),
+          <int>{1});
+      expect(
+        (await currentBinding.getContacts()).single.contactRemark,
+        '换绑后仍保留',
+        reason: 'finalized 前正式本地密文仍由当前钱包读取，目标密文不得预写 Worker',
+      );
+
+      await currentBinding.commitAccountHandover(
+          source: source, target: target);
+      expect(api.cloud.values.single.bindingRevision, 2);
+      expect(api.cloud.values.single.accountId, newAccountId);
 
       final newBinding = UserContactService(
-        walletManager: _FakeWalletManager(),
+        walletManager: wallet,
         identityAccountCache: _FixedIdentityCache(newAccountId),
+        sessionProvider: sessions,
+        apiClient: api,
         autoSync: false,
       );
       final contacts = await newBinding.getContacts();
 
       expect(contacts.single.cidNumber, _contactCidNumber);
       expect(contacts.single.contactRemark, '换绑后仍保留');
+    });
+
+    test('无当前账户签名换绑只隔离此前通讯录密文，新绑定从空通讯录开始', () async {
+      const newAccountId =
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const genesisHash =
+          '0x1111111111111111111111111111111111111111111111111111111111111111';
+      final wallet = _HandoverWalletManager();
+      final sourceService = UserContactService(
+        walletManager: wallet,
+        identityAccountCache:
+            _FixedIdentityCache(_accountId, bindingRevision: 1),
+        sessionProvider: _HandoverSessionProvider(
+          sourceAccountId: _accountId,
+          targetAccountId: newAccountId,
+        ),
+        apiClient: _HandoverApi(),
+        autoSync: false,
+      );
+      await sourceService.addContact(
+        cidNumber: _contactCidNumber,
+        ss58Address: _contactA,
+        contactRemark: '只属于此前密文',
+      );
+      final source = AccountDataBinding(
+        genesisHash: genesisHash,
+        cidNumber: _ownerCidNumber,
+        bindingRevision: 1,
+        accountId: _accountId,
+      );
+      final canonicalBefore = await WalletIsar.instance.read((isar) async {
+        return isar.appKvEntitys
+            .filter()
+            .keyStartsWith('contact_book_by_cid:')
+            .findAll();
+      });
+      expect(canonicalBefore, hasLength(1));
+
+      await sourceService.isolateInaccessibleBinding(source);
+
+      final rows = await WalletIsar.instance.read((isar) async =>
+          isar.appKvEntitys.filter().idGreaterThan(0, include: true).findAll());
+      expect(
+        rows.where((row) => row.key.startsWith('contact_book_by_cid:')),
+        isEmpty,
+      );
+      final archived = rows
+          .where(
+              (row) => row.key.startsWith('contact_inaccessible_by_binding:'))
+          .toList(growable: false);
+      expect(archived, hasLength(3));
+      expect(
+        archived.map((row) => row.stringValue),
+        contains(canonicalBefore.single.stringValue),
+      );
+
+      final targetService = UserContactService(
+        walletManager: wallet,
+        identityAccountCache:
+            _FixedIdentityCache(newAccountId, bindingRevision: 2),
+        sessionProvider: _HandoverSessionProvider(
+          sourceAccountId: _accountId,
+          targetAccountId: newAccountId,
+        ),
+        apiClient: _HandoverApi(),
+        autoSync: false,
+      );
+      expect(await targetService.getContacts(), isEmpty);
     });
 
     test('本地密文被篡改必须抛错,不得静默当成"无本地缓存"', () async {

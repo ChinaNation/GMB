@@ -113,12 +113,11 @@ void main() {
       );
       final rebind = service.verifyPayload(rebindRequest);
       expect(rebind.status, SignDecisionStatus.normal);
-      expect(
-          rebind.decoded?.fields['expected_old_account_id'], '0x${'55' * 32}');
+      expect(rebind.decoded?.fields['current_account_id'], '0x${'55' * 32}');
       expect(rebind.decoded?.fields['expected_binding_revision'], '7');
     });
 
-    test('域签名拒绝 envelope expiry 不一致和旧版 CID-only 载荷', () {
+    test('域签名拒绝 envelope expiry 不一致和已废弃的 CID-only 载荷', () {
       final expiresAt = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 90;
       const cid = 'CN220-CTZN2-198805200-2026';
       final mismatch = _buildTestRequest(

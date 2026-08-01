@@ -23,7 +23,7 @@ describe('Cloudflare 统一资源限制', () => {
   it('在进入风控和 D1 前拒绝未登记路由', () => {
     expect(() => assertKnownRoute('GET', '/v1/unknown')).toThrowError(HttpError);
     expect(() => assertKnownRoute('POST', '/v1/square/reports')).toThrowError(HttpError);
-    // finalized 换绑不再由客户端携旧账户签名二次清理；旧 endpoint 必须彻底下线。
+    // finalized 换绑不再由客户端携此前账户签名二次清理；已删除 endpoint 必须彻底下线。
     expect(() => assertKnownRoute('POST', '/v1/square/rebind/revoke')).toThrowError(
       HttpError
     );

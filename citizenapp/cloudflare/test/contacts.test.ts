@@ -68,8 +68,8 @@ describe('端到端加密通讯录 API', () => {
     const context = await buildContext();
     const secretContactAccount = '5ContactAccountMustNeverEnterCloudflare';
     const secretContactRemark = '绝不能进入 Cloudflare 的私人备注';
-    const aPayload = cipherPayload('accountId-a', 300);
-    const bPayload = cipherPayload('accountId-b', 400);
+    const aPayload = cipherPayload('accountId-a', 300, 1, ACCOUNT_ID_A);
+    const bPayload = cipherPayload('accountId-b', 400, 1, ACCOUNT_ID_B);
 
     await expect(
       call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, {
@@ -92,13 +92,19 @@ describe('端到端加密通讯录 API', () => {
     const stored = [...context.db.contacts.values()];
     expect(stored).toHaveLength(2);
     expect(Object.keys(stored[0]).sort()).toEqual([
-      'cid_number', 'ciphertext', 'contact_id', 'mac', 'nonce', 'updated_at'
+      'account_id', 'binding_revision', 'cid_number', 'ciphertext', 'contact_id', 'mac',
+      'nonce', 'updated_at'
     ]);
     expect(JSON.stringify(stored)).not.toContain(secretContactAccount);
     expect(JSON.stringify(stored)).not.toContain(secretContactRemark);
 
     const deleted = await json(
-      await call(context, context.accountA, 'DELETE', `/v1/square/contacts/${CONTACT_A}`)
+      await call(
+        context,
+        context.accountA,
+        'DELETE',
+        `/v1/square/contacts/${CONTACT_A}?binding_revision=1&account_id=${ACCOUNT_ID_A}`
+      )
     );
     expect(deleted.deleted).toBe(true);
     const aAfter = await json(await call(context, context.accountA, 'GET', '/v1/square/contacts'));
@@ -145,6 +151,20 @@ describe('端到端加密通讯录 API', () => {
 
     const page = await json(await call(context, context.accountA, 'GET', '/v1/square/contacts'));
     expect(page.items).toEqual([{ contact_id: CONTACT_A, ...current }]);
+  });
+
+  it('当前会话不能在换绑 finalized 前预写下一绑定版本', async () => {
+    const context = await buildContext();
+    await expect(
+      call(
+        context,
+        context.accountA,
+        'PUT',
+        `/v1/square/contacts/${CONTACT_A}`,
+        cipherPayload('next', 600, 2, ACCOUNT_ID_B),
+      ),
+    ).rejects.toMatchObject({ code: 'contact_binding_not_allowed' });
+    expect(context.db.contacts.size).toBe(0);
   });
 
   it('拒绝非法密文元数据、超限请求体和超过通讯录独立限流的请求', async () => {
@@ -290,13 +310,22 @@ async function call(
   }), context.env);
 }
 
-function cipherPayload(label: string, updatedAt: number): {
+function cipherPayload(
+  label: string,
+  updatedAt: number,
+  bindingRevision = 1,
+  accountId = ACCOUNT_ID_A
+): {
+  binding_revision: number;
+  account_id: string;
   ciphertext: string;
   nonce: string;
   mac: string;
   updated_at: number;
 } {
   return {
+    binding_revision: bindingRevision,
+    account_id: accountId,
     ciphertext: encodeBytes(new TextEncoder().encode(`cipher-${label}`)),
     nonce: encodeBytes(new Uint8Array(12).fill(label.length)),
     mac: encodeBytes(new Uint8Array(16).fill(label.length + 1)),
@@ -367,14 +396,19 @@ class ContactStmt {
   async all<T>(): Promise<{ results: T[] }> {
     if (!this.sql.includes('FROM square_contacts')) return { results: [] };
     const cidNumber = this.binds[0] as string;
+    const bindingRevision = this.binds[1] as number;
+    const accountId = this.binds[2] as string;
     const limit = this.binds[this.binds.length - 1] as number;
     let rows = [...this.db.contacts.values()]
-      .filter((row) => row.cid_number === cidNumber)
+      .filter((row) =>
+        row.cid_number === cidNumber &&
+        row.binding_revision === bindingRevision &&
+        row.account_id === accountId)
       .sort((left, right) =>
         right.updated_at - left.updated_at || right.contact_id.localeCompare(left.contact_id));
     if (this.sql.includes('updated_at < ?')) {
-      const cursorTime = this.binds[1] as number;
-      const cursorId = this.binds[3] as string;
+      const cursorTime = this.binds[3] as number;
+      const cursorId = this.binds[5] as string;
       rows = rows.filter((row) =>
         row.updated_at < cursorTime ||
         (row.updated_at === cursorTime && row.contact_id < cursorId));
@@ -392,13 +426,15 @@ class ContactStmt {
     if (this.sql.includes('INSERT INTO square_contacts')) {
       const row: ContactCiphertextRow = {
         cid_number: this.binds[0] as string,
-        contact_id: this.binds[1] as string,
-        ciphertext: this.binds[2] as string,
-        nonce: this.binds[3] as string,
-        mac: this.binds[4] as string,
-        updated_at: this.binds[5] as number
+        binding_revision: this.binds[1] as number,
+        account_id: this.binds[2] as string,
+        contact_id: this.binds[3] as string,
+        ciphertext: this.binds[4] as string,
+        nonce: this.binds[5] as string,
+        mac: this.binds[6] as string,
+        updated_at: this.binds[7] as number
       };
-      const key = `${row.cid_number}:${row.contact_id}`;
+      const key = `${row.cid_number}:${row.binding_revision}:${row.account_id}:${row.contact_id}`;
       const existing = this.db.contacts.get(key);
       if (!existing || row.updated_at >= existing.updated_at) {
         this.db.contacts.set(key, row);
@@ -407,7 +443,8 @@ class ContactStmt {
       return { meta: { changes: 0 } };
     }
     if (this.sql.includes('DELETE FROM square_contacts')) {
-      const key = `${this.binds[0] as string}:${this.binds[1] as string}`;
+      const key = `${this.binds[0] as string}:${this.binds[1] as number}:` +
+        `${this.binds[2] as string}:${this.binds[3] as string}`;
       return { meta: { changes: this.db.contacts.delete(key) ? 1 : 0 } };
     }
     return { meta: { changes: 1 } };

@@ -343,12 +343,15 @@ mod benchmarks {
     #[benchmark]
     fn self_rebind_cid_account_id() {
         set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
-        // 先自助占号建匿名 CID(旧账户绑定),再换绑到新账户。
-        let old_account_id: T::AccountId = account("rebind_old", 0, 0);
+        // 先自助占号建立当前绑定，再换绑到新账户。
+        let current_account_id: T::AccountId = account("rebind_current", 0, 0);
         let new_account_id: T::AccountId = whitelisted_caller();
         let cid_number = citizen_cid(8);
-        Pallet::<T>::self_occupy_cid(RawOrigin::Signed(old_account_id).into(), cid_number.clone())
-            .expect("self occupy sets up the binding");
+        Pallet::<T>::self_occupy_cid(
+            RawOrigin::Signed(current_account_id).into(),
+            cid_number.clone(),
+        )
+        .expect("self occupy sets up the binding");
         let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
             .as_secs()
             .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);
@@ -370,13 +373,16 @@ mod benchmarks {
     #[benchmark]
     fn admin_rebind_cid_account_id() {
         set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
-        // 先自助占号建匿名 CID(旧账户绑定),再由注册局代换绑到新账户。
+        // 先自助占号建立当前绑定，再由注册局代换绑到新账户。
         let authority = authority::<T>();
-        let old_account_id: T::AccountId = account("admin_rebind_old", 0, 0);
+        let current_account_id: T::AccountId = account("admin_rebind_current", 0, 0);
         let new_account_id: T::AccountId = whitelisted_caller();
         let cid_number = citizen_cid(9);
-        Pallet::<T>::self_occupy_cid(RawOrigin::Signed(old_account_id).into(), cid_number.clone())
-            .expect("self occupy sets up the binding");
+        Pallet::<T>::self_occupy_cid(
+            RawOrigin::Signed(current_account_id).into(),
+            cid_number.clone(),
+        )
+        .expect("self occupy sets up the binding");
         let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
             .as_secs()
             .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);

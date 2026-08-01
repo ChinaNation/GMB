@@ -6,6 +6,20 @@
 
 本文件是 GMB 工作区内 AI 聊天入口新线程的最高优先级启动协议。
 
+## 0. 全仓第一死规则：Substrate 官方命名绝对优先
+
+> **这是全仓库排名第一、优先于其它所有开发规则的死规则。** 全仓库所有第一方代码、
+> 目录、文件、类型、Trait、结构体、枚举、函数、变量、参数、字段、Storage、Event、
+> Error、Extrinsic、RPC、API、SQL、JSON、Dart、TypeScript、测试、生成物、注释和文档，
+> 只要涉及 Substrate / Polkadot SDK 已定义的概念，必须严格使用其官方类型和官方术语。
+> 同一语义全仓只能存在一个基础名称；只允许 `snake_case` 与 `lowerCamelCase` 之间由语言
+> 语法要求产生的大小写转换，禁止改变语义词根、另造同义词、缩写、别名或兼容字段。
+> Substrate 官方命名与仓库历史实现、旧文档、旧协议或旧字段冲突时，无条件以官方命名
+> 为准，并在当前任务中彻底清理旧名称，不保留兼容、别名、双轨或影子字段。Substrate
+> 未定义的 GMB 业务概念，以 `memory/07-ai/unified-naming.md` 登记的唯一命名为准。
+> 新增或修改命名前必须先查阅 Polkadot SDK 官方资料、再全仓搜索；无法确认时必须停止
+> 执行并询问用户。存在命名残留时，任务不得完成、不得创世、不得推送 CI、不得部署。
+
 ## 1. 启动定义
 
 - 任何在本仓库内打开的 Codex 或 Claude 线程，都属于同一个 GMB AI 编程系统
@@ -120,7 +134,7 @@
 - OnChina 系统不得新建或恢复独立 `backend/chain/`、`frontend/chain/` 业务目录；各功能模块如需和区块链交互，必须在所属功能模块目录中新建 `chain_` 开头文件；跨模块链底层工具只允许放 `core/chain_*`
 - OnChina 前端不得新建或恢复独立 `frontend/api/` 业务目录；某功能需要后端 API 时，必须在所属功能模块目录中新建 `api.ts`；通用 HTTP 请求封装只允许放 `frontend/utils/http.ts`，且不得承载业务接口
 - 编译产物硬规则：每个项目的编译只允许在**该项目根目录下的唯一产物目录**中产生产物（Rust = 项目根 `target/`，Flutter = 项目根 `build/`），禁止在子目录另开第二个产物目录；且**最新一次编译成功后必须彻底删除前一次编译的产物**，不允许跨次累积。典型如 `citizenchain/target`：增量缓存长期累积曾达 388 GB，占满整机磁盘。执行口径：构建脚本与 CI 在成功产出后清理上一次产物；Rust 关闭跨次增量累积（`CARGO_INCREMENTAL=0`）或在成功后清理 `target/<profile>/incremental`；任何 AI 线程不得在项目根产物目录之外创建 `target/`、`build/`、`out/` 等产物目录
-- **禁分支硬规则（最高优先级，用户 2026-07-29 明令重申）：一切工作只允许在 `main` 分支上进行。绝对禁止创建、切换、使用任何非 main 分支**（含 `claude/*`、`codex/*` 等任何 AI 工具自动生成的分支）。任何 AI 线程在 `git commit` / `git add` / 任何写操作**之前必须先执行 `git branch --show-current` 确认当前是 `main`**；若发现 HEAD 不在 main（可能被其它线程切走），必须**立即停止写操作并报告用户**，不得"跟着当前分支继续提交"。发现非 main 分支残留时报告用户后删除。历史违规：2026-07-29 本会话在被另一线程切到 `codex/citizen-identity-genesis-s5` 后未检查 HEAD 就连提 6 个提交，导致工作落在非 main 分支上。
+- **禁分支硬规则（高优先级，用户 2026-07-29 明令重申）：一切工作只允许在 `main` 分支上进行。绝对禁止创建、切换、使用任何非 main 分支**（含 `claude/*`、`codex/*` 等任何 AI 工具自动生成的分支）。任何 AI 线程在 `git commit` / `git add` / 任何写操作**之前必须先执行 `git branch --show-current` 确认当前是 `main`**；若发现 HEAD 不在 main（可能被其它线程切走），必须**立即停止写操作并报告用户**，不得"跟着当前分支继续提交"。发现非 main 分支残留时报告用户后删除。历史违规：2026-07-29 本会话在被另一线程切到 `codex/citizen-identity-genesis-s5` 后未检查 HEAD 就连提 6 个提交，导致工作落在非 main 分支上。
 - 主检出唯一工作区硬规则：Claude、Codex 等一切 AI 编程工具**只允许在 `/Users/rhett/GMB` 主检出的主分支工作**，禁止创建、使用或保留任何 git worktree（包括 `~/GMB/.claude/worktrees/*`、`~/GMB/citizenchain/.claude/worktrees/*` 及任何子仓副本）。即使 harness 把 cwd 设成 worktree，也必须用绝对路径在主检出读写，并提示清理该副本。发现残留副本时按“无未提交改动且无领先 main 的独有提交即直接删”处理，有独有提交的先报用户再定
 - 改代码后必须更新文档
 - 改代码后必须清理残留

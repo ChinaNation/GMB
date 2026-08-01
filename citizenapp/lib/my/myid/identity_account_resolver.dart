@@ -27,7 +27,7 @@ class ResolvedIdentity {
 /// 身份账户单源 —— 把「身份主键」从"钱包列表最靠前的热钱包(账户0)"改成
 /// **"CID 绑定的那个钱包账户"**(可为任意 `//n`)。
 ///
-/// 见 memory `citizenapp-cid-identity-master-key`:非链功能唯一身份主键 = CID 号,
+/// 非链功能唯一身份主键 = CID 号；当前绑定 `account_id` 只承担控制与签名授权，
 /// 钱包账户只是与该 CID 绑定的鉴权凭证;鉴权授权取决于 CID 当前绑定了哪个账户。
 /// 私钥泄漏可换绑到新账户而 CID(及其通讯录/动态/文章/粉丝)永不丢失。
 class IdentityAccountResolver {

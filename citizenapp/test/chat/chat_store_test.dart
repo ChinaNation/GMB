@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/chat/crypto/mls_session.dart';
 import 'package:citizenapp/chat/chat_models.dart';
+import 'package:citizenapp/chat/group/group_model.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
 
 import '../support/isar_test_env.dart';
@@ -290,6 +291,107 @@ void main() {
     expect(await store.outgoingMediaCount(_ownerCidNumber), 0);
   });
 
+  test('无签名交接时保留永久聊天密文并清空此前绑定的瞬时状态', () async {
+    final store = ChatStore();
+    final envelope = const MlsWireMessage(
+      wireBytes: [0x68, 0x69],
+      cipherSuite: 'MLS_128',
+      conversationId: 'conv-isolate',
+      messageKind: MlsMessageKind.application,
+    ).toEnvelope(
+      envelopeId: 'env-isolate',
+      senderCidNumber: _ownerCidNumber,
+      recipientCidNumber: _bobCidNumber,
+      senderDeviceId: 'alice-phone',
+      createdAtMillis: 10,
+      ttlMillis: 60000,
+    );
+
+    await store.saveOutgoingEnvelope(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+      envelope: envelope,
+      envelopeBytes: envelope.writeToBuffer(),
+      recipientCidNumber: _bobCidNumber,
+      messageKind: ChatMessageKind.text,
+      deliveryState: ChatMessageDeliveryState.queued,
+      plaintext: '必须保留的历史密文',
+    );
+    await store.savePendingInbound(
+      ownerCidNumber: _ownerCidNumber,
+      envelope: envelope,
+      envelopeBytes: envelope.writeToBuffer(),
+      reason: 'waiting',
+    );
+    await store.recordOutgoingMedia(
+      ownerCidNumber: _ownerCidNumber,
+      attachmentId: 'att-isolate',
+      recipientCidNumber: _bobCidNumber,
+      conversationId: 'conv-isolate',
+      fileName: 'pending.bin',
+      contentType: 'application/octet-stream',
+      byteSize: 2,
+    );
+    await store.upsertRouteRecord(
+      _ownerCidNumber,
+      const ChatRoute(
+        peerCidNumber: _bobCidNumber,
+        routeDisplayName: 'Bob',
+        deviceId: 'bob-phone',
+        devicePublicKey: 'bob-device-public-key',
+        safetyNumber: '123456',
+      ),
+    );
+    await store.upsertGroupShell(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+      groupId: 'group-isolate',
+      groupName: '此前群上下文',
+      creatorCidNumber: _ownerCidNumber,
+      epoch: 1,
+    );
+    await store.reconcileGroupRoster(
+      ownerCidNumber: _ownerCidNumber,
+      groupId: 'group-isolate',
+      members: const <String, GroupMemberRole>{
+        _ownerCidNumber: GroupMemberRole.admin,
+        _bobCidNumber: GroupMemberRole.member,
+      },
+      epoch: 1,
+    );
+    await store.bufferGroupCommit(
+      ownerCidNumber: _ownerCidNumber,
+      groupId: 'group-isolate',
+      messageEpoch: 2,
+      envelope: envelope,
+      envelopeBytes: envelope.writeToBuffer(),
+    );
+
+    await store.isolateInaccessibleBinding(_ownerCidNumber);
+
+    expect(await store.outboundQueueCount(_ownerCidNumber), 0);
+    expect(await store.pendingInboundCount(_ownerCidNumber), 0);
+    expect(await store.outgoingMediaCount(_ownerCidNumber), 0);
+    expect(await store.readRouteRecords(_ownerCidNumber), isEmpty);
+    expect(await store.readGroup(_ownerCidNumber, 'group-isolate'), isNull);
+    expect(
+      await store.takeGroupPendingCommit(
+        _ownerCidNumber,
+        'group-isolate',
+        2,
+      ),
+      isNull,
+    );
+
+    // 隔离只移除不能跨绑定续用的任务和 MLS 镜像，不删除永久聊天密文。
+    final retained = await store.readMessages(
+      ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _aliceAccountId,
+      conversationId: 'conv-isolate',
+    );
+    expect(retained.single.plaintext, '必须保留的历史密文');
+  });
+
   test('searchMessages 跨会话按解码摘要检索：大小写不敏感、时间倒序、limit 截断', () async {
     final store = ChatStore();
     const sender = _ownerCidNumber;
@@ -348,7 +450,7 @@ void main() {
     // 跨会话命中并按时间倒序（conv-search-2 的 env-c 比 conv-search-1 的 env-a 新）
     final ordered = await store.searchMessages(
       ownerCidNumber: _ownerCidNumber,
-      currentAccountId: sender,
+      currentAccountId: _aliceAccountId,
       keyword: '开会',
     );
     expect(
@@ -359,7 +461,7 @@ void main() {
     // limit 截断保留最新的一条
     final limited = await store.searchMessages(
       ownerCidNumber: _ownerCidNumber,
-      currentAccountId: sender,
+      currentAccountId: _aliceAccountId,
       keyword: '开会',
       limit: 1,
     );
@@ -371,7 +473,7 @@ void main() {
     // 大小写不敏感
     final caseInsensitive = await store.searchMessages(
       ownerCidNumber: _ownerCidNumber,
-      currentAccountId: sender,
+      currentAccountId: _aliceAccountId,
       keyword: 'material',
     );
     expect(

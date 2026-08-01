@@ -18,9 +18,6 @@ class ChatCrypto {
 
   final WalletManager _walletManager;
 
-  /// 按“永久 CID + 当前绑定账户”缓存子钥；CID 是属主，账户只负责解锁。
-  final Map<String, _ChatKeys> _cache = <String, _ChatKeys>{};
-
   static final Hmac _hmac = Hmac.sha256();
 
   /// HMAC 截断长度（字节）。截断换取索引体积，代价是假阳性——由解密后复验兜住。
@@ -30,31 +27,118 @@ class ChatCrypto {
   /// 统一用 bigram 两者通吃；查询短于 2 字符时由调用方回落到候选集扫描。
   static const int _gram = 2;
 
-  /// 测试注入口：设为非空后，子钥直接由该固定 CID 数据根派生，不再触碰
-  /// `WalletManager` → 硬件金库 → `flutter_secure_storage` 的平台通道。
+  /// 测试注入口：设为非空后直接使用固定用途子钥，不再触碰
+  /// `WalletManager` → 硬件金库的平台通道。
   ///
   /// 与 `WalletManager.debugSeedStore` 同一套惯例。**仅测试可用**，
   /// 生产路径必须走真实钱包派生。
   @visibleForTesting
-  static CidDataRoot? debugFixedCidDataRoot;
+  static Map<LocalKeyPurpose, Uint8List>? debugFixedKeys;
+
+  /// 解析聊天密文的 finalized 绑定元数据。CID 仍是唯一数据属主，绑定版本与账户
+  /// 只用于判定当前钱包能否认证这条密文，绝不进入聊天关系主键。
+  Future<ChatCipherBinding> resolveCipherBinding({
+    required String ownerCidNumber,
+    required String currentAccountId,
+  }) async {
+    if (debugFixedKeys != null) {
+      return ChatCipherBinding(
+        bindingRevision: 0,
+        accountId: currentAccountId,
+      );
+    }
+    final binding =
+        await _walletManager.accountDataBindingForAccountId(currentAccountId);
+    if (binding.cidNumber != ownerCidNumber) {
+      throw StateError('聊天属主 CID 与当前钱包绑定不一致');
+    }
+    return ChatCipherBinding(
+      bindingRevision: binding.bindingRevision,
+      accountId: binding.accountId,
+    );
+  }
 
   Future<_ChatKeys> _keysFor({
     required String ownerCidNumber,
     required String currentAccountId,
   }) async {
-    final bindingKey = '$ownerCidNumber|$currentAccountId';
-    final cached = _cache[bindingKey];
-    if (cached != null) return cached;
-    final dataRoot = debugFixedCidDataRoot ??
-        await _walletManager.ensureCidDataRootForCurrentBinding(
-          currentAccountId,
-        );
-    final keys = _ChatKeys(
-      content: await dataRoot.subkey(LocalKeyPurpose.chat),
-      index: await dataRoot.subkey(LocalKeyPurpose.chatIndex),
+    final fixed = debugFixedKeys;
+    if (fixed != null) {
+      final content = fixed[LocalKeyPurpose.chat];
+      final index = fixed[LocalKeyPurpose.chatIndex];
+      if (content == null || index == null) {
+        throw StateError('聊天测试用途子钥不完整');
+      }
+      return _ChatKeys(
+        content: Uint8List.fromList(content),
+        index: Uint8List.fromList(index),
+      );
+    }
+    final binding =
+        await _walletManager.accountDataBindingForAccountId(currentAccountId);
+    if (binding.cidNumber != ownerCidNumber) {
+      throw StateError('聊天属主 CID 与当前钱包绑定不一致');
+    }
+    final keys = await _walletManager.deriveDataKeysForBinding(
+      binding,
+      const <({LocalKeyPurpose purpose, String? context})>[
+        (purpose: LocalKeyPurpose.chat, context: null),
+        (purpose: LocalKeyPurpose.chatIndex, context: null),
+      ],
     );
-    _cache[bindingKey] = keys;
-    return keys;
+    return _ChatKeys(content: keys[0], index: keys[1]);
+  }
+
+  /// 为一次钱包换绑交接显式派生当前或新绑定版本的聊天用途子钥。
+  ///
+  /// 不读取“当前激活账户”，因此能在交易提交前同时验证此前密文可解、新密钥可用；
+  /// 返回值只在交接内存中使用，不能用于签名或恢复钱包。
+  Future<ChatHandoverKeys> handoverKeys(AccountDataBinding binding) async {
+    final keys = await _walletManager.deriveDataKeysForBinding(
+      binding,
+      const <({LocalKeyPurpose purpose, String? context})>[
+        (purpose: LocalKeyPurpose.chat, context: null),
+        (purpose: LocalKeyPurpose.chatIndex, context: null),
+      ],
+    );
+    return ChatHandoverKeys(content: keys[0], index: keys[1]);
+  }
+
+  Future<String> decryptForHandover({
+    required AccountDataBinding binding,
+    required ChatHandoverKeys keys,
+    required String recordId,
+    required String blob,
+  }) {
+    if (blob.isEmpty) return Future<String>.value('');
+    return LocalCipher.decryptString(
+      key: keys.content,
+      blob: blob,
+      aad: _aad(binding.cidNumber, recordId),
+    );
+  }
+
+  Future<String> encryptForHandover({
+    required AccountDataBinding binding,
+    required ChatHandoverKeys keys,
+    required String recordId,
+    required String plaintext,
+  }) =>
+      LocalCipher.encryptString(
+        key: keys.content,
+        plaintext: plaintext,
+        aad: _aad(binding.cidNumber, recordId),
+      );
+
+  Future<List<String>> searchTokensForHandover({
+    required ChatHandoverKeys keys,
+    required String text,
+  }) async {
+    final out = <String>[];
+    for (final gram in tokenize(text)) {
+      out.add(await _tokenHash(keys.index, gram));
+    }
+    return out;
   }
 
   /// 加密聊天正文 / 会话摘要。[recordId] 进 AAD，把密文钉死在该条记录上。
@@ -68,11 +152,15 @@ class ChatCrypto {
       ownerCidNumber: ownerCidNumber,
       currentAccountId: currentAccountId,
     );
-    return LocalCipher.encryptString(
-      key: keys.content,
-      plaintext: plaintext,
-      aad: _aad(ownerCidNumber, recordId),
-    );
+    try {
+      return await LocalCipher.encryptString(
+        key: keys.content,
+        plaintext: plaintext,
+        aad: _aad(ownerCidNumber, recordId),
+      );
+    } finally {
+      keys.dispose();
+    }
   }
 
   /// 解密聊天正文 / 会话摘要。
@@ -90,11 +178,15 @@ class ChatCrypto {
       ownerCidNumber: ownerCidNumber,
       currentAccountId: currentAccountId,
     );
-    return LocalCipher.decryptString(
-      key: keys.content,
-      blob: blob,
-      aad: _aad(ownerCidNumber, recordId),
-    );
+    try {
+      return await LocalCipher.decryptString(
+        key: keys.content,
+        blob: blob,
+        aad: _aad(ownerCidNumber, recordId),
+      );
+    } finally {
+      keys.dispose();
+    }
   }
 
   /// 为一条正文生成去重后的 HMAC 分词索引。
@@ -109,11 +201,15 @@ class ChatCrypto {
       ownerCidNumber: ownerCidNumber,
       currentAccountId: currentAccountId,
     );
-    final out = <String>[];
-    for (final gram in grams) {
-      out.add(await _tokenHash(keys.index, gram));
+    try {
+      final out = <String>[];
+      for (final gram in grams) {
+        out.add(await _tokenHash(keys.index, gram));
+      }
+      return out;
+    } finally {
+      keys.dispose();
     }
-    return out;
   }
 
   /// 把查询串转成索引 token；返回空表示查询过短，调用方须回落到候选集扫描。
@@ -158,9 +254,38 @@ class ChatCrypto {
       'citizenapp.local/chat|$ownerCidNumber|$recordId';
 }
 
+/// 聊天密文的公开绑定上下文；只做密文隔离，不是身份或密钥。
+class ChatCipherBinding {
+  const ChatCipherBinding({
+    required this.bindingRevision,
+    required this.accountId,
+  });
+
+  final int bindingRevision;
+  final String accountId;
+}
+
 class _ChatKeys {
   const _ChatKeys({required this.content, required this.index});
 
   final Uint8List content;
   final Uint8List index;
+
+  void dispose() {
+    content.fillRange(0, content.length, 0);
+    index.fillRange(0, index.length, 0);
+  }
+}
+
+/// CID 钱包换绑期间短时持有的聊天用途子钥；只允许此前密文解开后立即重加密。
+class ChatHandoverKeys {
+  const ChatHandoverKeys({required this.content, required this.index});
+
+  final Uint8List content;
+  final Uint8List index;
+
+  void dispose() {
+    content.fillRange(0, content.length, 0);
+    index.fillRange(0, index.length, 0);
+  }
 }

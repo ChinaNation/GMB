@@ -152,7 +152,7 @@ export class ChatRealtimeObject implements DurableObject {
 }
 
 export async function relayChatPayload(env: Env, payload: ChatRelayPayload): Promise<number> {
-  // 收件前直读 finalized 当前绑定，旧账户 WebSocket 即使尚未被接管清理也收不到密文。
+  // 收件前直读 finalized 当前绑定，此前账户 WebSocket 即使尚未被接管清理也收不到密文。
   const binding = await fetchChainIdentityStateByCid(
     env,
     payload.recipient_cid_number,
@@ -200,13 +200,19 @@ export async function closeStaleChatRealtime(
       }),
     }),
   );
-  if (!response.ok) return 0;
+  if (!response.ok) {
+    throw new HttpError(
+      503,
+      'chat_realtime_revoke_failed',
+      '此前 Chat 实时连接撤销失败，请重试设备登记',
+    );
+  }
   return ((await response.json()) as { closed?: number }).closed ?? 0;
 }
 
 /// 关闭某身份主键 cid_number 的实时信箱，仅供整身份注销使用。
 ///
-/// 换绑时新旧账户共享同一 CID/DO，严禁调用本函数，否则会把新账户连接一并踢下线。
+/// 换绑时当前与新账户共享同一 CID/DO，严禁调用本函数，否则会把新账户连接一并踢下线。
 export async function closeChatRealtime(env: Env, cidNumber: string): Promise<number> {
   const namespace = env.CHAT_REALTIME;
   if (!namespace) return 0;

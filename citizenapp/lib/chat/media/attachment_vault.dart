@@ -21,6 +21,7 @@ class AttachmentVault {
 
   /// 短命明文目录名(位于附件缓存根下)。
   static const String plainDirName = '.plain';
+  static const String _handoverDirName = '.account-handover';
 
   static File cipherFileOf(String cachePath) => File('$cachePath$cipherSuffix');
 
@@ -124,6 +125,86 @@ class AttachmentVault {
       }
     }
   }
+
+  /// 把附件树全部预演成目标账户密文，正式 `.enc` 文件保持不动。
+  static Future<void> stageAccountHandover({
+    required Directory attachmentDirectory,
+    required String handoverId,
+    required List<int> currentKey,
+    required List<int> newKey,
+  }) async {
+    if (!await attachmentDirectory.exists()) return;
+    final stageRoot = _handoverDirectory(attachmentDirectory, handoverId);
+    if (await stageRoot.exists()) await stageRoot.delete(recursive: true);
+    await for (final entity in attachmentDirectory.list(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith(cipherSuffix)) continue;
+      if (entity.path
+              .startsWith('${stageRoot.path}${Platform.pathSeparator}') ||
+          entity.path.contains(
+              '${Platform.pathSeparator}$_handoverDirName${Platform.pathSeparator}') ||
+          entity.path.contains(
+              '${Platform.pathSeparator}$plainDirName${Platform.pathSeparator}')) {
+        continue;
+      }
+      final relative =
+          entity.path.substring(attachmentDirectory.path.length + 1);
+      await MediaRelayCrypto.reencryptFile(
+        sourcePath: entity.path,
+        destPath: '${stageRoot.path}${Platform.pathSeparator}$relative',
+        currentKey: currentKey,
+        newKey: newKey,
+      );
+    }
+  }
+
+  /// finalized 后逐文件替换正式附件密文；每个文件均保留可回滚备份直到替换成功。
+  static Future<void> commitAccountHandover({
+    required Directory attachmentDirectory,
+    required String handoverId,
+  }) async {
+    final stageRoot = _handoverDirectory(attachmentDirectory, handoverId);
+    if (!await stageRoot.exists()) return;
+    final stagedFiles = <File>[];
+    await for (final entity in stageRoot.list(recursive: true)) {
+      if (entity is File) stagedFiles.add(entity);
+    }
+    for (final staged in stagedFiles) {
+      final relative = staged.path.substring(stageRoot.path.length + 1);
+      final target = File(
+        '${attachmentDirectory.path}${Platform.pathSeparator}$relative',
+      );
+      final backup = File('${target.path}.account-previous');
+      await target.parent.create(recursive: true);
+      if (await backup.exists()) await backup.delete();
+      if (await target.exists()) await target.rename(backup.path);
+      try {
+        await staged.rename(target.path);
+        if (await backup.exists()) await backup.delete();
+      } catch (_) {
+        if (await target.exists()) await target.delete();
+        if (await backup.exists()) await backup.rename(target.path);
+        rethrow;
+      }
+    }
+    if (await stageRoot.exists()) await stageRoot.delete(recursive: true);
+  }
+
+  static Future<void> discardAccountHandover({
+    required Directory attachmentDirectory,
+    required String handoverId,
+  }) async {
+    final stageRoot = _handoverDirectory(attachmentDirectory, handoverId);
+    if (await stageRoot.exists()) await stageRoot.delete(recursive: true);
+  }
+
+  static Directory _handoverDirectory(
+    Directory attachmentDirectory,
+    String handoverId,
+  ) =>
+      Directory(
+        '${attachmentDirectory.path}${Platform.pathSeparator}$_handoverDirName'
+        '${Platform.pathSeparator}$handoverId',
+      );
 
   /// 明文临时文件名：保留原扩展名，播放器按扩展名选解码器。
   static String _plainName(String cachePath) {

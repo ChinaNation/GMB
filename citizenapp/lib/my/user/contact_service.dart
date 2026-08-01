@@ -130,15 +130,24 @@ class ContactSyncState {
 }
 
 /// 联系人端到端加密器。AES-GCM 保护内容与完整性，HMAC 生成不透明 contact_id；
-/// 两把钥匙均由 WalletManager 从 seed 域隔离派生，本类永远接触不到 seed。
+/// 两把钥匙均由 WalletManager 从当前绑定账户 child 域隔离派生，本类接触不到账户秘密。
 class ContactCryptor {
   ContactCryptor({
     required String ownerCidNumber,
+    required this.bindingRevision,
+    required this.accountId,
     required this.keys,
-  }) : ownerCidNumber = UserContactService.requireCidNumber(ownerCidNumber);
+  }) : ownerCidNumber = UserContactService.requireCidNumber(ownerCidNumber) {
+    if (bindingRevision <= 0) {
+      throw const FormatException('通讯录密文绑定版本必须大于 0');
+    }
+    UserContactService.requireAccountId(accountId);
+  }
 
   static const String _domain = 'citizenapp.contacts';
   final String ownerCidNumber;
+  final int bindingRevision;
+  final String accountId;
   final ContactKeyMaterial keys;
   final AesGcm _aes = AesGcm.with256bits();
   final Hmac _hmac = Hmac.sha256();
@@ -170,6 +179,8 @@ class ContactCryptor {
       aad: _aad(id),
     );
     return SquareEncryptedContact(
+      bindingRevision: bindingRevision,
+      accountId: accountId,
       contactId: id,
       ciphertext: _base64UrlEncode(box.cipherText),
       nonce: _base64UrlEncode(box.nonce),
@@ -180,6 +191,10 @@ class ContactCryptor {
 
   Future<UserContact> decrypt(SquareEncryptedContact record) async {
     try {
+      if (record.bindingRevision != bindingRevision ||
+          record.accountId != accountId) {
+        throw const FormatException('通讯录密文钱包绑定上下文不匹配');
+      }
       final clear = await _aes.decrypt(
         SecretBox(
           _base64UrlDecode(record.ciphertext),
@@ -211,7 +226,9 @@ class ContactCryptor {
     }
   }
 
-  List<int> _aad(String id) => utf8.encode('$_domain|$ownerCidNumber|$id');
+  List<int> _aad(String id) => utf8.encode(
+        '$_domain|$ownerCidNumber|$bindingRevision|$accountId|$id',
+      );
 }
 
 /// 本地优先的加密通讯录服务。Isar 保存按永久 CID 隔离的可用缓存与待同步操作；
@@ -234,6 +251,8 @@ class UserContactService {
   static const String _contactsPrefix = 'contact_book_by_cid:';
   static const String _pendingPrefix = 'contact_pending_by_cid:';
   static const String _syncPrefix = 'contact_sync_by_cid:';
+  static const String _handoverPrefix = 'contact_handover_by_cid:';
+  static const String _inaccessiblePrefix = 'contact_inaccessible_by_binding:';
 
   final WalletManager _walletManager;
   final SquareSessionProvider _sessionProvider;
@@ -242,7 +261,7 @@ class UserContactService {
   final CitizenIdentityChainReader _chainReader;
   final bool _autoSync;
 
-  /// 通讯录永久归属 CID；当前绑定账户仅负责解锁 CID 数据根和云会话鉴权。
+  /// 通讯录永久归属 CID；当前绑定账户负责派生本绑定版本密钥和云会话鉴权。
   IdentityAccountCache get _identityCache =>
       _identityAccountCache ?? IdentityAccountCache.instance;
 
@@ -264,7 +283,7 @@ class UserContactService {
   /// 从同一个 finalized 区块批量刷新全部联系人当前绑定账户。
   ///
   /// 绑定快照只是可更新缓存；联系人关系与备注仍只归 CID。失效或不闭环的 CID
-  /// 不会用旧账户冒充有效绑定，也不会因此删除用户的联系人关系。
+  /// 不会用此前账户冒充有效绑定，也不会因此删除用户的联系人关系。
   Future<List<UserContact>> refreshContactBindings() async {
     final owner = await _requireIdentityOwner();
     final contacts = await _readContacts(owner);
@@ -448,10 +467,337 @@ class UserContactService {
     return _syncOwner(await _requireIdentityOwner());
   }
 
+  /// 链上换绑提交前预演通讯录交接，并只落目标账户密文暂存版。
+  ///
+  /// 本地此前密文只在内存中解开，随后立即用目标账户密钥重加密；目标云端密文只在
+  /// finalized 后由新账户当前会话上传。源版本不覆盖、不删除，换绑失败时仍可正常使用。
+  Future<void> stageAccountHandover({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    _validateHandover(source, target);
+    final sourceLocalKey = await _localKvKeyForBinding(source);
+    final targetLocalKey = await _localKvKeyForBinding(target);
+    ContactKeyMaterial? sourceCloudKeys;
+    ContactKeyMaterial? targetCloudKeys;
+    try {
+      final canonicalKeys = <String>[
+        '$_contactsPrefix${source.cidNumber}',
+        '$_pendingPrefix${source.cidNumber}',
+        '$_syncPrefix${source.cidNumber}',
+      ];
+      final stagedValues = <String, String>{};
+      final stagedCanonicalKeys = <String>[];
+      for (final canonicalKey in canonicalKeys) {
+        final blob = await _readRawKv(canonicalKey);
+        if (blob == null || blob.isEmpty) continue;
+        final plaintext = await LocalCipher.decryptString(
+          key: sourceLocalKey,
+          blob: blob,
+          aad: canonicalKey,
+        );
+        final targetCipher = await LocalCipher.encryptString(
+          key: targetLocalKey,
+          plaintext: plaintext,
+          aad: canonicalKey,
+        );
+        final verified = await LocalCipher.decryptString(
+          key: targetLocalKey,
+          blob: targetCipher,
+          aad: canonicalKey,
+        );
+        if (verified != plaintext) {
+          throw StateError('通讯录本地新账户密文回读不一致');
+        }
+        stagedValues[_handoverValueKey(target, canonicalKey)] = targetCipher;
+        stagedCanonicalKeys.add(canonicalKey);
+      }
+
+      // 先落只含目标密文的清单，再读取云端当前版本。换绑生效前绝不向 Worker 预写
+      // 尚未成为当前绑定的目标版本，避免扩大当前会话的云端写权限。
+      final manifestKey = _handoverManifestKey(target);
+      await WalletIsar.instance.writeTxn((isar) async {
+        for (final entry in stagedValues.entries) {
+          await _putKvInTxn(isar, entry.key, entry.value);
+        }
+        await _putKvInTxn(
+          isar,
+          manifestKey,
+          jsonEncode(<String, Object?>{
+            'source': source.toJson(),
+            'target': target.toJson(),
+            'canonical_keys': stagedCanonicalKeys,
+            'staged_keys': stagedValues.keys.toList(growable: false),
+            'previous_contact_ids': const <String>[],
+            'target_contact_ids': const <String>[],
+            'target_records': const <Object>[],
+          }),
+        );
+      });
+
+      sourceCloudKeys =
+          await _walletManager.contactKeyMaterialForBinding(source);
+      targetCloudKeys =
+          await _walletManager.contactKeyMaterialForBinding(target);
+      final sourceCryptor = ContactCryptor(
+        ownerCidNumber: source.cidNumber,
+        bindingRevision: source.bindingRevision,
+        accountId: source.accountId,
+        keys: sourceCloudKeys,
+      );
+      final targetCryptor = ContactCryptor(
+        ownerCidNumber: target.cidNumber,
+        bindingRevision: target.bindingRevision,
+        accountId: target.accountId,
+        keys: targetCloudKeys,
+      );
+      final sourceSession = await _sessionProvider.ensureSession();
+      if (sourceSession == null ||
+          sourceSession.cidNumber != source.cidNumber ||
+          sourceSession.bindingRevision != source.bindingRevision ||
+          sourceSession.accountId != source.accountId) {
+        throw const SquareApiException('通讯录交接需要当前账户有效会话');
+      }
+      final previousContactIds = <String>[];
+      final targetContactIds = <String>[];
+      final targetRecords = <SquareEncryptedContact>[];
+      String? cursor;
+      do {
+        final page = await _apiClient.fetchEncryptedContacts(
+          session: sourceSession,
+          cursor: cursor,
+        );
+        for (final record in page.items) {
+          final contact = await sourceCryptor.decrypt(record);
+          previousContactIds.add(record.contactId);
+          final targetRecord = await targetCryptor.encrypt(contact);
+          final verified = await targetCryptor.decrypt(targetRecord);
+          if (jsonEncode(verified.toJson()) != jsonEncode(contact.toJson())) {
+            throw StateError('通讯录云端新账户密文回读不一致');
+          }
+          targetContactIds.add(targetRecord.contactId);
+          targetRecords.add(targetRecord);
+          // 每生成一条目标密文就先持久化清单；明文不落盘，崩溃后只会保留可安全重试的密文。
+          await WalletIsar.instance.writeTxn((isar) async {
+            await _putKvInTxn(
+              isar,
+              manifestKey,
+              _encodeHandoverManifest(
+                source: source,
+                target: target,
+                canonicalKeys: stagedCanonicalKeys,
+                stagedKeys: stagedValues.keys.toList(growable: false),
+                previousContactIds: previousContactIds,
+                targetContactIds: targetContactIds,
+                targetRecords: targetRecords,
+              ),
+            );
+          });
+        }
+        cursor = page.nextCursor;
+      } while (cursor != null);
+
+      final manifest = _encodeHandoverManifest(
+        source: source,
+        target: target,
+        canonicalKeys: stagedCanonicalKeys,
+        stagedKeys: stagedValues.keys.toList(growable: false),
+        previousContactIds: previousContactIds,
+        targetContactIds: targetContactIds,
+        targetRecords: targetRecords,
+      );
+      await WalletIsar.instance.writeTxn((isar) async {
+        await _putKvInTxn(isar, manifestKey, manifest);
+      });
+    } finally {
+      sourceLocalKey.fillRange(0, sourceLocalKey.length, 0);
+      targetLocalKey.fillRange(0, targetLocalKey.length, 0);
+      sourceCloudKeys?.dispose();
+      targetCloudKeys?.dispose();
+    }
+  }
+
+  /// finalized 已确认新账户接管后提交本地暂存密文，并由新会话删除此前云端版本。
+  ///
+  /// 本方法幂等；只有目标密文上传回读、本地切换和此前云端清理全部成功才删除交接清单。
+  Future<void> commitAccountHandover({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    _validateHandover(source, target);
+    final manifestKey = _handoverManifestKey(target);
+    final raw = await _readRawKv(manifestKey);
+    if (raw == null || raw.isEmpty) return;
+    final manifest = jsonDecode(raw);
+    if (manifest is! Map<String, dynamic>) {
+      throw const FormatException('通讯录换绑交接清单损坏');
+    }
+    final canonicalKeys = (manifest['canonical_keys'] as List?)
+            ?.whereType<String>()
+            .toList(growable: false) ??
+        const <String>[];
+    final stagedKeys = (manifest['staged_keys'] as List?)
+            ?.whereType<String>()
+            .toList(growable: false) ??
+        const <String>[];
+    if (canonicalKeys.length != stagedKeys.length) {
+      throw const FormatException('通讯录换绑交接清单不完整');
+    }
+    final stagedValues = <String>[];
+    for (final key in stagedKeys) {
+      final value = await _readRawKv(key);
+      if (value == null || value.isEmpty) {
+        throw const FormatException('通讯录换绑暂存密文缺失');
+      }
+      stagedValues.add(value);
+    }
+    await WalletIsar.instance.writeTxn((isar) async {
+      for (var index = 0; index < canonicalKeys.length; index++) {
+        await _putKvInTxn(isar, canonicalKeys[index], stagedValues[index]);
+      }
+    });
+
+    final targetSession =
+        await _sessionProvider.ensureSessionForAccountId(target.accountId);
+    if (targetSession == null ||
+        targetSession.cidNumber != target.cidNumber ||
+        targetSession.bindingRevision != target.bindingRevision ||
+        targetSession.accountId != target.accountId) {
+      throw const SquareApiException('通讯录交接清理需要新账户当前有效会话');
+    }
+    final targetContactIds = (manifest['target_contact_ids'] as List?)
+            ?.whereType<String>()
+            .toSet() ??
+        const <String>{};
+    final targetRecords = (manifest['target_records'] as List?)
+            ?.whereType<Map>()
+            .map((record) => SquareEncryptedContact.fromJson(
+                  Map<String, dynamic>.from(record),
+                ))
+            .toList(growable: false) ??
+        const <SquareEncryptedContact>[];
+    if (targetRecords.length != targetContactIds.length ||
+        targetRecords.any((record) =>
+            record.bindingRevision != target.bindingRevision ||
+            record.accountId != target.accountId ||
+            !targetContactIds.contains(record.contactId))) {
+      throw const FormatException('通讯录目标账户密文清单不完整');
+    }
+    for (final record in targetRecords) {
+      await _apiClient.putEncryptedContact(
+        session: targetSession,
+        contact: record,
+      );
+    }
+    ContactKeyMaterial? targetKeys;
+    try {
+      targetKeys = await _walletManager.contactKeyMaterialForBinding(target);
+      final targetCryptor = ContactCryptor(
+        ownerCidNumber: target.cidNumber,
+        bindingRevision: target.bindingRevision,
+        accountId: target.accountId,
+        keys: targetKeys,
+      );
+      final verifiedTargetIds = <String>{};
+      String? cursor;
+      do {
+        final page = await _apiClient.fetchEncryptedContacts(
+          session: targetSession,
+          cursor: cursor,
+        );
+        for (final record in page.items) {
+          await targetCryptor.decrypt(record);
+          verifiedTargetIds.add(record.contactId);
+        }
+        cursor = page.nextCursor;
+      } while (cursor != null);
+      if (!verifiedTargetIds.containsAll(targetContactIds)) {
+        throw const SquareApiException('通讯录目标账户云端密文尚未完整回读，禁止清理此前版本');
+      }
+    } finally {
+      targetKeys?.dispose();
+    }
+    final previousContactIds = (manifest['previous_contact_ids'] as List?)
+            ?.whereType<String>()
+            .toList(growable: false) ??
+        const <String>[];
+    for (final contactId in previousContactIds) {
+      await _apiClient.deleteEncryptedContact(
+        session: targetSession,
+        contactId: contactId,
+        bindingRevision: source.bindingRevision,
+        accountId: source.accountId,
+      );
+    }
+    await _deleteHandoverRows(manifestKey, stagedKeys);
+  }
+
+  /// 换绑交易未生效时删除目标暂存版；源密文始终不动。
+  Future<void> discardAccountHandover({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    _validateHandover(source, target);
+    final manifestKey = _handoverManifestKey(target);
+    final raw = await _readRawKv(manifestKey);
+    if (raw == null || raw.isEmpty) return;
+    final manifest = jsonDecode(raw) as Map<String, dynamic>;
+    final stagedKeys = (manifest['staged_keys'] as List?)
+            ?.whereType<String>()
+            .toList(growable: false) ??
+        const <String>[];
+    await _deleteHandoverRows(manifestKey, stagedKeys);
+  }
+
+  /// 没有当前账户签名的换绑完成后，把此前绑定的本地通讯录密文移出当前入口。
+  ///
+  /// 这里只移动已经存在的密文，不解密、不重新加密，也不要求此前账户或此前设备。
+  /// 新账户随后从空的当前 KV 开始使用通讯录；此前密文按公开绑定上下文保留，绝不被
+  /// 新账户密钥误当作损坏数据覆盖。
+  Future<void> isolateInaccessibleBinding(
+    AccountDataBinding previous,
+  ) async {
+    previous.validate();
+    final canonicalKeys = <String>[
+      '$_contactsPrefix${previous.cidNumber}',
+      '$_pendingPrefix${previous.cidNumber}',
+      '$_syncPrefix${previous.cidNumber}',
+    ];
+    await WalletIsar.instance.writeTxn((isar) async {
+      for (final canonicalKey in canonicalKeys) {
+        final row = await isar.appKvEntitys.getByKey(canonicalKey);
+        if (row == null) continue;
+        final archiveKey = _inaccessibleKey(previous, canonicalKey);
+        final archive =
+            await isar.appKvEntitys.getByKey(archiveKey) ?? AppKvEntity();
+        archive
+          ..key = archiveKey
+          ..stringValue = row.stringValue;
+        await isar.appKvEntitys.put(archive);
+        await isar.appKvEntitys.delete(row.id);
+      }
+    });
+  }
+
+  Future<void> _deleteHandoverRows(
+    String manifestKey,
+    List<String> stagedKeys,
+  ) async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      for (final key in stagedKeys) {
+        final row = await isar.appKvEntitys.getByKey(key);
+        if (row != null) await isar.appKvEntitys.delete(row.id);
+      }
+      final manifestRow = await isar.appKvEntitys.getByKey(manifestKey);
+      if (manifestRow != null) await isar.appKvEntitys.delete(manifestRow.id);
+    });
+  }
+
   Future<List<UserContact>> _syncOwner(_ContactOwner owner) async {
     await _setSyncState(owner, ContactSyncPhase.syncing);
+    ContactKeyMaterial? keys;
     try {
-      final keys = await _walletManager.ensureContactKeyMaterialForAccountId(
+      keys = await _walletManager.ensureContactKeyMaterialForAccountId(
         owner.accountId,
       );
       final session = await _sessionProvider.ensureSession();
@@ -462,6 +808,8 @@ class UserContactService {
       }
       final cryptor = ContactCryptor(
         ownerCidNumber: owner.cidNumber,
+        bindingRevision: owner.bindingRevision,
+        accountId: owner.accountId,
         keys: keys,
       );
       final cloudRecords = <SquareEncryptedContact>[];
@@ -527,6 +875,8 @@ class UserContactService {
           pending.isEmpty ? ContactSyncPhase.offline : ContactSyncPhase.failed;
       await _setSyncState(owner, phase, message: error.toString());
       return _readContacts(owner);
+    } finally {
+      keys?.dispose();
     }
   }
 
@@ -563,6 +913,7 @@ class UserContactService {
     }
     return _ContactOwner(
       cidNumber: requireCidNumber(snapshot.cidNumber),
+      bindingRevision: snapshot.bindingRevision,
       accountId: requireAccountId(identity.accountId),
     );
   }
@@ -681,35 +1032,107 @@ class UserContactService {
     );
   }
 
-  /// 本地 KV 密文层的子钥缓存；CID 是属主，账户只标识本次有效绑定。
-  final Map<String, Uint8List> _localKvKeys = <String, Uint8List>{};
-
   /// 取某条 KV 的本地加密子钥。
   ///
   /// 用 `LocalKeyPurpose.contactsLocal` 而**不复用云端通讯录钥**:两者域隔离,
   /// 本地密文被拿到也不等于同时暴露云端密文。
-  Future<Uint8List> _localKvKey(_ContactOwner owner) async {
-    final bindingKey = '${owner.cidNumber}|${owner.accountId}';
-    final cached = _localKvKeys[bindingKey];
-    if (cached != null) return cached;
-    final dataRoot = await _walletManager.ensureCidDataRootForCurrentBinding(
-      owner.accountId,
-    );
-    final key = await dataRoot.subkey(LocalKeyPurpose.contactsLocal);
-    _localKvKeys[bindingKey] = key;
-    return key;
+  Future<Uint8List> _localKvKey(_ContactOwner owner) =>
+      _walletManager.deriveDataKeyForCurrentBinding(
+        owner.accountId,
+        LocalKeyPurpose.contactsLocal,
+      );
+
+  Future<Uint8List> _localKvKeyForBinding(AccountDataBinding binding) async {
+    return (await _walletManager.deriveDataKeysForBinding(
+      binding,
+      const <({LocalKeyPurpose purpose, String? context})>[
+        (purpose: LocalKeyPurpose.contactsLocal, context: null),
+      ],
+    ))
+        .single;
   }
+
+  Future<String?> _readRawKv(String key) => WalletIsar.instance.read(
+      (isar) async => (await isar.appKvEntitys.getByKey(key))?.stringValue);
+
+  static void _validateHandover(
+    AccountDataBinding source,
+    AccountDataBinding target,
+  ) {
+    source.validate();
+    target.validate();
+    if (source.genesisHash != target.genesisHash ||
+        source.cidNumber != target.cidNumber ||
+        target.bindingRevision != source.bindingRevision + 1 ||
+        source.accountId == target.accountId) {
+      throw const FormatException('通讯录换绑交接上下文不合法');
+    }
+  }
+
+  static String _handoverManifestKey(AccountDataBinding target) =>
+      '$_handoverPrefix${target.cidNumber}:${target.bindingRevision}:${target.accountId}';
+
+  static String _inaccessibleKey(
+    AccountDataBinding binding,
+    String canonicalKey,
+  ) =>
+      '$_inaccessiblePrefix${binding.cidNumber}:${binding.bindingRevision}:'
+      '${binding.accountId}:${Uri.encodeComponent(canonicalKey)}';
+
+  static String _handoverValueKey(
+    AccountDataBinding target,
+    String canonicalKey,
+  ) =>
+      '${_handoverManifestKey(target)}:${Uri.encodeComponent(canonicalKey)}';
+
+  static String _encodeHandoverManifest({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+    required List<String> canonicalKeys,
+    required List<String> stagedKeys,
+    required List<String> previousContactIds,
+    required List<String> targetContactIds,
+    required List<SquareEncryptedContact> targetRecords,
+  }) =>
+      jsonEncode(<String, Object?>{
+        'source': source.toJson(),
+        'target': target.toJson(),
+        'canonical_keys': canonicalKeys,
+        'staged_keys': stagedKeys,
+        'previous_contact_ids': previousContactIds,
+        'target_contact_ids': targetContactIds,
+        'target_records': targetRecords
+            .map((record) => record.toJson())
+            .toList(growable: false),
+      });
 
   /// AAD 绑完整 KV 键名,防止三份(通讯录 / 待同步 / 同步态)密文被互换。
   Future<String> _sealKv(
-          _ContactOwner owner, String kvKey, String value) async =>
-      LocalCipher.encryptString(
-          key: await _localKvKey(owner), plaintext: value, aad: kvKey);
+      _ContactOwner owner, String kvKey, String value) async {
+    final key = await _localKvKey(owner);
+    try {
+      return await LocalCipher.encryptString(
+        key: key,
+        plaintext: value,
+        aad: kvKey,
+      );
+    } finally {
+      key.fillRange(0, key.length, 0);
+    }
+  }
 
-  Future<String> _openKv(
-          _ContactOwner owner, String kvKey, String blob) async =>
-      LocalCipher.decryptString(
-          key: await _localKvKey(owner), blob: blob, aad: kvKey);
+  Future<String> _openKv(_ContactOwner owner, String kvKey, String blob) async {
+    final key = await _localKvKey(owner);
+    try {
+      return await LocalCipher.decryptString(
+        key: key,
+        blob: blob,
+        aad: kvKey,
+      );
+    } finally {
+      key.fillRange(0, key.length, 0);
+    }
+  }
 
   /// 读本地 KV 并解密。解密失败直接抛 [LocalCipherException],不静默返回 null——
   /// 静默会被上层当成"本地无缓存"而拉云端整表覆盖,悄悄丢掉待同步的本地改动。
@@ -787,10 +1210,12 @@ class UserContactService {
 class _ContactOwner {
   const _ContactOwner({
     required this.cidNumber,
+    required this.bindingRevision,
     required this.accountId,
   });
 
   final String cidNumber;
+  final int bindingRevision;
   final String accountId;
 }
 

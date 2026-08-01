@@ -57,6 +57,11 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
   final ChatDevice? _identity;
   final MlsStateStore? _stateStore;
 
+  /// 当前账户运行上下文退出后立即清零 Dart 侧 MLS 状态信封钥。
+  void dispose() {
+    _stateStore?.dispose();
+  }
+
   @override
   Future<MlsKeyPackage> createKeyPackage(
     ChatDevice identity,
@@ -417,6 +422,7 @@ class MlsNativeBindings {
     required this.twoPartySmoke,
     required this.encrypt,
     required this.decrypt,
+    required this.rekeyState,
     required this.groupCreate,
     required this.groupAddMembers,
     required this.groupRemoveMembers,
@@ -430,6 +436,7 @@ class MlsNativeBindings {
   final MlsJsonDart twoPartySmoke;
   final MlsJsonDart encrypt;
   final MlsJsonDart decrypt;
+  final MlsJsonDart rekeyState;
   final MlsJsonDart groupCreate;
   final MlsJsonDart groupAddMembers;
   final MlsJsonDart groupRemoveMembers;
@@ -452,6 +459,9 @@ class MlsNativeBindings {
       ),
       decrypt: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
         'gmb_chat_mls_decrypt_json',
+      ),
+      rekeyState: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
+        'gmb_chat_mls_rekey_state_json',
       ),
       groupCreate: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
         'gmb_chat_mls_group_create_json',
@@ -506,6 +516,22 @@ class MlsNativeBindings {
         _freeString(resultPtr);
       }
     }
+  }
+
+  /// 运行 Rust MLS 状态换绑边界；明文只在 Rust 内存中短暂存在。
+  void runStateRekey({
+    required String stateStoreDir,
+    required String action,
+    String? currentStateKeyHex,
+    String? newStateKeyHex,
+  }) {
+    callJson(rekeyState, <String, Object?>{
+      'state_store_dir': stateStoreDir,
+      'action': action,
+      if (currentStateKeyHex != null)
+        'current_state_key_hex': currentStateKeyHex,
+      if (newStateKeyHex != null) 'new_state_key_hex': newStateKeyHex,
+    });
   }
 }
 

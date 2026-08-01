@@ -52,9 +52,6 @@ interface WorkerSecretsAndOptionalVars {
   TOPUP_SETTLE_TOKEN?: string;
   // 付款意图 HMAC 密钥，只放 Worker Secret；用于把登录账户、付款钱包和报价绑定为短期令牌。
   TOPUP_INTENT_SECRET?: string;
-  // CID 独立恢复层的 32 字节根密钥，只允许 Worker Secret 注入；代码按创世与 CID
-  // 派生每个身份的恢复 KEK，D1 不保存明文数据根。
-  CID_DATA_ROOT_RECOVERY_KEY?: string;
 }
 
 /// Wrangler 会把配置值推导为字面量；Worker 运行期仍需接受测试覆盖值和控制台注入的字符串。
@@ -119,6 +116,9 @@ export interface DeviceSubkeyRow {
 /// 属主键 = 身份主键 cid_number(换绑后随身份保留)。
 export interface ContactCiphertextRow {
   cid_number: string;
+  /// 密文派生上下文；只作钱包换绑版本隔离，不改变 CID 属主。
+  binding_revision: number;
+  account_id: string;
   contact_id: string;
   ciphertext: string;
   nonce: string;

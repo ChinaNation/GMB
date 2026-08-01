@@ -306,8 +306,8 @@ fn append_bounded(out: &mut Vec<u8>, bytes: &[u8]) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FinalizedBindingExpectation {
     genesis_hash: [u8; 32],
-    /// 首次绑定为 None；换绑为挑战签发时的旧账户/revision。
-    previous_binding: Option<([u8; 32], u64)>,
+    /// 首次绑定为 None；换绑为交易提交前的绑定账户/revision。
+    current_binding: Option<([u8; 32], u64)>,
     target_account_id: [u8; 32],
     target_binding_revision: u64,
     /// 首次占号必须精确归因到本次注册局和账户承诺；换绑不改 CidRecord，故为 None。
@@ -355,14 +355,14 @@ fn finalized_target_state(
     {
         return FinalizedTargetState::Confirmed;
     }
-    let still_previous = match expectation.previous_binding {
+    let still_current = match expectation.current_binding {
         None => snapshot.is_unoccupied(),
-        Some(previous) => {
+        Some(current) => {
             snapshot.cid_status == FinalizedCidStatus::Active
-                && snapshot.active_binding() == Some(previous)
+                && snapshot.active_binding() == Some(current)
         }
     };
-    if still_previous
+    if still_current
         && authorization_is_live(
             snapshot.chain_now_seconds,
             expectation.authorization_expires_at,
@@ -407,7 +407,7 @@ fn encode_cid_occupy_authorization(
 fn encode_cid_rebind_authorization(
     genesis_hash: &[u8; 32],
     cid_number: &str,
-    expected_old_account_id: &[u8; 32],
+    current_account_id: &[u8; 32],
     new_account_id: &[u8; 32],
     expected_binding_revision: u64,
     expires_at: u64,
@@ -415,7 +415,7 @@ fn encode_cid_rebind_authorization(
     let mut out = Vec::new();
     out.extend_from_slice(genesis_hash);
     append_bounded(&mut out, cid_number.as_bytes());
-    out.extend_from_slice(expected_old_account_id);
+    out.extend_from_slice(current_account_id);
     out.extend_from_slice(new_account_id);
     out.extend_from_slice(&expected_binding_revision.to_le_bytes());
     out.extend_from_slice(&expires_at.to_le_bytes());
@@ -473,7 +473,7 @@ fn encode_admin_rebind_cid_account_id_call(
     new_account_id: &[u8; 32],
     expected_binding_revision: u64,
     expires_at: u64,
-    rebind_signature: &[u8],
+    new_account_signature: &[u8],
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(CITIZEN_IDENTITY_PALLET_INDEX);
@@ -484,7 +484,7 @@ fn encode_admin_rebind_cid_account_id_call(
     out.extend_from_slice(new_account_id);
     out.extend_from_slice(&expected_binding_revision.to_le_bytes());
     out.extend_from_slice(&expires_at.to_le_bytes());
-    append_bounded(&mut out, rebind_signature);
+    append_bounded(&mut out, new_account_signature);
     out
 }
 
@@ -504,6 +504,26 @@ fn verify_admin_rebind_signature(
         primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
         authorization,
     );
+    let public = sr25519::Public::from_raw(account_id_bytes);
+    let signature = sr25519::Signature::from_raw(signature);
+    sr25519::Pair::verify(&signature, message, &public)
+}
+
+/// 验当前账户对同一换绑授权载荷的签名；仅证明客户端可继承此前私有密文，不是注册局
+/// admin_rebind 的授权前提。当前账户不可用时注册局权限链仍可独立完成控制权换绑。
+fn verify_current_account_signature(
+    account_id: &str,
+    authorization: &[u8],
+    signature_hex: &str,
+) -> bool {
+    let Some(account_id_bytes) = parse_account_id_bytes(account_id) else {
+        return false;
+    };
+    let Some(signature) = parse_signature_bytes(signature_hex) else {
+        return false;
+    };
+    let message =
+        primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_REBIND, authorization);
     let public = sr25519::Public::from_raw(account_id_bytes);
     let signature = sr25519::Signature::from_raw(signature);
     sr25519::Pair::verify(&signature, message, &public)
@@ -562,7 +582,7 @@ fn finalized_binding_expectation(
             .ok_or_else(|| "finalized occupy context missing actor_cid_number".to_string())?;
         FinalizedBindingExpectation {
             genesis_hash,
-            previous_binding: None,
+            current_binding: None,
             target_account_id,
             target_binding_revision: 1,
             occupy_record: Some((
@@ -572,15 +592,13 @@ fn finalized_binding_expectation(
             authorization_expires_at,
         }
     } else {
-        let previous_account_id = session
+        let current_account_id = session
             .context
-            .get("expected_old_account_id")
+            .get("current_account_id")
             .and_then(|value| value.as_str())
             .and_then(parse_hex32)
-            .ok_or_else(|| {
-                "finalized rebind context missing expected_old_account_id".to_string()
-            })?;
-        let previous_binding_revision = session
+            .ok_or_else(|| "finalized rebind context missing current_account_id".to_string())?;
+        let current_binding_revision = session
             .context
             .get("expected_binding_revision")
             .and_then(|value| value.as_u64())
@@ -594,12 +612,12 @@ fn finalized_binding_expectation(
             .and_then(|value| value.as_str())
             .and_then(parse_hex32)
             .ok_or_else(|| "finalized rebind context missing new_account_id".to_string())?;
-        let target_binding_revision = previous_binding_revision
+        let target_binding_revision = current_binding_revision
             .checked_add(1)
             .ok_or_else(|| "finalized rebind revision overflow".to_string())?;
         FinalizedBindingExpectation {
             genesis_hash,
-            previous_binding: Some((previous_account_id, previous_binding_revision)),
+            current_binding: Some((current_account_id, current_binding_revision)),
             target_account_id,
             target_binding_revision,
             occupy_record: None,
@@ -666,7 +684,7 @@ pub(crate) struct PrepareCitizenRebindInput {
 pub(crate) struct PrepareCitizenRebindOutput {
     pub(crate) request_id: String,
     pub(crate) cid_number: String,
-    /// 新钱包域签名请求二维码；b.d 锁定链、CID、旧账户、revision 和过期时间，
+    /// 新钱包域签名请求二维码；b.d 锁定链、CID、当前账户、revision 和过期时间，
     /// new_account_id 槽留零，钱包选定本账户后填入并签名。
     pub(crate) new_wallet_sign_request: String,
     pub(crate) expires_at: i64,
@@ -674,12 +692,16 @@ pub(crate) struct PrepareCitizenRebindOutput {
 
 /// 换绑第二段:管理员回扫新钱包已签名的响应二维码后回传。
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct SubmitCitizenRebindInput {
     pub(crate) request_id: String,
     /// 新钱包账户(0x 小写 hex),换绑后 CID 绑定的新 account_id。
-    pub(crate) account_id: String,
+    pub(crate) new_account_id: String,
     /// 新账户对 CidRebindAuthorization 的换绑授权签名(域 OP_SIGN_CID_ADMIN_REBIND)。
-    pub(crate) rebind_signature: String,
+    pub(crate) new_account_signature: String,
+    /// 可选当前账户签名对；同时提供才表示客户端已完成此前私有数据交接预演。
+    pub(crate) current_account_id: Option<String>,
+    pub(crate) current_account_signature: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1096,7 +1118,8 @@ pub(crate) async fn submit_citizen_occupy(
 /// 换绑 prepare(第一段):直接读取链上 finalized 绑定真源，不以本局投影限制办理入口。
 ///
 /// 匿名 CID 可由任一在册 CREG/FRG 办理；civic CID 的本市 CREG/对应省 FRG 边界由
-/// Runtime 统一鉴权。返回完整授权模板供**新钱包**签名，不要求旧钱包签名。
+/// Runtime 统一鉴权。返回同一份完整授权模板：新钱包必须签名；当前钱包签名可选，
+/// 仅用于证明客户端可以在换绑生效时完成历史私有密文交接，不改变注册局强制换绑权限。
 pub(crate) async fn prepare_citizen_rebind(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1118,7 +1141,7 @@ pub(crate) async fn prepare_citizen_rebind(
         return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number 不能为空");
     }
     // 链上写(admin_rebind_cid_account_id extrinsic)硬规则 = passkey + 冷签:强制 passkey 断言(冷签在段3)。
-    // 换绑不要求旧账户签名(D4b 丢钥代办),passkey 是注册局侧唯一的操作者身份加固,不可省。
+    // 注册局强制换绑不以当前账户签名为权限前提；passkey 是注册局侧操作者身份加固，不可省。
     let rebind_grant_payload = serde_json::json!({
         "cid_number": cid_number,
         "actor_role_code": actor_role_code,
@@ -1149,7 +1172,7 @@ pub(crate) async fn prepare_citizen_rebind(
             );
         }
     };
-    let (expected_old_account_id, expected_binding_revision) = match finalized.cid_status {
+    let (current_account_id, expected_binding_revision) = match finalized.cid_status {
         FinalizedCidStatus::Missing => {
             return api_error(
                 StatusCode::NOT_FOUND,
@@ -1197,7 +1220,7 @@ pub(crate) async fn prepare_citizen_rebind(
             "cid_number": cid_number,
             "actor_role_code": actor_role_code,
             "genesis_hash": format!("0x{}", hex::encode(finalized.genesis_hash)),
-            "expected_old_account_id": format!("0x{}", hex::encode(expected_old_account_id)),
+            "current_account_id": format!("0x{}", hex::encode(current_account_id)),
             "expected_binding_revision": expected_binding_revision,
             "authorization_expires_at": authorization_expires_at,
         }),
@@ -1212,7 +1235,7 @@ pub(crate) async fn prepare_citizen_rebind(
     let authorization_template = encode_cid_rebind_authorization(
         &finalized.genesis_hash,
         cid_number.as_str(),
-        &expected_old_account_id,
+        &current_account_id,
         &[0u8; 32],
         expected_binding_revision,
         authorization_expires_at,
@@ -1235,7 +1258,7 @@ pub(crate) async fn prepare_citizen_rebind(
             "cid_number": cid_number,
             "request_id": request_id,
             "genesis_hash": format!("0x{}", hex::encode(finalized.genesis_hash)),
-            "expected_old_account_id": format!("0x{}", hex::encode(expected_old_account_id)),
+            "current_account_id": format!("0x{}", hex::encode(current_account_id)),
             "expected_binding_revision": expected_binding_revision,
             "authorization_expires_at": authorization_expires_at,
             "actor_ip": actor_ip_from_headers(&headers),
@@ -1254,7 +1277,7 @@ pub(crate) async fn prepare_citizen_rebind(
     .into_response()
 }
 
-/// 换绑第二段:复核 finalized 旧账户/revision 未变化 → 验新账户换绑签名 →
+/// 换绑第二段:复核 finalized 当前账户/revision 未变化 → 验新账户换绑签名 →
 /// 构造 admin_rebind_cid_account_id call → prepare_signing → 会话转正。
 pub(crate) async fn submit_citizen_rebind(
     State(state): State<AppState>,
@@ -1308,9 +1331,9 @@ pub(crate) async fn submit_citizen_rebind(
         .get("genesis_hash")
         .and_then(|v| v.as_str())
         .and_then(parse_hex32);
-    let expected_old_account_id = session
+    let current_account_id = session
         .context
-        .get("expected_old_account_id")
+        .get("current_account_id")
         .and_then(|v| v.as_str())
         .and_then(parse_hex32);
     let expected_binding_revision = session
@@ -1323,12 +1346,12 @@ pub(crate) async fn submit_citizen_rebind(
         .and_then(|v| v.as_u64());
     let (
         Some(expected_genesis_hash),
-        Some(expected_old_account_id),
+        Some(current_account_id),
         Some(expected_binding_revision),
         Some(authorization_expires_at),
     ) = (
         expected_genesis_hash,
-        expected_old_account_id,
+        current_account_id,
         expected_binding_revision,
         authorization_expires_at,
     )
@@ -1350,20 +1373,20 @@ pub(crate) async fn submit_citizen_rebind(
     }
 
     // 新钱包账户(0x 小写 hex,换绑后 CID 绑定的新 account_id)。
-    let Some(account_id_hex) = normalize_account_id(input.account_id.as_str()) else {
+    let Some(account_id_hex) = normalize_account_id(input.new_account_id.as_str()) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "新钱包账户格式错误");
     };
     let Some(account_id_bytes) = parse_account_id_bytes(account_id_hex.as_str()) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "新钱包账户格式错误");
     };
-    if account_id_bytes == expected_old_account_id {
+    if account_id_bytes == current_account_id {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
             "新钱包账户不能与当前绑定账户相同",
         );
     }
-    // submit 前再次读取同一 finalized 快照；旧账户/revision 任一变化都使挑战失效。
+    // submit 前再次读取同一 finalized 快照；当前账户/revision 任一变化都使挑战失效。
     let finalized = match read_finalized_cid_binding(cid_number.as_str()).await {
         Ok(snapshot) => snapshot,
         Err(err) => {
@@ -1377,7 +1400,7 @@ pub(crate) async fn submit_citizen_rebind(
     };
     if finalized.genesis_hash != expected_genesis_hash
         || finalized.cid_status != FinalizedCidStatus::Active
-        || finalized.active_binding() != Some((expected_old_account_id, expected_binding_revision))
+        || finalized.active_binding() != Some((current_account_id, expected_binding_revision))
     {
         delete_session_best_effort(&state, session.request_id.as_str(), "rebind state changed");
         return api_error(
@@ -1397,23 +1420,65 @@ pub(crate) async fn submit_citizen_rebind(
     let authorization = encode_cid_rebind_authorization(
         &expected_genesis_hash,
         cid_number.as_str(),
-        &expected_old_account_id,
+        &current_account_id,
         &account_id_bytes,
         expected_binding_revision,
         authorization_expires_at,
     );
-    // 新钱包签名锁定链、旧/新账户、revision 与过期时间；不要求已丢失的旧钱包签名。
+    let data_handover_authorized = match (
+        input.current_account_id.as_deref(),
+        input.current_account_signature.as_deref(),
+    ) {
+        (None, None) => false,
+        (Some(submitted_current_account_id), Some(current_account_signature)) => {
+            let current_account_id_hex = format!("0x{}", hex::encode(current_account_id));
+            let Some(normalized_current_account_id) =
+                normalize_account_id(submitted_current_account_id)
+            else {
+                return api_error(StatusCode::BAD_REQUEST, 1001, "当前钱包账户格式错误");
+            };
+            if normalized_current_account_id != current_account_id_hex {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1003,
+                    "当前钱包签名账户不是 CID 当前绑定账户",
+                );
+            }
+            if !verify_current_account_signature(
+                normalized_current_account_id.as_str(),
+                &authorization,
+                current_account_signature,
+            ) {
+                return api_error(StatusCode::BAD_REQUEST, 1003, "当前账户换绑签名验证失败");
+            }
+            true
+        }
+        _ => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "current_account_id 与 current_account_signature 必须同时提供或同时省略",
+            );
+        }
+    };
+    // 新钱包签名锁定链、当前/新账户、revision 与过期时间；当前账户签名只决定数据是否可交接。
     if !verify_admin_rebind_signature(
         account_id_hex.as_str(),
         &authorization,
-        input.rebind_signature.as_str(),
+        input.new_account_signature.as_str(),
     ) {
         return api_error(StatusCode::BAD_REQUEST, 1003, "新账户换绑签名验证失败");
     }
-    let Some(rebind_signature_bytes) = parse_signature_bytes(input.rebind_signature.as_str())
+    let Some(new_account_signature_bytes) =
+        parse_signature_bytes(input.new_account_signature.as_str())
     else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "换绑签名格式错误");
     };
+    tracing::info!(
+        cid_number = %cid_number,
+        data_handover_authorized,
+        "citizen rebind signatures verified"
+    );
 
     let actor_cid_number = match active_registry_cid_number(&state) {
         Ok(v) => v,
@@ -1426,7 +1491,7 @@ pub(crate) async fn submit_citizen_rebind(
         &account_id_bytes,
         expected_binding_revision,
         authorization_expires_at,
-        &rebind_signature_bytes,
+        &new_account_signature_bytes,
     );
     let prepared = match chain_submit::prepare_signing(&call, ctx.account_id.as_str()).await {
         Ok(v) => v,
@@ -2402,6 +2467,36 @@ pub(crate) async fn submit_chain_sign(
 mod tests {
     use super::*;
 
+    #[test]
+    fn submit_rebind_input_uses_exact_current_and_new_account_fields() {
+        let current_account_id = format!("0x{}", "11".repeat(32));
+        let new_account_id = format!("0x{}", "22".repeat(32));
+        let input: SubmitCitizenRebindInput = serde_json::from_value(serde_json::json!({
+            "request_id": "request-1",
+            "current_account_id": current_account_id,
+            "current_account_signature": format!("0x{}", "33".repeat(64)),
+            "new_account_id": new_account_id,
+            "new_account_signature": format!("0x{}", "44".repeat(64)),
+        }))
+        .expect("official account field names must deserialize");
+        assert_eq!(
+            input.current_account_id.as_deref(),
+            Some(current_account_id.as_str())
+        );
+        assert_eq!(input.new_account_id, new_account_id);
+
+        let alias_result = serde_json::from_value::<SubmitCitizenRebindInput>(serde_json::json!({
+            "request_id": "request-1",
+            "current_account_id": current_account_id,
+            "current_account_signature": format!("0x{}", "33".repeat(64)),
+            "new_account_id": format!("0x{}", "22".repeat(32)),
+            "new_account_signature": format!("0x{}", "44".repeat(64)),
+            "account_id": format!("0x{}", "22".repeat(32)),
+            "rebind_signature": format!("0x{}", "44".repeat(64)),
+        }));
+        assert!(alias_result.is_err(), "废弃泛化字段不得作为兼容输入");
+    }
+
     fn chain_session_with_context(context: serde_json::Value) -> ChainSignSession {
         ChainSignSession {
             request_id: "request-1".to_string(),
@@ -2563,22 +2658,22 @@ mod tests {
 
     #[test]
     fn finalized_target_rejects_pending_failed_and_accepts_only_exact_target() {
-        let old_account_id = [0x11u8; 32];
+        let current_account_id = [0x11u8; 32];
         let new_account_id = [0x22u8; 32];
         let expectation = FinalizedBindingExpectation {
             genesis_hash: [0xaau8; 32],
-            previous_binding: Some((old_account_id, 7)),
+            current_binding: Some((current_account_id, 7)),
             target_account_id: new_account_id,
             target_binding_revision: 8,
             occupy_record: None,
             authorization_expires_at: 1_300,
         };
-        // nonce 即使已被 txpool 推进，只要 finalized storage 仍是旧绑定就只能等待。
+        // nonce 即使已被 txpool 推进，只要 finalized storage 仍是交易前绑定就只能等待。
         assert_eq!(
             finalized_target_state(
                 &finalized_snapshot(
                     FinalizedCidStatus::Active,
-                    Some(old_account_id),
+                    Some(current_account_id),
                     Some(7),
                     1_100,
                 ),
@@ -2603,7 +2698,7 @@ mod tests {
             finalized_target_state(
                 &finalized_snapshot(
                     FinalizedCidStatus::Active,
-                    Some(old_account_id),
+                    Some(current_account_id),
                     Some(7),
                     1_300,
                 ),
@@ -2632,7 +2727,7 @@ mod tests {
         let commitment = blake2_256(&account_id);
         let expectation = FinalizedBindingExpectation {
             genesis_hash: [0xaau8; 32],
-            previous_binding: None,
+            current_binding: None,
             target_account_id: account_id,
             target_binding_revision: 1,
             occupy_record: Some((registrar.clone(), commitment)),
@@ -2693,7 +2788,7 @@ mod tests {
     #[test]
     fn encode_admin_rebind_cid_account_id_call_byte_golden() {
         let new_account_id = [0x11u8; 32];
-        let rebind_signature = [0x22u8; 4];
+        let new_account_signature = [0x22u8; 4];
         let out = encode_admin_rebind_cid_account_id_call(
             "A",
             "B",
@@ -2701,7 +2796,7 @@ mod tests {
             &new_account_id,
             0x1112_1314_1516_1718,
             0x0102_0304_0506_0708,
-            &rebind_signature,
+            &new_account_signature,
         );
         // ... | new_account | revision LE | expires LE | Compact(sig len) | sig
         let expected = concat!(
@@ -2778,13 +2873,13 @@ mod tests {
         let account_hex = format!("0x{}", hex::encode(account));
         let cid = "CN330-NATP3-111111111-2026";
         let genesis_hash = [0xcdu8; 32];
-        let old_account = [0x44u8; 32];
+        let current_account = [0x44u8; 32];
         let expected_binding_revision = 7;
         let expires_at = 1_800_000_000;
         let payload = encode_cid_rebind_authorization(
             &genesis_hash,
             cid,
-            &old_account,
+            &current_account,
             &account,
             expected_binding_revision,
             expires_at,
@@ -2802,7 +2897,7 @@ mod tests {
             encode_cid_rebind_authorization(
                 &[0xceu8; 32],
                 cid,
-                &old_account,
+                &current_account,
                 &account,
                 expected_binding_revision,
                 expires_at,
@@ -2818,7 +2913,7 @@ mod tests {
             encode_cid_rebind_authorization(
                 &genesis_hash,
                 cid,
-                &old_account,
+                &current_account,
                 &account,
                 expected_binding_revision + 1,
                 expires_at,
@@ -2826,7 +2921,7 @@ mod tests {
             encode_cid_rebind_authorization(
                 &genesis_hash,
                 cid,
-                &old_account,
+                &current_account,
                 &account,
                 expected_binding_revision,
                 expires_at + 1,
@@ -2843,6 +2938,43 @@ mod tests {
             account_hex.as_str(),
             &payload,
             sig_hex.as_str()
+        ));
+    }
+
+    #[test]
+    fn verify_current_account_signature_requires_chain_current_account_and_own_domain() {
+        let current_pair = sr25519::Pair::from_seed(&[7u8; 32]);
+        let new_pair = sr25519::Pair::from_seed(&[8u8; 32]);
+        let current_account = current_pair.public().0;
+        let new_account = new_pair.public().0;
+        let current_account_hex = format!("0x{}", hex::encode(current_account));
+        let payload = encode_cid_rebind_authorization(
+            &[0xaau8; 32],
+            "CN330-NATP3-111111111-2026",
+            &current_account,
+            &new_account,
+            7,
+            1_800_000_000,
+        );
+        let current_message =
+            primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_REBIND, &payload);
+        let current_account_signature =
+            format!("0x{}", hex::encode(current_pair.sign(&current_message).0));
+
+        assert!(verify_current_account_signature(
+            current_account_hex.as_str(),
+            &payload,
+            current_account_signature.as_str()
+        ));
+        assert!(!verify_current_account_signature(
+            format!("0x{}", hex::encode(new_account)).as_str(),
+            &payload,
+            current_account_signature.as_str()
+        ));
+        assert!(!verify_admin_rebind_signature(
+            current_account_hex.as_str(),
+            &payload,
+            current_account_signature.as_str()
         ));
     }
 }

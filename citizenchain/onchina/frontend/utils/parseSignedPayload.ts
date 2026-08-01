@@ -44,6 +44,8 @@ export type SignedReceiptPayload = {
   signature: string;
   account_id?: string;
   payload_hash?: string;
+  current_account_id?: string;
+  current_account_signature?: string;
 };
 
 // 解析"挑战签名响应"二维码 payload。
@@ -81,5 +83,7 @@ export function parseSignedReceiptPayload(
     challenge_id,
     signature: body.signature,
     account_id: body.account_id,
+    current_account_id: body.current_account_id,
+    current_account_signature: body.current_account_signature,
   };
 }

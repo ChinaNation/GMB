@@ -1,7 +1,7 @@
 // CitizenIdentity(pallet 10)自助占号 / 换绑 call data SCALE 布局测试。
 //
 // 逐字节钉死 pallet/call 前缀、CidNumberBound(BoundedVec<u8>)与 SignatureOf
-// (BoundedVec<u8>)编码,以及旧账户换绑授权摘要 signing_message(0x11, ...),
+// (BoundedVec<u8>)编码,以及当前账户换绑授权摘要 signing_message(0x11, ...),
 // 防与链端 `self_occupy_cid` / `self_rebind_cid_account_id` 漂移。
 
 import 'dart:typed_data';
@@ -49,7 +49,7 @@ void main() {
         cidNumber: cid,
         expectedBindingRevision: revision,
         expiresAt: expiresAt,
-        oldAccountSignature: sig,
+        currentAccountSignature: sig,
       );
       expect(call.sublist(0, 2), <int>[10, 9]);
       expect(call[2], compactCid);
@@ -77,7 +77,7 @@ void main() {
           cidNumber: cid,
           expectedBindingRevision: revision,
           expiresAt: expiresAt,
-          oldAccountSignature: Uint8List(63),
+          currentAccountSignature: Uint8List(63),
         ),
         throwsArgumentError,
       );
@@ -86,20 +86,20 @@ void main() {
           cidNumber: cid,
           expectedBindingRevision: BigInt.one << 64,
           expiresAt: expiresAt,
-          oldAccountSignature: sig,
+          currentAccountSignature: sig,
         ),
         throwsArgumentError,
       );
     });
   });
 
-  group('rebind 旧账户授权摘要', () {
+  group('rebind 当前账户授权摘要', () {
     final genesisHash = Uint8List.fromList(List<int>.filled(32, 0x22));
-    const oldAccount =
+    const currentAccount =
         '0x3333333333333333333333333333333333333333333333333333333333333333';
     const newAccount =
         '0x1111111111111111111111111111111111111111111111111111111111111111';
-    final oldAccountBytes = Uint8List.fromList(List<int>.filled(32, 0x33));
+    final currentAccountBytes = Uint8List.fromList(List<int>.filled(32, 0x33));
     final newAccountBytes = Uint8List.fromList(
       List<int>.filled(32, 0x11),
     );
@@ -110,7 +110,7 @@ void main() {
       final digest = CitizenIdentityRpc.buildRebindSigningDigest(
         genesisHash: genesisHash,
         cidNumber: cid,
-        expectedOldAccountId: oldAccount,
+        currentAccountId: currentAccount,
         newAccountId: newAccount,
         expectedBindingRevision: revision,
         expiresAt: expiresAt,
@@ -122,7 +122,7 @@ void main() {
         ...genesisHash,
         compactCid,
         ...cidBytes,
-        ...oldAccountBytes,
+        ...currentAccountBytes,
         ...newAccountBytes,
         0x04,
         0x03,
@@ -150,7 +150,7 @@ void main() {
       );
     });
 
-    test('创世/旧账户/revision/expiry 任一变化都不能重放旧摘要', () {
+    test('创世/当前账户/revision/expiry 任一变化都不能重放此前摘要', () {
       Uint8List digest({
         Uint8List? genesis,
         String? old,
@@ -160,7 +160,7 @@ void main() {
           CitizenIdentityRpc.buildRebindSigningDigest(
             genesisHash: genesis ?? genesisHash,
             cidNumber: cid,
-            expectedOldAccountId: old ?? oldAccount,
+            currentAccountId: old ?? currentAccount,
             newAccountId: newAccount,
             expectedBindingRevision: revisionValue ?? revision,
             expiresAt: expiresValue ?? expiresAt,
@@ -178,7 +178,7 @@ void main() {
         () => CitizenIdentityRpc.buildRebindSigningDigest(
           genesisHash: genesisHash,
           cidNumber: cid,
-          expectedOldAccountId: oldAccount,
+          currentAccountId: currentAccount,
           newAccountId: 'not-hex',
           expectedBindingRevision: revision,
           expiresAt: expiresAt,
@@ -188,13 +188,13 @@ void main() {
     });
   });
 
-  test('换绑上下文在同一 finalized 块读取旧账户/revision/链上时间', () async {
+  test('换绑上下文在同一 finalized 块读取当前账户/revision/链上时间', () async {
     final rpc = _RebindContextChainRpc();
     final context = await CitizenIdentityRpc(chainRpc: rpc)
         .fetchSelfRebindAuthorizationContext(cid);
 
     expect(context.genesisHash, Uint8List.fromList(List<int>.filled(32, 0x22)));
-    expect(context.expectedOldAccountId, '0x${'33' * 32}');
+    expect(context.currentAccountId, '0x${'33' * 32}');
     expect(context.expectedBindingRevision, BigInt.from(7));
     expect(context.expiresAt, BigInt.from(1700000300));
     expect(rpc.readBlockHashes, List<String>.filled(3, '0x${'55' * 32}'));
@@ -235,7 +235,7 @@ void main() {
       expect(rpc.readBlockHashes, <String>[blockHash, blockHash]);
     });
 
-    test('extrinsic 已 finalized 但绑定仍是旧账户/旧 revision 时拒绝', () async {
+    test('extrinsic 已 finalized 但绑定仍是此前账户/此前 revision 时拒绝', () async {
       final rpc = _FinalizedBindingChainRpc(
         accountByte: 0x33,
         revision: 7,

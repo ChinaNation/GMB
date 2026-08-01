@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' as hashes;
-import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:citizenapp/8964/models/square_models.dart';
@@ -11,8 +9,7 @@ import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/services/square_post_store.dart';
 import 'package:citizenapp/chat/chat_media_limits.dart';
 import 'package:citizenapp/signer/signing.dart';
-import 'package:citizenapp/wallet/core/device_subkey.dart'
-    show bytesToHex, hexToBytes;
+import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
 import 'package:citizenapp/8964/services/square_request_signer.dart';
 
 class SquareApiException implements Exception {
@@ -50,6 +47,23 @@ class SquareSession {
   final SquareDeviceSigner? signRequest;
 
   bool get isUsable => expiresAt > DateTime.now().millisecondsSinceEpoch;
+}
+
+class _FinalizedSessionBinding {
+  const _FinalizedSessionBinding({
+    required this.cidNumber,
+    required this.bindingRevision,
+    required this.accountId,
+  });
+
+  final String cidNumber;
+  final int bindingRevision;
+  final String accountId;
+
+  bool matches(SquareSession session) =>
+      session.cidNumber == cidNumber &&
+      session.bindingRevision == bindingRevision &&
+      session.accountId == accountId;
 }
 
 /// 会员订阅态（ADR-036：与身份彻底解耦）。只描述付费订阅本身，不含任何链上身份信息；
@@ -287,9 +301,12 @@ class SquareBrowseState {
 }
 
 /// Cloudflare 只可见的单条通讯录密文信封。联系人 CID、账户、SS58 和私人备注只存在于
-/// [ciphertext] 内，Worker 不参与解密。
+/// [ciphertext] 内；[bindingRevision] / [accountId] 只是公开密钥版本上下文，Worker
+/// 不参与密钥派生或解密。
 class SquareEncryptedContact {
   const SquareEncryptedContact({
+    required this.bindingRevision,
+    required this.accountId,
     required this.contactId,
     required this.ciphertext,
     required this.nonce,
@@ -297,6 +314,8 @@ class SquareEncryptedContact {
     required this.updatedAt,
   });
 
+  final int bindingRevision;
+  final String accountId;
   final String contactId;
   final String ciphertext;
   final String nonce;
@@ -305,6 +324,8 @@ class SquareEncryptedContact {
 
   factory SquareEncryptedContact.fromJson(Map<String, dynamic> json) {
     return SquareEncryptedContact(
+      bindingRevision: SquareApiClient._asInt(json['binding_revision']),
+      accountId: json['account_id']?.toString() ?? '',
       contactId: json['contact_id']?.toString() ?? '',
       ciphertext: json['ciphertext']?.toString() ?? '',
       nonce: json['nonce']?.toString() ?? '',
@@ -312,6 +333,16 @@ class SquareEncryptedContact {
       updatedAt: SquareApiClient._asInt(json['updated_at']),
     );
   }
+
+  Map<String, Object> toJson() => <String, Object>{
+        'binding_revision': bindingRevision,
+        'account_id': accountId,
+        'contact_id': contactId,
+        'ciphertext': ciphertext,
+        'nonce': nonce,
+        'mac': mac,
+        'updated_at': updatedAt,
+      };
 }
 
 abstract class SquareFeedSource {
@@ -346,23 +377,6 @@ typedef SquareLoginSigner = Future<String> Function(Uint8List loginMessage);
 /// 账户敏感动作（注销/退订）签名器：对 `signing_message(OP_SIGN_SQUARE_ACTION)`
 /// 的 32 字节摘要用 sr25519 **主钥**签名，返回 `0x` hex 签名（动钱动权，弹生物识别）。
 typedef SquareActionSigner = Future<String> Function(Uint8List actionMessage);
-
-/// finalized CID 当前绑定账户取得的稳定数据根授权。
-class CidDataRootGrant {
-  const CidDataRootGrant({
-    required this.cidNumber,
-    required this.bindingRevision,
-    required this.accountId,
-    required this.dataRoot,
-    required this.dataRootHash,
-  });
-
-  final String cidNumber;
-  final int bindingRevision;
-  final String accountId;
-  final Uint8List dataRoot;
-  final String dataRootHash;
-}
 
 class SquareApiConfig {
   const SquareApiConfig._();
@@ -412,7 +426,39 @@ class SquareApiClient
   })  : baseUrl = SquareApiConfig.normalizeBaseUrl(
           baseUrl ?? SquareApiConfig.defaultBaseUrl,
         ),
-        _http = httpClient ?? http.Client();
+        _http = httpClient ?? http.Client() {
+    _liveClients.add(WeakReference<SquareApiClient>(this));
+  }
+
+  static final List<WeakReference<SquareApiClient>> _liveClients =
+      <WeakReference<SquareApiClient>>[];
+  static _FinalizedSessionBinding? _finalizedSessionBinding;
+
+  /// finalized 绑定切换后立即清除所有现存 API 客户端中的非当前 Session。
+  ///
+  /// WeakReference 不延长页面级客户端生命周期；仍在进行的此前账户握手即使稍后返回，
+  /// 也会在落入缓存前再次核对本绑定并失败关闭。
+  static void activateFinalizedBinding({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) {
+    final binding = _FinalizedSessionBinding(
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
+    _finalizedSessionBinding = binding;
+    for (var index = _liveClients.length - 1; index >= 0; index--) {
+      final client = _liveClients[index].target;
+      if (client == null) {
+        _liveClients.removeAt(index);
+        continue;
+      }
+      client._sessions.removeWhere((_, session) => !binding.matches(session));
+      client._inflightSessions.clear();
+    }
+  }
 
   static String get defaultBaseUrl => SquareApiConfig.defaultBaseUrl;
 
@@ -432,7 +478,13 @@ class SquareApiClient
     Future<void> Function()? onDeviceNotRegistered,
   }) async {
     final cached = _sessions[accountId];
-    if (cached != null && cached.isUsable) return cached;
+    final finalizedBinding = _finalizedSessionBinding;
+    if (cached != null &&
+        cached.isUsable &&
+        (finalizedBinding == null || finalizedBinding.matches(cached))) {
+      return cached;
+    }
+    if (cached != null) _sessions.remove(accountId);
 
     // in-flight 去重：同账户并发调用共享一次握手（challenge+session=2 请求），
     // 避免广场/聊天等多入口冷启动各跑一套、迅速打满 `auth:{ip}` 限流桶（429）。
@@ -527,6 +579,10 @@ class SquareApiClient
       expiresAt: expiresAt,
       signRequest: signLoginPayload,
     );
+    final finalizedBinding = _finalizedSessionBinding;
+    if (finalizedBinding != null && !finalizedBinding.matches(next)) {
+      throw const SquareApiException('CID 当前绑定已切换，请重新登录');
+    }
     _sessions[accountId] = next;
     return next;
   }
@@ -547,232 +603,6 @@ class SquareApiClient
       signAction: signAction,
     );
   }
-
-  /// 由 finalized 当前绑定账户独立接管 CID 稳定数据根。
-  ///
-  /// 当前账户签名绑定创世、CID、版本、账户、一次性挑战、过期时间和本次 X25519
-  /// 接收公钥。Worker 返回的数据根再用该临时公钥加密；请求与响应均不包含此前账户、
-  /// 此前助记词或此前设备。
-  Future<CidDataRootGrant> takeoverCidDataRoot({
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required String expectedGenesisHash,
-    required SquareActionSigner signAction,
-  }) async {
-    if (!RegExp(r'^0x[0-9a-f]{64}$').hasMatch(expectedGenesisHash)) {
-      throw const SquareApiException('本地创世哈希格式无效');
-    }
-    final x25519 = X25519();
-    final recipientKeyPair = await x25519.newKeyPair();
-    try {
-      final recipientPublicKey = await recipientKeyPair.extractPublicKey();
-      final recipientPublicKeyHex = '0x${bytesToHex(recipientPublicKey.bytes)}';
-      final challenge = await _postJson(
-        '/v1/square/identity/takeover/challenge',
-        <String, Object?>{
-          'cid_number': cidNumber,
-          'account_id': accountId,
-          'recovery_public_key': recipientPublicKeyHex,
-        },
-      );
-      _requireTakeoverBinding(
-        challenge,
-        cidNumber: cidNumber,
-        bindingRevision: bindingRevision,
-        accountId: accountId,
-        expectedGenesisHash: expectedGenesisHash,
-      );
-      final signingPayloadHex = challenge['signing_payload_hex'];
-      final challengeId = challenge['challenge_id'];
-      if (signingPayloadHex is! String ||
-          challengeId is! String ||
-          !challengeId.startsWith('cidt_')) {
-        throw const SquareApiException('CID 接管挑战响应不完整');
-      }
-      final message = signingMessage(
-        opTag: kOpSignSquareAction,
-        scalePayload: hexToBytes(signingPayloadHex),
-      );
-      final signature = await signAction(message);
-      final granted = await _postJson(
-        '/v1/square/identity/takeover',
-        <String, Object?>{
-          'cid_number': cidNumber,
-          'binding_revision': bindingRevision,
-          'account_id': accountId,
-          'recovery_public_key': recipientPublicKeyHex,
-          'challenge_id': challengeId,
-          'signature': signature,
-        },
-      );
-      _requireTakeoverBinding(
-        granted,
-        cidNumber: cidNumber,
-        bindingRevision: bindingRevision,
-        accountId: accountId,
-        expectedGenesisHash: expectedGenesisHash,
-      );
-      final responseRecipientPublicKey =
-          granted['recovery_recipient_public_key'];
-      final senderPublicKey = granted['recovery_sender_public_key'];
-      final nonceBase64 = granted['recovery_nonce_base64'];
-      final encryptedRootBase64 = granted['encrypted_cid_data_root_base64'];
-      final dataRootHash = granted['data_root_hash'];
-      if (responseRecipientPublicKey != recipientPublicKeyHex ||
-          senderPublicKey is! String ||
-          !RegExp(r'^0x[0-9a-f]{64}$').hasMatch(senderPublicKey) ||
-          nonceBase64 is! String ||
-          encryptedRootBase64 is! String ||
-          dataRootHash is! String ||
-          !RegExp(r'^[0-9a-f]{64}$').hasMatch(dataRootHash)) {
-        throw const SquareApiException('CID 数据根加密授权响应不完整');
-      }
-      final dataRoot = await _decryptCidDataRootGrant(
-        recipientKeyPair: recipientKeyPair,
-        recipientPublicKeyHex: recipientPublicKeyHex,
-        senderPublicKeyHex: senderPublicKey,
-        nonceBase64: nonceBase64,
-        encryptedRootBase64: encryptedRootBase64,
-        genesisHash: expectedGenesisHash,
-        cidNumber: cidNumber,
-        bindingRevision: bindingRevision,
-        accountId: accountId,
-        challengeId: challengeId,
-        dataRootHash: dataRootHash,
-      );
-      if (hashes.sha256.convert(dataRoot).toString() != dataRootHash) {
-        dataRoot.fillRange(0, dataRoot.length, 0);
-        throw const SquareApiException('CID 数据根摘要校验失败');
-      }
-      return CidDataRootGrant(
-        cidNumber: cidNumber,
-        bindingRevision: bindingRevision,
-        accountId: accountId,
-        dataRoot: dataRoot,
-        dataRootHash: dataRootHash,
-      );
-    } finally {
-      recipientKeyPair.destroy();
-    }
-  }
-
-  static Future<Uint8List> _decryptCidDataRootGrant({
-    required SimpleKeyPair recipientKeyPair,
-    required String recipientPublicKeyHex,
-    required String senderPublicKeyHex,
-    required String nonceBase64,
-    required String encryptedRootBase64,
-    required String genesisHash,
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required String challengeId,
-    required String dataRootHash,
-  }) async {
-    try {
-      final senderPublicKeyBytes = hexToBytes(senderPublicKeyHex);
-      final nonce = base64Decode(nonceBase64);
-      final sealed = base64Decode(encryptedRootBase64);
-      if (senderPublicKeyBytes.length != 32 ||
-          nonce.length != 12 ||
-          sealed.length != 48) {
-        throw const SquareApiException('CID 数据根加密信封长度无效');
-      }
-      final sharedSecret = await X25519().sharedSecretKey(
-        keyPair: recipientKeyPair,
-        remotePublicKey: SimplePublicKey(
-          senderPublicKeyBytes,
-          type: KeyPairType.x25519,
-        ),
-      );
-      try {
-        final envelopeKey =
-            await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
-          secretKey: sharedSecret,
-          nonce: utf8.encode(_cidRecoverySalt(
-            genesisHash: genesisHash,
-            cidNumber: cidNumber,
-            bindingRevision: bindingRevision,
-            accountId: accountId,
-            challengeId: challengeId,
-          )),
-          info: utf8.encode(_cidRecoveryDomain),
-        );
-        try {
-          final cipherText = sealed.sublist(0, sealed.length - 16);
-          final mac = Mac(sealed.sublist(sealed.length - 16));
-          final cleartext = await AesGcm.with256bits().decrypt(
-            SecretBox(cipherText, nonce: nonce, mac: mac),
-            secretKey: envelopeKey,
-            aad: utf8.encode(_cidRecoveryAad(
-              genesisHash: genesisHash,
-              cidNumber: cidNumber,
-              bindingRevision: bindingRevision,
-              accountId: accountId,
-              challengeId: challengeId,
-              recipientPublicKeyHex: recipientPublicKeyHex,
-              senderPublicKeyHex: senderPublicKeyHex,
-              dataRootHash: dataRootHash,
-            )),
-          );
-          if (cleartext.length != 32) {
-            throw const SquareApiException('CID 数据根长度无效');
-          }
-          return Uint8List.fromList(cleartext);
-        } finally {
-          envelopeKey.destroy();
-        }
-      } finally {
-        sharedSecret.destroy();
-      }
-    } on FormatException {
-      throw const SquareApiException('CID 数据根加密信封编码无效');
-    } on SecretBoxAuthenticationError {
-      throw const SquareApiException('CID 数据根加密信封认证失败');
-    }
-  }
-
-  static void _requireTakeoverBinding(
-    Map<String, dynamic> value, {
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required String expectedGenesisHash,
-  }) {
-    if (value['cid_number'] != cidNumber ||
-        value['binding_revision'] != bindingRevision ||
-        value['account_id'] != accountId ||
-        value['chain_genesis_hash'] != expectedGenesisHash) {
-      throw const SquareApiException('CID 接管响应与 finalized 当前绑定不一致');
-    }
-  }
-
-  static const String _cidRecoveryDomain =
-      'citizenapp.cid-data-root/recovery-grant';
-
-  static String _cidRecoverySalt({
-    required String genesisHash,
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required String challengeId,
-  }) =>
-      '$_cidRecoveryDomain/salt|$genesisHash|$cidNumber|$bindingRevision|'
-      '$accountId|$challengeId';
-
-  static String _cidRecoveryAad({
-    required String genesisHash,
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-    required String challengeId,
-    required String recipientPublicKeyHex,
-    required String senderPublicKeyHex,
-    required String dataRootHash,
-  }) =>
-      '$_cidRecoveryDomain|$genesisHash|$cidNumber|$bindingRevision|$accountId|'
-      '$challengeId|$recipientPublicKeyHex|$senderPublicKeyHex|$dataRootHash';
 
   /// 账户敏感动作签名往返：取挑战 → 客户端**钉死** op_tag 重算摘要并签 → 提交确认。
   /// 绝不采信服务端下发的 op_tag（固定 [kOpSignSquareAction]），防被诱导跨域签名。
@@ -929,6 +759,8 @@ class SquareApiClient
     await _putJson(
       '/v1/square/contacts/${Uri.encodeComponent(contact.contactId)}',
       <String, Object?>{
+        'binding_revision': contact.bindingRevision,
+        'account_id': contact.accountId,
         'ciphertext': contact.ciphertext,
         'nonce': contact.nonce,
         'mac': contact.mac,
@@ -942,9 +774,14 @@ class SquareApiClient
   Future<void> deleteEncryptedContact({
     required SquareSession session,
     required String contactId,
+    int? bindingRevision,
+    String? accountId,
   }) async {
+    final revision = bindingRevision ?? session.bindingRevision;
+    final bindingAccountId = accountId ?? session.accountId;
     await _deleteJson(
-      '/v1/square/contacts/${Uri.encodeComponent(contactId)}',
+      '/v1/square/contacts/${Uri.encodeComponent(contactId)}'
+      '?binding_revision=$revision&account_id=${Uri.encodeQueryComponent(bindingAccountId)}',
       session: session,
     );
   }

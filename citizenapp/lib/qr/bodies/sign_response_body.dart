@@ -10,6 +10,8 @@ class SignResponseBody implements QrBody {
   const SignResponseBody({
     required this.signerPublicKey,
     required this.signature,
+    this.currentAccountId,
+    this.currentAccountSignature,
   });
 
   /// 签名者公钥 `u`:32 字节 base64url 无填充。
@@ -17,6 +19,11 @@ class SignResponseBody implements QrBody {
 
   /// 签名 `s`:64 字节 sr25519 signature base64url 无填充。
   final String signature;
+
+  /// 换绑且当前账户可签名时，`o` / `r` 同时携带当前账户与当前账户授权签名。
+  /// 其它动作两字段都省略；禁止只出现其中一个。
+  final String? currentAccountId;
+  final String? currentAccountSignature;
 
   Uint8List get signerPublicKeyBytes => _b64ToBytes(signerPublicKey, 'u');
 
@@ -26,15 +33,27 @@ class SignResponseBody implements QrBody {
 
   String get signatureHex => '0x${_toHex(signatureBytes)}';
 
+  String? get currentAccountIdHex => currentAccountId == null
+      ? null
+      : '0x${_toHex(_b64ToBytes(currentAccountId!, 'o'))}';
+
+  String? get currentAccountSignatureHex => currentAccountSignature == null
+      ? null
+      : '0x${_toHex(_b64ToBytes(currentAccountSignature!, 'r'))}';
+
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
         'u': signerPublicKey,
         's': signature,
+        if (currentAccountId != null) 'o': currentAccountId,
+        if (currentAccountSignature != null) 'r': currentAccountSignature,
       };
 
   static SignResponseBody fromJson(Map<String, dynamic> data) {
     final signerPublicKey = data['u'];
     final signature = data['s'];
+    final currentAccountId = data['o'];
+    final currentAccountSignature = data['r'];
     if (signerPublicKey is! String ||
         _b64ToBytes(signerPublicKey, 'u').length != 32) {
       throw const FormatException('签名响应 u 必须为 32 字节 base64url');
@@ -42,19 +61,45 @@ class SignResponseBody implements QrBody {
     if (signature is! String || _b64ToBytes(signature, 's').length != 64) {
       throw const FormatException('签名响应 s 必须为 64 字节 base64url');
     }
+    if ((currentAccountId == null) != (currentAccountSignature == null)) {
+      throw const FormatException('签名响应 o/r 必须同时出现或同时省略');
+    }
+    if (currentAccountId != null &&
+        (currentAccountId is! String ||
+            _b64ToBytes(currentAccountId, 'o').length != 32)) {
+      throw const FormatException('签名响应 o 必须为 32 字节 base64url');
+    }
+    if (currentAccountSignature != null &&
+        (currentAccountSignature is! String ||
+            _b64ToBytes(currentAccountSignature, 'r').length != 64)) {
+      throw const FormatException('签名响应 r 必须为 64 字节 base64url');
+    }
     return SignResponseBody(
       signerPublicKey: signerPublicKey,
       signature: signature,
+      currentAccountId: currentAccountId as String?,
+      currentAccountSignature: currentAccountSignature as String?,
     );
   }
 
   static SignResponseBody fromHex({
     required String signerPublicKeyHex,
     required String signatureHex,
+    String? currentAccountIdHex,
+    String? currentAccountSignatureHex,
   }) {
+    if ((currentAccountIdHex == null) != (currentAccountSignatureHex == null)) {
+      throw const FormatException('当前账户与当前账户签名必须同时提供');
+    }
     return SignResponseBody(
       signerPublicKey: _b64NoPad(_hexToBytes(signerPublicKeyHex)),
       signature: _b64NoPad(_hexToBytes(signatureHex)),
+      currentAccountId: currentAccountIdHex == null
+          ? null
+          : _b64NoPad(_hexToBytes(currentAccountIdHex)),
+      currentAccountSignature: currentAccountSignatureHex == null
+          ? null
+          : _b64NoPad(_hexToBytes(currentAccountSignatureHex)),
     );
   }
 }

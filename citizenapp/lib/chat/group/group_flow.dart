@@ -80,6 +80,7 @@ class ChatGroupFlow {
     final created = await _crypto.createGroup(groupId);
     await _store.upsertGroupShell(
       ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _currentAccountId,
       groupId: groupId,
       groupName: name,
       creatorCidNumber: cidNumber,
@@ -522,6 +523,7 @@ class ChatGroupFlow {
       case GroupInboundKind.welcome:
         await _store.upsertGroupShell(
           ownerCidNumber: _ownerCidNumber,
+          currentAccountId: _currentAccountId,
           groupId: result.groupId,
           groupName: '群聊',
           creatorCidNumber: creator,

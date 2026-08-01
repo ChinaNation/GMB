@@ -10,13 +10,14 @@
 - 注册局首次绑定授权固定为
   `genesis_hash + cid + account_id + expected_binding_revision(0) + expires_at`，域 `0x12`；
   注册局换绑授权固定为
-  `genesis_hash + cid + expected_old_account_id + new_account_id
+  `genesis_hash + cid + current_account_id + new_account_id
   + expected_binding_revision + expires_at`，域 `0x1F`。CID 为最大 32 字节规范 SCALE
   BoundedVec，u64 均为小端；签名消息统一走 `blake2_256(GMB ‖ op_tag ‖ SCALE)`。
 - 授权过期时间只取同一 finalized 快照的链上 `Timestamp.Now + 300s`；外层 QR `e` 必须
   等于内层过期时间。会话仍按服务端时间独立保存 600 秒。
 - 匿名 CID 可由任一在册 CREG/FRG 办理；civic CID 可由投票身份居住城市的 CREG 或对应
-  省 FRG 办理。换绑不要求旧钱包签名，个人多签不进入本流程。
+  省 FRG 办理。注册局换绑授权不要求当前钱包签名；当前账户签名仅用于可选的 Chat、
+  通讯录密文交接，个人多签不进入本流程。
 - OnChina 不再要求“本局已有本地档案”才允许换绑；它从同一 finalized 状态读取
   `CidRegistry + AccountIdByCid + BindingRevisionByCid + CidByAccountId +
   VotingIdentityByCid + CandidateIdentityByCid + Timestamp.Now`，严格区分
@@ -41,7 +42,7 @@
 - 两个不同市注册局 OnChina 实例、两套独立 PostgreSQL 对同一 fresh 链 CID 返回完全一致
   的账户、revision=1 和 finalized 哈希；每套创世机构投影均为 49,593 个机构、99,232 个
   账户。
-- 当前旧冻结链没有 `BindingRevisionByCid` 元数据，新读取器失败关闭。正式发布必须等待
+- 当前冻结链没有 `BindingRevisionByCid` 元数据，新读取器失败关闭。正式发布必须等待
   唯一正式创世重生后整体切换；本步未创世、未推送、未触发 CI。
 - 创世法定代表人本地投影也已删除硬编码账户，统一读取 finalized 链上身份快照。后端
   179 项测试、严格 clippy、前端 TypeScript 和本步 Rust 格式检查通过；源码和编译包残留
@@ -50,8 +51,9 @@
 ## 已完成地基(S1-S3,新窗口直接复用)
 - CID = CN 前缀去地域化、人主体(CTZN/NATP/SMTP)12 位号段(`primitives/cid`)。
 - `self_occupy_cid`(call 5):公民本人自助占号+占即绑+匿名+自付费;类型 CTZN|NATP(`ensure_valid_self_registrable_cid`);SELF sentinel registrar + 空 residence;commitment=blake2_256(account_id)。
-- `self_rebind_cid_account_id`(call 9):新账户 origin + 旧账户 detached 签名
-  (`OP_SIGN_CID_REBIND`)，授权绑定创世、CID、预期旧/新账户、revision 和过期时间；
+- `self_rebind_cid_account_id`(call 9):新账户 origin + 当前账户 detached 签名
+  (`OP_SIGN_CID_REBIND`)，授权绑定创世、CID、`current_account_id`、
+  `new_account_id`、revision 和过期时间；
   `rebind_account_id` 原语维持 CID 不变并原子更新双向账户绑定。
 - 复用 helper:`ensure_account_id_binding_available`/`bind_account_id`/`rebind_account_id`/`do_occupy_cid`(已剥离 CTZN 硬校验,类型校验下沉到调用方)。
 
@@ -74,11 +76,11 @@
 2. **`register_voting_identity`/`upgrade_to_candidate_identity` 变纯升级**:账户已在占号绑定 → 用 `ensure_current_account_id_binding` 校验、**不再重绑**,只写 `VotingIdentityByCid`/`CandidateIdentityByCid`;仍 CTZN-only(NATP 永不可升,现有校验已保护)。出生省市镇/性别的不可改守卫扩展(D4a)。
 3. **`admin_rebind_cid_account_id`**(call 7):注册局管理员换绑匿名或 civic CID；
    匿名由任一在册 CREG/FRG 办理，civic 由同市 CREG/对应省 FRG 办理；新账户签完整
-   `CidRebindAuthorization`，不要求旧账户签名。
+   `CidRebindAuthorization`，注册局授权不要求当前账户签名。
 4. 费:注册局 call 走机构付费 `institution_onchain_route`(不变);admin_rebind 同。node 守卫已放行绑定变更(闭环一致即可)。
 5. **测试**:occupy 占即绑 / 无账户拒 / 签名不符拒 / CTZN|NATP / register 纯升级不重绑 /
    admin_rebind 匿名任一注册局成功 + civic 同辖区成功/跨辖区拒 + 非注册局拒 +
-   创世/旧账户/revision/过期时间任一改变签名拒。dev 期重新创世随母卡 S5。
+   创世/`current_account_id`/revision/过期时间任一改变签名拒。dev 期重新创世随母卡 S5。
 
 ## onchina 范围(S6)
 - `src/domains/citizens/`:「新增公民」弹窗(`CitizenCreateModal`)改必填类型+账户+签名、档案选填;`occupy.rs` `prepare_citizen_occupy`/`encode_occupy_cid_call` 适配新 `occupy_cid` 签名(加 account + 用户签名);`admin_entry.rs` CID 生成同 CN(母卡 S1 已改 primitive,onchina wrapper 对齐)。
@@ -121,13 +123,14 @@
 ### Part B — admin_rebind_cid_account_id(链 extrinsic,`call_index(7)`=删 batch 释放槽)
 - `admin_rebind_cid_account_id(origin=管理员, actor_cid, actor_role, cid_number,
   new_account_id, expected_binding_revision, expires_at, new_account_signature)`：
-  finalized 读取旧账户/revision → 匿名任一 CREG/FRG 或 civic 同市 CREG/对应省 FRG →
+  finalized 读取当前账户/revision → 匿名任一 CREG/FRG 或 civic 同市 CREG/对应省 FRG →
   新账户对完整 `CidRebindAuthorization` 走 `0x1F` 控制证明 → 一账户一 CID →
-  `rebind_account_id` + `CidAccountIdRebound`。**无旧账户签名**(丢钥恢复目标)。
+  `rebind_account_id` + `CidAccountIdRebound`。**注册局授权无当前账户签名要求**(当前钱包
+  不可用时仍可换绑；有当前签名时可另行完成 Chat、通讯录交接)。
 - **专用签名域 `OP_SIGN_CID_ADMIN_REBIND=0x1F`(E1,用户拍板)**:防注册局把占号阶段(0x12)截获的签名重放成换绑,强制目标账户新鲜授权。`SIGN_OP_TAGS[14]` + 金标 `c8d1bf2d…`。四端镜像留 S8。
 - 新 trait 方法 `verify_admin_rebind_signature`(6 处 impl 全同步)+ 错误 `InvalidAdminRebindSignature` + helper + weights(3)/benchmark。
 - 测试覆盖：匿名换绑、civic 同市 CREG/对应省 FRG 换绑、跨辖区拒、未占拒、非注册局拒、
-  坏签名拒、新账户已绑他 CID 拒，以及创世/旧账户/revision/过期时间篡改拒绝。
+  坏签名拒、新账户已绑他 CID 拒，以及创世/`current_account_id`/revision/过期时间篡改拒绝。
 - 门禁:`cargo test -p citizen-identity` 58 绿 / node guard 4 绿 / `cargo test --workspace` 全绿。
 
 ## 小步④ 决策(用户 2026-07-27 定稿)
@@ -139,7 +142,7 @@
 - CITIZEN_IDENTITY_PUSH(投票/竞选身份)**不动**(本来就好)。
 - R5-split:**机构 cid 不动**(省市码照旧),只人主体(CN)改;注册局新建公民在 citizens 表有显式居住字段、不经 R5-split → ④c 收窄为 genesis 人(S5)+ 守卫。
 - 命名铁律:全程 `account_id`/`accountId`；多账户授权必须使用
-  `expected_old_account_id`/`new_account_id`，禁止 `account` 缩写和含糊同义字段
+  `current_account_id`/`new_account_id`，禁止 `account` 缩写和含糊同义字段
   [[wallet-account-naming-account-id]]。
 
 ### ④a-1 —— **完成 ✅(2026-07-27,onchina 145 tests 0 failed + byte-golden)**
@@ -165,7 +168,7 @@
 onchina admin_rebind 三段式入口(与 occupy 同构,全 `account_id`):
 - `encode_admin_rebind_cid_account_id_call`(pallet 10/call 7,布局同 occupy)+ `verify_admin_rebind_signature`(域 `OP_SIGN_CID_ADMIN_REBIND`)+ `ADMIN_REBIND_CID_CALL_INDEX=7` + 两 purpose 常量。
 - `prepare_citizen_rebind`(`{actor_role_code, cid_number}`) 直接读取 finalized 链上绑定真源
-  并签发完整模板，不要求本地档案→`submit_citizen_rebind` 复查同一旧账户/revision/
+  并签发完整模板，不要求本地档案→`submit_citizen_rebind` 复查同一当前账户/revision/
   授权有效期后建 call+promote→`submit_chain_sign` 在 finalized 精确状态核验后更新存在的
   本地投影；本地无档案时链上换绑仍可完成。
 - 路由 `/api/v1/admin/citizens/rebind/{prepare,submit}`;byte-golden `0a07…`。
@@ -213,7 +216,7 @@ R5-split 三处收敛到 primitives 权威单源 + 修程伟 live 误播种:
 
 ### 用户决策(2026-07-28)
 - **公民/新钱包内层签名挑战 = 后端下发完整授权模板，钱包原位填账户槽**：
-  段 1 prepare 返回绑定创世/CID/预期旧账户/revision/过期时间的模板，钱包选择本账户、
+  段 1 prepare 返回绑定创世/CID/`current_account_id`/revision/过期时间的模板，钱包选择本账户、
   替换唯一 32 字节零槽后签名，一次扫码输出 `{account_id, signature}`。
 - **范围 = 先出三模块完整方案再动手;citizenwallet 本会话一并做**(推翻母卡「citizenwallet 另一会话」的分工,因 occupy 要求钱包也能签 + 钱包 occupy_cid decoder 是必修隐患)。
 
@@ -227,7 +230,7 @@ R5-split 三处收敛到 primitives 权威单源 + 修程伟 live 误播种:
 ### 子步执行序(每子步先出聚焦方案待确认→实现→门禁)
 - **⑤-1 qr-protocol 契约 —— 当前**：`citizen_occupy`(code 10) 必审
   `genesis_hash/cid_number/expected_binding_revision/expires_at`；
-  `citizen_rebind`(code 11) 另必审 `expected_old_account_id`。账户由钱包填模板零槽；
+  `citizen_rebind`(code 11) 另必审 `current_account_id`。账户由钱包填模板零槽；
   生成器同步产出 CitizenApp/CitizenWallet registry，禁止端侧第二真源。
 - **⑤-2 OnChina 后端挑战下发 —— 当前契约**：
   `build_domain_sign_request_bytes` 的 `b.u` 留空，`b.d` 分别携完整
@@ -245,13 +248,13 @@ R5-split 三处收敛到 primitives 权威单源 + 修程伟 live 误播种:
   - 门禁:qr-protocol 一致性 7+1 绿 + `cargo test --workspace` 81 批次 0 failed + citizenwallet `dart analyze` 0 + signer 测试 +115 全绿。
   - 范围:只碰注册局 call 6/7;self_occupy(5)/self_rebind(9)不在 ⑤。
 - **⑤-4a citizenwallet occupy 域签名路径 —— 完成 ✅(2026-07-28)**:
-  - **后端 `b.d` 完整授权化**：CID 使用规范 `Compact(len)+cid`，其余创世、预期旧账户、
+  - **后端 `b.d` 完整授权化**：CID 使用规范 `Compact(len)+cid`，其余创世、`current_account_id`、
     账户零槽、revision 和过期时间均按冻结字段顺序编码；钱包填槽后直接对完整授权走
     对应 op-tag 签名，不再拼接或追加账户字节。
   - citizenwallet：`qr_protocols` 登记 `citizenOccupy(10)/citizenRebind(11)`；
     `payload_decoder` 严格解析两类完整授权模板、规范 Compact、固定字段顺序和无尾字节；
     `qr_signer` 只允许把所选账户原位写入零槽，再分别走 `0x12/0x1F`；缺账户、非零槽、
-    新旧账户相同、revision/过期时间异常均拒签。响应 `b.u` 使用所选账户。
+    当前账户与新账户相同、revision/过期时间异常均拒签。响应 `b.u` 使用所选账户。
   - UI:`scan_page` occupy/rebind 走 `_pickBindingAccount`(bottom sheet 选本钱包账户);`offline_sign_page` 展示自选绑定账户。
   - 测试：两类完整授权模板与 materialize 后签名字节 golden、缺账户/非规范 Compact/
     非零槽/尾字节/revision/过期时间/新旧相同负例，以及 call 6/7 decoder golden。
@@ -285,7 +288,9 @@ prepare→同一 finalized 快照构造完整授权模板 → 公民/新钱包�
 ## 全面审计(2026-07-28,security-reviewer + code-reviewer 产线索 → 逐条回原文核验)
 - **[CRITICAL] 已修 ✅**:citizenwallet `offline_sign_page.dart` 占号/换绑请求(b.u 空)展示行无条件求值 `signerPublicKeyHex` getter,而 citizenwallet `_b64ToBytes` 对空串 `throw`(citizenapp 版不抛)→ 整页 FormatException 红屏、占号/换绑冷钱包端 100% 崩溃。修:改用 `QrActions.isSelfAccountDomainAction(action)` 判断绕开会抛的 getter + 加占号渲染回归 widget 测试(`test/ui/offline_sign_page_test.dart`)。dart analyze 0 + 钱包全套绿。
 - **[HIGH] 授权分层倒挂 —— 已修 ✅(用户揪出:违反硬规则「查看=登录态/本地写=passkey/链上写=passkey+冷签」[[onchina-three-tier-write-auth]])**:occupy/rebind 是**链上写**(发 occupy_cid/admin_rebind extrinsic),原只有段3 冷签、漏了 prepare 的 passkey(revoke 有、它俩没有)。修:`prepare_citizen_occupy`/`prepare_citizen_rebind` 补 `require_admin_security_grant(CitizenOnchainPush)`(occupy.rs)+ 前端 `prepareCitizenOccupy`/`prepareCitizenRebind` 补 `assertPasskey`+`PASSKEY_ASSERTION_HEADER`(api.ts)。现三档合规:占号/换绑 = prepare passkey + 段3 冷签。
-- **[设计非 bug] admin_rebind 无旧账户签名 + 全国无辖区**=D4b 既定(丢钥代办,靠注册局线下核验);链上有独立第二道验签(configs.rs sr25519)兜底密码学层。
+- **[设计非 bug] admin_rebind 的注册局授权不要求当前账户签名 + 全国无辖区**=D4b 既定
+  (当前钱包不可用时由注册局权限办理；当前账户签名仅决定能否交接 Chat、通讯录密文)；
+  链上有独立第二道验签(configs.rs sr25519)兜底密码学层。
 - **[MEDIUM 记录] 审计失败静默丢弃**:`append_audit_log` fire-and-forget(既有框架模式,非本次回归);安全敏感事件建议独立告警通道。`consumed_at` 永不置位靠删行防重放(既有模式)。
 - **测试缺口 —— 已补 ✅**:①`verify_occupy_signature`/`verify_admin_rebind_signature` 加 sign→verify 往返 + 域分离拒绝测试(occupy.rs,onchina 154 绿);②新 `citizen_occupy_sign_service_test.dart`(citizenapp 6 项:prepare 解 CID/换绑 isOccupy/非占号拒/冷钱包拒/畸形 d 拒 + **硬编码常量 vs registry 防漂移断言**);③CRITICAL 的 occupy 渲染回归 widget 测试(citizenwallet)。
 - **已核验无问题（排除误判）**：旧批量动作与 `cid_count` 已从当前协议删除；命名全为 `account_id`；op 域 0x11/0x12/0x1F 严格分离；冷热四端签名字节逐字节一致（golden 兜底）；段2/段3 会话防重放（已消费检查）+`same_account_id` 防越权+验签失败即拒；空 b.u 放开仅限 occupy/rebind；旧全档案字段/getCidMeta 等无孤儿。

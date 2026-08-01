@@ -39,13 +39,13 @@ typedef SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 /// 注册局占号/换绑二维码中的完整授权模板。
 ///
 /// 生成端把待绑定账户写成 32 字节零槽；签名端必须严格解码全部字段且确认无尾字节，
-/// 再把用户选择的账户原位填入。禁止恢复旧版 `bounded_cid ++ account_id` 末尾拼接。
+/// 再把用户选择的账户原位填入。禁止恢复已经删除的末尾拼接载荷。
 class CidAccountAuthorizationTemplate {
   CidAccountAuthorizationTemplate._({
     required Uint8List payload,
     required this.genesisHash,
     required this.cidNumber,
-    required this.expectedOldAccountId,
+    required this.currentAccountId,
     required this.expectedBindingRevision,
     required this.expiresAt,
     required int accountOffset,
@@ -56,18 +56,18 @@ class CidAccountAuthorizationTemplate {
   final int _accountOffset;
   final String genesisHash;
   final String cidNumber;
-  final String? expectedOldAccountId;
+  final String? currentAccountId;
   final BigInt expectedBindingRevision;
   final BigInt expiresAt;
 
   /// 把所选账户填回授权结构的零槽，返回与 Runtime 逐字节一致的 SCALE。
   ///
-  /// 换绑时新旧账户相同必须拒绝，不能生成可签名载荷。
+  /// 换绑时当前账户与新账户相同必须拒绝，不能生成可签名载荷。
   Uint8List? materialize(Uint8List accountId) {
     if (accountId.length != 32) return null;
-    final oldAccountId = expectedOldAccountId;
-    if (oldAccountId != null &&
-        oldAccountId == QrSigner._bytesToLowerHex(accountId)) {
+    final chainCurrentAccountId = currentAccountId;
+    if (chainCurrentAccountId != null &&
+        chainCurrentAccountId == QrSigner._bytesToLowerHex(accountId)) {
       return null;
     }
     final output = Uint8List.fromList(_payload);
@@ -124,6 +124,8 @@ class QrSigner {
     required SignRequestEnvelope request,
     required String signatureHex,
     String? signerPublicKeyHexOverride,
+    String? currentAccountIdHex,
+    String? currentAccountSignatureHex,
   }) {
     _validateHexField(signatureHex, 'signature');
     return QrEnvelope<SignResponseBody>(
@@ -136,6 +138,8 @@ class QrSigner {
         signerPublicKeyHex:
             signerPublicKeyHexOverride ?? request.body.signerPublicKeyHex,
         signatureHex: signatureHex,
+        currentAccountIdHex: currentAccountIdHex,
+        currentAccountSignatureHex: currentAccountSignatureHex,
       ),
     );
   }
@@ -277,7 +281,7 @@ class QrSigner {
         return Uint8List(0);
       }
       // 两种授权结构的账户槽位置不同：严格解析完整模板并原位填入所选账户。
-      // 任何零槽污染、revision 错误、尾字节或换绑新旧账户相同都 fail-closed。
+      // 任何零槽污染、revision 错误、尾字节或当前账户与新账户相同都 fail-closed。
       final authorization = decodeCidAccountAuthorizationTemplate(
         action: action,
         payload: payload,
@@ -310,7 +314,7 @@ class QrSigner {
   /// `genesis_hash + bounded cid + account_id(32B 零槽) + revision=0 + expires`
   ///
   /// rebind:
-  /// `genesis_hash + bounded cid + expected_old_account_id`
+  /// `genesis_hash + bounded cid + current_account_id`
   /// `+ new_account_id(32B 零槽) + revision(nonzero) + expires`
   static CidAccountAuthorizationTemplate?
       decodeCidAccountAuthorizationTemplate({
@@ -345,7 +349,7 @@ class QrSigner {
       payload: bytes,
       genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
       cidNumber: cidRead.$1,
-      expectedOldAccountId: null,
+      currentAccountId: null,
       expectedBindingRevision: revision,
       expiresAt: expiresAt,
       accountOffset: accountOffset,
@@ -360,7 +364,7 @@ class QrSigner {
     if (cidRead == null) return null;
     offset = cidRead.$2;
     if (offset + 32 > bytes.length) return null;
-    final expectedOldAccount = bytes.sublist(offset, offset + 32);
+    final currentAccount = bytes.sublist(offset, offset + 32);
     offset += 32;
     final accountOffset = offset;
     if (!_hasZeroAccountSlot(bytes, accountOffset)) return null;
@@ -374,7 +378,7 @@ class QrSigner {
       payload: bytes,
       genesisHash: _bytesToLowerHex(bytes.sublist(0, 32)),
       cidNumber: cidRead.$1,
-      expectedOldAccountId: _bytesToLowerHex(expectedOldAccount),
+      currentAccountId: _bytesToLowerHex(currentAccount),
       expectedBindingRevision: revision,
       expiresAt: expiresAt,
       accountOffset: accountOffset,

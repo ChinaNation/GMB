@@ -209,7 +209,7 @@ Apple 开发者账户不属于当前完成条件。
   `walletIndex` 对应的 Android Keystore / iOS Secure Enclave P-256 设备子钥；删除非末
   账户与冷钱包不误删共享子钥。
 - 同一删除生命周期同时清除账户 child、钱包 KEK 与旧账户级密钥命名；仅当被删账户
-  是本机激活 CID 的当前绑定账户时，才清除该 CID 数据根包装、缓存和用途子钥。每项
+  是本机激活 CID 的当前绑定账户时，才清除该 CID 当前绑定公开元数据和内存用途子钥。每项
   独立尝试，全部完成后以 `WalletLocalCleanupException` 汇总失败，避免首个安全存储
   错误留下其余密钥。
 - 现有 WalletManager 测试覆盖整钱包、非末账户、全量清空、冷热钱包隔离及多项失败仍

@@ -610,15 +610,11 @@ fn sync_phase_name(phase: smoldot_light::SyncPhase) -> &'static str {
         smoldot_light::SyncPhase::WarpVerifyingFragments => "warpVerifyingFragments",
         smoldot_light::SyncPhase::WarpDownloadingTargetState => "warpDownloadingTargetState",
         smoldot_light::SyncPhase::WarpBuildingRuntime => "warpBuildingRuntime",
-        smoldot_light::SyncPhase::WarpBuildingChainInformation => {
-            "warpBuildingChainInformation"
-        }
+        smoldot_light::SyncPhase::WarpBuildingChainInformation => "warpBuildingChainInformation",
     }
 }
 
-fn startup_finalized_source_name(
-    source: smoldot_light::StartupFinalizedSource,
-) -> &'static str {
+fn startup_finalized_source_name(source: smoldot_light::StartupFinalizedSource) -> &'static str {
     match source {
         smoldot_light::StartupFinalizedSource::BundledCheckpoint => "bundledCheckpoint",
         smoldot_light::StartupFinalizedSource::LocalDatabase => "localDatabase",
@@ -638,9 +634,7 @@ fn warp_failure_name(failure: smoldot_light::WarpFailure) -> &'static str {
         smoldot_light::WarpFailure::StorageProofRequestFailed => "storageProofRequestFailed",
         smoldot_light::WarpFailure::CallProofRequestFailed => "callProofRequestFailed",
         smoldot_light::WarpFailure::RuntimeBuildFailed => "runtimeBuildFailed",
-        smoldot_light::WarpFailure::ChainInformationBuildFailed => {
-            "chainInformationBuildFailed"
-        }
+        smoldot_light::WarpFailure::ChainInformationBuildFailed => "chainInformationBuildFailed",
     }
 }
 
@@ -1793,7 +1787,6 @@ fn json_storage_value_response_from_bytes(
         }),
     }
 }
-
 
 // ──── 测试模块统一置于文件末尾:clippy items_after_test_module 要求
 // 真实条目不得排在 #[cfg(test)] 模块之后,否则易被误读成"测试之后没有代码"。

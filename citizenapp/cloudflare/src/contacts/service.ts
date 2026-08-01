@@ -10,9 +10,19 @@ const MAX_CIPHERTEXT_BYTES = 8 * 1024;
 const NONCE_BYTES = 12;
 const MAC_BYTES = 16;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
-const CONTACT_BODY_FIELDS = new Set(['ciphertext', 'nonce', 'mac', 'updated_at']);
+const ACCOUNT_ID_PATTERN = /^0x[a-f0-9]{64}$/;
+const CONTACT_BODY_FIELDS = new Set([
+  'binding_revision',
+  'account_id',
+  'ciphertext',
+  'nonce',
+  'mac',
+  'updated_at'
+]);
 
 interface ContactCiphertextRequest {
+  binding_revision?: unknown;
+  account_id?: unknown;
   ciphertext?: unknown;
   nonce?: unknown;
   mac?: unknown;
@@ -33,7 +43,11 @@ export async function listContactsRoute(request: Request, env: Env): Promise<Res
     MAX_PAGE_SIZE
   );
   const cursor = parseCursor(url.searchParams.get('cursor'));
-  const binds: Array<string | number> = [session.cid_number];
+  const binds: Array<string | number> = [
+    session.cid_number,
+    session.binding_revision,
+    session.account_id
+  ];
   let cursorClause = '';
   if (cursor) {
     cursorClause = ' AND (updated_at < ? OR (updated_at = ? AND contact_id < ?))';
@@ -42,9 +56,9 @@ export async function listContactsRoute(request: Request, env: Env): Promise<Res
   // 多取一条只用于判断是否还有下一页，不向客户端泄露额外记录。
   binds.push(limit + 1);
   const result = await env.DB.prepare(
-    `SELECT cid_number, contact_id, ciphertext, nonce, mac, updated_at
+    `SELECT cid_number, binding_revision, account_id, contact_id, ciphertext, nonce, mac, updated_at
       FROM square_contacts
-      WHERE cid_number = ?${cursorClause}
+      WHERE cid_number = ? AND binding_revision = ? AND account_id = ?${cursorClause}
       ORDER BY updated_at DESC, contact_id DESC
       LIMIT ?`
   ).bind(...binds).all<ContactCiphertextRow>();
@@ -60,7 +74,7 @@ export async function listContactsRoute(request: Request, env: Env): Promise<Res
   });
 }
 
-/// PUT /v1/square/contacts/:contact_id —— 幂等写入端侧生成的密文，旧版本不得覆盖新版本。
+/// PUT /v1/square/contacts/:contact_id —— 幂等写入端侧生成的密文，较早更新不得覆盖较新更新。
 export async function putContactRoute(
   request: Request,
   env: Env,
@@ -69,6 +83,13 @@ export async function putContactRoute(
   const session = await requireSession(request, env);
   const contactId = parseContactId(contactIdRaw);
   const body = assertContactRequest(await readJson<unknown>(request));
+  const target = parseCipherBinding(
+    body.binding_revision,
+    body.account_id,
+    session.binding_revision,
+    session.account_id,
+    'write'
+  );
   const ciphertext = parseBase64Url(
     body.ciphertext,
     'invalid_contact_ciphertext',
@@ -94,9 +115,9 @@ export async function putContactRoute(
 
   const result = await env.DB.prepare(
     `INSERT INTO square_contacts
-      (cid_number, contact_id, ciphertext, nonce, mac, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(cid_number, contact_id) DO UPDATE SET
+      (cid_number, binding_revision, account_id, contact_id, ciphertext, nonce, mac, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(cid_number, binding_revision, account_id, contact_id) DO UPDATE SET
         ciphertext = excluded.ciphertext,
         nonce = excluded.nonce,
         mac = excluded.mac,
@@ -104,6 +125,8 @@ export async function putContactRoute(
       WHERE excluded.updated_at >= square_contacts.updated_at`
   ).bind(
     session.cid_number,
+    target.bindingRevision,
+    target.accountId,
     contactId,
     ciphertext,
     nonce,
@@ -127,9 +150,23 @@ export async function deleteContactRoute(
 ): Promise<Response> {
   const session = await requireSession(request, env);
   const contactId = parseContactId(contactIdRaw);
+  const url = new URL(request.url);
+  const target = parseCipherBinding(
+    url.searchParams.get('binding_revision'),
+    url.searchParams.get('account_id'),
+    session.binding_revision,
+    session.account_id,
+    'delete'
+  );
   const result = await env.DB.prepare(
-    'DELETE FROM square_contacts WHERE cid_number = ? AND contact_id = ?'
-  ).bind(session.cid_number, contactId).run();
+    `DELETE FROM square_contacts
+      WHERE cid_number = ? AND binding_revision = ? AND account_id = ? AND contact_id = ?`
+  ).bind(
+    session.cid_number,
+    target.bindingRevision,
+    target.accountId,
+    contactId
+  ).run();
 
   return jsonResponse({
     ok: true,
@@ -162,6 +199,40 @@ function assertContactRequest(value: unknown): ContactCiphertextRequest {
     throw new HttpError(400, 'invalid_contact_request', '通讯录接口只接受密文字段');
   }
   return value as ContactCiphertextRequest;
+}
+
+/// 当前 CID 控制者只能写当前绑定密文；finalized 后的新控制者可删除当前或紧邻的此前
+/// 版本。目标版本在换绑生效前只允许保存在客户端，Worker 不接受未生效账户预写。
+function parseCipherBinding(
+  revisionValue: unknown,
+  accountValue: unknown,
+  currentRevision: number,
+  currentAccountId: string,
+  operation: 'write' | 'delete'
+): { bindingRevision: number; accountId: string } {
+  const bindingRevision = typeof revisionValue === 'string'
+    ? Number(revisionValue)
+    : revisionValue;
+  if (
+    typeof bindingRevision !== 'number' ||
+    !Number.isSafeInteger(bindingRevision) ||
+    bindingRevision <= 0
+  ) {
+    throw new HttpError(400, 'invalid_contact_binding', '通讯录密文绑定版本不合法');
+  }
+  if (typeof accountValue !== 'string' || !ACCOUNT_ID_PATTERN.test(accountValue)) {
+    throw new HttpError(400, 'invalid_contact_binding', '通讯录密文 account_id 不合法');
+  }
+  const isCurrent =
+    bindingRevision === currentRevision && accountValue === currentAccountId;
+  const isPreviousDelete =
+    operation === 'delete' &&
+    bindingRevision + 1 === currentRevision &&
+    accountValue !== currentAccountId;
+  if (!isCurrent && !isPreviousDelete) {
+    throw new HttpError(403, 'contact_binding_not_allowed', '无权读写该通讯录密文版本');
+  }
+  return { bindingRevision, accountId: accountValue };
 }
 
 function parseBase64Url(
@@ -220,6 +291,8 @@ function formatCursor(updatedAt: number, contactId: string): string {
 function publicContactRow(row: ContactCiphertextRow): Omit<ContactCiphertextRow, 'cid_number'> {
   // 属主键 cid_number 只用于服务端隔离，响应不重复下发，降低客户端误信自报属主的风险。
   return {
+    binding_revision: row.binding_revision,
+    account_id: row.account_id,
     contact_id: row.contact_id,
     ciphertext: row.ciphertext,
     nonce: row.nonce,

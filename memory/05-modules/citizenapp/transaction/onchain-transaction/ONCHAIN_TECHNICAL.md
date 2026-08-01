@@ -98,7 +98,7 @@ citizenapp/lib/transaction/shared/
 
 - 签名算法固定 `sr25519`
 - `OnchainPaymentService.submitTransfer()` 只接收签名回调，不读取 seed
-- 热钱包 seed 只在 `WalletManager` 内短暂存在，签名后清零
+- 热钱包账户 child 只在 `WalletManager` 内短暂存在，签名后清零；母种子和助记词不落盘
 - 公民钱包签名通过 `QR_V1` 的 `sign_request / sign_response`
 - CitizenApp 只负责生成待签名 payload、校验签名响应、广播交易；离线签名由 CitizenWallet 完成
 

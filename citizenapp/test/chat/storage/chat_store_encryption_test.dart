@@ -1,13 +1,64 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:citizenapp/chat/chat_runtime.dart';
 import 'package:citizenapp/chat/chat_models.dart';
 import 'package:citizenapp/chat/proto/chat_envelope.pb.dart';
+import 'package:citizenapp/chat/storage/chat_crypto.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/security/local_cipher.dart';
+import 'package:citizenapp/security/local_data_key.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:fixnum/fixnum.dart';
 import 'package:isar_community/isar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/isar_test_env.dart';
+
+class _HandoverWalletManager extends WalletManager {
+  _HandoverWalletManager(this.activeBinding);
+
+  AccountDataBinding activeBinding;
+
+  Uint8List _key(String accountId, LocalKeyPurpose purpose) {
+    if (accountId == activeBinding.accountId &&
+        activeBinding.bindingRevision == 1) {
+      return Uint8List.fromList(debugChatKeys[purpose]!);
+    }
+    return Uint8List.fromList(List<int>.generate(
+      32,
+      (index) => (0x80 + purpose.index * 13 + index) & 0xff,
+    ));
+  }
+
+  @override
+  Future<AccountDataBinding> accountDataBindingForAccountId(
+    String accountId,
+  ) async {
+    if (activeBinding.accountId != accountId) {
+      throw StateError('测试账户不是当前绑定账户');
+    }
+    return activeBinding;
+  }
+
+  @override
+  Future<Uint8List> deriveDataKeyForCurrentBinding(
+    String accountId,
+    LocalKeyPurpose purpose, {
+    String? context,
+  }) async =>
+      _key(accountId, purpose);
+
+  @override
+  Future<List<Uint8List>> deriveDataKeysForBinding(
+    AccountDataBinding binding,
+    List<({String? context, LocalKeyPurpose purpose})> requests,
+  ) async =>
+      requests
+          .map((request) => _key(binding.accountId, request.purpose))
+          .toList(growable: false);
+}
 
 /// 聊天正文静止态加密 + HMAC 分词搜索的端到端验收。
 ///
@@ -37,10 +88,12 @@ void main() {
   }
 
   Future<void> saveText(ChatStore store, String envelopeId, String text,
-      {String conversationId = 'conv-1', int at = 1000}) {
+      {String conversationId = 'conv-1',
+      int at = 1000,
+      String currentAccountId = accountId}) {
     return store.saveIncomingEnvelope(
       ownerCidNumber: ownerCidNumber,
-      currentAccountId: accountId,
+      currentAccountId: currentAccountId,
       envelope: envelopeOf(
         envelopeId: envelopeId,
         conversationId: conversationId,
@@ -90,8 +143,7 @@ void main() {
 
     final messages = await store.readMessages(
       ownerCidNumber: ownerCidNumber,
-      currentAccountId:
-          '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      currentAccountId: accountId,
       conversationId: 'conv-1',
     );
     expect(messages.single.plaintext, secret);
@@ -200,5 +252,192 @@ void main() {
       ),
       throwsA(isA<LocalCipherException>()),
     );
+  });
+
+  test('当前钱包签名换绑：finalized 前保留此前密文，提交后新钱包解密历史消息', () async {
+    const genesisHash =
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
+    const newAccountId =
+        '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const source = AccountDataBinding(
+      genesisHash: genesisHash,
+      cidNumber: ownerCidNumber,
+      bindingRevision: 1,
+      accountId: accountId,
+    );
+    const target = AccountDataBinding(
+      genesisHash: genesisHash,
+      cidNumber: ownerCidNumber,
+      bindingRevision: 2,
+      accountId: newAccountId,
+    );
+    final manager = _HandoverWalletManager(source);
+    final previousFixedKeys = ChatCrypto.debugFixedKeys;
+    ChatCrypto.debugFixedKeys = null;
+    try {
+      final store = ChatStore(
+        crypto: ChatCrypto(walletManager: manager),
+      );
+      await saveText(store, 'env-handover', '只有内存中出现的交接明文');
+      final before = await WalletIsar.instance.read((isar) async => (await isar
+              .chatMessageEntitys
+              .getByOwnerCidNumberEnvelopeId(ownerCidNumber, 'env-handover'))!
+          .plaintextCipher!);
+
+      await store.stageAccountHandover(source: source, target: target);
+      final stagedRows = await WalletIsar.instance.read((isar) async => isar
+          .appKvEntitys
+          .filter()
+          .keyStartsWith('chat_handover_by_cid:')
+          .findAll());
+      expect(stagedRows, hasLength(1));
+      expect(stagedRows.single.stringValue, isNot(contains('只有内存中出现的交接明文')));
+      final stillSource = await WalletIsar.instance.read((isar) async =>
+          (await isar.chatMessageEntitys.getByOwnerCidNumberEnvelopeId(
+                  ownerCidNumber, 'env-handover'))!
+              .plaintextCipher!);
+      expect(stillSource, before, reason: 'finalized 前正式消息行不得切换');
+
+      await store.commitAccountHandover(source: source, target: target);
+      manager.activeBinding = target;
+      final committed = await WalletIsar.instance.read((isar) async =>
+          (await isar.chatMessageEntitys
+              .getByOwnerCidNumberEnvelopeId(ownerCidNumber, 'env-handover'))!);
+      final after = committed.plaintextCipher!;
+      expect(after, isNot(before));
+      expect(committed.bindingRevision, target.bindingRevision);
+      expect(committed.accountId, target.accountId);
+      expect(
+        (await store.readMessages(
+          ownerCidNumber: ownerCidNumber,
+          currentAccountId: newAccountId,
+          conversationId: 'conv-1',
+        ))
+            .single
+            .plaintext,
+        '只有内存中出现的交接明文',
+      );
+      expect(
+        await WalletIsar.instance.read((isar) async => isar.appKvEntitys
+            .filter()
+            .keyStartsWith('chat_handover_by_cid:')
+            .count()),
+        0,
+      );
+    } finally {
+      ChatCrypto.debugFixedKeys = previousFixedKeys;
+    }
+  });
+
+  test('无当前账户签名换绑：此前聊天密文保留但新绑定不可见，当前密文损坏仍上抛', () async {
+    const genesisHash =
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
+    const newAccountId =
+        '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const source = AccountDataBinding(
+      genesisHash: genesisHash,
+      cidNumber: ownerCidNumber,
+      bindingRevision: 1,
+      accountId: accountId,
+    );
+    const target = AccountDataBinding(
+      genesisHash: genesisHash,
+      cidNumber: ownerCidNumber,
+      bindingRevision: 2,
+      accountId: newAccountId,
+    );
+    final manager = _HandoverWalletManager(source);
+    final previousFixedKeys = ChatCrypto.debugFixedKeys;
+    ChatCrypto.debugFixedKeys = null;
+    try {
+      final store = ChatStore(crypto: ChatCrypto(walletManager: manager));
+      await saveText(store, 'env-inaccessible', '没有交接签名的历史内容');
+      final before = await WalletIsar.instance.read((isar) async => (await isar
+          .chatMessageEntitys
+          .getByOwnerCidNumberEnvelopeId(ownerCidNumber, 'env-inaccessible'))!);
+
+      manager.activeBinding = target;
+      expect(
+        await store.readMessages(
+          ownerCidNumber: ownerCidNumber,
+          currentAccountId: newAccountId,
+          conversationId: 'conv-1',
+        ),
+        isEmpty,
+      );
+      final preserved = await WalletIsar.instance.read((isar) async =>
+          (await isar.chatMessageEntitys.getByOwnerCidNumberEnvelopeId(
+              ownerCidNumber, 'env-inaccessible'))!);
+      expect(preserved.plaintextCipher, before.plaintextCipher);
+      expect(preserved.bindingRevision, source.bindingRevision);
+      expect(preserved.accountId, source.accountId);
+
+      await saveText(
+        store,
+        'env-current',
+        '当前绑定密文',
+        currentAccountId: newAccountId,
+      );
+      await WalletIsar.instance.writeTxn((isar) async {
+        final current = await isar.chatMessageEntitys
+            .getByOwnerCidNumberEnvelopeId(ownerCidNumber, 'env-current');
+        current!.plaintextCipher = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+        await isar.chatMessageEntitys.putByOwnerCidNumberEnvelopeId(current);
+      });
+      await expectLater(
+        store.readMessages(
+          ownerCidNumber: ownerCidNumber,
+          currentAccountId: newAccountId,
+          conversationId: 'conv-1',
+        ),
+        throwsA(isA<LocalCipherException>()),
+      );
+    } finally {
+      ChatCrypto.debugFixedKeys = previousFixedKeys;
+    }
+  });
+
+  test('双签交接提交后原子把附件与 MLS 文件树切到新绑定分区', () async {
+    const genesisHash =
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
+    const newAccountId =
+        '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const source = AccountDataBinding(
+      genesisHash: genesisHash,
+      cidNumber: ownerCidNumber,
+      bindingRevision: 1,
+      accountId: accountId,
+    );
+    const target = AccountDataBinding(
+      genesisHash: genesisHash,
+      cidNumber: ownerCidNumber,
+      bindingRevision: 2,
+      accountId: newAccountId,
+    );
+    final root = await Directory.systemTemp.createTemp('gmb-chat-binding-');
+    addTearDown(() async {
+      if (root.existsSync()) await root.delete(recursive: true);
+    });
+    final sourceDirectory = Directory(
+      '${root.path}/chat/by_cid/$ownerCidNumber/by_binding/'
+      '${source.bindingRevision}/${source.accountId}',
+    );
+    await sourceDirectory.create(recursive: true);
+    await File('${sourceDirectory.path}/cipher-marker.bin')
+        .writeAsBytes(const <int>[1, 2, 3]);
+    final runtime = ChatRuntime(
+      store: ChatStore(),
+      documentsDirectoryProvider: () async => root,
+    );
+
+    await runtime.commitAccountHandover(source: source, target: target);
+
+    final targetDirectory = Directory(
+      '${root.path}/chat/by_cid/$ownerCidNumber/by_binding/'
+      '${target.bindingRevision}/${target.accountId}',
+    );
+    expect(sourceDirectory.existsSync(), isFalse);
+    expect(
+        File('${targetDirectory.path}/cipher-marker.bin').existsSync(), isTrue);
   });
 }

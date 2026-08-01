@@ -113,6 +113,16 @@ class _ChatAccountContext {
       sessionExpiresAt - ChatRuntime._sessionRefreshSkewMillis >
       DateTime.now().millisecondsSinceEpoch;
 
+  /// 当前绑定失效后主动清零 MLS 状态钥并关闭网络上下文。
+  Future<void> dispose() async {
+    final currentCrypto = crypto;
+    if (currentCrypto is NativeMlsCrypto) {
+      currentCrypto.dispose();
+    }
+    transport.dispose();
+    await webrtc.dispose();
+  }
+
   ChatDevice get identity => ChatDevice(
         cidNumber: account.cidNumber,
         deviceId: deviceId,
@@ -160,6 +170,7 @@ class ChatRuntime {
     ChatPushService? pushService,
     ChatPushTokenProvider? pushTokenProvider,
     IdentityAccountCache? identityAccountCache,
+    Future<Directory> Function()? documentsDirectoryProvider,
   })  : _store = store ?? ChatStore(),
         _walletManager = walletManager ?? WalletManager(),
         _identityAccountCache = identityAccountCache,
@@ -172,7 +183,9 @@ class ChatRuntime {
         _cryptoFactory = cryptoFactory,
         _cloudTransportFactory = cloudTransportFactory,
         _pushService = pushService ?? ChatPushService(),
-        _pushTokenProvider = pushTokenProvider;
+        _pushTokenProvider = pushTokenProvider,
+        _documentsDirectoryProvider =
+            documentsDirectoryProvider ?? getApplicationDocumentsDirectory;
 
   static const _kDeviceId = 'chat.device.id';
   static const _kDevicePublicKeyHex = 'chat.device.public_key_hex';
@@ -205,6 +218,7 @@ class ChatRuntime {
   final ChatCloudTransportFactory? _cloudTransportFactory;
   final ChatPushService _pushService;
   final ChatPushTokenProvider? _pushTokenProvider;
+  final Future<Directory> Function() _documentsDirectoryProvider;
 
   /// 正在经 WebRTC 传输字节的媒体 attachmentId(初始发送或补发中),用于去重:
   /// peer_ready 触发的补发不得对在途媒体再整块重传。
@@ -246,15 +260,16 @@ class ChatRuntime {
     return (await _identityCache.resolve())?.snapshot?.cidNumber;
   }
 
-  /// 附件本地静止态密钥（`LocalKeyPurpose.attachment` 子钥）。
+  /// 当前绑定钱包账户派生的附件本地静止态密钥。
   Future<List<int>> _attachmentKey() async {
     final accountId = await readAccountId();
     if (accountId == null || accountId.isEmpty) {
       throw StateError('无身份账户，无法读取附件加密密钥');
     }
-    final dataRoot =
-        await _walletManager.ensureCidDataRootForCurrentBinding(accountId);
-    return dataRoot.subkey(LocalKeyPurpose.attachment);
+    return _walletManager.deriveDataKeyForCurrentBinding(
+      accountId,
+      LocalKeyPurpose.attachment,
+    );
   }
 
   /// 短命明文目录：解密出来的附件只落这里，与密文缓存物理分开。
@@ -265,13 +280,27 @@ class ChatRuntime {
     );
   }
 
-  /// 附件密文缓存永久按 CID 分区，换绑账户不会改变目录。
+  /// 附件密文缓存以 CID 为属主，并按 finalized 绑定版本与账户隔离加密上下文。
   Future<Directory> _attachmentDirectory() async {
     final account = await _readAccount();
-    final dir = await getApplicationDocumentsDirectory();
-    return Directory(
-      '${dir.path}/chat/by_cid/${_safePath(account.cidNumber)}/attachments',
+    return _attachmentDirectoryForBinding(
+      cidNumber: account.cidNumber,
+      bindingRevision: account.bindingRevision,
+      accountId: account.accountId,
     );
+  }
+
+  Future<Directory> _attachmentDirectoryForBinding({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) async {
+    final bindingDirectory = await _bindingDirectory(
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
+    return Directory('${bindingDirectory.path}/attachments');
   }
 
   /// 清空短命明文附件。
@@ -282,6 +311,207 @@ class ChatRuntime {
   Future<void> purgePlainAttachments() async {
     await AttachmentVault.purgePlainDirectory(await _plainDirectory());
   }
+
+  /// 在 CID 钱包换绑签名前预演全部 Chat 私有数据交接。
+  ///
+  /// 聊天正文暂存在 Isar 的目标密文清单；附件逐块重加密；MLS 状态由 Rust 原生
+  /// 加密边界重封。三者都保留正式的此前密文，且不会生成任何明文文件。
+  Future<void> stageAccountHandover({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    _validateHandover(source, target);
+    final sourceKeys = await _walletManager.deriveDataKeysForBinding(
+      source,
+      const <({LocalKeyPurpose purpose, String? context})>[
+        (purpose: LocalKeyPurpose.attachment, context: null),
+        (purpose: LocalKeyPurpose.mls, context: null),
+      ],
+    );
+    final targetKeys = await _walletManager.deriveDataKeysForBinding(
+      target,
+      const <({LocalKeyPurpose purpose, String? context})>[
+        (purpose: LocalKeyPurpose.attachment, context: null),
+        (purpose: LocalKeyPurpose.mls, context: null),
+      ],
+    );
+    try {
+      await _store.stageAccountHandover(source: source, target: target);
+      await AttachmentVault.stageAccountHandover(
+        attachmentDirectory: await _attachmentDirectoryForBinding(
+          cidNumber: source.cidNumber,
+          bindingRevision: source.bindingRevision,
+          accountId: source.accountId,
+        ),
+        handoverId: _handoverId(target),
+        currentKey: sourceKeys[0],
+        newKey: targetKeys[0],
+      );
+      final mlsDirs = await _mlsDeviceDirectories(source);
+      final bindings = mlsDirs.isEmpty ? null : MlsNativeBindings.load();
+      for (final deviceDir in mlsDirs) {
+        bindings!.runStateRekey(
+          stateStoreDir: deviceDir.path,
+          action: 'stage',
+          currentStateKeyHex: _hexKey(sourceKeys[1]),
+          newStateKeyHex: _hexKey(targetKeys[1]),
+        );
+        await MlsStateStore(
+          deviceDir,
+          ownerCidNumber: source.cidNumber,
+          stateKey: Uint8List.fromList(sourceKeys[1]),
+        ).stageAccountHandover(Uint8List.fromList(targetKeys[1]));
+      }
+    } finally {
+      for (final key in <Uint8List>[...sourceKeys, ...targetKeys]) {
+        key.fillRange(0, key.length, 0);
+      }
+    }
+  }
+
+  /// finalized 后提交全部 Chat 目标密文；每个子步骤均可幂等重试。
+  Future<void> commitAccountHandover({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    _validateHandover(source, target);
+    await _store.commitAccountHandover(source: source, target: target);
+    await AttachmentVault.commitAccountHandover(
+      attachmentDirectory: await _attachmentDirectoryForBinding(
+        cidNumber: source.cidNumber,
+        bindingRevision: source.bindingRevision,
+        accountId: source.accountId,
+      ),
+      handoverId: _handoverId(target),
+    );
+    final mlsDirs = await _mlsDeviceDirectories(source);
+    final bindings = mlsDirs.isEmpty ? null : MlsNativeBindings.load();
+    for (final deviceDir in mlsDirs) {
+      bindings!.runStateRekey(
+        stateStoreDir: deviceDir.path,
+        action: 'commit',
+      );
+      await MlsStateStore.commitAccountHandoverFiles(deviceDir);
+    }
+    await _moveBindingDirectory(source, target);
+  }
+
+  Future<void> discardAccountHandover({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    _validateHandover(source, target);
+    await _store.discardAccountHandover(target);
+    await AttachmentVault.discardAccountHandover(
+      attachmentDirectory: await _attachmentDirectoryForBinding(
+        cidNumber: source.cidNumber,
+        bindingRevision: source.bindingRevision,
+        accountId: source.accountId,
+      ),
+      handoverId: _handoverId(target),
+    );
+    final mlsDirs = await _mlsDeviceDirectories(source);
+    final bindings = mlsDirs.isEmpty ? null : MlsNativeBindings.load();
+    for (final deviceDir in mlsDirs) {
+      bindings!.runStateRekey(
+        stateStoreDir: deviceDir.path,
+        action: 'discard',
+      );
+      await MlsStateStore.discardAccountHandoverFiles(deviceDir);
+    }
+  }
+
+  /// 没有当前账户签名的换绑完成后隔离不可继承的 Chat 状态。
+  ///
+  /// 绑定分区目录天然让新账户使用全新的附件与 MLS 状态；本方法只清理不能跨 MLS
+  /// 上下文续用的本地队列和派生镜像，历史正文密文仍留在 Isar 且对新账户不可见。
+  Future<void> isolateInaccessibleBinding(AccountDataBinding previous) =>
+      _store.isolateInaccessibleBinding(previous.cidNumber);
+
+  /// finalized 当前绑定完成端内交接后，关闭非当前账户上下文并建立当前 Chat 设备。
+  Future<void> convergeFinalizedBinding(AccountDataBinding current) async {
+    for (final accountId in _accountContextKeys.keys.toList(growable: false)) {
+      if (accountId != current.accountId) {
+        await _invalidateAccountContext(accountId);
+      }
+    }
+    await _invalidateAccountContext(current.accountId);
+    await ensureReady(current.accountId);
+  }
+
+  Future<List<Directory>> _mlsDeviceDirectories(
+    AccountDataBinding binding,
+  ) async {
+    final bindingDirectory = await _bindingDirectory(
+      cidNumber: binding.cidNumber,
+      bindingRevision: binding.bindingRevision,
+      accountId: binding.accountId,
+    );
+    final mlsRoot = Directory('${bindingDirectory.path}/mls');
+    if (!await mlsRoot.exists()) return const <Directory>[];
+    final out = <Directory>[];
+    await for (final entity in mlsRoot.list()) {
+      if (entity is Directory) out.add(entity);
+    }
+    return out;
+  }
+
+  Future<Directory> _bindingDirectory({
+    required String cidNumber,
+    required int bindingRevision,
+    required String accountId,
+  }) async {
+    final root = await _documentsDirectoryProvider();
+    return Directory(
+      '${root.path}/chat/by_cid/${_safePath(cidNumber)}/by_binding/'
+      '$bindingRevision/${_safePath(accountId)}',
+    );
+  }
+
+  /// 交接密文全部提交后，原子把文件树切换到新绑定目录；重试时目标已存在即视为完成。
+  Future<void> _moveBindingDirectory(
+    AccountDataBinding source,
+    AccountDataBinding target,
+  ) async {
+    final sourceDirectory = await _bindingDirectory(
+      cidNumber: source.cidNumber,
+      bindingRevision: source.bindingRevision,
+      accountId: source.accountId,
+    );
+    final targetDirectory = await _bindingDirectory(
+      cidNumber: target.cidNumber,
+      bindingRevision: target.bindingRevision,
+      accountId: target.accountId,
+    );
+    if (!await sourceDirectory.exists()) {
+      return;
+    }
+    if (await targetDirectory.exists()) {
+      throw StateError('Chat 新绑定目录已存在，禁止覆盖');
+    }
+    await targetDirectory.parent.create(recursive: true);
+    await sourceDirectory.rename(targetDirectory.path);
+  }
+
+  static void _validateHandover(
+    AccountDataBinding source,
+    AccountDataBinding target,
+  ) {
+    source.validate();
+    target.validate();
+    if (source.genesisHash != target.genesisHash ||
+        source.cidNumber != target.cidNumber ||
+        target.bindingRevision != source.bindingRevision + 1 ||
+        source.accountId == target.accountId) {
+      throw const FormatException('Chat 换绑交接上下文不合法');
+    }
+  }
+
+  static String _handoverId(AccountDataBinding target) =>
+      '${target.bindingRevision}-${target.accountId.substring(2)}';
+
+  static String _hexKey(List<int> key) =>
+      key.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
 
   /// 点击「广场发帖」推送时发信号（转发自设备推送服务），供 AppShell 切到广场 tab。
   Stream<void> get squarePostOpens => _pushService.squarePostOpens;
@@ -294,12 +524,19 @@ class ChatRuntime {
 
   /// 默认账户切换或本机 Chat 数据清理时精确失效该账户上下文。
   void invalidateAccount(String accountId) {
+    unawaited(_invalidateAccountContext(accountId));
+  }
+
+  /// finalized 接管路径必须等此前网络与 MLS 上下文全部关闭后再建立新上下文。
+  Future<void> _invalidateAccountContext(String accountId) async {
     _accountGenerations[accountId] = (_accountGenerations[accountId] ?? 0) + 1;
-    _readyFlights.remove(accountId);
+    _readyFlights.removeWhere((key, _) => key.endsWith('|$accountId'));
     final key = _accountContextKeys.remove(accountId);
     if (key != null) {
-      _readyContexts.remove(key);
+      final context = _readyContexts.remove(key);
+      if (context != null) await context.dispose();
     }
+    _squareApiClient.clearSession(accountId);
   }
 
   static String directConversationId(
@@ -1001,7 +1238,8 @@ class ChatRuntime {
       return Future.value(cached);
     }
     if (knownKey != null) {
-      _readyContexts.remove(knownKey);
+      final context = _readyContexts.remove(knownKey);
+      if (context != null) unawaited(context.dispose());
     }
 
     final flightKey =
@@ -1013,14 +1251,16 @@ class ChatRuntime {
 
     final generation = _accountGenerations[account.accountId] ?? 0;
     late final Future<_ChatAccountContext> created;
-    created = _buildAccountContext(account).then((context) {
+    created = _buildAccountContext(account).then((context) async {
       if ((_accountGenerations[account.accountId] ?? 0) != generation) {
+        await context.dispose();
         throw StateError('CID 当前绑定已切换，本次旧初始化结果已丢弃');
       }
       final contextKey = _contextKey(context.account, context.identity);
       final previousKey = _accountContextKeys[account.accountId];
       if (previousKey != null && previousKey != contextKey) {
-        _readyContexts.remove(previousKey);
+        final previous = _readyContexts.remove(previousKey);
+        if (previous != null) await previous.dispose();
       }
       _accountContextKeys[account.accountId] = contextKey;
       _readyContexts[contextKey] = context;
@@ -1045,71 +1285,70 @@ class ChatRuntime {
     var devicePublicKey = prefs.getString(_kDevicePublicKeyHex) ?? '';
     final stateStore = await _stateStore(
       account.cidNumber,
+      account.bindingRevision,
       account.accountId,
       deviceId,
     );
-    var identity = ChatDevice(
-      cidNumber: account.cidNumber,
-      deviceId: deviceId,
-      devicePublicKey: devicePublicKey.isEmpty ? '00' : devicePublicKey,
-    );
-    final crypto = _cryptoFactory?.call(identity, stateStore) ??
-        NativeMlsCrypto(identity: identity, stateStore: stateStore);
-    MlsKeyPackage? freshKeyPackage;
-    if (devicePublicKey.isEmpty) {
-      freshKeyPackage = await crypto.createKeyPackage(identity);
-      final keyPackage = freshKeyPackage;
-      if (keyPackage.devicePublicKey.isEmpty) {
-        throw StateError('OpenMLS native 未返回 Chat 设备公钥，请先重编 native 库');
-      }
-      devicePublicKey = keyPackage.devicePublicKey;
-      await prefs.setString(_kDevicePublicKeyHex, devicePublicKey);
-      identity = ChatDevice(
+    ChatCloudTransport? transport;
+    var keepStateStore = false;
+    try {
+      var identity = ChatDevice(
         cidNumber: account.cidNumber,
         deviceId: deviceId,
-        devicePublicKey: devicePublicKey,
+        devicePublicKey: devicePublicKey.isEmpty ? '00' : devicePublicKey,
       );
-    }
-    final finalCrypto = _cryptoFactory?.call(identity, stateStore) ??
-        NativeMlsCrypto(identity: identity, stateStore: stateStore);
-    final service = await _ensureServiceReady(
-      account: account,
-      identity: identity,
-      crypto: finalCrypto,
-      prefs: prefs,
-      initialKeyPackage: freshKeyPackage,
-    );
-    final transport = _cloudTransportFactory?.call(
-          accountId: account.accountId,
-          localDeviceId: deviceId,
-          serviceBaseUrl: service.baseUri,
-          sessionToken: service.session.sessionToken,
-        ) ??
-        ChatCloudTransport(
-          accountId: account.accountId,
-          localDeviceId: deviceId,
-          serviceBaseUrl: service.baseUri,
-          sessionToken: service.session.sessionToken,
-          requestSigner: service.session.signRequest,
+      final crypto = _cryptoFactory?.call(identity, stateStore) ??
+          NativeMlsCrypto(identity: identity, stateStore: stateStore);
+      MlsKeyPackage? freshKeyPackage;
+      if (devicePublicKey.isEmpty) {
+        freshKeyPackage = await crypto.createKeyPackage(identity);
+        final keyPackage = freshKeyPackage;
+        if (keyPackage.devicePublicKey.isEmpty) {
+          throw StateError('OpenMLS native 未返回 Chat 设备公钥，请先重编 native 库');
+        }
+        devicePublicKey = keyPackage.devicePublicKey;
+        await prefs.setString(_kDevicePublicKeyHex, devicePublicKey);
+        identity = ChatDevice(
+          cidNumber: account.cidNumber,
+          deviceId: deviceId,
+          devicePublicKey: devicePublicKey,
         );
-    final tempDirectory = '${(await _attachmentDirectory()).path}/.tmp';
-    // 回收被永久放弃的续传残档(对端删会话/待投递后不会再续写的 .part)。
-    unawaited(ChatAttachmentReceiveBuffer.sweepStalePartials(tempDirectory));
-    final webrtc = ChatWebrtcTransport(
-      accountId: account.accountId,
-      cloud: transport,
-      tempDirectory: tempDirectory,
-      onAttachment: _saveReceivedAttachmentToCache,
-    );
-    return _ChatAccountContext(
-      account: account,
-      deviceId: deviceId,
-      devicePublicKey: identity.devicePublicKey,
-      crypto: finalCrypto,
-      transport: transport,
-      webrtc: webrtc,
-      sessionExpiresAt: service.session.expiresAt,
-    );
+      }
+      final finalCrypto = _cryptoFactory?.call(identity, stateStore) ??
+          NativeMlsCrypto(identity: identity, stateStore: stateStore);
+      final service = await _ensureServiceReady(
+        account: account,
+        identity: identity,
+        crypto: finalCrypto,
+        prefs: prefs,
+        initialKeyPackage: freshKeyPackage,
+      );
+      transport = service.transport;
+      final tempDirectory = '${(await _attachmentDirectory()).path}/.tmp';
+      // 回收被永久放弃的续传残档(对端删会话/待投递后不会再续写的 .part)。
+      unawaited(ChatAttachmentReceiveBuffer.sweepStalePartials(tempDirectory));
+      final webrtc = ChatWebrtcTransport(
+        accountId: account.accountId,
+        cloud: transport,
+        tempDirectory: tempDirectory,
+        onAttachment: _saveReceivedAttachmentToCache,
+      );
+      keepStateStore = true;
+      return _ChatAccountContext(
+        account: account,
+        deviceId: deviceId,
+        devicePublicKey: identity.devicePublicKey,
+        crypto: finalCrypto,
+        transport: transport,
+        webrtc: webrtc,
+        sessionExpiresAt: service.session.expiresAt,
+      );
+    } finally {
+      if (!keepStateStore) {
+        transport?.dispose();
+        stateStore.dispose();
+      }
+    }
   }
 
   Future<_ChatServiceContext> _ensureServiceReady({
@@ -1154,24 +1393,29 @@ class ChatRuntime {
           sessionToken: session.sessionToken,
           requestSigner: session.signRequest,
         );
-
-    await _ensureDeviceRegistered(
-      account: account,
-      identity: identity,
-      prefs: prefs,
-      transport: transport,
-    );
-    await _ensureOwnKeyPackagePublished(
-      identity: identity,
-      crypto: crypto,
-      prefs: prefs,
-      transport: transport,
-      initialKeyPackage: initialKeyPackage,
-    );
-    return _ChatServiceContext(
-      baseUri: _squareApiClient.baseUri,
-      session: session,
-    );
+    try {
+      await _ensureDeviceRegistered(
+        account: account,
+        identity: identity,
+        prefs: prefs,
+        transport: transport,
+      );
+      await _ensureOwnKeyPackagePublished(
+        identity: identity,
+        crypto: crypto,
+        prefs: prefs,
+        transport: transport,
+        initialKeyPackage: initialKeyPackage,
+      );
+      return _ChatServiceContext(
+        baseUri: _squareApiClient.baseUri,
+        session: session,
+        transport: transport,
+      );
+    } catch (_) {
+      transport.dispose();
+      rethrow;
+    }
   }
 
   Future<void> _ensureDeviceRegistered({
@@ -1304,7 +1548,7 @@ class ChatRuntime {
   }
 
   Future<_ChatAccount> _readAccount({String? expectedAccountId}) async {
-    // CID 是永久身份主键；当前绑定账户只负责签名、鉴权与解锁 CID 数据根。
+    // CID 是永久身份主键；当前绑定账户负责签名、鉴权与派生本版本私有数据密钥。
     final wallet = await _walletManager.getDefaultWallet();
     if (wallet == null) {
       throw StateError('请先在「我的 → 我的钱包」创建热钱包');
@@ -1349,6 +1593,7 @@ class ChatRuntime {
 
   Future<MlsStateStore> _stateStore(
     String ownerCidNumber,
+    int bindingRevision,
     String accountId,
     String deviceId,
   ) async {
@@ -1356,17 +1601,21 @@ class ChatRuntime {
     if (factory != null) {
       return factory(ownerCidNumber, deviceId);
     }
-    final dir = await getApplicationDocumentsDirectory();
-    final safeCid = _safePath(ownerCidNumber);
+    final bindingDirectory = await _bindingDirectory(
+      cidNumber: ownerCidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
     final safeDevice = _safePath(deviceId);
-    // MLS 状态（设备签名私钥 + 群 ratchet 秘密）落盘必须加密：取 CID 数据根的
-    // mls 用途子钥，Rust native 与 Dart pending 队列共用同一把。
-    final dataRoot =
-        await _walletManager.ensureCidDataRootForCurrentBinding(accountId);
+    // MLS 状态（设备签名私钥 + 群 ratchet 秘密）落盘必须加密：取当前绑定钱包
+    // 账户的 mls 用途子钥，Rust native 与 Dart pending 队列共用同一把。
     return MlsStateStore(
-      Directory('${dir.path}/chat/by_cid/$safeCid/mls/$safeDevice'),
+      Directory('${bindingDirectory.path}/mls/$safeDevice'),
       ownerCidNumber: ownerCidNumber,
-      stateKey: await dataRoot.subkey(LocalKeyPurpose.mls),
+      stateKey: await _walletManager.deriveDataKeyForCurrentBinding(
+        accountId,
+        LocalKeyPurpose.mls,
+      ),
     );
   }
 }
@@ -1375,10 +1624,12 @@ class _ChatServiceContext {
   const _ChatServiceContext({
     required this.baseUri,
     required this.session,
+    required this.transport,
   });
 
   final Uri baseUri;
   final SquareSession session;
+  final ChatCloudTransport transport;
 }
 
 bool _needsFirstKeyPackage(Object error) {

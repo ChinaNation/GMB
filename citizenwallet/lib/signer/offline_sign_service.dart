@@ -121,8 +121,8 @@ class OfflineSignService {
       final fields = <String, String>{
         'genesis_hash': authorization.genesisHash,
         'cid_number': authorization.cidNumber,
-        if (authorization.expectedOldAccountId != null)
-          'expected_old_account_id': authorization.expectedOldAccountId!,
+        if (authorization.currentAccountId != null)
+          'current_account_id': authorization.currentAccountId!,
         'expected_binding_revision':
             authorization.expectedBindingRevision.toString(),
         'expires_at': authorization.expiresAt.toString(),

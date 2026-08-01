@@ -391,6 +391,7 @@ void main() {
     const groupId = 'grp:$_cidA:n2';
     await store.upsertGroupShell(
       ownerCidNumber: _ownerCidNumber,
+      currentAccountId: _accountA,
       groupId: groupId,
       groupName: '旧名',
       creatorCidNumber: _cidA,

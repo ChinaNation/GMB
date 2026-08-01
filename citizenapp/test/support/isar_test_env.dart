@@ -12,14 +12,19 @@ import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/security/local_data_key.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 聊天本地加密的测试密钥（固定 32 字节）。
+/// 聊天本地加密的测试用途子钥（固定 32 字节）。
 ///
 /// 单测没有平台通道，真实路径会走
 /// `WalletManager → 硬件金库 → flutter_secure_storage` 而抛 binding 错误；
-/// 这里注入固定 CID 数据根，让 `ChatStore` 在测试中走**真实加解密**（不是绕过加密），
+/// 这里注入固定用途子钥，让 `ChatStore` 在测试中走**真实加解密**（不是绕过加密），
 /// 只是密钥来源换成确定值。
-final CidDataRoot debugChatCidDataRoot =
-    CidDataRoot(Uint8List.fromList(List<int>.generate(32, (i) => i * 3 % 256)));
+final Map<LocalKeyPurpose, Uint8List> debugChatKeys =
+    <LocalKeyPurpose, Uint8List>{
+  LocalKeyPurpose.chat:
+      Uint8List.fromList(List<int>.generate(32, (i) => i * 3 % 256)),
+  LocalKeyPurpose.chatIndex:
+      Uint8List.fromList(List<int>.generate(32, (i) => (i * 5 + 1) % 256)),
+};
 
 /// 为当前测试文件挂上隔离的 Isar 生命周期:
 /// - setUpAll:建本文件专属临时目录 + 指向它 + 初始化 IsarCore + 注入聊天测试密钥
@@ -30,7 +35,7 @@ void useIsolatedIsar() {
   setUpAll(() async {
     dir = Directory.systemTemp.createTempSync('citizenapp_test_');
     WalletIsar.debugTestDirectoryOverride = dir.path;
-    ChatCrypto.debugFixedCidDataRoot = debugChatCidDataRoot;
+    ChatCrypto.debugFixedKeys = debugChatKeys;
     await WalletIsar.instance.ensureTestCoreInitialized();
   });
   setUp(() async {
@@ -42,7 +47,7 @@ void useIsolatedIsar() {
   tearDownAll(() async {
     await WalletIsar.instance.resetForTest();
     WalletIsar.debugTestDirectoryOverride = null;
-    ChatCrypto.debugFixedCidDataRoot = null;
+    ChatCrypto.debugFixedKeys = null;
     if (dir.existsSync()) {
       dir.deleteSync(recursive: true);
     }

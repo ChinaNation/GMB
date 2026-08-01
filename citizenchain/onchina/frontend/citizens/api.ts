@@ -322,7 +322,7 @@ export async function submitCitizenOccupy(
 /**
  * 换绑段1 prepare:直接按链上 finalized 绑定真源发起。
  * 匿名 CID 可由任一在册 CREG/FRG 办理；实名 CID 仅本市 CREG/对应省 FRG，
- * 最终辖区权限由 Runtime 统一裁决。新钱包签名，不要求旧钱包。
+ * 最终辖区权限由 Runtime 统一裁决。新钱包签名，不要求当前钱包。
  */
 export async function prepareCitizenRebind(
   auth: AdminAuth,
@@ -340,19 +340,29 @@ export async function prepareCitizenRebind(
 }
 
 /**
- * 换绑段2 submit:回传新钱包的换绑签名(account_id + rebind_signature),
+ * 换绑段2 submit:回传新钱包的换绑签名(new_account_id + new_account_signature),
  * 后端验签 → 组装 admin_rebind_cid_account_id → 返回管理员冷签 QR(段3 用)。
  */
 export async function submitCitizenRebind(
   auth: AdminAuth,
   requestId: string,
-  account_id: string,
-  rebind_signature: string,
+  newAccountId: string,
+  newAccountSignature: string,
+  currentAccountId?: string,
+  currentAccountSignature?: string,
 ): Promise<SubmitCitizenRebindResult> {
   return request<SubmitCitizenRebindResult>('/api/v1/admin/citizens/rebind/submit', {
     method: 'POST',
     headers: jsonAdminHeaders(auth),
-    body: JSON.stringify({ request_id: requestId, account_id, rebind_signature }),
+    body: JSON.stringify({
+      request_id: requestId,
+      new_account_id: newAccountId,
+      new_account_signature: newAccountSignature,
+      ...(currentAccountId ? { current_account_id: currentAccountId } : {}),
+      ...(currentAccountSignature
+        ? { current_account_signature: currentAccountSignature }
+        : {}),
+    }),
   });
 }
 

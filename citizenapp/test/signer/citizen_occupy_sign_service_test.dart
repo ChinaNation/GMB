@@ -23,14 +23,25 @@ Account _account({int index = 0, int accountByte = 0xab}) => Account(
     );
 
 class _FakeWalletManager extends WalletManager {
+  _FakeWalletManager({this.currentAccount});
+
+  final Account? currentAccount;
   String? signedAccountId;
   Uint8List? signedPayload;
+  final List<String> signedAccountIds = <String>[];
+  final List<Uint8List> signedPayloads = <Uint8List>[];
+
+  @override
+  Future<Account?> getAccountByAccountId(String accountId) async =>
+      currentAccount?.accountId == accountId ? currentAccount : null;
 
   @override
   Future<Uint8List> signForAccountId(
       String accountId, Uint8List payload) async {
     signedAccountId = accountId;
     signedPayload = Uint8List.fromList(payload);
+    signedAccountIds.add(accountId);
+    signedPayloads.add(Uint8List.fromList(payload));
     return Uint8List(64);
   }
 }
@@ -95,7 +106,7 @@ void main() {
     for (final field in const <String>[
       'genesis_hash',
       'cid_number',
-      'expected_old_account_id',
+      'current_account_id',
       'expected_binding_revision',
       'expires_at',
     ]) {
@@ -112,19 +123,19 @@ void main() {
     expect(prep.cidNumber, _cid);
     expect(prep.isOccupy, isTrue);
     expect(prep.genesisHash, '0x${'44' * 32}');
-    expect(prep.expectedOldAccountId, isNull);
+    expect(prep.currentAccountId, isNull);
     expect(prep.expectedBindingRevision, BigInt.zero);
     expect(prep.expiresAt, BigInt.from(_expiresAt));
     expect(prep.account.accountId, '0x${'ab' * 32}');
   });
 
-  test('prepare 严格解出换绑旧账户、非零 revision 与 expires', () async {
+  test('prepare 严格解出换绑当前账户、非零 revision 与 expires', () async {
     final prep = await service.prepare(
         _domainRaw(action: QrActions.citizenRebind), _account());
     expect(prep.isOccupy, isFalse);
     expect(prep.cidNumber, _cid);
     expect(prep.genesisHash, '0x${'44' * 32}');
-    expect(prep.expectedOldAccountId, '0x${'55' * 32}');
+    expect(prep.currentAccountId, '0x${'55' * 32}');
     expect(prep.expectedBindingRevision, BigInt.from(7));
     expect(prep.expiresAt, BigInt.from(_expiresAt));
   });
@@ -194,7 +205,7 @@ void main() {
     }
   });
 
-  test('换绑选择账户与 expected_old_account_id 相同即拒', () async {
+  test('换绑选择账户与 current_account_id 相同即拒', () async {
     await expectLater(
       service.prepare(
         _domainRaw(action: QrActions.citizenRebind),
@@ -230,5 +241,71 @@ void main() {
         scalePayload: exactAuthorization,
       ),
     );
+  });
+
+  test('注册局换绑在同一次扫码中收集当前与新账户对同一授权的双签名', () async {
+    final newAccount = _account(accountByte: 0xab);
+    final currentAccount = _account(accountByte: 0x55);
+    final manager = _FakeWalletManager(currentAccount: currentAccount);
+    final prep = await service.prepare(
+      _domainRaw(action: QrActions.citizenRebind),
+      newAccount,
+      manager,
+    );
+
+    expect(prep.currentAccount?.accountId, currentAccount.accountId);
+    final raw = await service.sign(prep, manager);
+    expect(manager.signedAccountIds, <String>[
+      newAccount.accountId,
+      currentAccount.accountId,
+    ]);
+
+    final exactAuthorization = _rebindTemplate()
+      ..setRange(
+        32 + 1 + _cid.length + 32,
+        32 + 1 + _cid.length + 64,
+        List<int>.filled(32, 0xab),
+      );
+    expect(
+      manager.signedPayloads[0],
+      QrSigner.signingBytesForHex(
+        payloadHex: prep.request.body.payloadHex,
+        action: QrActions.citizenRebind,
+        selfAccountId: Uint8List.fromList(List<int>.filled(32, 0xab)),
+      ),
+    );
+    expect(
+      manager.signedPayloads[1],
+      signingMessage(
+        opTag: kOpSignCidRebind,
+        scalePayload: exactAuthorization,
+      ),
+    );
+
+    final response = QrSigner().parseResponse(
+      raw,
+      expectedRequestId: prep.request.id!,
+    );
+    expect(response.body.signerPublicKeyHex, newAccount.accountId);
+    expect(response.body.currentAccountIdHex, currentAccount.accountId);
+    expect(response.body.currentAccountSignatureHex, '0x${'00' * 64}');
+  });
+
+  test('当前钱包不在本机时注册局仍可强制换绑，但响应不伪造当前账户签名', () async {
+    final manager = _FakeWalletManager();
+    final prep = await service.prepare(
+      _domainRaw(action: QrActions.citizenRebind),
+      _account(accountByte: 0xab),
+      manager,
+    );
+    expect(prep.currentAccount, isNull);
+
+    final response = QrSigner().parseResponse(
+      await service.sign(prep, manager),
+      expectedRequestId: prep.request.id!,
+    );
+    expect(manager.signedAccountIds, <String>['0x${'ab' * 32}']);
+    expect(response.body.currentAccountIdHex, isNull);
+    expect(response.body.currentAccountSignatureHex, isNull);
   });
 }

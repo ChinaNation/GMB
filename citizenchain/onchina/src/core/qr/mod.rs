@@ -114,6 +114,11 @@ pub struct SignResponseBody {
     pub account_id: String,
     /// 0x + 64B hex 签名。parse 时由 b.s 解码得到。
     pub signature: String,
+    /// 换绑数据交接的当前账户签名；注册局授权换绑本身不依赖这两个可选字段。
+    #[allow(dead_code)]
+    pub current_account_id: Option<String>,
+    #[allow(dead_code)]
+    pub current_account_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +219,8 @@ impl std::error::Error for QrParseError {}
 struct CompactResponseBody {
     u: String,
     s: String,
+    o: Option<String>,
+    r: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -297,6 +304,21 @@ pub fn parse_sign_response(raw: &str) -> Result<SignResponseEnvelope, QrParseErr
         .map_err(|e| QrParseError::BadField(format!("b: {}", e)))?;
     let account_id = b64_to_prefixed_hex(&body.u, 32, "b.u")?;
     let signature = b64_to_prefixed_hex(&body.s, 64, "b.s")?;
+    if body.o.is_some() != body.r.is_some() {
+        return Err(QrParseError::BadField(
+            "b.o / b.r 必须同时出现或同时省略".into(),
+        ));
+    }
+    let current_account_id = body
+        .o
+        .as_deref()
+        .map(|value| b64_to_prefixed_hex(value, 32, "b.o"))
+        .transpose()?;
+    let current_account_signature = body
+        .r
+        .as_deref()
+        .map(|value| b64_to_prefixed_hex(value, 64, "b.r"))
+        .transpose()?;
 
     Ok(SignResponseEnvelope {
         proto: QR_V1.to_string(),
@@ -306,6 +328,8 @@ pub fn parse_sign_response(raw: &str) -> Result<SignResponseEnvelope, QrParseErr
         body: SignResponseBody {
             account_id,
             signature,
+            current_account_id,
+            current_account_signature,
         },
     })
 }
@@ -448,6 +472,46 @@ mod tests {
         assert_eq!(
             b64_to_prefixed_hex(&body.account_id, 32, "b.u").expect("b.u 应可解码"),
             ACCOUNT_ID
+        );
+    }
+
+    #[test]
+    fn sign_response_parses_paired_current_account_handover_signature() {
+        let current_account = [0x22u8; 32];
+        let current_account_signature = [0x33u8; 64];
+        let raw = serde_json::json!({
+            "p": QR_V1,
+            "k": QrKind::SignResponse.code(),
+            "i": "citizen-rebind-response-1",
+            "e": 1_800_000_000i64,
+            "b": {
+                "u": URL_SAFE_NO_PAD.encode([0x11u8; 32]),
+                "s": URL_SAFE_NO_PAD.encode([0x44u8; 64]),
+                "o": URL_SAFE_NO_PAD.encode(current_account),
+                "r": URL_SAFE_NO_PAD.encode(current_account_signature),
+            }
+        })
+        .to_string();
+        let parsed = parse_sign_response(raw.as_str()).expect("双签响应应通过");
+        let current_account_hex = format!("0x{}", hex::encode(current_account));
+        let current_account_signature_hex = format!("0x{}", hex::encode(current_account_signature));
+        assert_eq!(
+            parsed.body.current_account_id.as_deref(),
+            Some(current_account_hex.as_str())
+        );
+        assert_eq!(
+            parsed.body.current_account_signature.as_deref(),
+            Some(current_account_signature_hex.as_str())
+        );
+
+        let mut missing_current_account_signature: serde_json::Value =
+            serde_json::from_str(raw.as_str()).expect("测试 JSON");
+        missing_current_account_signature["b"]
+            .as_object_mut()
+            .expect("测试 body")
+            .remove("r");
+        assert!(
+            parse_sign_response(missing_current_account_signature.to_string().as_str()).is_err()
         );
     }
 

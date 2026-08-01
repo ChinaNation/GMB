@@ -57,7 +57,7 @@
   field_label_zh: 过期时间
 - field_key: expected_binding_revision
   field_label_zh: 预期绑定版本
-- field_key: expected_old_account_id
+- field_key: current_account_id
   field_label_zh: 当前绑定账户
 - field_key: family_name
   field_label_zh: 姓

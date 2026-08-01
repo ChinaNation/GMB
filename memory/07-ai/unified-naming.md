@@ -1,5 +1,18 @@
 # GMB 统一命名文件
 
+## 0. 全仓第一死规则：Substrate 官方命名绝对优先
+
+1. 全仓库所有第一方实现只要涉及 Substrate / Polkadot SDK 已定义的概念，必须严格使用
+   官方类型和官方术语；官方命名优先于历史代码、旧协议、旧文档和任何局部习惯。
+2. 同一语义全仓只能存在一个基础名称。Rust、SQL、JSON 使用 `snake_case`，Dart、
+   TypeScript 使用对应的 `lowerCamelCase`；这只是语言语法转换，不得改变语义词根。
+3. 禁止为同一概念另造同义词、缩写、别名、兼容字段、双轨字段或影子字段。冲突旧名必须
+   在当前任务中从代码、协议、测试、生成物、注释和文档彻底删除。
+4. Substrate 未定义的 GMB 业务概念，以本文件登记的唯一命名为准。
+5. 新增或修改命名前，必须先查阅 Polkadot SDK 官方资料，再全仓搜索本文件和现有实现；
+   无法确认时必须停止执行并询问用户，不得猜测。
+6. 存在命名残留时，任务不得完成、不得创世、不得推送 CI、不得部署。
+
 ## 1. 定位
 
 本文件是 GMB AI 编程系统的统一命名入口。
@@ -52,7 +65,7 @@
 | Dart / TS 类型 | PascalCase | `InstitutionAccountEntry` |
 | 函数 / 方法 | snake_case(Rust) / lowerCamelCase(Dart/TS) | `build_call_data` / `buildCallData` |
 | 常量 | SCREAMING_SNAKE_CASE(Rust) / lowerCamelCase 或 static const(Dart) | `MODULE_TAG` / `actionCreate` |
-| JSON / API 字段 | snake_case | `signer_pubkey` |
+| JSON / API 字段 | snake_case | `signer_public_key` |
 | storage 字段 | PascalCase | `InstitutionAccounts` |
 | 扫码端解码展示字段 | snake_case | `cid_full_name` |
 | 任务卡文件名 | 短日期 + 短 slug | `20260507-ai-unified-naming.md` |
@@ -149,6 +162,9 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 机构命名规范 | `institution-naming.md` | `memory/07-ai/` | 管理机构具体中英文全称/简称；字段命名仍以本文件为总入口 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
+| 当前钱包数据绑定 | `AccountDataBinding` | `citizenapp/lib/security/local_data_key.dart` | 仅保存 `genesis_hash + cid_number + binding_revision + account_id` 公开绑定元数据，不保存任何密钥 |
+| 当前钱包数据密钥派生器 | `AccountDataKeyDeriver` | `citizenapp/lib/security/local_data_key.dart` | 只从当前绑定钱包账户 child mini-secret 直接派生用途子钥；不得引入额外用户私有数据主钥或第二密钥持有人 |
+| 当前钱包数据密钥用途 | `LocalKeyPurpose` | `citizenapp/lib/security/`、`citizenapp/lib/chat/`、`citizenapp/lib/my/` | 只登记 Chat、MLS、聊天附件和通讯录的 HKDF 用途域，域前缀固定为 `citizenapp.account-data/`；不得扩展到草稿或其它数据 |
 | Chat Envelope | `ChatEnvelope` | `citizenapp/chat/proto/chat_envelope.proto` / `citizenapp/lib/chat/` / `citizenapp/cloudflare/src/chat/` | Chat 的 Protobuf 外层瞬时信封，统一承载互联网和近场传输中的 OpenMLS wire bytes、MLS 消息类型和 ratchet tree；不含云端附件引用或确认状态 |
 | Chat 路由记录 | `ChatRoute` | `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | Chat 设备本地路由缓存，保存对方永久 `cid_number`、设备公钥、安全码和近场提示，不替代“我的通讯录” |
 | Chat KeyPackage | `ChatKeyPackage` / `MlsKeyPackage` | `citizenapp/lib/chat/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到对应 `cid_number` 的一次性池并在消费时硬删除 |

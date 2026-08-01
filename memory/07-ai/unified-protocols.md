@@ -225,16 +225,17 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 注册局占号/换绑：`citizen_occupy` 的 `b.d` 固定为
   `genesis_hash + bounded cid + 32B 零 account 槽 + revision=0 + expires_at`；
   `citizen_rebind` 固定为
-  `genesis_hash + bounded cid + expected_old_account_id + 32B 零 new_account 槽`
+  `genesis_hash + bounded cid + current_account_id + 32B 零 new_account 槽`
   `+ nonzero revision + expires_at`。外层 `e` 必须等于内层过期时间；钱包严格解码、确认
-  无尾字节并拒绝换绑新旧相同后，才可原位填选定账户并分别走 `0x12/0x1f` 哈希域签名。
+  无尾字节并拒绝换绑当前账户与新账户相同后，才可原位填选定账户并分别走
+  `0x12/0x1f` 哈希域签名。
   OnChina 段 3 管理员冷签 call 固定为：
   `occupy_cid(10/6) = actor_cid + actor_role + cid + account_id(32B) + expires_at(u64 LE)
   + citizen_signature(Vec64)`；
   `admin_rebind_cid_account_id(10/7) = actor_cid + actor_role + cid + new_account_id(32B)
   + expected_binding_revision(u64 LE) + expires_at(u64 LE) + new_account_signature(Vec64)`。
-  call 6 的展示字段用 `account_id`，call 7 同时涉及旧/新账户时必须用
-  `expected_old_account_id`/`new_account_id`，不得退回含糊 `account_id`。
+  call 6 的展示字段用 `account_id`，call 7 同时涉及当前/新账户时必须用
+  `current_account_id`/`new_account_id`，不得退回含糊 `account_id`。
 - 平台调价动作：`propose_set_platform_price`，pallet/call 为 `SquarePost/propose_set_platform_price`；必审字段为 `actor_cid_number`、`membership_level`、`new_price_fen`。CitizenWallet 必须严格中文解码并输出标准签名响应二维码，OnChina 负责回扫提交。
 - 禁止兼容：开发期不做旧协议兼容
 - 禁止事项：
@@ -290,7 +291,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `GET /health` 响应：`ok`、`service`、`storage_backend`、`content_on_chain`
   - `POST /v1/square/auth/challenge` 请求：`account_id`；响应：`challenge_id`、`cid_number`、`account_id`、`op_tag`、`signing_payload_hex`、`expires_at`。签名 SCALE payload 固定为 `account_id ‖ cid_number ‖ challenge_id ‖ expires_at`。
   - `POST /v1/square/auth/session` 请求：`account_id`、`challenge_id`、`signature`；响应：`session_token`、`cid_number`、`account_id`、`expires_at`。登录挑战写入必填 `cid_number`，挑战创建与 Session 签发分别读取最新 finalized 双向绑定，换绑竞态必须拒绝。会话只验证已登记 P-256 设备子钥对挑战的签名及钱包归属，不读取 `System.Account`，不要求链上账户已经存在，也不以余额或存在性存款作为 Cloudflare 登录门禁。挑战必须通过 D1 条件更新原子消费，CID、账户、挑战编号、未消费状态和有效期同时命中才允许继续；并发请求只允许一个成功。明文 token 只返回客户端，KV 键与 D1 `square_sessions` 只保存其 SHA-256；D1 以 CID 建立强一致注销索引。KV Session 或索引写入失败时挑战保持已消费，并删除两侧半成品，不得恢复旧挑战。
-  - `POST /v1/square/auth/device/register` 的 `issued_at` 必须是服务端当前时间前后五分钟内的安全整数；同一 `account_id` 的 D1 条件 UPSERT 只接受严格更大的 `issued_at`，重复、旧绑定和并发回滚返回冲突，不得覆盖当前设备子密钥。
+  - `POST /v1/square/auth/device/register` 的 `issued_at` 必须是服务端当前时间前后五分钟内的安全整数；同一 `account_id` 的 D1 条件 UPSERT 只接受严格更大的 `issued_at`，重复、非当前绑定和并发回滚返回冲突，不得覆盖当前设备子密钥。
   - `GET /v1/square/membership` 请求：Bearer `session_token`；响应：`plans[]`、`membership`、`subscription_active`、`active`。`plans[]` 只返回权益配额和平台档位标识，不返回价格；平台价格由 CitizenApp 直接读取 finalized `PlatformPrice`。`membership` 镜像字段至少包含 `membership_level`、`subscription_status`、`last_charged_price_fen`、`last_charged_at`、`paid_until`、`updated_at`。
   - `POST /v1/square/membership/confirm` 请求：Bearer `session_token`，`tx_hash`、`block_hash`、`signed_extrinsic_hex`、`action`(`subscribe`/`cancel`/`change`)，订阅或换档时另带 `membership_level`；响应：finalized 链上平台订阅镜像。Worker 从 session 取 `cid_number` 读取同一区块 `Subscriptions[(cid_number, Platform)]`，同时用 `account_id` 复核完整交易签名者；禁止采信请求自报价格、状态或期限。该镜像路由只用 Bearer，不生成第二次账户或设备签名。
   - `GET /v1/square/creator/plan` 与 `GET /v1/square/creator/plan/{creator_cid_number}`：返回创作者展示资料和链上 `tier_id` 引用；名称、说明、权益文案不进入链上，扣款价格不由 D1 返回为真源。
@@ -328,9 +329,9 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `GET /v1/square/users/{cid_number}` 请求：可选 Bearer `session_token`；响应：`profile`（`cid_number`、`account_id`、`display_name`、`bio`、`avatar_object_key`、`banner_object_key`、`is_certified`、`identity_level`、`membership_level`、`membership_active`、`counts{following,followers,posts}`、`is_following`、`is_notifying`、`updated_at`）。**路由末段是身份主键 `cid_number`，不是钱包账户**；响应里的 `account_id` 只是该 CID 当前绑定钱包的展示/审计字段，广场订阅和创作者调用不得把它作为业务键。身份/认证真源 = 按 CID 读链（`AccountIdByCid` + `CidRegistry` active + 投票/竞选公开字段），不再依赖发帖投影。
   - `GET /v1/square/users/{cid_number}/posts` 请求：可选 `category`（all/normal/campaign）、`content_format`（all/normal/article）、`limit`、`cursor`；响应：`cid_number`、`posts[]`、`next_cursor`（按 `created_at` keyset 游标）。帖子 Tab 传 `content_format=normal` 排除文章，文章 Tab 传 `content_format=article`。
   - `GET /v1/square/users/{cid_number}/follows` 请求：`type`（following/followers）、`limit`、`cursor`；响应：`entries[{cid_number,created_at}]`、`next_cursor`
-  - `GET /v1/square/contacts` 请求：Bearer `session_token` + P-256 设备请求证明，可选 `limit`、`cursor`；响应：`items[{contact_id,ciphertext,nonce,mac,updated_at}]`、`next_cursor`。属主 `cid_number` 只从 session 派生，Worker 不接收联系人 CID、账户、SS58 或私人备注明文。
-  - `PUT /v1/square/contacts/{contact_id}` 请求：Bearer `session_token` + P-256 设备请求证明，`ciphertext`、`nonce`、`mac`、`updated_at`；响应：`contact_id`、`updated_at`、`applied`。`contact_id` 固定为端侧通讯录索引密钥对目标 `cid_number` 的 HMAC-SHA256 hex，Worker 只校验形状和大小，不持有索引密钥且不能反推出联系人。
-  - `DELETE /v1/square/contacts/{contact_id}` 请求：Bearer `session_token` + P-256 设备请求证明；响应：`contact_id`、`deleted`；只能删除当前 session 所属 CID 的对应密文记录。
+  - `GET /v1/square/contacts` 请求：Bearer `session_token` + P-256 设备请求证明，可选 `limit`、`cursor`；响应：`items[{binding_revision,account_id,contact_id,ciphertext,nonce,mac,updated_at}]`、`next_cursor`。Worker 只返回 session 当前 `binding_revision + account_id` 对应的密文；属主 `cid_number` 只从 session 派生，Worker 不接收联系人 CID、SS58 或私人备注明文。
+  - `PUT /v1/square/contacts/{contact_id}` 请求：Bearer `session_token` + P-256 设备请求证明，`binding_revision`、`account_id`、`ciphertext`、`nonce`、`mac`、`updated_at`；响应：`contact_id`、`updated_at`、`applied`。`binding_revision + account_id` 必须与当前 session 精确一致，禁止在换绑 finalized 前预写新账户密文。`contact_id` 固定为端侧通讯录索引密钥对目标 `cid_number` 的 HMAC-SHA256 hex，Worker 只校验形状和大小，不持有索引密钥且不能反推出联系人。
+  - `DELETE /v1/square/contacts/{contact_id}?binding_revision=...&account_id=...` 请求：Bearer `session_token` + P-256 设备请求证明；响应：`contact_id`、`deleted`。当前 session 只能删除当前版本，或在换绑 finalized 后删除相邻的此前版本；不得删除其它 CID、未来版本或非相邻版本。
   - `PUT /v1/square/profile` 请求：Bearer `session_token`，可选 `display_name`(≤40)、`bio`(≤160)、`avatar_object_key`、`avatar_content_hash`、`banner_object_key`、`banner_content_hash`（头像/背景 key 只能分别为本人固定 `profile/{cid_number}/avatar`、`profile/{cid_number}/banner`）；响应：与 GET `users/{cid_number}` 同构的完整 `profile`。身份主键 cid 由 session 派生。
   - `POST /v1/square/profile/assets/prepare` 请求：Bearer `session_token`，`kind`(`avatar`/`banner`)、`content_type`、`byte_size`、`sha256`；头像最多 512KiB/1024×1024，背景最多 1536KiB/1920×720；响应本人 `object_key`、`content_hash` 与同域 Worker `upload_url`。
   - `PUT /v1/square/profile/assets?object_key=...&byte_size=...&sha256=...`：Bearer + P-256 设备请求签名；Worker 校验真实字节、MIME、文件头、尺寸和 sha256 后覆盖固定 R2 对象键。
@@ -394,15 +395,15 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `post_id`、`manifest_object_key` 由 Worker 在 `uploads/prepare` 后生成，真源在 D1 `square_uploads.object_keys_json`；Images/Stream 的 `provider_asset_id`、上传方式、播放地址和处理状态真源在 D1 `square_media_assets`，不要求 App 在 prepare 前写入 manifest。
 - D1 表字段（**身份主键铁律**：所有用户数据以 `cid_number` 为归属键；`account_id` 只在链上镜像/凭证表保留，语义是"当前绑定钱包账户 / 该笔链上事实的签名者"，不再是身份）：
   - `square_login_challenges`: `challenge_id`、`cid_number`、`account_id`、`signing_payload`、`expires_at`、`used_at`。`cid_number` 是挑战归属与注销键，`account_id` 只表示本次必须签名的当前绑定账户；登录挑战落库前必须先从最新 finalized 双向绑定解析 CID。
-  - `square_sessions`: `session_token_hash`、`cid_number`、`account_id`、`created_at`、`expires_at`。明文 token 禁止入库；D1 与 KV 键只保存 SHA-256。注销按 CID 查询全部哈希，换绑吊销才按 CID + 旧账户筛选。
+  - `square_sessions`: `session_token_hash`、`cid_number`、`account_id`、`created_at`、`expires_at`。明文 token 禁止入库；D1 与 KV 键只保存 SHA-256。注销按 CID 查询全部哈希，换绑吊销才按 CID + 此前账户筛选。
   - `chain_clock`: 单行 `clock_id=1`、`chain_timestamp`、`finalized_block_number`、`finalized_block_hash`、`observed_at`；只允许更高 finalized 区块推进，旧证明不能刷新观测时间。
-  - `square_device_subkeys`: 复合主键 `(cid_number,device_id)`（`device_id` = P-256 公钥 sha256，同一身份多设备各一行）；`account_id`（生成该子钥的钱包账户）、`p256_public_key`、`issued_at`、`created_at`、`updated_at`。子钥属账户：换绑后旧账户子钥由每请求链上绑定复查判失效，不迁移。
+  - `square_device_subkeys`: 复合主键 `(cid_number,device_id)`（`device_id` = P-256 公钥 sha256，同一身份多设备各一行）；`account_id`（生成该子钥的钱包账户）、`p256_public_key`、`issued_at`、`created_at`、`updated_at`。子钥属账户：换绑后此前账户子钥由每请求链上绑定复查判失效，不迁移。
   - `square_request_nonces`: `nonce_hash` 主键；`cid_number`、`expires_at`、`created_at`。
   - `square_memberships`: 以身份主键 `cid_number` 为主键；`account_id`（当前付款/签名账户）、`membership_level`、`started_at`、`last_charged_at`、`last_charged_price_fen`、`paid_until`、`subscription_status`、`finalized_block_number`、`finalized_block_hash`、`verified_at`、`entitlement_lapsed_at`、`last_tx_hash`。
   - `square_creator_tiers`: 复合主键 `(creator_cid_number,tier_id)`；`creator_account_id`（当前签名账户）、`name`、`tier_order`、三个公历周期的 finalized 价格镜像、`finalized_block_number`、`finalized_block_hash`、`verified_at`、`last_tx_hash`。名称是展示资料，价格镜像只用于证明与展示审计，链上 `CreatorPlans` 始终是扣款真源。
   - `square_creator_subscriptions`: 复合主键 `(subscriber_cid_number,creator_cid_number)`；`subscriber_account_id`/`creator_account_id`（各自当前签名账户）、`tier_id`/`billing_period`、链上时间、最近扣款价格、状态、finalized 锚点、`verified_at`、`last_tx_hash`。
   - `chain_transaction_confirmations`: 以 `tx_hash` 为主键，保存首次绑定的 `cid_number`、签名 `account_id`、区块、extrinsic 序号、动作、规范化 `request_hash`、链时间和确认时间；相同请求幂等，任何 CID、账户或请求改绑均拒绝。注销按 `cid_number` 删除 D1 最小证明，链上原始交易事实不受影响。
-  - `square_contacts`: 复合主键 `(cid_number,contact_id)`；`ciphertext`、`nonce`、`mac`、`updated_at`。属主 cid 只从 session 派生，换绑后密文随身份保留。
+  - `square_contacts`: 复合主键 `(cid_number,binding_revision,account_id,contact_id)`；`ciphertext`、`nonce`、`mac`、`updated_at`。属主 `cid_number` 只从 session 派生；版本与账户只隔离钱包派生密文，不构成第二身份主键。换绑 finalized 前目标密文只存客户端，finalized 后由新账户会话上传、回读并清理相邻的此前版本。
   - `square_uploads`: `upload_id`、`post_id`、`cid_number`（归属）、`account_id`（发起账户）、`post_category`、`manifest_hash`、`content_hash`、`storage_receipt_id`、`estimated_bytes`、`object_keys_json`、`status`、`created_at`、`completed_at`
   - `square_media_assets`: `upload_id`、`post_id`、`cid_number`（归属）、`account_id`（上传账户）、`media_index`、`media_kind`、`provider`、`provider_asset_id`、`upload_method`、`resource_key`、`content_type`、`byte_size`、`asset_state`、`declared_duration_seconds`、`duration_seconds`、`width`、`height`、`error_code`、`created_at`、`updated_at`、`ready_at`
   - `square_posts`: `post_id`、`cid_number`（NOT NULL，发布者身份主键，由链上 `SquarePostPublished` 事件镜像）、`account_id`（发布时链上签名者）、`post_category`、`content_format`、`title`、`text`、`content_hash`、`storage_receipt_id`、`chain_block`、`created_at`、`post_state`
@@ -447,12 +448,15 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `SubscriptionMirror`: 平台订阅、创作者订阅与创作者档位的 finalized 待提交证明和有限历史按订阅者/创作者 CID 分区；证明内部的 `signer_account_id` 只记录当时签名与付款事实。
 - 通讯录云端密文契约：
   - 明文记录只存在 CitizenApp 端，字段固定为 `owner_cid_number`、联系人 `cid_number`、`account_id`、`ss58_address`、`contact_remark`、`created_at`、`updated_at`；不保留版本化 schema 或旧字段兼容。
-  - 本地与云端通讯录子钥都由 CID 稳定 `CidDataRoot` 域隔离派生；云端密文固定使用
-    `citizenapp.cid/contacts-cloud`，本地 KV 固定使用 `citizenapp.cid/contacts-local`。
-    当前账户 child 只派生包装数据根的 KEK，不直接决定通讯录密钥；CID 数据根及用途
-    子钥不得上传日志或写入业务数据库明文字段。
+  - 本地与云端通讯录子钥都由 CID 当前链上绑定钱包账户的 child mini-secret 直接派生；
+    云端密文固定使用 `citizenapp.account-data/contacts-cloud`，本地 KV 固定使用
+    `citizenapp.account-data/contacts-local`。HKDF salt 必须绑定 `genesis_hash + cid_number
+    + binding_revision + account_id`，用途域和可选 context 进入 info。用途子钥只在 App
+    内存短期使用，不得上传、记录日志或写入业务数据库。换绑后新账户派生不同子钥；
+    有当前账户签名时，同一换绑流程先解密再用新账户子钥重加密，缺少当前账户签名时
+    新账户不能解密此前历史私有密文。
   - 单条记录使用 AES-256-GCM；AAD 必须绑定未版本化通讯录域、属主 `cid_number` 与 `contact_id`，防止跨身份或跨联系人替换。
-  - D1 `square_contacts` 只允许保存属主 `cid_number`、`contact_id`、`ciphertext`、`nonce`、`mac`、`updated_at`；禁止保存联系人 CID、账户、SS58、私人备注、公开昵称或关系明文。
+  - D1 `square_contacts` 只允许保存属主 `cid_number`、公开密钥上下文 `binding_revision + account_id`、`contact_id`、`ciphertext`、`nonce`、`mac`、`updated_at`；禁止保存联系人 CID、联系人账户、SS58、私人备注、公开昵称或关系明文。
 - 编码：HTTP JSON 字段统一 snake_case；R2 manifest 为 UTF-8 JSON；hash 字段为 sha256 hex；Worker 阶段 3 已落地字段的时间统一使用毫秒时间戳。
 - CitizenApp 阶段 5/6 实现真源：
   - `citizenapp/lib/8964/services/square_api_client.dart`
@@ -477,44 +481,39 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - Worker session 必须由已登记的 P-256 设备子钥对 `signing_payload` 签名获得；设备子钥归属仍由钱包主钥绑定证明建立。会话不得读取链上账户、余额或存在性存款。
   - CID 账户绑定防重放真源为 finalized `BindingRevisionByCid[cid_number]`。
     `CidRebindAuthorization` 的 SCALE 字段顺序固定为
-    `genesis_hash(H256) + cid_number(BoundedVec<u8,32>) + expected_old_account_id(AccountId32)`
+    `genesis_hash(H256) + cid_number(BoundedVec<u8,32>) + current_account_id(AccountId32)`
     `+ new_account_id(AccountId32) + expected_binding_revision(u64 LE) + expires_at(u64 LE)`；
     `expires_at` 是 Unix 秒，链端要求晚于当前时间且不超过 600 秒。CitizenApp 自助换绑
     使用 `OP_SIGN_CID_REBIND=0x11`；call 9 参数固定为
-    `cid_number, expected_binding_revision, expires_at, old_account_signature`，新账户为
-    extrinsic origin。创世、当前旧账户、revision 或过期时间任一变化都必须使旧授权失效。
+    `cid_number, expected_binding_revision, expires_at, current_account_signature`，新账户为
+    extrinsic origin。创世、当前账户、revision 或过期时间任一变化都必须使此前授权失效。
   - finalized inclusion 不等于 dispatch 成功。CitizenApp 收到交易回执后必须在回执的
     精确 finalized 区块读取 `AccountIdByCid` 与 `BindingRevisionByCid`：首次占号只接受
     目标账户且 revision=1，自助换绑只接受新账户且 revision 精确等于签名前 revision+1；
     目标状态缺失或不一致一律 fail-closed，核验通过前不得执行本地接管或广播身份变化。
-  - finalized 换绑后新账户立即取得 CID 控制权。CitizenApp 不得保存旧账户签名清理
-    outbox，也不存在客户端换绑后吊销接口。旧账户凭证撤销只能由可信 finalized
-    绑定版本事件驱动，禁止让客户端另交旧签名形成第二授权协议。
-  - CID 数据根接管接口固定为
-    `POST /v1/square/identity/takeover/challenge` 与
-    `POST /v1/square/identity/takeover`。Worker 必须在挑战前和验签后两次读取 finalized
-    `cid_number + account_id + binding_revision`；挑战正文绑定创世哈希、CID、当前账户、
-    revision、临时 X25519 接收公钥、随机 challenge 与过期时间，并使用现有
-    `OP_SIGN_SQUARE_ACTION` 签名域。挑战有专用 `cidt_` 前缀并以 D1 条件更新原子消费，
-    不得与 `sqc_` 登录挑战交叉使用。当前新账户验签通过后取得同一 CID 稳定数据根；
-    响应只返回 X25519 + HKDF + AES-256-GCM 加密信封，AAD 绑定完整接管上下文和摘要，
-    HTTP JSON 不得出现明文数据根。
-  - 每个 CID 的稳定数据根首次随机生成；Worker Secret `CID_DATA_ROOT_RECOVERY_KEY` 只作
-    恢复层基础密钥，按创世、CID 与密钥版本派生独立 KEK 后密封数据根。D1 只保存
-    `recovery_ciphertext`、`recovery_nonce`、`recovery_key_version`、摘要和当前激活绑定。
-    该 Secret 是集中恢复信任边界，泄漏会影响全部 CID，必须独立轮换、审计且禁止写入
-    仓库、日志或普通业务表；恢复接口不得接收任何此前账户、助记词或设备材料。
-  - App 必须先完成“解密及摘要校验 → 当前新账户包装写入并读回 → 激活精确绑定 →
-    落 CID 缓存和用途子钥 → 清旧本地包装”，再登记当前新钱包的设备子钥。Worker 只有
-    在该新子钥成功写入后，才删除同一 CID 下旧 revision / 旧 `account_id` 的
-    `square_login_challenges`、`chat_keypackages`、`chat_devices`、
-    `square_device_subkeys` 和 Session，并关闭旧账户实时连接；清理函数不接收旧账户签名。
-    通讯录、动态、媒体、关注、会员、CID 稳定数据根和其它 CID 业务数据一律保留。
+  - finalized 换绑后新账户立即取得 CID 控制权。CitizenApp 不得保存此前账户签名清理
+    outbox，也不存在客户端换绑后吊销接口。此前账户凭证撤销只能由可信 finalized
+    绑定版本事件驱动，禁止让客户端另交此前签名形成第二授权协议。
+  - Worker 不提供任何私有数据密钥领取、接管、密封或恢复接口，不保存用户数据主钥，
+    也不接受临时密钥交换公钥。App 在精确核验 finalized
+    `(genesis_hash, cid_number, binding_revision, account_id)` 后，读取当前钱包账户 child
+    mini-secret，直接派生用途子钥并激活本机公开绑定元数据；同一绑定版本出现不同创世、
+    CID 或账户时失败关闭。
+  - 换绑 finalized 后新账户立即取得 CID 控制权。App 使用新账户派生新用途子钥，再登记
+    新钱包的设备子钥；Worker 按 finalized 新绑定拒绝旧凭证并清理同一 CID 下旧 revision /
+    旧 `account_id` 的 `square_login_challenges`、`chat_keypackages`、`chat_devices`、
+    `square_device_subkeys` 和 Session，并关闭此前账户实时连接。通讯录云端密文、动态、
+    媒体、关注、会员和其它 CID 业务数据继续按 CID 保留，但新账户不能直接解密换绑前
+    当前账户加密的历史私有密文。无当前账户签名的换绑不得要求此前账户、此前设备、
+    此前助记词或此前缓存参与。
+  - App 的收敛顺序固定为“激活新绑定派生上下文 → 登记新钱包设备子钥 → 只保留精确新
+    三元组 Session → 等待此前 Chat HTTP/WebSocket/MLS 上下文完全关闭 → 建立新上下文”。
+    Worker 关闭旧实时连接失败时必须失败关闭，设备子钥登记不得返回成功。无当前账户签名
+    时只隔离此前 Chat/通讯录密文并清除不能跨绑定续用的瞬时任务，不得把解密失败静默当空数据。
   - P-256 设备子钥的跨端文本编码统一带 `0x`（ADR-041，§0.3）：`p256_public_key` = `^0x04[0-9a-f]{128}$`，`signature` / `binding_signature` / `x-device-signature` = `^0x[0-9a-f]{128}$`；Worker 边界一次 require 0x + strip，内部 SCALE 签名消息 / D1 存储 / `device_key_hash` preimage 继续裸字节（逐字节不变）。禁止裸或「两端都收」。
   - Worker 只能把钱包签名证明用于登录和上传授权，不得托管钱包私钥。
-  - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由 CID 稳定数据根域隔离派生；Worker
-    不得接收通讯录用途子钥，也不得记录联系人明文。Worker 仅可为当前 finalized 绑定
-    账户发放该 CID 的稳定数据根，并按上条恢复层契约密封保存。
+  - 通讯录密文的 AES/HMAC 密钥只在 CitizenApp 端由当前 finalized 绑定钱包账户直接
+    派生；Worker 不得接收用途子钥、账户 child 或联系人明文，也不得提供任何密钥发放链路。
   - manifest 与图片必须经同域 Worker 有界读取并验证 P-256 设备签名；视频 TUS 地址必须绑定 `account_id`、`upload_id`、精确字节和最长时长。
   - CitizenApp 必须先用 finalized 余额确认钱包至少保留 `1.21 元`（ED 1.11 元 + 发布费 0.1 元），余额不足不得进入 Worker prepare 或媒体上传。
   - CitizenApp 必须在链上扣费交易入块后才上传 manifest 与主媒体；链上未入块不得占用 R2 / Images / Stream 存储，只能保存本地草稿。
@@ -1191,11 +1190,13 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   Secure Enclave P-256 KEK，`biometryCurrentSet + privateKeyUsage` 只保护账户 child
   mini-secret 的 `ios-se-v1:` ECIES-AES-GCM 信封；两类私钥不得复用。
 - 设备子钥生命周期：CID 换绑成功后，新钱包账户的 `walletIndex` 生成或使用自己的
-  P-256 设备子钥，完成新绑定三元组登记后即接管；绝不读取、联系或要求旧账户私钥和
-  旧设备。Worker 按新 finalized 三元组撤销旧 Session、旧设备子钥、旧 Chat 设备、
-  KeyPackage 和旧 WebSocket。CID 数据根先由新账户完成可解密包装并验证，再删除本机
-  可见的旧账户包装；CID 所属业务数据、MLS 目录和用途子钥不重建。删除本地钱包不等于
-  注销 CID，也不得扩大为 Cloudflare 身份数据删除。
+  P-256 设备子钥，完成新绑定三元组登记后即接管；无当前账户签名的换绑绝不读取、联系或
+  要求此前账户私钥和设备。Worker 按新 finalized 三元组撤销此前 Session、设备子钥、
+  Chat 设备、KeyPackage 和 WebSocket。新账户只使用自己的 child mini-secret 派生后续
+  私有数据子钥，不接收此前账户的数据密钥；CID 所属公开数据和云端私有密文归属不变，
+  新账户不能直接解密此前账户加密的历史私有数据。有当前账户签名时只由客户端对 Chat
+  与通讯录执行端内重加密交接。删除本地钱包不等于注销 CID，也不得扩大为
+  Cloudflare 身份数据删除。
 - 签名/验签规则：
   - `ChatRoute` 是 Chat 模块内部路由缓存，不是第二套通讯录，不得替代“我的通讯录”联系人详情。
   - 公民端发消息必须解析永久 CID 和当前 finalized 绑定；没有 CID 或绑定闭环不得发送。

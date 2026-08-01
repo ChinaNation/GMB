@@ -115,21 +115,29 @@
 
 ### 4.2 通讯录
 
-本机缓存复用 Isar `AppKvEntity`，全部按属主永久 `cid_number` 分区：
+本机缓存复用 Isar `AppKvEntity`，全部按属主永久 `cid_number` 分区且保存为
+`contacts-local` 用途子钥加密的密文：
 
-- `contact_book_by_cid:<owner_cid_number>`：解密后的本机通讯录缓存
-- `contact_pending_by_cid:<owner_cid_number>`：按联系人 CID 记录的添加/改备注/删除操作
-- `contact_sync_by_cid:<owner_cid_number>`：最近一次同步阶段、时间和错误状态
+- `contact_book_by_cid:<owner_cid_number>`：本机通讯录密文
+- `contact_pending_by_cid:<owner_cid_number>`：按联系人 CID 记录的添加/改备注/删除操作密文
+- `contact_sync_by_cid:<owner_cid_number>`：最近一次同步阶段、时间和错误状态密文
+- `contact_inaccessible_by_binding:<owner_cid_number>:<binding_revision>:<account_id>:<key>`：
+  无当前账户签名换绑后保留的此前本机密文；新绑定从空的当前键开始，禁止把无法解密的
+  此前密文当作损坏数据覆盖
 
 Cloudflare D1 `square_contacts` 只保存端侧 AES-256-GCM 密文、HMAC `contact_id`、
 nonce、MAC 和更新时间；Worker 不接收联系人 CID、账户、SS58 或私人备注明文。
 `contact_id` 固定为索引钥对目标 CID 的 HMAC-SHA256。AES-GCM 载荷包含属主 CID、
-联系人四字段与时间戳，AAD 包含属主 CID；通讯录加密和索引密钥由 CID 稳定数据根的
-`citizenapp.cid/contacts-cloud` 用途域派生。当前账户 child 只包装 CID 数据根，不直接
-决定通讯录密钥；换绑不删除或重建云端密文。
+联系人四字段与时间戳，AAD 包含属主 CID；通讯录加密和索引密钥由 CID 当前链上绑定
+钱包账户的 child mini-secret 直接派生，用途域为
+`citizenapp.account-data/contacts-cloud`。换绑 finalized 前，目标密文只在客户端本地
+暂存；finalized 后由新账户当前会话上传、回读验证，再删除此前云端版本。新账户不能直接
+解密换绑前当前账户加密的历史私有数据，只有同次换绑取得当前账户签名时才执行该交接；
+Worker 不持有任何用户私有数据密钥，也不接受未生效账户预写。本地与云端用途子钥按操作
+临时派生并在 `finally` 清零，不在服务对象、Isar、Secure Storage 或 Worker 中长期缓存。
 
-废弃的账户分区缓存、待办、同步态和密钥名只清理不读取；旧联系人 JSON 与旧密文
-不迁移、不兼容。D1 废弃密文由一次性重建脚本清空，生产执行必须另行人工审核。
+废弃的账户分区缓存、待办、同步态和密钥名只清理不读取；废弃联系人 JSON 与废弃格式
+密文不迁移、不兼容。创世前 D1 只按当前单一 schema 重建，生产执行必须另行人工审核。
 
 ### 4.3 电子护照
 
@@ -184,7 +192,7 @@ nonce、MAC 和更新时间；Worker 不接收联系人 CID、账户、SS58 或�
   `AccountIdByCid + CidRegistry + BindingRevisionByCid + CidByAccountId`，只有四项闭环
   一致才原子更新联系人 `accountId/ss58Address` 快照；任一联系人解析失败不伪造新绑定。
 - 转账前必须对所选联系人执行一次同样的 finalized 双向闭环精确读取，成功后才把最新
-  SS58 交给支付页；链读取失败或闭环不一致时失败关闭，禁止回退使用本地旧账户快照。
+  SS58 交给支付页；链读取失败或闭环不一致时失败关闭，禁止回退使用本地过期账户快照。
   页面批量刷新与转账前强校验构成双重保证。
 - 支持修改可留空的私人备注、按 CID 删除、搜索和下拉同步
 - 页面先显示按身份账户隔离的 Isar 缓存，再后台刷新 Cloudflare 密文和按 CID 寻址的公开资料

@@ -218,7 +218,7 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
 - **群控制载荷**(`group/group_control.dart`,不改 proto、不进 `ChatMessageKind`):`t=gmb.chat.ctrl`,`op=rename|leave_request`;收端 `group_flow` 先判别——是控制则处理、**绝不当聊天消息显示**,非控制退化为普通消息(`tryDecode` 对坏数据/未知 op 返回 null,不误吞用户文本)。
 - **群名传播**:创建者/admin `renameGroup` → 本机改 + 广播 `rename`;成员收到 `rename` → 更新群名(补 Welcome 不带名的缺口)。
 - **退群自动重钥**:`leaveGroup` = 发 `leave_request` + 本机标 `leftLocally`;群 **admin** 收到 `leave_request` → 自动 `removeMembers([leaver])` 产 Commit 重钥,**补齐阶段1"退群仅本机停发"的密码学后向保密**。
-- **存储**:`ChatConversationPreview.conversationKind` 透出(列表区分群/私聊);`ChatStore.renameGroup`;`ChatGroupFlow` 使用 owner CID 判定自身与代提交移除，当前账户只供本地数据根解锁。
+- **存储**:`ChatConversationPreview.conversationKind` 透出(列表区分群/私聊);`ChatStore.renameGroup`;`ChatGroupFlow` 使用 owner CID 判定自身与代提交移除，当前账户只负责派生本地私有数据用途子钥。
 - **测试**:`test/chat/group/` 13 绿(含控制载荷编解码退化、admin 收 leave_request 自动移除、rename 同步群名)。`flutter analyze lib/chat` 0。
 - **UI 待做(阶段2 第 2 段)**:建群页 / 成员管理页 / 群聊页(chat_page 群适配 + sender 归属)+ chat_tab 新建群入口与群会话行。
 

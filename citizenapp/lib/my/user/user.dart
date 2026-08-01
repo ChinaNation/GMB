@@ -240,14 +240,14 @@ class _ProfilePageState extends State<MyTab> {
       return;
     }
     if (wallet == null) return;
-    final walletAccountId = wallet.accountId;
+    final defaultAccountId = wallet.accountId;
     // 账户用于当前签名者比对，CID 用于徽章快照归属。默认钱包本身是否被换掉仍按
     // 钱包账户做再入守卫，避免账户0 与子账户混淆导致守卫误判。
     final identity = await IdentityAccountCache.instance.resolve();
-    final identityAccountId = identity?.accountId ?? walletAccountId;
+    final identityAccountId = identity?.accountId ?? defaultAccountId;
     final identityCidNumber =
         identity?.snapshot?.cidNumber ?? _identityCidNumber;
-    if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
+    if (!mounted || _defaultWallet?.accountId != defaultAccountId) return;
     if (identityAccountId.isEmpty ||
         _operationalIdentityAccount == identityAccountId) {
       return;
@@ -255,7 +255,7 @@ class _ProfilePageState extends State<MyTab> {
     _operationalIdentityAccount = identityAccountId;
 
     final state = await _myIdService.getState();
-    if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
+    if (!mounted || _defaultWallet?.accountId != defaultAccountId) return;
 
     String? refreshedLevel;
     if (state.isCitizen &&
@@ -273,7 +273,7 @@ class _ProfilePageState extends State<MyTab> {
         _ => null,
       };
     }
-    if (!mounted || _defaultWallet?.accountId != walletAccountId) return;
+    if (!mounted || _defaultWallet?.accountId != defaultAccountId) return;
     setState(() {
       _identityCidNumber = state.cidNumber?.trim().isNotEmpty == true
           ? state.cidNumber!.trim()

@@ -72,33 +72,51 @@ interface StoredSubkey {
   updated_at: number;
 }
 
+interface StoredBindingCredential {
+  cid_number: string;
+  binding_revision: number;
+  account_id: string;
+}
+
 // 主键 (cid_number, device_id);绑定序对齐 service.ts 的 upsert:
 // (cid_number, device_id, binding_revision, account_id, p256_public_key, issued_at,
 // created_at, updated_at)。
 class DeviceStmt {
   private binds: unknown[] = [];
   constructor(
-    private readonly rows: Map<string, StoredSubkey>,
+    private readonly db: DeviceDb,
     private readonly sql: string,
-    private readonly deletes: string[],
   ) {}
   bind(...args: unknown[]): DeviceStmt {
     this.binds = args;
     return this;
   }
   async run(): Promise<{ meta: { changes: number } }> {
-    if (this.sql.startsWith('DELETE FROM')) this.deletes.push(this.sql);
+    const rows = this.db.rows;
+    if (this.sql.startsWith('DELETE FROM')) this.db.deletes.push(this.sql);
+    if (this.sql.includes('DELETE FROM square_sessions')) {
+      return { meta: { changes: this.db.purgeStale(this.db.sessions, this.binds) } };
+    }
+    if (this.sql.includes('DELETE FROM square_login_challenges')) {
+      return { meta: { changes: this.db.purgeStale(this.db.loginChallenges, this.binds) } };
+    }
+    if (this.sql.includes('DELETE FROM chat_keypackages')) {
+      return { meta: { changes: this.db.purgeStale(this.db.keyPackages, this.binds) } };
+    }
+    if (this.sql.includes('DELETE FROM chat_devices')) {
+      return { meta: { changes: this.db.purgeStale(this.db.chatDevices, this.binds) } };
+    }
     if (this.sql.includes('DELETE FROM square_device_subkeys')) {
       const cidNumber = this.binds[0] as string;
       const bindingRevision = this.binds[1] as number;
       const accountId = this.binds[2] as string;
       let changes = 0;
-      for (const [key, row] of this.rows) {
+      for (const [key, row] of rows) {
         if (
           row.cid_number === cidNumber &&
           (row.binding_revision !== bindingRevision || row.account_id !== accountId)
         ) {
-          this.rows.delete(key);
+          rows.delete(key);
           changes++;
         }
       }
@@ -112,7 +130,7 @@ class DeviceStmt {
     const key = `${cidNumber}:${deviceId}`;
     const bindingRevision = this.binds[2] as number;
     const issuedAt = this.binds[5] as number;
-    const current = this.rows.get(key);
+    const current = rows.get(key);
     if (
       current
       && bindingRevision <= current.binding_revision
@@ -120,7 +138,7 @@ class DeviceStmt {
     ) {
       return { meta: { changes: 0 } };
     }
-    this.rows.set(key, {
+    rows.set(key, {
       cid_number: cidNumber,
       device_id: deviceId,
       binding_revision: bindingRevision,
@@ -133,25 +151,80 @@ class DeviceStmt {
     return { meta: { changes: 1 } };
   }
   async all<T>(): Promise<{ results: T[] }> {
+    if (this.sql.includes('SELECT session_token_hash') && this.sql.includes('FROM square_sessions')) {
+      const [cidNumber, bindingRevision, accountId] = this.binds as [string, number, string];
+      const results = [...this.db.sessions.entries()]
+        .filter(([, row]) =>
+          row.cid_number === cidNumber
+          && (row.binding_revision !== bindingRevision || row.account_id !== accountId)
+        )
+        .map(([sessionTokenHash]) => ({ session_token_hash: sessionTokenHash })) as T[];
+      return { results };
+    }
     return { results: [] };
   }
 }
 
 class DeviceDb {
   readonly rows = new Map<string, StoredSubkey>();
+  readonly sessions = new Map<string, StoredBindingCredential>();
+  readonly loginChallenges = new Map<string, StoredBindingCredential>();
+  readonly keyPackages = new Map<string, StoredBindingCredential>();
+  readonly chatDevices = new Map<string, StoredBindingCredential>();
   readonly deletes: string[] = [];
+
+  purgeStale(
+    rows: Map<string, StoredBindingCredential>,
+    binds: unknown[],
+  ): number {
+    const [cidNumber, bindingRevision, accountId] = binds as [string, number, string];
+    let changes = 0;
+    for (const [key, row] of rows) {
+      if (
+        row.cid_number === cidNumber
+        && (row.binding_revision !== bindingRevision || row.account_id !== accountId)
+      ) {
+        rows.delete(key);
+        changes++;
+      }
+    }
+    return changes;
+  }
+
   prepare(sql: string): DeviceStmt {
-    return new DeviceStmt(this.rows, sql, this.deletes);
+    return new DeviceStmt(this, sql);
   }
   async batch(statements: DeviceStmt[]): Promise<Array<{ meta: { changes: number } }>> {
     return Promise.all(statements.map((statement) => statement.run()));
   }
 }
 
-function deviceEnv(db = new DeviceDb()): Env {
+class DeviceCache {
+  readonly keys = new Set<string>();
+  readonly deleted: string[] = [];
+
+  async delete(key: string): Promise<void> {
+    this.deleted.push(key);
+    this.keys.delete(key);
+  }
+}
+
+function deviceEnv(
+  db = new DeviceDb(),
+  options: {
+    cache?: DeviceCache;
+    realtimeFetch?: (request: Request) => Promise<Response>;
+  } = {},
+): Env {
+  const cache = options.cache ?? new DeviceCache();
   return {
     DB: db,
-    SQUARE_CACHE: { delete: async () => undefined },
+    SQUARE_CACHE: cache,
+    CHAT_REALTIME: options.realtimeFetch == null
+      ? undefined
+      : {
+          getByName: (_name: string) => ({ fetch: options.realtimeFetch }),
+        },
   } as unknown as Env;
 }
 
@@ -304,22 +377,79 @@ describe('registerDeviceSubkey 原子单调更新', () => {
     ).rejects.toMatchObject({ code: 'invalid_issued_at' });
   });
 
-  it('当前新设备上岗后才清理同一 CID 的旧 revision/旧账户子钥', async () => {
+  it('当前新设备上岗后才清理同一 CID 的此前 revision/此前账户子钥', async () => {
     const db = new DeviceDb();
+    const cache = new DeviceCache();
+    const previousAccountId = `0x${'2'.repeat(64)}`;
+    const stale = {
+      cid_number: TEST_CID,
+      binding_revision: 0,
+      account_id: previousAccountId,
+    };
+    const current = {
+      cid_number: TEST_CID,
+      binding_revision: 1,
+      account_id: DEVICE_BIND_INPUT.account_id,
+    };
     db.rows.set('old', {
       cid_number: TEST_CID,
       device_id: 'old',
       binding_revision: 0,
-      account_id: `0x${'2'.repeat(64)}`,
+      account_id: previousAccountId,
       p256_public_key: `04${'c'.repeat(128)}`,
       issued_at: 1,
       created_at: 1,
       updated_at: 1,
     });
-    await registerDeviceSubkey(registerRequest(Date.now()), deviceEnv(db));
+    db.sessions.set('stale-session', stale);
+    db.sessions.set('current-session', current);
+    db.loginChallenges.set('stale-challenge', stale);
+    db.loginChallenges.set('current-challenge', current);
+    db.keyPackages.set('stale-package', stale);
+    db.keyPackages.set('current-package', current);
+    db.chatDevices.set('stale-chat-device', stale);
+    db.chatDevices.set('current-chat-device', current);
+    cache.keys.add('square_session:stale-session');
+    cache.keys.add('square_session:current-session');
+    const realtimeRequests: Request[] = [];
+    await registerDeviceSubkey(
+      registerRequest(Date.now()),
+      deviceEnv(db, {
+        cache,
+        realtimeFetch: async (request) => {
+          realtimeRequests.push(request);
+          return Response.json({ ok: true, closed: 1 });
+        },
+      }),
+    );
     expect([...db.rows.values()].some((row) => row.device_id === 'old')).toBe(false);
     expect([...db.rows.values()]).toHaveLength(1);
     expect([...db.rows.values()][0]?.account_id).toBe(DEVICE_BIND_INPUT.account_id);
+    expect(db.sessions.has('stale-session')).toBe(false);
+    expect(db.sessions.has('current-session')).toBe(true);
+    expect(cache.keys.has('square_session:stale-session')).toBe(false);
+    expect(cache.keys.has('square_session:current-session')).toBe(true);
+    expect(db.loginChallenges.has('stale-challenge')).toBe(false);
+    expect(db.loginChallenges.has('current-challenge')).toBe(true);
+    expect(db.keyPackages.has('stale-package')).toBe(false);
+    expect(db.keyPackages.has('current-package')).toBe(true);
+    expect(db.chatDevices.has('stale-chat-device')).toBe(false);
+    expect(db.chatDevices.has('current-chat-device')).toBe(true);
     expect(db.deletes.join('\n')).toContain('DELETE FROM square_login_challenges');
+    expect(realtimeRequests).toHaveLength(1);
+    expect(new URL(realtimeRequests[0]!.url).pathname).toBe('/__close_stale');
+    await expect(realtimeRequests[0]!.json()).resolves.toEqual({
+      binding_revision: 1,
+      account_id: DEVICE_BIND_INPUT.account_id,
+    });
+  });
+
+  it('此前实时连接撤销失败时设备登记失败关闭并要求重试', async () => {
+    const env = deviceEnv(new DeviceDb(), {
+      realtimeFetch: async () => new Response('failed', { status: 503 }),
+    });
+
+    await expect(registerDeviceSubkey(registerRequest(Date.now()), env))
+      .rejects.toMatchObject({ code: 'chat_realtime_revoke_failed', status: 503 });
   });
 });

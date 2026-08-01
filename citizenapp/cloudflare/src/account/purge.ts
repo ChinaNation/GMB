@@ -111,7 +111,6 @@ export async function purgeIdentity(
     env.DB.prepare(`DELETE FROM square_device_subkeys WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_sessions WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_login_challenges WHERE cid_number = ?`).bind(cidNumber),
-    env.DB.prepare(`DELETE FROM cid_data_roots WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_uploads WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_posts WHERE cid_number = ?`).bind(cidNumber),
     env.DB.prepare(`DELETE FROM square_media_assets WHERE cid_number = ?`).bind(cidNumber),

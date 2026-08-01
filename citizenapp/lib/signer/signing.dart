@@ -28,7 +28,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 /// 公民身份上链确认(对齐 OP_SIGN_CITIZEN_IDENTITY)。
 const int kOpSignCitizenIdentity = 0x10;
 
-/// 匿名 CID 自助换绑：旧绑定账户对含创世、当前绑定、目标账户、绑定 revision 与
+/// 匿名 CID 自助换绑：当前绑定账户对含创世、当前绑定、目标账户、绑定 revision 与
 /// expires_at 的 `CidRebindAuthorization` 授权签名。
 const int kOpSignCidRebind = 0x11;
 
@@ -63,10 +63,12 @@ const int kOpSignChatDeviceBind = 0x1A;
 /// 广场 BFF 登录挑战(对齐 OP_SIGN_SQUARE_LOGIN;链下 Worker 验签,设备子钥 ES256 签 digest)。
 const int kOpSignSquareLogin = 0x1B;
 
-/// 广场 BFF 设备子钥绑定(对齐 OP_SIGN_SQUARE_DEVICE_BIND;链下 Worker 验签,sr25519 主钥签)。
+/// 广场 BFF 设备子钥绑定(对齐 OP_SIGN_SQUARE_DEVICE_BIND；链下 Worker 验签，
+/// 由当前 `account_id` 对应的 sr25519 账户密钥签名)。
 const int kOpSignSquareDeviceBind = 0x1C;
 
-/// 广场 BFF 账户敏感动作:注销/退订(对齐 OP_SIGN_SQUARE_ACTION;链下 Worker 验签,sr25519 主钥签)。
+/// 广场 BFF 账户敏感动作：注销/退订(对齐 OP_SIGN_SQUARE_ACTION；链下 Worker 验签，
+/// 由当前 `account_id` 对应的 sr25519 账户密钥签名)。
 const int kOpSignSquareAction = 0x1D;
 
 /// 注册局代办换绑：新钱包对完整 `CidRebindAuthorization` 的授权签名；载荷与自助

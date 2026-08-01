@@ -45,12 +45,33 @@ class SquareSessionProvider {
     }
     final identityAccountId =
         await _identityCache.accountId() ?? wallet.accountId;
+    final identityWalletIndex =
+        await _walletManager.walletIndexForAccountId(identityAccountId);
     return _client.ensureSession(
       accountId: identityAccountId,
       signLoginPayload: (loginMessage) async {
         // 会话握手 = 非用户动权 → P-256 硬件子钥静默签名(后端 ES256 验,不读 seed)。
-        final raw =
-            await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
+        final raw = await _deviceSubkey.signRawHex(
+          identityWalletIndex,
+          loginMessage,
+        );
+        return '0x$raw';
+      },
+    );
+  }
+
+  /// 已由精确 finalized 交易结果确认换绑后，为目标账户建立新会话。
+  ///
+  /// 本入口不再自行解析身份或读链；Worker 登录挑战仍会按链上当前绑定 fail-closed。
+  /// 只供同一次换绑交接提交目标密文使用。
+  Future<SquareSession?> ensureSessionForAccountId(String accountId) async {
+    final wallet = await _walletManager.getDefaultWallet();
+    if (wallet == null || !wallet.isHotWallet) return null;
+    final walletIndex = await _walletManager.walletIndexForAccountId(accountId);
+    return _client.ensureSession(
+      accountId: accountId,
+      signLoginPayload: (loginMessage) async {
+        final raw = await _deviceSubkey.signRawHex(walletIndex, loginMessage);
         return '0x$raw';
       },
     );

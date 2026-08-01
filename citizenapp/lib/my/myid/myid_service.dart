@@ -2,13 +2,15 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/log/app_log.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/area_path_formatter.dart';
 import 'package:citizenapp/citizen/public/data/isar_admin_division_store.dart';
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
 import 'package:citizenapp/citizen/cid/cid_generator.dart';
+import 'package:citizenapp/chat/chat_runtime.dart';
+import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/citizen_identity_rpc.dart';
 import 'package:citizenapp/security/local_data_key.dart';
@@ -20,7 +22,7 @@ import 'identity_badge_snapshot_store.dart';
 /// 身份页身份档。
 ///
 /// 身份钥匙 = **CID 绑定的钱包账户**(经 [IdentityAccountResolver] 解析:优先账户0、
-/// 未命中查子账户;见 memory `citizenapp-cid-identity-master-key`)。身份主键是 CID 号,
+/// 未命中查子账户）。身份主键是 CID 号，
 /// 绑定账户切换(换绑)即跟随;链上一人一 CID 一账户一身份,故无多身份冲突。
 enum MyIdTier {
   /// 访客(默认匿名)。含两子态,均用同一张访客卡、同一枚访客徽章:
@@ -39,6 +41,145 @@ enum MyIdTier {
 
 /// 护照有效期/生命周期状态(仅公民档有意义;`queryFailed` 为链读失败兜底)。
 enum MyIdStatus { normal, notYetValid, expired, revoked, queryFailed }
+
+/// CID 钱包换绑的私有数据交接编排；只调用客户端端到端加密边界。
+class CidAccountDataHandover {
+  CidAccountDataHandover({
+    UserContactService? contactService,
+    ChatRuntime? chatRuntime,
+    WalletManager? walletManager,
+  })  : _contactService = contactService ?? UserContactService(autoSync: false),
+        _chatRuntime = chatRuntime ?? ChatRuntime(),
+        _walletManager = walletManager ?? WalletManager();
+
+  final UserContactService _contactService;
+  final ChatRuntime _chatRuntime;
+  final WalletManager _walletManager;
+
+  Future<void> stage({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    try {
+      await _chatRuntime.stageAccountHandover(source: source, target: target);
+      await _contactService.stageAccountHandover(
+        source: source,
+        target: target,
+      );
+      await _walletManager.recordPendingAccountDataHandover(
+        source: source,
+        target: target,
+      );
+    } catch (_) {
+      await discard(source: source, target: target);
+      rethrow;
+    }
+  }
+
+  Future<void> commit({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    await _chatRuntime.commitAccountHandover(source: source, target: target);
+    await _contactService.commitAccountHandover(
+      source: source,
+      target: target,
+    );
+    await _walletManager.clearPendingAccountDataHandover();
+  }
+
+  Future<void> discard({
+    required AccountDataBinding source,
+    required AccountDataBinding target,
+  }) async {
+    try {
+      await _chatRuntime.discardAccountHandover(
+        source: source,
+        target: target,
+      );
+    } catch (_) {
+      // 继续清其余暂存，避免一个子域失败阻断其它子域清理。
+    }
+    try {
+      await _contactService.discardAccountHandover(
+        source: source,
+        target: target,
+      );
+    } finally {
+      await _walletManager.clearPendingAccountDataHandover();
+    }
+  }
+
+  Future<void> resumeForFinalizedBinding(AccountDataBinding current) async {
+    final pending = await _walletManager.readPendingAccountDataHandover();
+    if (pending == null) return;
+    final target = pending.target;
+    if (target.genesisHash != current.genesisHash ||
+        target.cidNumber != current.cidNumber ||
+        target.bindingRevision != current.bindingRevision ||
+        target.accountId != current.accountId) {
+      return;
+    }
+    await commit(source: pending.source, target: target);
+  }
+
+  /// 新绑定已经由新账户用途密钥验证后，按 finalized 真值准备端内私有数据状态。
+  ///
+  /// 精确命中交接目标时保留暂存，等待 [completeFinalizedBinding] 提交；确认交易未生效
+  /// 或链上版本已经越过目标时清掉旁路暂存。没有可提交交接且绑定确实变化时，只隔离
+  /// 此前密文和派生状态，不读取此前账户、此前设备或任何额外密钥。
+  Future<void> prepareFinalizedBinding({
+    required AccountDataBinding current,
+    AccountDataBinding? previous,
+  }) async {
+    final pending = await _walletManager.readPendingAccountDataHandover();
+    if (pending != null && _sameBinding(pending.target, current)) {
+      return;
+    }
+    if (pending != null &&
+        pending.target.genesisHash == current.genesisHash &&
+        pending.target.cidNumber == current.cidNumber &&
+        (_sameBinding(pending.source, current) ||
+            current.bindingRevision >= pending.target.bindingRevision)) {
+      await discard(source: pending.source, target: pending.target);
+    }
+    if (previous == null ||
+        _sameBinding(previous, current) ||
+        previous.genesisHash != current.genesisHash ||
+        previous.cidNumber != current.cidNumber ||
+        previous.bindingRevision >= current.bindingRevision) {
+      return;
+    }
+    await _contactService.isolateInaccessibleBinding(previous);
+    await _chatRuntime.isolateInaccessibleBinding(previous);
+  }
+
+  /// 当前设备子钥登记成功后收敛 Session、交接密文和 Chat 当前设备状态。
+  Future<void> completeFinalizedBinding(AccountDataBinding current) async {
+    SquareApiClient.activateFinalizedBinding(
+      cidNumber: current.cidNumber,
+      bindingRevision: current.bindingRevision,
+      accountId: current.accountId,
+    );
+    await resumeForFinalizedBinding(current);
+    try {
+      await _chatRuntime.convergeFinalizedBinding(current);
+    } catch (error) {
+      // Chat 初始化依赖推送与网络；失败不能回滚已经 finalized 的 CID 控制权。
+      // 当前绑定已生效且此前凭证已由 Worker 撤销，进入 Chat 时会继续幂等补齐。
+      AppLog.d('chat finalized binding convergence deferred: $error');
+    }
+  }
+
+  static bool _sameBinding(
+    AccountDataBinding left,
+    AccountDataBinding right,
+  ) =>
+      left.genesisHash == right.genesisHash &&
+      left.cidNumber == right.cidNumber &&
+      left.bindingRevision == right.bindingRevision &&
+      left.accountId == right.accountId;
+}
 
 /// 身份页只读链上状态(身份账户维度)。
 class MyIdState {
@@ -110,7 +251,7 @@ class MyIdService {
     IdentityBadgeSnapshotStore? badgeSnapshotStore,
     IdentityAccountResolver? identityResolver,
     CitizenIdentityRpc? identityRpc,
-    SquareApiClient? squareApiClient,
+    CidAccountDataHandover? dataHandover,
     DateTime Function()? nowProvider,
     int Function()? cidYearProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
@@ -127,7 +268,8 @@ class MyIdService {
               chainRpc: chainRpc,
               walletManager: walletManager,
             ),
-        _squareApiClient = squareApiClient ?? SquareApiClient(),
+        _dataHandover = dataHandover ??
+            CidAccountDataHandover(walletManager: walletManager),
         _chainRpc = chainRpc ?? ChainRpc(),
         _nowProvider = nowProvider ?? _beijingNow,
         _cidYearProvider = cidYearProvider ?? _utcYear;
@@ -137,7 +279,7 @@ class MyIdService {
   final IdentityBadgeSnapshotStore _badgeSnapshotStore;
   final IdentityAccountResolver _identityResolver;
   final CitizenIdentityRpc _identityRpc;
-  final SquareApiClient _squareApiClient;
+  final CidAccountDataHandover _dataHandover;
 
   /// 子钥懒绑定的并发去重:五处门禁可能同时挂载,只允许一次真正执行。
   Future<void>? _subkeyBindInflight;
@@ -298,9 +440,9 @@ class MyIdService {
 
   /// 把当前身份 CID [cidNumber] 换绑到另一本地账户 [newAccountId]。
   ///
-  /// 旧账户 = **当前 CID 绑定账户**(经 [IdentityAccountResolver] 解析,可为任意 `//n`,
+  /// 当前账户 = **当前 CID 绑定账户**(经 [IdentityAccountResolver] 解析,可为任意 `//n`,
   /// 非恒账户0),对含创世、当前绑定、revision 与 expires_at 的授权载荷签名;新账户自签
-  /// 提交 `self_rebind_cid_account_id`(旧、新各触发一次生物识别)。换绑成功后 CID 归
+  /// 提交 `self_rebind_cid_account_id`(当前、新账户各签名一次)。换绑成功后 CID 归
   /// 新账户、广播身份绑定变化,常驻页/身份页跟随。
   /// 仅**匿名 CID** 可自助换绑;投票/竞选链端强制走注册局(`CivicRebindRequiresRegistrar`)。
   Future<void> rebindCidTo({
@@ -311,7 +453,7 @@ class MyIdService {
     if (resolved == null || !resolved.isRegistered) {
       throw const WalletAuthException('当前无已注册身份,无法换绑');
     }
-    final oldAccountId = resolved.accountId;
+    final currentAccountId = resolved.accountId;
     final resolvedCidNumber = resolved.snapshot?.cidNumber;
     if (resolvedCidNumber == null || resolvedCidNumber != cidNumber) {
       throw const WalletAuthException('当前链上身份与待换绑 CID 不一致');
@@ -320,22 +462,57 @@ class MyIdService {
     if (newAccount == null) {
       throw const WalletAuthException('目标账户不存在');
     }
-    if (newAccount.accountId == oldAccountId) {
+    if (newAccount.accountId == currentAccountId) {
       throw const WalletAuthException('目标账户与当前身份账户相同');
     }
-    await _identityRpc.selfRebindCidAccount(
+    final context =
+        await _identityRpc.fetchSelfRebindAuthorizationContext(cidNumber);
+    if (context.currentAccountId != currentAccountId) {
+      throw const WalletAuthException('CID 当前绑定账户已经变化，请刷新后重试');
+    }
+    final source = AccountDataBinding(
+      genesisHash: '0x${_bytesToHex(context.genesisHash)}',
       cidNumber: cidNumber,
-      newAccountId: newAccount.accountId,
-      oldAccountId: oldAccountId,
-      newFromSs58Address: newAccount.ss58Address,
+      bindingRevision: context.expectedBindingRevision.toInt(),
+      accountId: currentAccountId,
     );
-    // 当前账户授权已由 runtime 交易验证。finalized 后进入第二阶段：新账户独立接管
-    // CID 数据根与设备子钥，不读取或要求此前账户、此前私钥或此前设备参与。
-    final finalized = await _requireFinalizedBinding(
+    final target = AccountDataBinding(
+      genesisHash: source.genesisHash,
       cidNumber: cidNumber,
+      bindingRevision: source.bindingRevision + 1,
       accountId: newAccount.accountId,
     );
-    await _ensureBindingReady(finalized);
+    final currentAccountDigest = CitizenIdentityRpc.buildRebindSigningDigest(
+      genesisHash: context.genesisHash,
+      cidNumber: cidNumber,
+      currentAccountId: currentAccountId,
+      newAccountId: newAccount.accountId,
+      expectedBindingRevision: context.expectedBindingRevision,
+      expiresAt: context.expiresAt,
+    );
+    final currentAccountSignature = await _walletManager.signForAccountId(
+        currentAccountId, currentAccountDigest);
+    await _dataHandover.stage(source: source, target: target);
+    try {
+      await _identityRpc.selfRebindCidAccount(
+        cidNumber: cidNumber,
+        newAccountId: newAccount.accountId,
+        currentAccountId: currentAccountId,
+        newFromSs58Address: newAccount.ss58Address,
+        context: context,
+        currentAccountSignature: currentAccountSignature,
+      );
+    } catch (error, stackTrace) {
+      try {
+        await _dataHandover.discard(source: source, target: target);
+      } catch (cleanupError) {
+        // 原交易失败才是本次换绑结果；清理失败保留幂等暂存，下一次 finalized 对账再清。
+        AppLog.d('CID 换绑失败后的私有数据暂存清理待重试: $cleanupError');
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    // RPC 已在交易所在 finalized 区块核验目标账户与 revision，不再额外读链。
+    await _finishFinalizedBinding(target);
   }
 
   /// 注册身份前的自付能力测算:返回门槛与该账户当前余额(均为**分**)。
@@ -358,14 +535,14 @@ class MyIdService {
     );
   }
 
-  /// 确保当前 finalized 绑定在本机就位：CID 数据根 + 本设备 P-256 子钥。
+  /// 确保当前 finalized 钱包绑定和本设备 P-256 子钥在本机就位。
   ///
   /// **懒执行**：两者只服务广场 / 聊天 / 通讯录 / 创作者 / 会员这些需 CID 的场景，
   /// 故不在建钱包时做（那时账户还没有 CID），而由 `IdentityRegistrationGate` 在用户
   /// 初次进入上述页面时调用本方法。只用钱包和交易的用户永远不会走到这里。
   ///
-  /// 数据根属于 CID 且不从钱包派生。本机没有当前绑定包装时，由 finalized 当前账户
-  /// 签一次性恢复挑战取得同一数据根；子钥绑定会再触发一次当前账户验证。
+  /// 私有数据密钥只由当前绑定钱包账户直接派生；本方法不向 Worker 领取任何密钥。
+  /// 有当前账户签名的换绑先在端内重加密再由新账户接管；无当前账户签名时不继承此前密文。
   ///
   /// 并发去重:五处门禁可能同时挂载,用 [_subkeyBindInflight] 保证同一时刻只跑一次,
   /// 其余调用等同一个 Future。失败向上抛,由门禁按 fail-closed 拦住功能页并给重试。
@@ -387,56 +564,46 @@ class MyIdService {
     await _ensureBindingReady(resolved);
   }
 
-  /// 全步幂等：数据根已激活到同一三元组、子钥已登记时都不重复执行。
-  /// 正确顺序是恢复授权 → 新账户包装读回 → 用途子钥落地/旧本地包装清理 →
-  /// 新设备子钥登记/旧服务端凭证清理。
+  /// 全步幂等：当前钱包派生上下文已激活、子钥已登记时都不重复执行。
+  /// 正确顺序是读取 finalized 当前绑定 → 新账户派生验证钥并激活 → 登记新设备子钥。
   Future<void> _ensureBindingReady(ResolvedIdentity resolved) async {
     final snapshot = resolved.snapshot;
     if (snapshot == null) {
       throw const WalletAuthException('当前无已注册身份，无法完成设备绑定');
     }
-    try {
-      await _walletManager.ensureCidDataRootReady(
-        cidNumber: snapshot.cidNumber,
-        bindingRevision: snapshot.bindingRevision,
-        accountId: resolved.accountId,
-      );
-    } on CidDataRootRecoveryRequiredException {
-      final genesisHash = await _chainRpc.fetchGenesisHash();
-      if (genesisHash.length != 32) {
-        throw const WalletAuthException('创世哈希无效，禁止恢复 CID 数据根');
-      }
-      final grant = await _squareApiClient.takeoverCidDataRoot(
-        cidNumber: snapshot.cidNumber,
-        bindingRevision: snapshot.bindingRevision,
-        accountId: resolved.accountId,
-        expectedGenesisHash: '0x${_bytesToHex(genesisHash)}',
-        signAction: (message) async => _signatureHex(
-          await _walletManager.signForAccountId(resolved.accountId, message),
-        ),
-      );
-      try {
-        await _walletManager.installCidDataRootForCurrentBinding(
-          cidNumber: grant.cidNumber,
-          bindingRevision: grant.bindingRevision,
-          accountId: grant.accountId,
-          dataRoot: CidDataRoot(grant.dataRoot),
-          dataRootHash: grant.dataRootHash,
-        );
-      } finally {
-        grant.dataRoot.fillRange(0, grant.dataRoot.length, 0);
-      }
+    final genesisHash = await _chainRpc.fetchGenesisHash();
+    if (genesisHash.length != 32) {
+      throw const WalletAuthException('创世哈希无效，禁止派生当前钱包私有数据密钥');
     }
-    await _walletManager.bindDeviceSubkeyToCurrentBinding(
+    await _finishFinalizedBinding(AccountDataBinding(
+      genesisHash: '0x${_bytesToHex(genesisHash)}',
       cidNumber: snapshot.cidNumber,
       bindingRevision: snapshot.bindingRevision,
       accountId: resolved.accountId,
-    );
-    WalletManager.notifyIdentityBindingChanged();
+    ));
   }
 
-  static String _signatureHex(Uint8List signature) =>
-      '0x${_bytesToHex(signature)}';
+  /// 新账户用途密钥先验证上岗，再隔离/提交私有数据，随后登记设备并收敛凭证。
+  Future<void> _finishFinalizedBinding(AccountDataBinding current) async {
+    final previous = await _walletManager.readActiveAccountDataBinding();
+    await _walletManager.activateAccountDataBinding(
+      genesisHash: current.genesisHash,
+      cidNumber: current.cidNumber,
+      bindingRevision: current.bindingRevision,
+      accountId: current.accountId,
+    );
+    await _dataHandover.prepareFinalizedBinding(
+      current: current,
+      previous: previous,
+    );
+    await _walletManager.bindDeviceSubkeyToCurrentBinding(
+      cidNumber: current.cidNumber,
+      bindingRevision: current.bindingRevision,
+      accountId: current.accountId,
+    );
+    await _dataHandover.completeFinalizedBinding(current);
+    WalletManager.notifyIdentityBindingChanged();
+  }
 
   static String _bytesToHex(List<int> bytes) {
     const alphabet = '0123456789abcdef';

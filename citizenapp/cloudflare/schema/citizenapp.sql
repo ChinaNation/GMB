@@ -1,13 +1,6 @@
--- CitizenApp Cloudflare 唯一 schema 基线。
--- SCHEMA VERSION: v1.2.0
---
--- 文件名固定 citizenapp.sql：禁止改名、新建、多建，本目录只允许这一个文件。
--- 开发期（零用户）：改本文件 + 升版本号 + 追加日志，然后清空重建；不写迁移、不做兼容。
--- 上线冻结后：本文件转只读，变更改走 0002_ 起的增量迁移。
---
--- v1.0.0  2026-07-31  基线冻结：废止 0002/0003 迁移链，收敛为唯一 schema 文件。
--- v1.1.0  2026-07-31  删除 cid_data_roots：数据根改为用户助记词本地派生，服务端不再持有任何密钥材料。
--- v1.2.0  2026-07-31  修复母种子绑定漏洞：恢复每 CID 随机稳定数据根及独立恢复封装。
+-- CitizenApp Cloudflare 唯一创世 schema 基线。
+-- SCHEMA VERSION: v1.0.0
+-- 本目录只允许 citizenapp.sql；创世冻结前直接重建，不保留增量版本日志或兼容迁移。
 
 -- 登录与注销挑战都绑定唯一身份主键 CID；account_id 仅记录本次必须签名的当前账户。
 CREATE TABLE square_login_challenges (
@@ -23,26 +16,6 @@ CREATE INDEX idx_square_login_challenges_account_id
   ON square_login_challenges(account_id, expires_at);
 CREATE INDEX idx_square_login_challenges_cid_number
   ON square_login_challenges(cid_number, expires_at);
-
--- 每个 CID 唯一的稳定数据根恢复封装。D1 只保存 AES-256-GCM 密文；恢复 KEK 由
--- Worker Secret 按创世、CID 与 key version 派生。account_id 只记录当前授权账户，
--- 不参与数据根归属，也不能据此生成另一把数据根。
-CREATE TABLE cid_data_roots (
-  cid_number TEXT PRIMARY KEY,
-  recovery_ciphertext TEXT NOT NULL,
-  recovery_nonce TEXT NOT NULL,
-  recovery_key_version INTEGER NOT NULL CHECK(recovery_key_version > 0),
-  data_root_hash TEXT NOT NULL CHECK(
-    length(data_root_hash) = 64
-    AND data_root_hash NOT GLOB '*[^0-9a-f]*'
-  ),
-  active_binding_revision INTEGER NOT NULL CHECK(active_binding_revision > 0),
-  active_account_id TEXT NOT NULL CHECK(length(active_account_id) = 66 AND substr(active_account_id, 1, 2) = '0x' AND substr(active_account_id, 3) NOT GLOB '*[^0-9a-f]*'),
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-CREATE INDEX idx_cid_data_roots_active_account
-  ON cid_data_roots(active_account_id, active_binding_revision);
 
 -- 广场会话强一致索引。明文 token 只交给客户端，D1 与 KV 键仅保存其 SHA-256；
 -- cid_number 是注销范围，account_id 只记录签发该凭证时的当前绑定账户，供换绑吊销筛选。
@@ -63,7 +36,7 @@ CREATE INDEX idx_square_sessions_cid_account
   ON square_sessions(cid_number, account_id, expires_at);
 
 -- 设备子钥:身份主键 cid_number(占即绑,挂当前绑定账户下)+ device_id(=P-256 公钥 sha256)。
--- 子钥由钱包 account_id 生成、属于该账户;换绑后旧账户子钥靠链上绑定校验判失效,不迁移。
+-- 子钥由钱包 account_id 生成、属于该账户；换绑后此前账户子钥靠链上绑定校验判失效，不迁移。
 CREATE TABLE square_device_subkeys (
   cid_number TEXT NOT NULL,
   device_id TEXT NOT NULL,
@@ -92,9 +65,16 @@ CREATE INDEX idx_square_request_nonces_expires
   ON square_request_nonces(expires_at);
 
 -- 通讯录只保存端到端密文；联系人账户、名称和关系明文不得进入 Cloudflare。
--- 属主 = 身份主键 cid_number(换绑后随身份保留);Worker 只按 cid 隔离,不接触明文账户。
+-- 属主始终是 cid_number；binding_revision + account_id 只标明密文使用哪一版钱包钥匙，
+-- 让换绑前后版本可并存并在 finalized 后原子切换读取，不构成第二身份主键。
 CREATE TABLE square_contacts (
   cid_number TEXT NOT NULL,
+  binding_revision INTEGER NOT NULL CHECK(binding_revision > 0),
+  account_id TEXT NOT NULL CHECK(
+    length(account_id) = 66
+    AND substr(account_id, 1, 2) = '0x'
+    AND substr(account_id, 3) NOT GLOB '*[^0-9a-f]*'
+  ),
   contact_id TEXT NOT NULL CHECK(
     length(contact_id) = 64 AND contact_id NOT GLOB '*[^0-9a-f]*'
   ),
@@ -102,10 +82,16 @@ CREATE TABLE square_contacts (
   nonce TEXT NOT NULL,
   mac TEXT NOT NULL,
   updated_at INTEGER NOT NULL CHECK(updated_at > 0),
-  PRIMARY KEY(cid_number, contact_id)
+  PRIMARY KEY(cid_number, binding_revision, account_id, contact_id)
 );
 CREATE INDEX idx_square_contacts_cid_number_updated
-  ON square_contacts(cid_number, updated_at DESC, contact_id DESC);
+  ON square_contacts(
+    cid_number,
+    binding_revision,
+    account_id,
+    updated_at DESC,
+    contact_id DESC
+  );
 
 CREATE TABLE square_rate_windows (
   rate_key TEXT PRIMARY KEY,
@@ -386,7 +372,7 @@ CREATE INDEX idx_chain_extrinsic_relays_tx_hash
 -- Chat 云端只保存建立端到端通道所需的最小公开材料。
 -- Chat 消息、会话、附件及联系人明文禁止进入 D1、KV、R2 或 Durable Object Storage。
 -- 设备名册按身份主键 cid_number 归属(收件寻址单元);account_id 为登记该设备的当前绑定
--- 钱包账户(设备登记签名主体)；每次使用都核验 CID finalized 当前绑定，旧账户登记自然失效。
+-- 钱包账户(设备登记签名主体)；每次使用都核验 CID finalized 当前绑定，此前账户登记自然失效。
 CREATE TABLE chat_devices (
   cid_number TEXT NOT NULL,
   binding_revision INTEGER NOT NULL CHECK(binding_revision > 0),

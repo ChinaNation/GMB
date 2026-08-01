@@ -161,10 +161,12 @@ citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 永
 - 互联网聊天：Worker 校验 CID、绑定版本、当前账户三元组 session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
 - 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入 `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；通讯录不复制公开资料。头像下固定按公开昵称、SS58 地址及复制按钮、CID、关注/关注者/帖子三项计数展示；SS58 只从当前绑定规范 `account_id` 即时派生，原始 AccountId 不展示、不复制，CID 单独展示且无复制按钮。
 - 通讯录：联系人关系永久主键是 `cid_number`；公开昵称、头像和签名仍以 CID 从公开
-  资料读取，不复制进通讯录。Cloudflare D1 只保存由 CID 稳定数据根
+  资料读取，不复制进通讯录。Cloudflare D1 只保存由当前链上绑定钱包账户直接派生的
   `contacts-cloud` 用途子钥生成的 AES-256-GCM 单联系人密文和以目标 CID 计算的
-  HMAC `contact_id`，用于同一身份换设备恢复；属主 CID 写入密文并参与 AAD。
-  Worker 不持有通讯录用途子钥，也不能读取联系人 CID、账户、SS58 或私人备注。
+  HMAC `contact_id`；属主 CID 写入密文并参与 AAD。同一钱包账户在新设备导入后可以
+  重新派生相同密钥；CID 换绑后新账户可取回此前密文，但不能直接解密换绑前当前账户的
+  历史私有数据；只有同次换绑取得当前账户签名时，客户端才执行端内重加密交接。
+  Worker 不持有任何用户数据密钥，也不能读取联系人 CID、账户、SS58 或私人备注。
   扫码添加只接受用户码：先把码内账户经链上双向绑定解析成 CID，收款码不得兼作联系人码。
 - 附件：Worker 只转发 SDP/ICE，附件经 WebRTC DTLS DataChannel 设备间传输；Chat 禁止使用 R2。
 - 近场通信：不设计独立“局域网模式”，不要求同一路由器；Android 优先 Nearby Connections，必要时回退 Wi-Fi Direct / Wi-Fi Aware / BLE；iOS 使用 Multipeer Connectivity；Android 与 iOS 跨平台近场通过 BLE GATT 做发现和短消息控制。
@@ -553,18 +555,20 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   创作者套餐和创作者订阅关系均直接使用 CID。`account_id` 只用于当前链交易签名、首次扣款、
   自动续费时由 CID 解析出的当前付款/收款账户及不可变审计；换绑后不得读取或扣取历史账户。
 - CID 自助换绑必须在同一 finalized 区块读取 `AccountIdByCid`、
-  `BindingRevisionByCid` 与 `Timestamp.Now`，并读取 block 0 创世哈希。旧账户签名载荷固定为
-  `genesis_hash + cid_number + expected_old_account_id + new_account_id`
+  `BindingRevisionByCid` 与 `Timestamp.Now`，并读取 block 0 创世哈希。当前账户签名载荷固定为
+  `genesis_hash + cid_number + current_account_id + new_account_id`
   `+ expected_binding_revision + expires_at` 的 SCALE 编码；call 9 同步携带 revision 与
   Unix 秒过期时间。`signAndSubmitInBlock(waitForFinalized: true)` 只证明交易进入
   finalized 区块，不证明 dispatch 成功；CitizenApp 必须在回执的精确区块哈希读取
   `AccountIdByCid` 与 `BindingRevisionByCid`，首次占号只接受目标账户且 revision=1，
   换绑只接受新账户且 revision 精确等于签名前 revision+1，核验通过前不得迁移 MyId
-  本地数据或广播身份变化。CitizenApp 不保存旧账户签名清理 outbox，也不存在客户端
-  换绑后吊销 API；finalized 后新账户即取得 CID 控制权。App 先用当前新账户恢复并验证
-  CID 数据根、安装用途子钥，再登记新钱包 P-256 子钥；Worker 只有确认新子钥成功落库后，
-  才按 CID + 当前 revision/account 清旧 Session、设备子钥、Chat 设备、KeyPackage 和旧
-  实时连接。清理不是第二套控制权授权，也不接收任何旧账户材料。
+  本地数据或广播身份变化。CitizenApp 不保存此前账户签名清理 outbox，也不存在客户端
+  换绑后吊销 API；finalized 后新账户即取得 CID 控制权。App 先用当前新账户 child
+  直接派生并验证用途子钥，再登记新钱包 P-256 子钥；Worker 只有确认新子钥成功落库后，
+  才按 CID + 当前 revision/account 清此前 Session、设备子钥、Chat 设备、KeyPackage 和
+  此前实时连接。旧实时连接关闭失败时设备登记必须返回 503，禁止报告收敛成功。App 随后
+  使 Square Session 只保留新三元组，完整关闭此前 Chat HTTP/WebSocket/MLS 上下文，再建立
+  新绑定上下文。清理不是第二套控制权授权，也不接收任何此前账户材料。
 - App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
 - 本人已发布内容以 `SquareLocalPostEntity` / `SquarePostStore` 保存规范 manifest 原始字节和
   不可变发布锚，归属主键为 `cid_number`，不保存媒体文件或公共 feed。发布确认成功后立即
@@ -646,11 +650,9 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   该目录属于本机私有运维工具，整目录由 Git 忽略，不得提交或推送 GitHub。生产部署逐次
   通过 Touch ID，Secret 只保存在 macOS Data Protection Keychain、Cloudflare Worker
   Secret 或 GitHub Secrets。
-- `citizenapp/cloudflare/migrations/0001_square_core.sql` 是清空数据库后的重建基线，
-  不是可重复执行的增量迁移。`0002_reset_contacts_for_cid_payload.sql` 是通讯录切换
-  CID HMAC/AAD/密文载荷时的一次性破坏性清理，只删除旧 `square_contacts` 密文；
-  旧密文不兼容、不迁移。生产部署脚本禁止自动重放基线或迁移，所有新增 migration
-  必须停止发布并单独审查、人工确认执行目标。
+- `citizenapp/cloudflare/schema/citizenapp.sql` 是 Cloudflare 唯一创世 schema，版本固定从
+  `v1.0.0` 开始；仓库不保留增量 migration、升级日志或废弃 schema。创世冻结前只允许
+  用当前单一 schema 重建数据库；生产数据库变更必须停止发布并单独审查、人工确认执行目标。
 - CitizenConsole 使用 Xcode 签名的 `com.gmb.citizenconsole.security` 原生安全代理，
   仅接受 Touch ID，禁止 Mac 密码回退。所有本机 Secret 使用 Data Protection Keychain、
   `biometryCurrentSet`、`WhenUnlockedThisDeviceOnly` 与独立 access group；缺少有效签名、
@@ -739,34 +741,29 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   `device/register` 读到「无 CID」时旁路缓存回源核实一次，不拿占号前的空值拒绝刚上链的身份。
 - 设备子钥生命周期归属产生它的热钱包。CID 换绑到同一热钱包内的其它账户时可复用该
   `walletIndex` 子钥；换绑到另一只钱包时必须使用新账户所属钱包自己的子钥，不得读取
-  旧钱包。整钱包删除、末账户级联删除或 `clearWallet()` 必须同时清除账户 child、钱包
+  此前钱包。整钱包删除、末账户级联删除或 `clearWallet()` 必须同时清除账户 child、钱包
   KEK 及其 P-256 设备子钥；仅当被删账户是本机已激活 CID 的当前绑定账户时，才清除
-  该 CID 数据根本地包装、缓存和用途子钥。清理逐项尝试，不能因一个安全存储错误跳过
+  该 CID 当前绑定公开元数据和内存用途子钥。清理逐项尝试，不能因一个安全存储错误跳过
   后续密钥，最后以 `WalletLocalCleanupException` 汇总残留。
-- CID 私有数据密钥采用三层模型：业务数据永久归 `cid_number`；每个 CID 只有一把稳定
-  `CidDataRoot`；当前 `account_id` 的 child 只派生本机 KEK 包装该数据根。数据根首次由
-  恢复层使用 CSPRNG 随机生成，**不从任何钱包助记词、账户 child 或设备密钥派生**：
+- CID 是唯一身份和数据归属主键，链上当前绑定 `account_id` 是唯一控制、签名授权和付款
+  凭证。私有数据密钥不另设主钥，只允许 CitizenApp 从当前钱包账户的 child mini-secret
+  直接派生：
 
   ```text
-  CID 永久业务数据 ──用途 HKDF──► Chat / MLS / 通讯录 / 草稿子钥
-          ▲
-    稳定 CidDataRoot（每 CID 一把、换绑不变）
-          ▲                            ▲
-  Worker Secret 按创世+CID 密封       当前账户 child 派生本机 KEK 包装
+  finalized 当前绑定
+  (genesis_hash, cid_number, binding_revision, account_id)
+                         + 当前账户 child mini-secret
+                         └── HKDF 用途隔离 ──► Chat / MLS / 聊天附件 / 通讯录子钥
   ```
 
-  Worker 只在 Secret 中保存恢复密钥，D1 只保存按创世与 CID 域隔离后的 AES-256-GCM
-  密封值；因此 D1 泄漏不能直接恢复数据根。该 Secret 是明确的集中恢复信任边界：一旦
-  泄漏会影响全部 CID 数据根，必须只存在于 Cloudflare Secret、独立轮换和审计，禁止写入
-  仓库、日志或普通业务表。没有这个独立恢复层，在旧钱包、旧助记词和旧设备全部不可用时，
-  新钱包不可能取得同一把数据根。
-- 数据根就位（`WalletManager.ensureCidDataRootReady`）只接受精确
-  `(cid_number, binding_revision, account_id)` 的当前账户包装。没有或损坏时抛
-  `CidDataRootRecoveryRequiredException`，由 `MyIdService` 使用 finalized 当前账户签
-  一次性挑战；Worker 双读 finalized 绑定，并把稳定数据根封装给 App 的临时 X25519
-  接收公钥。App 校验摘要，以当前新账户 child 写入包装并读回，再派生用途子钥；至此才
-  清旧本地包装并登记新钱包设备子钥，Worker 确认新子钥上岗后清旧会话和旧设备凭证。
-  全流程没有旧账户、旧钱包、旧助记词、旧设备或旧缓存输入，业务密文一律不重加密。
+  HKDF salt 固定绑定创世、CID、绑定版本和当前账户，info 使用
+  `citizenapp.account-data/<purpose>` 与可选业务 context。安全存储只保存公开
+  `AccountDataBinding` 元数据；用途子钥只在内存短期使用。Worker、D1、R2、注册局和链
+  节点都不得持有、生成、密封、恢复或下发用户私有数据密钥。
+- `WalletManager.activateAccountDataBinding` 必须先读取当前账户 child 并完成实际派生，
+  再单调推进本机绑定元数据；`deriveDataKeyForCurrentBinding` 只接受该精确绑定。换绑后
+  新账户立即控制 CID 并派生自己的新用途子钥，不读取此前账户材料，也不能直接解密
+  换绑前当前账户加密的历史私有数据；公开数据、链上归属和 Cloudflare 密文记录仍按 CID 保留。
 - 注册身份前的余额闸：门槛 = 链上 `OnchainTransaction.OnchainMinFee + Balances.ExistentialDeposit`，
   两个数现取自链上 metadata。**交易费常量的真源恒为区块链常量库 `primitives::fee_policy`，
   runtime 只把它转发到 metadata（`OnchainMinFee` / `OnchainFeeRate` / `VoteFlatFee`），
@@ -875,7 +872,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 链上转账/投票签名使用 `k=1` 请求和 `k=2` 响应；业务动作由 `b.a` 区分。
 - 注册局占号/换绑请求的 `b.u` 留空，`b.d` 必须是含创世哈希、CID、账户零槽、
   revision 和 `expires_at` 的完整授权模板；CitizenApp 与 CitizenWallet 均严格核对零槽、
-  无尾字节和外层 `e == expires_at`，再把所选账户原位填入。换绑新旧账户相同必须拒绝，
+  无尾字节和外层 `e == expires_at`，再把所选账户原位填入。当前账户与新账户相同必须拒绝，
   确认页必须完整展示创世哈希、CID、当前账户、绑定版本、过期时间和所选账户。
 - `k=3 user_contact` body 严格为
   `cid_number + ss58_address + display_name`；`display_name` 只作公开展示，
@@ -898,13 +895,11 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 
 ## 5. 手机端三层存储（当前）
 
-### 5.1 机密层（Secure Storage）
+### 5.1 机密层（硬件金库 + Secure Storage）
 
-仅存高敏感数据：
-
-- `wallet.secret.<wallet_id>.mnemonic.v1`
-- `wallet.session.<scope>.token.v1`
-- `wallet.session.<scope>.key.v1`（预留）
+只保存账户 child mini-secret 的硬件 KEK 加密 blob（按规范 `account_id` 分键）、短期
+Session token、PIN/设备锁和 attestation 最小状态。助记词、母种子、Chat/通讯录用途子钥
+以及任何额外 CID/Worker 恢复密钥禁止持久化。
 
 ### 5.2 业务层（Isar）
 

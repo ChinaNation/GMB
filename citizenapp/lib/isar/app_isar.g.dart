@@ -20813,48 +20813,58 @@ const ChatConversationEntitySchema = CollectionSchema(
   name: r'ChatConversationEntity',
   id: 6241151859022060416,
   properties: {
-    r'conversationId': PropertySchema(
+    r'accountId': PropertySchema(
       id: 0,
+      name: r'accountId',
+      type: IsarType.string,
+    ),
+    r'bindingRevision': PropertySchema(
+      id: 1,
+      name: r'bindingRevision',
+      type: IsarType.long,
+    ),
+    r'conversationId': PropertySchema(
+      id: 2,
       name: r'conversationId',
       type: IsarType.string,
     ),
     r'conversationKind': PropertySchema(
-      id: 1,
+      id: 3,
       name: r'conversationKind',
       type: IsarType.string,
     ),
     r'lastDeliveryState': PropertySchema(
-      id: 2,
+      id: 4,
       name: r'lastDeliveryState',
       type: IsarType.string,
     ),
     r'lastMessageCipher': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'lastMessageCipher',
       type: IsarType.string,
     ),
     r'lastUpdatedAtMillis': PropertySchema(
-      id: 4,
+      id: 6,
       name: r'lastUpdatedAtMillis',
       type: IsarType.long,
     ),
     r'ownerCidNumber': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'ownerCidNumber',
       type: IsarType.string,
     ),
     r'peerCidNumber': PropertySchema(
-      id: 6,
+      id: 8,
       name: r'peerCidNumber',
       type: IsarType.string,
     ),
     r'title': PropertySchema(
-      id: 7,
+      id: 9,
       name: r'title',
       type: IsarType.string,
     ),
     r'unreadCount': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'unreadCount',
       type: IsarType.long,
     )
@@ -20924,6 +20934,7 @@ int _chatConversationEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  bytesCount += 3 + object.accountId.length * 3;
   bytesCount += 3 + object.conversationId.length * 3;
   {
     final value = object.conversationKind;
@@ -20945,15 +20956,17 @@ void _chatConversationEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.conversationId);
-  writer.writeString(offsets[1], object.conversationKind);
-  writer.writeString(offsets[2], object.lastDeliveryState);
-  writer.writeString(offsets[3], object.lastMessageCipher);
-  writer.writeLong(offsets[4], object.lastUpdatedAtMillis);
-  writer.writeString(offsets[5], object.ownerCidNumber);
-  writer.writeString(offsets[6], object.peerCidNumber);
-  writer.writeString(offsets[7], object.title);
-  writer.writeLong(offsets[8], object.unreadCount);
+  writer.writeString(offsets[0], object.accountId);
+  writer.writeLong(offsets[1], object.bindingRevision);
+  writer.writeString(offsets[2], object.conversationId);
+  writer.writeString(offsets[3], object.conversationKind);
+  writer.writeString(offsets[4], object.lastDeliveryState);
+  writer.writeString(offsets[5], object.lastMessageCipher);
+  writer.writeLong(offsets[6], object.lastUpdatedAtMillis);
+  writer.writeString(offsets[7], object.ownerCidNumber);
+  writer.writeString(offsets[8], object.peerCidNumber);
+  writer.writeString(offsets[9], object.title);
+  writer.writeLong(offsets[10], object.unreadCount);
 }
 
 ChatConversationEntity _chatConversationEntityDeserialize(
@@ -20963,16 +20976,18 @@ ChatConversationEntity _chatConversationEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ChatConversationEntity();
-  object.conversationId = reader.readString(offsets[0]);
-  object.conversationKind = reader.readStringOrNull(offsets[1]);
+  object.accountId = reader.readString(offsets[0]);
+  object.bindingRevision = reader.readLong(offsets[1]);
+  object.conversationId = reader.readString(offsets[2]);
+  object.conversationKind = reader.readStringOrNull(offsets[3]);
   object.id = id;
-  object.lastDeliveryState = reader.readString(offsets[2]);
-  object.lastMessageCipher = reader.readString(offsets[3]);
-  object.lastUpdatedAtMillis = reader.readLong(offsets[4]);
-  object.ownerCidNumber = reader.readString(offsets[5]);
-  object.peerCidNumber = reader.readString(offsets[6]);
-  object.title = reader.readString(offsets[7]);
-  object.unreadCount = reader.readLong(offsets[8]);
+  object.lastDeliveryState = reader.readString(offsets[4]);
+  object.lastMessageCipher = reader.readString(offsets[5]);
+  object.lastUpdatedAtMillis = reader.readLong(offsets[6]);
+  object.ownerCidNumber = reader.readString(offsets[7]);
+  object.peerCidNumber = reader.readString(offsets[8]);
+  object.title = reader.readString(offsets[9]);
+  object.unreadCount = reader.readLong(offsets[10]);
   return object;
 }
 
@@ -20986,20 +21001,24 @@ P _chatConversationEntityDeserializeProp<P>(
     case 0:
       return (reader.readString(offset)) as P;
     case 1:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
-      return (reader.readLong(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 5:
       return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 7:
       return (reader.readString(offset)) as P;
     case 8:
+      return (reader.readString(offset)) as P;
+    case 9:
+      return (reader.readString(offset)) as P;
+    case 10:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -21448,6 +21467,200 @@ extension ChatConversationEntityQueryWhere on QueryBuilder<
 
 extension ChatConversationEntityQueryFilter on QueryBuilder<
     ChatConversationEntity, ChatConversationEntity, QFilterCondition> {
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'accountId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+          QAfterFilterCondition>
+      accountIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+          QAfterFilterCondition>
+      accountIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'accountId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'accountId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> accountIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'accountId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> bindingRevisionEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'bindingRevision',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> bindingRevisionGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'bindingRevision',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> bindingRevisionLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'bindingRevision',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity,
+      QAfterFilterCondition> bindingRevisionBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'bindingRevision',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<ChatConversationEntity, ChatConversationEntity,
       QAfterFilterCondition> conversationIdEqualTo(
     String value, {
@@ -22610,6 +22823,34 @@ extension ChatConversationEntityQueryLinks on QueryBuilder<
 extension ChatConversationEntityQuerySortBy
     on QueryBuilder<ChatConversationEntity, ChatConversationEntity, QSortBy> {
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      sortByAccountId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      sortByAccountIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      sortByBindingRevision() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      sortByBindingRevisionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
       sortByConversationId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'conversationId', Sort.asc);
@@ -22738,6 +22979,34 @@ extension ChatConversationEntityQuerySortBy
 
 extension ChatConversationEntityQuerySortThenBy on QueryBuilder<
     ChatConversationEntity, ChatConversationEntity, QSortThenBy> {
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      thenByAccountId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      thenByAccountIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      thenByBindingRevision() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
+      thenByBindingRevisionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.desc);
+    });
+  }
+
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QAfterSortBy>
       thenByConversationId() {
     return QueryBuilder.apply(this, (query) {
@@ -22882,6 +23151,20 @@ extension ChatConversationEntityQuerySortThenBy on QueryBuilder<
 extension ChatConversationEntityQueryWhereDistinct
     on QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct> {
   QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct>
+      distinctByAccountId({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'accountId', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct>
+      distinctByBindingRevision() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'bindingRevision');
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, ChatConversationEntity, QDistinct>
       distinctByConversationId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'conversationId',
@@ -22960,6 +23243,20 @@ extension ChatConversationEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<ChatConversationEntity, String, QQueryOperations>
+      accountIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'accountId');
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, int, QQueryOperations>
+      bindingRevisionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'bindingRevision');
+    });
+  }
+
+  QueryBuilder<ChatConversationEntity, String, QQueryOperations>
       conversationIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'conversationId');
@@ -23034,73 +23331,83 @@ const ChatMessageEntitySchema = CollectionSchema(
   name: r'ChatMessageEntity',
   id: 8398983736130033389,
   properties: {
-    r'conversationId': PropertySchema(
+    r'accountId': PropertySchema(
       id: 0,
+      name: r'accountId',
+      type: IsarType.string,
+    ),
+    r'bindingRevision': PropertySchema(
+      id: 1,
+      name: r'bindingRevision',
+      type: IsarType.long,
+    ),
+    r'conversationId': PropertySchema(
+      id: 2,
       name: r'conversationId',
       type: IsarType.string,
     ),
     r'createdAtMillis': PropertySchema(
-      id: 1,
+      id: 3,
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
     r'deliveryState': PropertySchema(
-      id: 2,
+      id: 4,
       name: r'deliveryState',
       type: IsarType.string,
     ),
     r'direction': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'direction',
       type: IsarType.string,
     ),
     r'envelopeBytesHex': PropertySchema(
-      id: 4,
+      id: 6,
       name: r'envelopeBytesHex',
       type: IsarType.string,
     ),
     r'envelopeId': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'envelopeId',
       type: IsarType.string,
     ),
     r'messageKind': PropertySchema(
-      id: 6,
+      id: 8,
       name: r'messageKind',
       type: IsarType.string,
     ),
     r'mlsMessageKind': PropertySchema(
-      id: 7,
+      id: 9,
       name: r'mlsMessageKind',
       type: IsarType.string,
     ),
     r'ownerCidNumber': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'ownerCidNumber',
       type: IsarType.string,
     ),
     r'plaintextCipher': PropertySchema(
-      id: 9,
+      id: 11,
       name: r'plaintextCipher',
       type: IsarType.string,
     ),
     r'recipientCidNumber': PropertySchema(
-      id: 10,
+      id: 12,
       name: r'recipientCidNumber',
       type: IsarType.string,
     ),
     r'searchTokens': PropertySchema(
-      id: 11,
+      id: 13,
       name: r'searchTokens',
       type: IsarType.stringList,
     ),
     r'senderCidNumber': PropertySchema(
-      id: 12,
+      id: 14,
       name: r'senderCidNumber',
       type: IsarType.string,
     ),
     r'senderDeviceId': PropertySchema(
-      id: 13,
+      id: 15,
       name: r'senderDeviceId',
       type: IsarType.string,
     )
@@ -23183,6 +23490,7 @@ int _chatMessageEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  bytesCount += 3 + object.accountId.length * 3;
   bytesCount += 3 + object.conversationId.length * 3;
   bytesCount += 3 + object.deliveryState.length * 3;
   bytesCount += 3 + object.direction.length * 3;
@@ -23216,20 +23524,22 @@ void _chatMessageEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.conversationId);
-  writer.writeLong(offsets[1], object.createdAtMillis);
-  writer.writeString(offsets[2], object.deliveryState);
-  writer.writeString(offsets[3], object.direction);
-  writer.writeString(offsets[4], object.envelopeBytesHex);
-  writer.writeString(offsets[5], object.envelopeId);
-  writer.writeString(offsets[6], object.messageKind);
-  writer.writeString(offsets[7], object.mlsMessageKind);
-  writer.writeString(offsets[8], object.ownerCidNumber);
-  writer.writeString(offsets[9], object.plaintextCipher);
-  writer.writeString(offsets[10], object.recipientCidNumber);
-  writer.writeStringList(offsets[11], object.searchTokens);
-  writer.writeString(offsets[12], object.senderCidNumber);
-  writer.writeString(offsets[13], object.senderDeviceId);
+  writer.writeString(offsets[0], object.accountId);
+  writer.writeLong(offsets[1], object.bindingRevision);
+  writer.writeString(offsets[2], object.conversationId);
+  writer.writeLong(offsets[3], object.createdAtMillis);
+  writer.writeString(offsets[4], object.deliveryState);
+  writer.writeString(offsets[5], object.direction);
+  writer.writeString(offsets[6], object.envelopeBytesHex);
+  writer.writeString(offsets[7], object.envelopeId);
+  writer.writeString(offsets[8], object.messageKind);
+  writer.writeString(offsets[9], object.mlsMessageKind);
+  writer.writeString(offsets[10], object.ownerCidNumber);
+  writer.writeString(offsets[11], object.plaintextCipher);
+  writer.writeString(offsets[12], object.recipientCidNumber);
+  writer.writeStringList(offsets[13], object.searchTokens);
+  writer.writeString(offsets[14], object.senderCidNumber);
+  writer.writeString(offsets[15], object.senderDeviceId);
 }
 
 ChatMessageEntity _chatMessageEntityDeserialize(
@@ -23239,21 +23549,23 @@ ChatMessageEntity _chatMessageEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ChatMessageEntity();
-  object.conversationId = reader.readString(offsets[0]);
-  object.createdAtMillis = reader.readLong(offsets[1]);
-  object.deliveryState = reader.readString(offsets[2]);
-  object.direction = reader.readString(offsets[3]);
-  object.envelopeBytesHex = reader.readString(offsets[4]);
-  object.envelopeId = reader.readString(offsets[5]);
+  object.accountId = reader.readString(offsets[0]);
+  object.bindingRevision = reader.readLong(offsets[1]);
+  object.conversationId = reader.readString(offsets[2]);
+  object.createdAtMillis = reader.readLong(offsets[3]);
+  object.deliveryState = reader.readString(offsets[4]);
+  object.direction = reader.readString(offsets[5]);
+  object.envelopeBytesHex = reader.readString(offsets[6]);
+  object.envelopeId = reader.readString(offsets[7]);
   object.id = id;
-  object.messageKind = reader.readString(offsets[6]);
-  object.mlsMessageKind = reader.readString(offsets[7]);
-  object.ownerCidNumber = reader.readString(offsets[8]);
-  object.plaintextCipher = reader.readStringOrNull(offsets[9]);
-  object.recipientCidNumber = reader.readString(offsets[10]);
-  object.searchTokens = reader.readStringList(offsets[11]) ?? [];
-  object.senderCidNumber = reader.readString(offsets[12]);
-  object.senderDeviceId = reader.readString(offsets[13]);
+  object.messageKind = reader.readString(offsets[8]);
+  object.mlsMessageKind = reader.readString(offsets[9]);
+  object.ownerCidNumber = reader.readString(offsets[10]);
+  object.plaintextCipher = reader.readStringOrNull(offsets[11]);
+  object.recipientCidNumber = reader.readString(offsets[12]);
+  object.searchTokens = reader.readStringList(offsets[13]) ?? [];
+  object.senderCidNumber = reader.readString(offsets[14]);
+  object.senderDeviceId = reader.readString(offsets[15]);
   return object;
 }
 
@@ -23271,7 +23583,7 @@ P _chatMessageEntityDeserializeProp<P>(
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
@@ -23283,14 +23595,18 @@ P _chatMessageEntityDeserializeProp<P>(
     case 8:
       return (reader.readString(offset)) as P;
     case 9:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 10:
       return (reader.readString(offset)) as P;
     case 11:
-      return (reader.readStringList(offset) ?? []) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 12:
       return (reader.readString(offset)) as P;
     case 13:
+      return (reader.readStringList(offset) ?? []) as P;
+    case 14:
+      return (reader.readString(offset)) as P;
+    case 15:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -23881,6 +24197,198 @@ extension ChatMessageEntityQueryWhere
 
 extension ChatMessageEntityQueryFilter
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QFilterCondition> {
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'accountId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'accountId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'accountId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'accountId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      accountIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'accountId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      bindingRevisionEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'bindingRevision',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      bindingRevisionGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'bindingRevision',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      bindingRevisionLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'bindingRevision',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      bindingRevisionBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'bindingRevision',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
       conversationIdEqualTo(
     String value, {
@@ -25878,6 +26386,34 @@ extension ChatMessageEntityQueryLinks
 extension ChatMessageEntityQuerySortBy
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QSortBy> {
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByAccountId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByAccountIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByBindingRevision() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByBindingRevisionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
       sortByConversationId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'conversationId', Sort.asc);
@@ -26062,6 +26598,34 @@ extension ChatMessageEntityQuerySortBy
 
 extension ChatMessageEntityQuerySortThenBy
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QSortThenBy> {
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByAccountId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByAccountIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'accountId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByBindingRevision() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByBindingRevisionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'bindingRevision', Sort.desc);
+    });
+  }
+
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
       thenByConversationId() {
     return QueryBuilder.apply(this, (query) {
@@ -26261,6 +26825,20 @@ extension ChatMessageEntityQuerySortThenBy
 extension ChatMessageEntityQueryWhereDistinct
     on QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct> {
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
+      distinctByAccountId({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'accountId', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
+      distinctByBindingRevision() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'bindingRevision');
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
       distinctByConversationId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'conversationId',
@@ -26373,6 +26951,20 @@ extension ChatMessageEntityQueryProperty
   QueryBuilder<ChatMessageEntity, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, String, QQueryOperations>
+      accountIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'accountId');
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, int, QQueryOperations>
+      bindingRevisionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'bindingRevision');
     });
   }
 

@@ -89,7 +89,7 @@ export async function deleteAccountRoute(request: Request, env: Env): Promise<Re
     signature: parsed.signature
   });
   try {
-    // 验签可能跨越一个区块最终化窗口；副作用开始前再次复核，禁止换绑竞态借旧授权删身份。
+    // 验签可能跨越一个区块最终化窗口；副作用开始前再次复核，禁止换绑竞态借此前授权删身份。
     await requireCurrentCidBinding(
       env,
       session.cid_number,

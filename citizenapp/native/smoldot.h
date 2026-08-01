@@ -404,6 +404,19 @@ char *gmb_chat_mls_encrypt_json(const char *request_json, char **error_out);
 char *gmb_chat_mls_decrypt_json(const char *request_json, char **error_out);
 
 /**
+ * 为 CID 钱包换绑暂存、提交或丢弃 MLS 状态的新账户密文。
+ *
+ * `stage` 只在内存解开旧密文并写旁路目标密文；`commit` 在 finalized 后替换正式
+ * 文件；`discard` 删除旁路文件。任何动作都不会把 OpenMLS 状态明文写盘。
+ *
+ * # Safety
+ * - `request_json` 必须是合法 UTF-8 C 字符串。
+ * - 返回字符串必须由 `smoldot_free_string` 释放。
+ */
+char *gmb_chat_mls_rekey_state_json(const char *request_json,
+                                    char **error_out);
+
+/**
  * 创建 MLS 群(创建者为唯一成员,epoch 0)。
  *
  * # Safety

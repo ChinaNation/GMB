@@ -32,6 +32,11 @@ class MlsStateStore {
   String get stateKeyHex =>
       stateKey.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+  /// 运行上下文失效时立即清零 MLS 状态信封钥，不等待垃圾回收。
+  void dispose() {
+    stateKey.fillRange(0, stateKey.length, 0);
+  }
+
   String get _pendingAad =>
       'citizenapp.local/mls|$ownerCidNumber|pending_inbound';
 
@@ -42,7 +47,9 @@ class MlsStateStore {
     _purgeLegacyPlaintext();
   }
 
-  File get _pendingFile => File('${directory.path}/pending_inbound.bin');
+  File get _pendingFile => _pendingFileFor(directory);
+
+  File get _pendingRekeyFile => _pendingRekeyFileFor(directory);
 
   /// 清除历史遗留的**明文** pending 队列。
   ///
@@ -98,6 +105,58 @@ class MlsStateStore {
     );
     await _pendingFile.writeAsString(blob, flush: true);
   }
+
+  /// 只在内存解开 pending 队列并写入新账户密文旁路文件，正式文件保持不动。
+  Future<void> stageAccountHandover(Uint8List newStateKey) async {
+    if (!_pendingFile.existsSync()) return;
+    final oldBlob = await _pendingFile.readAsString();
+    final plaintext = await LocalCipher.decryptString(
+      key: stateKey,
+      blob: oldBlob,
+      aad: _pendingAad,
+    );
+    final newBlob = await LocalCipher.encryptString(
+      key: newStateKey,
+      plaintext: plaintext,
+      aad: _pendingAad,
+    );
+    // 写前再验一次目标密文，确保新账户密钥确实能够接管。
+    await LocalCipher.decryptString(
+      key: newStateKey,
+      blob: newBlob,
+      aad: _pendingAad,
+    );
+    await _pendingRekeyFile.writeAsString(newBlob, flush: true);
+  }
+
+  /// finalized 后只提交已验证的目标密文文件，不构造或接收任何占位密钥。
+  static Future<void> commitAccountHandoverFiles(Directory directory) async {
+    final pendingFile = _pendingFileFor(directory);
+    final pendingRekeyFile = _pendingRekeyFileFor(directory);
+    if (!await pendingRekeyFile.exists()) return;
+    final backup = File('${pendingFile.path}.account_previous');
+    if (await backup.exists()) await backup.delete();
+    if (await pendingFile.exists()) await pendingFile.rename(backup.path);
+    try {
+      await pendingRekeyFile.rename(pendingFile.path);
+      if (await backup.exists()) await backup.delete();
+    } catch (_) {
+      if (await pendingFile.exists()) await pendingFile.delete();
+      if (await backup.exists()) await backup.rename(pendingFile.path);
+      rethrow;
+    }
+  }
+
+  static Future<void> discardAccountHandoverFiles(Directory directory) async {
+    final pendingRekeyFile = _pendingRekeyFileFor(directory);
+    if (await pendingRekeyFile.exists()) await pendingRekeyFile.delete();
+  }
+
+  static File _pendingFileFor(Directory directory) =>
+      File('${directory.path}/pending_inbound.bin');
+
+  static File _pendingRekeyFileFor(Directory directory) =>
+      File('${directory.path}/pending_inbound.account_rekey');
 }
 
 Map<String, Object?> _wireMessageToJson(MlsWireMessage message) {

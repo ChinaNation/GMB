@@ -9,7 +9,7 @@ import '../../my/myid/citizen_identity_chain_reader.dart';
 ///   3. 成功后只回写进程缓存。
 ///
 /// 对端未绑定 CID（`readByAccountId` 返回 `null` 或 CID 空）时**显式抛错**，
-/// 绝不静默错投。见 memory `citizenapp-cid-identity-master-key`。
+/// 绝不静默错投。CID 是唯一身份主键，账户只用于当前绑定授权。
 class PeerCidResolver {
   PeerCidResolver({
     CitizenIdentityChainReader? chainReader,

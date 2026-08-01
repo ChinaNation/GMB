@@ -4,7 +4,7 @@
 所属模块:citizenapp/cloudflare(Worker/D1/广场·聊天·会员·通讯录 BFF)
 
 ## 背景(用户揪出)
-公民 App 身份主键早已切为 **CID 号**([[citizenapp-cid-identity-master-key]]:CID=身份/账户不可改,钱包 account_id=控制该身份的签名凭证/"密码",可换绑),但 **Cloudflare Worker 从没跟上** —— 全库仍以 `account_id`(钱包账户)为身份主键,CID 只在 square_posts 有一个可空快照列。后果:换绑钱包后新账户登录 resolve 到同一 CID,但数据全挂旧 account_id 下且被 rebind/revoke 删掉 → 用户社交资产(动态/文章/粉丝/通讯录/会员/订阅)全丢,正是母卡要根治的背景漏洞在 worker 侧没实现。
+公民 App 身份主键早已切为 **CID 号**：CID 是唯一身份主键，钱包 `account_id` 是可换绑的当前控制与签名凭证；当时 **Cloudflare Worker 尚未跟上** —— 全库仍以 `account_id` 为身份主键，CID 只在 `square_posts` 有一个可空快照列。后果是换绑后新账户解析到同一 CID，但数据仍挂在此前 `account_id` 下并被 rebind/revoke 删除，导致用户社交资产丢失；本任务据此完成 Worker 的 CID 主键改造。
 
 ## 用户三条硬约束(2026-07-28)
 1. **cid_number = 用户唯一身份主键**,worker 所有用户数据必须以它为主键存。

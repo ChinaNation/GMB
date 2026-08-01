@@ -37,7 +37,7 @@ const STATE_NONCE_LEN: usize = 12;
 
 /// 解析 Dart 侧下传的 32 字节 MLS 状态密钥(小写 hex)。
 ///
-/// 密钥由 `lib/security/local_data_key.dart` 的 `LocalKeyPurpose.mls` 子钥派生,
+/// 密钥由 CID 当前绑定钱包账户按 `LocalKeyPurpose.mls` 用途域派生，
 /// Rust 侧只收密钥、不接触钱包种子。
 fn parse_state_key(state_key_hex: &str) -> Result<[u8; 32], String> {
     let bytes = hex::decode(state_key_hex.trim_start_matches("0x"))
@@ -132,6 +132,14 @@ struct DecryptRequest {
     conversation_id: String,
     wire_message_hex: String,
     ratchet_tree_hex: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RekeyStateRequest {
+    state_store_dir: String,
+    action: String,
+    current_state_key_hex: Option<String>,
+    new_state_key_hex: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -241,6 +249,72 @@ pub unsafe extern "C" fn gmb_chat_mls_decrypt_json(
     }
 }
 
+/// 为 CID 钱包换绑暂存、提交或丢弃 MLS 状态的新账户密文。
+///
+/// `stage` 只在内存解开此前密文并写旁路新账户密文；`commit` 在 finalized 后替换正式
+/// 文件；`discard` 删除旁路文件。任何动作都不会把 OpenMLS 状态明文写盘。
+///
+/// # Safety
+/// - `request_json` 必须是合法 UTF-8 C 字符串。
+/// - 返回字符串必须由 `smoldot_free_string` 释放。
+#[no_mangle]
+pub unsafe extern "C" fn gmb_chat_mls_rekey_state_json(
+    request_json: *const c_char,
+    error_out: *mut *mut c_char,
+) -> *mut c_char {
+    match rekey_state_json(request_json) {
+        Ok(value) => crate::string_into_raw(value, error_out),
+        Err(message) => {
+            crate::set_error(error_out, &message);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+fn rekey_state_json(request_json: *const c_char) -> Result<String, String> {
+    let request: RekeyStateRequest = parse_request(request_json)?;
+    let state_dir = Path::new(&request.state_store_dir);
+    match request.action.as_str() {
+        "stage" => {
+            let current_key = parse_state_key(
+                request
+                    .current_state_key_hex
+                    .as_deref()
+                    .ok_or_else(|| "stage 缺少 current_state_key_hex".to_string())?,
+            )?;
+            let new_key = parse_state_key(
+                request
+                    .new_state_key_hex
+                    .as_deref()
+                    .ok_or_else(|| "stage 缺少 new_state_key_hex".to_string())?,
+            )?;
+            stage_rekey_state_file(
+                &storage_path(state_dir),
+                &current_key,
+                &new_key,
+                STATE_AAD_STORAGE,
+            )?;
+            stage_rekey_state_file(
+                &device_record_path(state_dir),
+                &current_key,
+                &new_key,
+                STATE_AAD_DEVICE,
+            )?;
+        }
+        "commit" => {
+            commit_rekey_state_file(&storage_path(state_dir))?;
+            commit_rekey_state_file(&device_record_path(state_dir))?;
+        }
+        "discard" => {
+            discard_rekey_state_file(&storage_path(state_dir))?;
+            discard_rekey_state_file(&device_record_path(state_dir))?;
+        }
+        _ => return Err("MLS 状态换绑 action 必须为 stage/commit/discard".to_string()),
+    }
+    serde_json::to_string(&serde_json::json!({"ok": true}))
+        .map_err(|error| format!("序列化 MLS 状态换绑结果失败: {error}"))
+}
+
 fn create_key_package_json(request_json: *const c_char) -> Result<String, String> {
     let request: CreateKeyPackageRequest = parse_request(request_json)?;
     require_non_empty("cid_number", &request.cid_number)?;
@@ -347,7 +421,11 @@ fn two_party_smoke_json(request_json: *const c_char) -> Result<String, String> {
     .map_err(|error| format!("创建 Alice OpenMLS group 失败: {error:?}"))?;
 
     let (_, welcome, _) = alice_group
-        .add_members(&alice_provider, &alice_signer, std::slice::from_ref(&bob_key_package))
+        .add_members(
+            &alice_provider,
+            &alice_signer,
+            std::slice::from_ref(&bob_key_package),
+        )
         .map_err(|error| format!("添加 Bob KeyPackage 失败: {error:?}"))?;
     alice_group
         .merge_pending_commit(&alice_provider)
@@ -804,6 +882,45 @@ fn storage_path(state_dir: &Path) -> PathBuf {
 
 fn device_record_path(state_dir: &Path) -> PathBuf {
     state_dir.join("device.bin")
+}
+
+fn rekey_staged_path(path: &Path) -> PathBuf {
+    path.with_extension("account_rekey")
+}
+
+fn stage_rekey_state_file(
+    path: &Path,
+    current_key: &[u8; 32],
+    new_key: &[u8; 32],
+    aad: &[u8],
+) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let current_blob = fs::read(path).map_err(|error| format!("读取 MLS 当前状态失败: {error}"))?;
+    let mut clear = open_state(current_key, &current_blob, aad)?;
+    let new_blob = seal_state(new_key, &clear, aad)?;
+    clear.fill(0);
+    // 写盘前再用新钥认证一次，确保“新密钥已上岗”不是只写未验。
+    let mut verified = open_state(new_key, &new_blob, aad)?;
+    verified.fill(0);
+    atomic_write(&rekey_staged_path(path), &new_blob)
+}
+
+fn commit_rekey_state_file(path: &Path) -> Result<(), String> {
+    let staged = rekey_staged_path(path);
+    if !staged.exists() {
+        return Ok(());
+    }
+    fs::rename(&staged, path).map_err(|error| format!("提交 MLS 新账户状态密文失败: {error}"))
+}
+
+fn discard_rekey_state_file(path: &Path) -> Result<(), String> {
+    let staged = rekey_staged_path(path);
+    if staged.exists() {
+        fs::remove_file(staged).map_err(|error| format!("删除 MLS 换绑暂存失败: {error}"))?;
+    }
+    Ok(())
 }
 
 /// 原子写入:先写同目录临时文件、fsync,再 rename 覆盖目标。

@@ -199,4 +199,97 @@ void main() {
     await AttachmentVault.releasePlain(b);
     expect(plainDir.listSync(), isEmpty);
   });
+
+  test('换绑重加密先旁路暂存，提交后只有新钱包密钥可打开附件', () async {
+    final newKey = List<int>.generate(32, (i) => (i * 19 + 3) % 256);
+    final secret = List<int>.generate(8193, (i) => (i * 23) % 256);
+    final cachePath = '${cacheDir.path}/conv/att-handover.bin';
+    await AttachmentVault.seal(
+      plainSource: writePlain('handover-source.bin', secret),
+      cachePath: cachePath,
+      key: key,
+    );
+
+    await AttachmentVault.stageAccountHandover(
+      attachmentDirectory: cacheDir,
+      handoverId: 'revision-2',
+      currentKey: key,
+      newKey: newKey,
+    );
+    final beforeCommit = await AttachmentVault.openPlain(
+      cachePath: cachePath,
+      key: key,
+      plainDirectory: plainDir,
+    );
+    expect(await beforeCommit.readAsBytes(), secret);
+    await AttachmentVault.releasePlain(beforeCommit);
+    await expectLater(
+      AttachmentVault.openPlain(
+        cachePath: cachePath,
+        key: newKey,
+        plainDirectory: plainDir,
+      ),
+      throwsA(anything),
+    );
+
+    await AttachmentVault.commitAccountHandover(
+      attachmentDirectory: cacheDir,
+      handoverId: 'revision-2',
+    );
+    final afterCommit = await AttachmentVault.openPlain(
+      cachePath: cachePath,
+      key: newKey,
+      plainDirectory: plainDir,
+    );
+    expect(await afterCommit.readAsBytes(), secret);
+    await AttachmentVault.releasePlain(afterCommit);
+    await expectLater(
+      AttachmentVault.openPlain(
+        cachePath: cachePath,
+        key: key,
+        plainDirectory: plainDir,
+      ),
+      throwsA(anything),
+    );
+    expect(
+      cacheDir.listSync(recursive: true).whereType<File>().any(
+            (file) => !file.path.endsWith(AttachmentVault.cipherSuffix),
+          ),
+      isFalse,
+      reason: '交接不得在长期目录留下明文或此前密文备份',
+    );
+  });
+
+  test('新一次换绑暂存不得把历史交接目录当成正式附件重复加密', () async {
+    final revision2Key = List<int>.generate(32, (i) => (i * 17 + 5) % 256);
+    final revision3Key = List<int>.generate(32, (i) => (i * 29 + 7) % 256);
+    final cachePath = '${cacheDir.path}/conv/history.bin';
+    await AttachmentVault.seal(
+      plainSource: writePlain('history.bin', List<int>.filled(2048, 41)),
+      cachePath: cachePath,
+      key: key,
+    );
+    await AttachmentVault.stageAccountHandover(
+      attachmentDirectory: cacheDir,
+      handoverId: 'revision-2',
+      currentKey: key,
+      newKey: revision2Key,
+    );
+    await AttachmentVault.stageAccountHandover(
+      attachmentDirectory: cacheDir,
+      handoverId: 'revision-3',
+      currentKey: key,
+      newKey: revision3Key,
+    );
+
+    final revision3Root = Directory(
+      '${cacheDir.path}/.account-handover/revision-3',
+    );
+    final staged = revision3Root.listSync(recursive: true).whereType<File>();
+    expect(staged, hasLength(1));
+    expect(
+      staged.single.path.contains('/.account-handover/revision-2/'),
+      isFalse,
+    );
+  });
 }

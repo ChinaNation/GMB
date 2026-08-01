@@ -79,7 +79,8 @@
   唯一关系主键，私人备注允许空值，旧 `contact_name` JSON 直接拒绝。
 - `contact_id` 改为索引钥对目标 CID 的 HMAC-SHA256；AES-256-GCM 载荷包含属主
   CID、联系人 CID、账户、SS58、私人备注和时间戳，AAD 绑定属主 CID 与不透明 ID。
-  HKDF 域改为 `citizenapp.contacts/encryption` / `index`，不新增版本化协议标识。
+  HKDF 域统一为 `citizenapp.account-data/contacts-cloud`，并用 `encryption` / `index`
+  context 隔离，不新增版本化协议标识。
 - 修复了新增联系人后因局部变量遮蔽而误用“对方账户”启动属主同步的既有缺陷。
 - 当前用户名片码仍是本步骤输入边界：扫码先由 SS58 派生规范 `account_id`，再经链上
   双向绑定解析 CID 后入库；未绑定 CID 时拒绝。二维码钱包标签不写入私人备注；
@@ -87,14 +88,15 @@
 - 通讯录卡以公开资料昵称为主标题，私人备注、CID、SS58 分行展示；修改操作只编辑
   私人备注。公开资料缓存和用户主页直接按联系人 CID 寻址，不再为已入库联系人重复
   account→CID 链读。
-- CID 换绑不删除、不重建、不全量重传联系人密文；新绑定账户接管同一 CID 稳定
-  数据根后直接读取原数据。账户间搬运和云端重建标记均已删除。
+- CID 换绑不删除、不重建、不全量重传联系人密文；新绑定账户使用自己的 child 直接
+  派生新用途子钥，可以读取密文记录但不能解密旧账户加密的历史私有数据。账户间搬运
+  和云端重建标记均已删除。
 - 本地目标键为 `contact_book_by_cid:`、`contact_pending_by_cid:`、
-  `contact_sync_by_cid:`；废弃账户分区只清理不读取。安全存储只保留 CID 数据根
-  派生用途钥，废弃账户密钥名只删不读。
+  `contact_sync_by_cid:`；废弃账户分区只清理不读取。安全存储只保留当前绑定公开元数据，
+  用途钥由当前账户在内存派生，废弃账户密钥名只删不读。
 - 本步骤仍按已确认边界保存可离线读取的本地联系人副本；本地副本的字段级静止态
   加密归独立任务 `20260728-citizenapp-chat-local-data-encryption`，后续必须与聊天
-  正文、搜索索引和换绑重封装一起实施，不在本步骤建立第二套临时加密流程。
+  正文、搜索索引和当前绑定生命周期一起实施，不在本步骤建立第二套临时加密流程。
 - 新增一次性破坏性迁移
   `citizenapp/cloudflare/migrations/0002_reset_contacts_for_cid_payload.sql`，SQL
   内存库实测执行后旧记录数为 0。本步骤没有执行本地/生产 D1 部署，生产执行仍需

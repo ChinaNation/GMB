@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/signer/signing.dart'
+    show kOpSignCidRebind, signingMessage;
 import 'package:citizenapp/wallet/core/device_subkey.dart' show bytesToHex;
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -20,10 +22,12 @@ class CitizenOccupySignPrep {
     required this.cidNumber,
     required this.isOccupy,
     required this.genesisHash,
-    required this.expectedOldAccountId,
+    required this.currentAccountId,
     required this.expectedBindingRevision,
     required this.expiresAt,
     required this.account,
+    required this.materializedPayload,
+    this.currentAccount,
   });
 
   final SignRequestEnvelope request;
@@ -31,10 +35,12 @@ class CitizenOccupySignPrep {
   final String cidNumber;
   final bool isOccupy;
   final String genesisHash;
-  final String? expectedOldAccountId;
+  final String? currentAccountId;
   final BigInt expectedBindingRevision;
   final BigInt expiresAt;
   final Account account;
+  final Account? currentAccount;
+  final Uint8List materializedPayload;
 }
 
 /// 注册局占号/换绑签名服务。
@@ -49,8 +55,9 @@ class CitizenOccupySignService {
   /// [selectedAccount] = 用户自选或账户卡扫码入口锁定的绑定账户(占即绑一账户)。
   Future<CitizenOccupySignPrep> prepare(
     String raw,
-    Account selectedAccount,
-  ) async {
+    Account selectedAccount, [
+    WalletManager? walletManager,
+  ]) async {
     final SignRequestEnvelope request;
     try {
       request = _signer.parseRequest(raw);
@@ -83,19 +90,28 @@ class CitizenOccupySignService {
     if (accountId == null) {
       throw const CitizenOccupySignException('所选账户 account_id 格式错误');
     }
-    if (authorization.materialize(accountId) == null) {
+    final materializedPayload = authorization.materialize(accountId);
+    if (materializedPayload == null) {
       throw const CitizenOccupySignException('换绑新账户不得与当前绑定账户相同');
     }
+    final currentAccount =
+        authorization.currentAccountId == null || walletManager == null
+            ? null
+            : await walletManager.getAccountByAccountId(
+                authorization.currentAccountId!,
+              );
     return CitizenOccupySignPrep(
       request: request,
       actionLabel: actionLabel,
       cidNumber: authorization.cidNumber,
       isOccupy: action == QrActions.citizenOccupy,
       genesisHash: authorization.genesisHash,
-      expectedOldAccountId: authorization.expectedOldAccountId,
+      currentAccountId: authorization.currentAccountId,
       expectedBindingRevision: authorization.expectedBindingRevision,
       expiresAt: authorization.expiresAt,
       account: selectedAccount,
+      currentAccount: currentAccount,
+      materializedPayload: materializedPayload,
     );
   }
 
@@ -119,10 +135,25 @@ class CitizenOccupySignService {
       prep.account.accountId,
       bytes,
     );
+    String? currentAccountSignatureHex;
+    final currentAccount = prep.currentAccount;
+    if (!prep.isOccupy && currentAccount != null) {
+      final currentAccountDigest = signingMessage(
+        opTag: kOpSignCidRebind,
+        scalePayload: prep.materializedPayload,
+      );
+      final currentAccountSignature = await walletManager.signForAccountId(
+        currentAccount.accountId,
+        currentAccountDigest,
+      );
+      currentAccountSignatureHex = '0x${bytesToHex(currentAccountSignature)}';
+    }
     return _signer.encodeResponse(_signer.buildResponse(
       request: prep.request,
       signatureHex: '0x${bytesToHex(signature)}',
       signerPublicKeyHexOverride: prep.account.accountId,
+      currentAccountIdHex: currentAccount?.accountId,
+      currentAccountSignatureHex: currentAccountSignatureHex,
     ));
   }
 

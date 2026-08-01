@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/shared/account_derivation.dart'
@@ -9,6 +11,9 @@ import 'package:citizenapp/signer/square_action_sign_service.dart';
 import 'package:citizenapp/signer/citizen_identity_sign_service.dart';
 import 'package:citizenapp/signer/citizen_occupy_sign_service.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
+import 'package:citizenapp/my/myid/myid_service.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/offchain_scan_flow.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/seed_sign_error.dart';
@@ -212,13 +217,13 @@ Future<void> _handleOccupySignRequest(
   if (selected == null || !context.mounted) return;
 
   try {
-    final prep = await service.prepare(raw, selected);
+    final prep = await service.prepare(raw, selected, walletManager);
     if (!context.mounted) return;
     final reviewEntries = <(String, String)>[
       ('创世哈希', prep.genesisHash),
       ('身份CID', prep.cidNumber),
-      if (prep.expectedOldAccountId != null)
-        ('当前绑定账户', ss58FromAccountIdText(prep.expectedOldAccountId!)),
+      if (prep.currentAccountId != null)
+        ('当前绑定账户', ss58FromAccountIdText(prep.currentAccountId!)),
       ('预期绑定版本', prep.expectedBindingRevision.toString()),
       ('过期时间（Unix 秒）', prep.expiresAt.toString()),
       (prep.isOccupy ? '绑定账户' : '新绑定账户', prep.account.ss58Address),
@@ -247,6 +252,31 @@ Future<void> _handleOccupySignRequest(
     );
     if (confirmed != true || !context.mounted) return;
     final response = await service.sign(prep, walletManager);
+    if (!prep.isOccupy && prep.currentAccount != null) {
+      final source = AccountDataBinding(
+        genesisHash: prep.genesisHash,
+        cidNumber: prep.cidNumber,
+        bindingRevision: prep.expectedBindingRevision.toInt(),
+        accountId: prep.currentAccount!.accountId,
+      );
+      final target = AccountDataBinding(
+        genesisHash: prep.genesisHash,
+        cidNumber: prep.cidNumber,
+        bindingRevision: source.bindingRevision + 1,
+        accountId: prep.account.accountId,
+      );
+      final handover = CidAccountDataHandover(walletManager: walletManager);
+      await handover.stage(source: source, target: target);
+      // 注册局后续冷签上链无需用户再次扫码；本 App 在后台只等待 finalized 目标绑定，
+      // 命中后提交同一次扫码已暂存的新账户密文。退出 App 时公开交接清单仍可在下次
+      // 身份门禁就位时续接，不依赖此前设备进程持续存活。
+      unawaited(_completeRegistryHandover(
+        walletManager: walletManager,
+        handover: handover,
+        target: target,
+        expiresAt: prep.expiresAt.toInt(),
+      ));
+    }
     if (!context.mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => QrSignResponsePage(
@@ -263,6 +293,48 @@ Future<void> _handleOccupySignRequest(
     if (context.mounted) _snack(context, error.message);
   } on Exception catch (error) {
     if (context.mounted) _snack(context, '签名失败：$error');
+  }
+}
+
+Future<void> _completeRegistryHandover({
+  required WalletManager walletManager,
+  required CidAccountDataHandover handover,
+  required AccountDataBinding target,
+  required int expiresAt,
+}) async {
+  final reader = CitizenIdentityChainReader();
+  while (DateTime.now().millisecondsSinceEpoch ~/ 1000 <= expiresAt + 600) {
+    try {
+      final current = await reader.readBindingByCidNumber(target.cidNumber);
+      if (current?.accountIdText == target.accountId &&
+          current?.bindingRevision == target.bindingRevision) {
+        final previous = await walletManager.readActiveAccountDataBinding();
+        await walletManager.activateAccountDataBinding(
+          genesisHash: target.genesisHash,
+          cidNumber: target.cidNumber,
+          bindingRevision: target.bindingRevision,
+          accountId: target.accountId,
+        );
+        await handover.prepareFinalizedBinding(
+          current: target,
+          previous: previous,
+        );
+        await walletManager.bindDeviceSubkeyToCurrentBinding(
+          cidNumber: target.cidNumber,
+          bindingRevision: target.bindingRevision,
+          accountId: target.accountId,
+        );
+        await handover.completeFinalizedBinding(target);
+        WalletManager.notifyIdentityBindingChanged();
+        return;
+      }
+      if (current != null && current.bindingRevision > target.bindingRevision) {
+        return;
+      }
+    } catch (_) {
+      // 链暂不可用时继续等待；交接清单仍在本地，绝不回退或清掉此前密文。
+    }
+    await Future<void>.delayed(const Duration(seconds: 5));
   }
 }
 

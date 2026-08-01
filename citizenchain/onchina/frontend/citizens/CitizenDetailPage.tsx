@@ -351,6 +351,8 @@ export function CitizenDetailPage({
         prep.request_id,
         newWalletSigned.account_id,
         newWalletSigned.signature,
+        newWalletSigned.current_account_id,
+        newWalletSigned.current_account_signature,
       );
       // 段2→3:注册局管理员冷签换绑 extrinsic。
       const adminSigned = await signChain(admin.request_id, admin.sign_request);
@@ -565,7 +567,7 @@ export function CitizenDetailPage({
             type="info"
             showIcon
             style={{ marginBottom: 12 }}
-            message="CID 换绑:匿名 CID 可由任一在册 CREG/FRG 办理；实名 CID 仅本市 CREG/对应省 FRG。新钱包本人签名，不要求旧钱包；授权锁定创世哈希、当前账户、绑定版本和过期时间。"
+            message="CID 换绑:匿名 CID 可由任一在册 CREG/FRG 办理；实名 CID 仅本市 CREG/对应省 FRG。新钱包本人签名，不要求当前钱包；授权锁定创世哈希、当前账户、绑定版本和过期时间。"
           />
           <Space wrap>
             <Input
