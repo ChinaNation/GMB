@@ -24,7 +24,7 @@ CitizenChain workflow 内的 `guardrails` job 对每个非草稿 PR 执行全局
 `citizenchain-ci.yml` 的 `guardrails` job 调用 `.github/scripts/check-ai-guardrails.sh`，执行：
 
 - 直接验证已跟踪的启动协议文件、根入口软链接和关键规则；本机手工验收脚本保持 Git 忽略，
-  GitHub runner 不依赖本机私有 `scripts/` 文件
+  GitHub runner 的独立门禁和全工程 `--startup-only` 检查均不依赖本机私有 `scripts/` 文件
 - 禁止删除/迁出 AI 编程系统核心基础设施
 - 改代码必须同步更新文档与任务卡，并回写对应模块文档
 - 开发残留扫描（TODO/FIXME/console.log/dbg! 等）

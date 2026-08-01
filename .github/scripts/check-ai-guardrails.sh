@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+mode="${1:-}"
 base_ref="${BASE_REF:-origin/main}"
 
 # 中文注释：全仓禁止中国国旗字符；用 UTF-8 八进制构造，避免门禁源码自身成为命中项。
@@ -30,7 +31,7 @@ while IFS= read -r line; do
   status_lines+=("${line}")
 done < <(git diff --name-status --find-renames "${diff_target}")
 
-if [[ "${#changed_files[@]}" -eq 0 ]]; then
+if [[ "${#changed_files[@]}" -eq 0 && "$mode" != "--startup-only" ]]; then
   echo "未检测到变更文件，跳过 AI 门禁检查。"
   exit 0
 fi
@@ -92,6 +93,10 @@ require_startup_text "memory/07-ai/chat-protocol.md" "需求分析"
 require_startup_text "memory/07-ai/chat-protocol.md" "检查为什么报错"
 echo "启动协议检查通过。"
 
+if [[ "$mode" == "--startup-only" ]]; then
+  exit 0
+fi
+
 doc_regex='^(memory/|docs/|README\.md$|GMB_TECHNICAL\.md$|CLAUDE\.md$|\.github/pull_request_template\.md$|.*_TECHNICAL\.md$)'
 code_regex='^(\.github/workflows/|scripts/|citizenchain/|citizenapp/|primitives/|Cargo\.toml$|Cargo\.lock$|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml|ya?ml|json|swift|kt|kts))'
 scan_regex='^(scripts/|citizenchain/|citizenapp/|primitives/|.*\.(rs|dart|ts|tsx|js|jsx|sh|py|sql|toml))'
@@ -142,7 +147,7 @@ module_doc_requirement_for_file() {
   local file="$1"
 
   case "$file" in
-    .github/workflows/*|scripts/check-ai-guardrails.sh|scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/check-startup-acceptance.sh|scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh)
+    .github/workflows/*|.github/scripts/check-ai-guardrails.sh|scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh)
       printf '%s' "memory/07-ai/"
       ;;
     citizenchain/*|primitives/*|Cargo.toml|Cargo.lock)
@@ -172,7 +177,7 @@ has_matching_module_doc_update() {
   fi
 
   case "$file" in
-    .github/workflows/*|scripts/check-ai-guardrails.sh|scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/check-startup-acceptance.sh|scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh)
+    .github/workflows/*|.github/scripts/check-ai-guardrails.sh|scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh)
       has_changed_doc_file "memory/01-architecture/repo-map.md" && return 0
       ;;
     citizenchain/*|primitives/*|Cargo.toml|Cargo.lock)
@@ -358,11 +363,13 @@ is_protected_ai_path() {
     memory/08-tasks/templates/*)
       return 0
       ;;
+    .github/scripts/check-ai-guardrails.sh)
+      return 0
+      ;;
     # 中文注释:AI 工作流脚本已统一收敛到根 scripts/(原 memory/scripts/),逐个保护,避免误伤同目录通用工具脚本。
-    scripts/analyze-requirement.sh|scripts/architect-entry.sh|scripts/check-startup-acceptance.sh|\
+    scripts/analyze-requirement.sh|scripts/architect-entry.sh|\
     scripts/complete-task.sh|scripts/index-tasks.sh|scripts/load-context.sh|\
-    scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh|\
-    scripts/check-ai-guardrails.sh)
+    scripts/module-router.sh|scripts/new-task.sh|scripts/start-task.sh)
       return 0
       ;;
     *)

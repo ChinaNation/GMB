@@ -188,7 +188,7 @@ jobs:
           workspaces: citizenchain -> target
 
       - name: 检查 AI 启动协议与模块残留
-        run: bash scripts/check-startup-acceptance.sh --ci
+        run: ./.github/scripts/check-ai-guardrails.sh --startup-only
 
       - name: 校验 pallet 注册表与链上一致
         run: node .github/scripts/check-pallet-registry-sync.mjs

@@ -315,7 +315,10 @@
   `guardrails` job `91429584677` 暴露出 GitHub runner 调用了被 Git 忽略的本机
   `scripts/check-startup-acceptance.sh`，因此以退出码 127 失败；本次把同一组启动协议断言
   收口到已跟踪的 `.github/scripts/check-ai-guardrails.sh`，不跟踪本机脚本、不放开根
-  `scripts/` 私有边界、不改变业务或 runtime。
+  `scripts/` 私有边界、不改变业务或 runtime。修复提交 `54110ec9034061ce7b7c6c80e3442b7c4892345e`
+  的独立 guardrails job 已通过；同一 run `30723124152` 随后又发现全工程 job 仍直接调用
+  该本机脚本。本次进一步让全工程 job 调用已跟踪 guard 的 `--startup-only` 模式，消除第二个
+  同源调用点并保持单一检查真源。
 - 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
 
 ## 第一步预计修改目录
