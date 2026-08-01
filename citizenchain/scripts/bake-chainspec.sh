@@ -3,7 +3,7 @@
 #
 # 当前创世只直铸国家/省/市公权机构;镇级和新增机构运行期注册上链。
 # 冻结 SSOT 为 plain JSON(runtime WASM + genesis patch + bootnodes)。脚本启动临时节点物化块 0,
-# 同时导出安装包内置的 genesis-state 链数据库包;CitizenApp/smoldot 用 stateRootHash 轻形态。
+# 同时导出用于正式创世审计的 genesis-state 链数据库包;CitizenApp/smoldot 用 stateRootHash 轻形态。
 #
 # 默认模式只生成预览文件到 target/chainspec,不覆盖冻结 SSOT。
 # 正式创世必须在 GitHub WASM CI 成功后执行:
@@ -509,7 +509,7 @@ if [[ "$FINALIZE" == "1" ]]; then
     echo "    $APP_LIGHT_SYNC_STATE (lightSyncState checkpoint)"
     echo "    $APP_PUBLIC_INSTITUTION (块 0 公权机构缓存)"
     echo "    $CLOUDFLARE_WRANGLER (公开链身份派生配置)"
-    echo "==> 创世链状态包已生成,打包安装包前需作为资源放入 genesis-state/:"
+    echo "==> 正式创世审计状态包已生成（安装包仍按冻结 plain chainspec 本地物化）:"
     echo "    $GENESIS_STATE_OUT"
 else
     echo "==> 预览模式完成,未覆盖冻结 SSOT。正式创世请加 --finalize --wasm <CI_WASM>。"

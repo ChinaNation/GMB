@@ -1,8 +1,15 @@
 # CitizenApp Cloudflare 按当前创世重新部署
 
-状态：**生产部署已完成（2026-07-31）**，剩余前置项：国储会 cloudflared 未安装
+状态：**等待 2026-08-01 新创世部署**；仓库锚点已冻结，必须先完成冻结后软件 CI 和节点重装
 
-## 部署结果（2026-07-31 只读实测）
+## 当前部署目标（2026-08-01）
+
+- `genesis_hash` = `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`
+- `state_root` = `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`
+- `wrangler.toml` 与 `worker-configuration.d.ts` 已由同一次正式 bake/Wrangler 生成并通过
+  类型检查和 256 项 Worker 测试；生产 Worker 尚未部署该新锚点。
+
+## 历史部署结果（2026-07-31 只读实测，已被本次创世替代）
 
 用户已在 CitizenConsole 执行生产部署。`GET https://www.crcfrcn.com/api/v1/chain/bootstrap`
 返回 HTTP 200，链身份与仓库冻结值逐字节一致：
@@ -108,12 +115,12 @@ CitizenConsole → 「☁️ CitizenApp Cloudflare」→ 「生产部署」。
 脚本步骤 6 会把 Keychain 里 16 个 Secret 原样推到 Worker，其中 `CHAIN_URL` /
 `CHAIN_ID` / `CHAIN_SECRET` 决定 Worker 读哪条链。**若 Keychain 里的 `CHAIN_URL`
 指向的 RPC 网关仍连旧创世链，部署后 vars 正确但链读依旧错，「设备绑定未完成」不会消失。**
-部署前必须确认该网关后面的节点跑的是 `0x278e68bc…` 这条链。
+部署前必须确认该网关后面的节点跑的是 `0x15755822…58671d` 这条链。
 
 ## 部署后复验
 
 1. `GET /api/v1/chain/bootstrap` 的 `genesis_hash` / `state_root` 应等于
-   `0x278e68bc…3e8bcbfa` / `0xa5386e7c…81c8c2`。
+   `0x15755822…58671d` / `0x363d9c48…5bbe80`。
 2. App 进聊天/广场，应通过设备子钥绑定（首次弹一次生物识别）而非「设备绑定未完成」。
 3. App 日志不再出现「链启动清单与本地 chainspec 不一致，跳过远端 bootnodes」。
 

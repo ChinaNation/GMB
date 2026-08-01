@@ -32,10 +32,10 @@ iOS 最低系统版本统一为 16.0；Runner、RunnerTests 与全部 CocoaPods 
 - 外部接口：Cloudflare Worker 承接聊天控制面、广场、会员、支付、媒体资源和端到端加密通讯录密文。通讯录账户与私人名称明文只在设备；公民、机构、管理员与清算行身份统一由 smoldot 读取 finalized runtime storage。
 - 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/onchina/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 OnChina 联网更新行政区。
 - 公权机构包：安装包内置 `assets/public_institutions/`。生成器在同一个 finalized 块分页读取 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts`，生成 43 省、49,593 条机构的本地查询索引。manifest 保存块号、块哈希、创世哈希、状态根、分片哈希和机构根，Isar 只缓存该链快照。绑定、付款和权限判断必须精确读取当前 finalized 链状态。
-- 2026-07-31 正式创世资产已同源冻结：App
-  `genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`、
-  `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`、
-  `light_sync_state_hash=a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`、
+- 2026-08-01 正式创世资产已同源冻结：App
+  `genesis_hash=0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
+  `state_root=0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`、
+  `light_sync_state_hash=aa24f11ef550951971bfee279c50f8d7180cb32c6556455b0b07fc45a7a4defe`、
   `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
   Cloudflare 三环境仅同步这份创世哈希和状态根，不成为链状态真源。
 
@@ -607,9 +607,9 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   Tunnel 到达国储会服务器 `127.0.0.1:18080` 网关，再由网关按固定 JSON-RPC 方法转发
   本机节点。唯一 production Worker 使用 `CitizenChain` Service Auth 凭据组，Secret
   由 CitizenConsole 管理并同步到 Cloudflare。固定 RPC 必须返回当前正式创世
-  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`；
-  节点重建不改变 Tunnel、Access、域名或网关地址。2026-07-31 重新创世后国储会节点已按新
-  锚点重建，Tunnel 链路需在部署收口时重新实测确认返回该创世。
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`；
+  节点重建不改变 Tunnel、Access、域名或网关地址。2026-08-01 重新创世后必须按新锚点
+  重建节点，并在部署收口时重新实测 Tunnel 链路返回该创世。
 - Cloudflare 唯一 API 入口为 `https://www.crcfrcn.com/api`。2026-07-26 已把配置收敛为
   单一 production Worker，远端只保留 production D1、KV、两个 R2 桶、通知队列和 16 项
   Worker Secret；staging Worker、路由、Access 应用、D1、KV、两个 R2 桶和队列已彻底

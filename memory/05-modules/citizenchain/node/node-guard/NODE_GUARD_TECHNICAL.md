@@ -510,11 +510,11 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 - 该结果只证明当前源码创世与守卫的静态/启动一致性，不替代第8步以正式 CI WASM、正式
   chainspec 和正式权威环境执行的出块、跨节点导入及终局验收。
 
-## 22. 正式创世 NodeGuard 收口（2026-07-26，已被 2026-07-31 重新创世替代）
+## 22. 正式创世 NodeGuard 收口（2026-07-26，已被后续创世替代）
 
 > 本节哈希是 2026-07-26 那次创世的历史实测值。当前正式锚点为
-> `genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`、
-> `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`，
+> `genesis_hash=0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
+> `state_root=0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`，
 > 见 `memory/07-ai/chainspec-frozen.md`。NodeGuard 逻辑本身未随重新创世改变。
 
 

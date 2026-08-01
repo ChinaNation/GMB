@@ -1,6 +1,6 @@
 # chainspec 与创世状态冻结规则（铁律）
 
-> 适用范围：全节点 `citizenchain.plain.json`、安装包内置 `genesis-state/`、CitizenApp
+> 适用范围：全节点 `citizenchain.plain.json`、正式创世审计 `genesis-state/`、CitizenApp
 > `assets/chainspec.json`、`assets/light_sync_state.json`，以及任何分发给轻节点 / 钱包 / App 的创世锚点文件。
 
 ## 结论
@@ -9,9 +9,9 @@
 
 1. **全节点 plain SSOT**：`citizenchain/node/chainspecs/citizenchain.plain.json`。
    它只保存 runtime WASM、genesis patch、bootNodes、properties 和 protocolId。
-2. **节点创世状态包**：`genesis-state/manifest.json` 与
-   `genesis-state/chains/citizenchain/db/**`。正式安装包携带经 release 清单校验的块 0
-   数据库，首启复制到独立数据目录；开发/排障才允许仅按 plain chainspec 本地物化。
+2. **正式创世审计状态包**：`target/chainspec/genesis-state/manifest.json` 与
+   `target/chainspec/genesis-state/chains/citizenchain/db/**`。它记录 release 块 0、CI
+   provenance 和交叉哈希，只保存在忽略产物目录；四平台安装包不携带 RocksDB。
 3. **CitizenApp 轻形态 chainspec**：`citizenapp/assets/chainspec.json`。
    它只保存轻节点联网所需字段和 `genesis.stateRootHash`，不得携带 GB 级 raw state。
 4. **CitizenApp light sync checkpoint**：`citizenapp/assets/light_sync_state.json`。
@@ -36,7 +36,7 @@
 ## 单一权威源
 
 - 全节点创世配置唯一真源：`citizenchain/node/chainspecs/citizenchain.plain.json`。
-- 创世状态包、App 轻节点资产、公权机构分片与 Cloudflare 锚点唯一来源：
+- 正式创世审计状态包、App 轻节点资产、公权机构分片与 Cloudflare 锚点唯一来源：
   `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`，
   并必须提供 `--wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>`；清单记录可追溯的 WASM CI run 和提交。
 - CitizenApp 轻形态、checkpoint 和公权机构分片唯一来源：同一次 `bake-chainspec.sh`
@@ -46,13 +46,13 @@
 
 ## 正式创世流程
 
-1. 把已审查的 `main` 提交固定为直接指向该提交的轻量候选 tag；只推送该 tag，不提前移动远端
-   `main`，避免误触发其它软件 CI。以该 tag 手动执行 GitHub `CitizenChain WASM`
-   普通源码构建，且运行必须成功。
-2. 使用 `citizenchain/scripts/download-wasm.sh` 明确传入本次运行的 run ID、40 位
-   head SHA 和候选 tag；脚本先确认远端 `refs/tags/<候选名>` 直接指向该提交，再核对
-   workflow、`workflow_dispatch` 事件、完成状态、conclusion、head SHA、ref 和唯一未过期 artifact 后，下载同一运行的
-   `citizenchain.compact.compressed.wasm`。禁止选择“最新成功”运行。
+1. 对已审查提交手动执行 GitHub `CitizenChain WASM` 普通源码构建并等待成功。优先以直接
+   指向提交的轻量候选 tag 运行；用户明确指定 `main` 时，仍须钉死该次 run 的 40 位
+   head SHA，不能用后续移动的 `main` 代替。
+2. tag 运行使用 `citizenchain/scripts/download-wasm.sh` 同时核验 run ID、head SHA、tag、
+   workflow、`workflow_dispatch`、完成状态、conclusion 和唯一 artifact。`main` 运行则用
+   GitHub CLI 精确核验同一组运行字段以及唯一 artifact ID/digest，再下载该 run 的
+   `citizenchain.compact.compressed.wasm`；两条路径都禁止选择“最新成功”运行。
 3. 执行：
 
    ```bash
@@ -72,44 +72,45 @@
    - 同步并校验 Cloudflare 各环境的 genesis/state root。
    - 导出 `target/chainspec/genesis-state/manifest.json` 和
      `target/chainspec/genesis-state/chains/citizenchain/db`。
-5. 打包前执行 `citizenchain/scripts/prepack.sh` 或 `prepack.ps1`，把
-   `genesis-state/` 放进 Tauri resources。
-6. 节点首启时优先复制内置创世状态包；没有该包时，只允许开发/排障场景回退到
-   GenesisBuilder 本地物化。
-7. `CitizenChain` 软件 CI 只能消费已冻结且 `artifact_stage=release` 的状态包；preview
-   清单、缺失 CI provenance 或与仓库 plain spec hash 不一致时打包必须失败。
+5. `prepack.sh` / `prepack.ps1` 和 `CitizenChain` CI 必须清除旧 `genesis-state/` 资源残留；
+   安装包只携带冻结 plain chainspec，不携带审计 RocksDB。
+6. 节点首次启动必须从冻结 plain chainspec 本地物化块 0，并在进入运行态前由节点守卫
+   核验创世状态；审计状态包不作为四平台安装包的启动依赖。
+7. `CitizenChain` 软件 CI 必须消费已提交的冻结 plain chainspec，并拒绝把 preview 或
+   release 审计状态包混入安装资源。
 8. 无头服务器下载对应平台软件，停服务安装后保留节点身份密钥和 GRANDPA keystore；
-   新数据目录由安装包内 release 状态包初始化，既有链数据库不得被覆盖。
+   新数据目录由安装包内冻结 plain chainspec 本地物化，既有链数据库不得被覆盖。
 
-## 当前唯一正式创世锚点（2026-07-31）
+## 当前唯一正式创世锚点（2026-08-01）
 
-- runtime 源提交：`9f61e986`（轻量候选 tag
-  `genesis-wasm-candidate-20260731-9f61e986` 直接指向该提交）；冻结资产提交：
-  `369cbc5a9a453dc3015aa19116e3382098a8d3bb`；GitHub `CitizenChain WASM`
-  run：`30593994910`。
+- runtime 源提交：`9c2ec97b91b3236c6268ddd3057a4700a4591cd2`；冻结资产提交：
+  **本次创世资产提交，提交完成后回填完整 SHA**；GitHub `CitizenChain WASM` run：
+  `30721127038`，artifact：`8824990228`，artifact digest：
+  `sha256:e2dfbd037d62e032a45d2dea00b72112308b7e79ccd26ca2cebfe55e000a33fb`。
 - `genesis_hash`：
-  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`。
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`。
 - `state_root`：
-  `0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`。
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`。
 - `runtime_wasm_hash`（compressed WASM SHA-256）：
-  `eecd43eb87815e2fe7601ef02856717b3ba7a1204f59998321887a3388fa4e91`；
+  `2b329862be596f8844457452c37f0beac89c80fec22b101132b35e1b04324a36`；
   Blake2-256 为
-  `8d92e92ccd52693bce9ae915bae74600d58f6581d8e800396ef9bcfbf0b5f93e`。
+  `7e8184a9a5183e87779f13139e0569d4bd403f211881069651c3ae9e071596c0`。
 - 全节点 `chainspec_hash`：
-  `ce353fb3a7b078dce9a6da0c065a4a883df8892882a498336890aea5d04e29b5`。
+  `b239671c5ed930d39ed69aea9fcc09bfaacc299f3456d19af0a3ed61ab2f3e9c`。
 - CitizenApp `chainspec_hash`：
-  `9cb95a69368199f79172724e41ee1afa7593ece796cdbb5f58da3004d7fc8a19`。
+  `9bff21ab73c91962416842d890b545271a16a50a81bbaa3a6ed0f616a57a29de`。
 - `light_sync_state_hash`：
-  `a1a5d43046b379e8168a9651c41a7bbadf1299971252b4e9f99e7701056f8045`。
+  `aa24f11ef550951971bfee279c50f8d7180cb32c6556455b0b07fc45a7a4defe`。
 - `public_institution_root`：
   `c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`，
   43 省共 49,593 个公权机构。
 
-冻结前后两次 CI 的 compressed WASM 逐字节一致（Blake2-256 与 SHA-256 均相同），构建
-可复现性成立；该 CI compressed WASM 是正式创世唯一权威输入，本机 WASM 不参与冻结。
-同一次 release bake 生成的节点 plain SSOT、创世状态包、CitizenApp 轻形态 chainspec、
-light-sync checkpoint、43 个公权机构分片和 Cloudflare 链身份已经交叉校验通过。正式创世
-已经完成，不得再次执行 `--finalize` 覆盖上述锚点；后续 runtime 升级只能通过正式链
+该 CI compressed WASM 是正式创世唯一权威输入，本机 WASM 不参与冻结。同一次 release
+bake 在 131 秒内真实物化块 0，`:code` 与 CI WASM 逐字节一致，宪法、节点 plain SSOT、
+审计状态包、CitizenApp 轻形态 chainspec、light-sync checkpoint、43 个公权机构分片、
+Cloudflare 链身份和 Wrangler 类型已经交叉校验通过；runtime 创世测试固定断言公权
+49,593 个机构 / 99,232 个账户、公民链基金会 1 个机构 / 2 个账户。正式创世已经完成，
+不得再次执行 `--finalize` 覆盖上述锚点；后续 runtime 升级只能通过正式链
 `system.setCode`，除非用户另行明确批准正式硬分叉。
 
 ## S7A 重新创世源码 preview（2026-07-30，已被 CI-WASM preview 取代）

@@ -1,6 +1,4 @@
 name: CitizenChain WASM
-# 中文注释：本次创世候选的一次性显示名称；WASM 成功并冻结时必须删除，禁止遗留到后续运行。
-run-name: 创世
 
 on:
   # 中文注释：公民控制台按钮会先在源码中把 spec_version 提高 1，再带目标链版本触发；

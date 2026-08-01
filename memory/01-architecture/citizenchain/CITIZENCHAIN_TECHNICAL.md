@@ -420,17 +420,19 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
   创世状态包、CitizenApp 链资产、公权机构包和 Cloudflare 链身份锚点均由同一候选生成并
   交叉校验；本步没有切换正式数据、部署节点或转入资金。
 
-## 16. 正式创世运行基线（2026-07-26）
+## 16. 正式创世运行基线（2026-08-01）
 
 - 第8.3B步已经完成本机旧链数据切换；CitizenChain CI run `30211805231` 四个平台任务
   成功，本机安装 CI macOS 应用后从内嵌冻结 plain chainspec 物化正式链数据。
 - 当前唯一正式创世哈希为
-  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`，
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`，
   状态根为
-  `0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`；
-  冻结资产提交为 `369cbc5a9a453dc3015aa19116e3382098a8d3bb`。
-  该值于 2026-07-31 重新创世时更新；2026-07-26 的
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`；
+  runtime 源提交为 `9c2ec97b91b3236c6268ddd3057a4700a4591cd2`，冻结资产为本次创世提交。
+  2026-07-26 的
   `0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`
+  与 2026-07-31 的
+  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`
   只保留为历史冻结记录。
 - 本机正式链、固定远端 RPC、CitizenApp 轻节点资产和 Cloudflare 链身份使用同一创世锚点。
   第8.3D步只读审计时本机 best/finalized 均为 block #6、`isSyncing=false`。

@@ -17,7 +17,9 @@
    - 非创世范围:镇级 14 类×39,087 镇=547,218,由注册局按真实运行期需要注册上链;
    - 号=生成器现场派生、主/费账户=派生原语现场派生,全确定性;与 296 常量共用 `insert_public_institution`;创世机构不带管理员(后续走联邦特权直设通道)。
 3. **构建期断言**:逐号 `parse_cid_number_parts`+`is_public_legal_code`,坏号创世构建即 panic。
-4. **部署形态改造(必做)**:即便创世降到国家/省/市,正式链仍以 plain spec + 官方创世状态包冻结;正式安装包内置 `genesis-state/`,首启复制链数据库并等待 RPC ready;CitizenApp/smoldot 侧 chainspec 用 `stateRootHash` 轻形态。
+4. **部署形态改造(已完成)**：正式链以冻结 plain spec 为启动 SSOT，四平台安装包不携带
+   `genesis-state` RocksDB；首启本地物化并等待 RPC ready。release 状态包只作为正式创世
+   审计制品；CitizenApp/smoldot 侧 chainspec 使用 `stateRootHash` 轻形态。
 5. **onchina 只读投影(D9)**:不再生成机构、不再上链;各市节点启动时只能从链上读取公权机构册并写本地 subjects(`cid_number` 新 schema)缓存;旧 `sfid` 库整体删除。
 
 ## 目标
@@ -77,7 +79,8 @@
 - A1 生成冻结 plain spec:`fresh_genesis_config()` → `as_json(raw=false)` 落 `node/chainspecs/citizenchain.plain.json`(内嵌 WASM+genesis patch+bootnodes+properties,MB 级);新增导出入口(CLI 子命令或 clean-run.sh 步骤)。
 - A2 `chain_config()` 切换:include_bytes 冻结 plain JSON(替换 raw);raw 文件删除零残留;clean-run.sh / deploy-node.sh 打包链路适配。
 - A3 bake 行为:`bake-chainspec.sh` 启动临时节点经 WASM `GenesisBuilder_build_state` 物化 49,593 机构,导出 `target/chainspec/genesis-state/`。
-- A4 正式首启行为:安装包内置 `genesis-state/`,节点启动前复制 `chains/citizenchain/db` 到本地数据目录;没有内置包时才允许开发/排障回退到 GenesisBuilder。
+- A4 正式首启行为：安装包内嵌冻结 plain chainspec，节点首次启动通过
+  `GenesisBlockBuilder` 本地物化块 0 并等待 RPC ready；审计 `genesis-state` 不进入安装包。
 - A5 冻结语义:冻结的是 plain JSON(runtime WASM + patch + bootnodes)与同一次物化出的创世状态包,创世哈希由其唯一决定,全网一致(派生全确定性)。
 
 ### B. citizenapp/smoldot 轻形态

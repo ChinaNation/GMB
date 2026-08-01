@@ -227,7 +227,7 @@ passkey 的消费点统一钉在**创建冷签会话那一步**，不在 prepare
 
 2026-07-19 私权创世公民链基金会第 6 步验收：`institution_lookup` 已实现在相同 CID 主键下依次读取 `PublicManage` 和 `PrivateManage`，公权全量目录迭代继续只读取公权 storage；启动抽样固定增加公民链基金会，全量公权审计先独立核验基金会存在，再执行 49,593 个公权机构的双向比对。OnChina 137 项测试通过；没有把基金会复制进本地公权投影、没有读取本地公民数据库生成法定代表人，也没有新增第二套基金会身份常量。
 
-2026-08-01 管理员换绑接管验收：登录反查、管理员列表、岗位合并和会话复查统一固定到 finalized 区块，带 CID 管理员只接受当前绑定账户，岗位继续以名册账户关联。冻结 plain chainspec 的创世哈希核对为 `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`；临时 OnChina 从链投影得到 49,593 个机构、99,232 个账户并完成 34 项抽样对账。真实 `POST /api/v1/admin/auth/qr/sign-request` 验证 FRG 冻结无 CID 管理员与基金会当前绑定账户均返回 200，无在册账户返回 403 / `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN`。OnChina 191 项测试和 `cargo clippy -p onchina --all-targets -- -D warnings` 通过；未修改 runtime、创世或远端状态。
+2026-08-01 正式创世前管理员换绑接管验收：登录反查、管理员列表、岗位合并和会话复查统一固定到 finalized 区块，带 CID 管理员只接受当前绑定账户，岗位继续以名册账户关联。当次历史冻结 plain chainspec 的创世哈希为 `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`；该值已被同日新创世替代，不是当前部署锚点。临时 OnChina 从链投影得到 49,593 个机构、99,232 个账户并完成 34 项抽样对账。真实 `POST /api/v1/admin/auth/qr/sign-request` 验证 FRG 冻结无 CID 管理员与基金会当前绑定账户均返回 200，无在册账户返回 403 / `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN`。OnChina 191 项测试和 `cargo clippy -p onchina --all-targets -- -D warnings` 通过；未修改 runtime、创世或远端状态。
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'

@@ -1,7 +1,7 @@
 # 公民宪法联邦政府改名 + reward-bind 去出块门槛 + 章节标题纳入修宪判定（重新创世）
 
-状态：open（2026-08-01；**代码改动三项已完成，全 workspace build/test/clippy 全绿**，
-下一步推 tag → WASM CI → `bake --finalize` → 节点重装）
+状态：open（2026-08-01；代码、WASM CI 与正式冻结已完成，下一步等待冻结后软件 CI，
+再按确认顺序部署）
 
 ## 进度
 
@@ -14,11 +14,11 @@
 | clippy `-D warnings`（两 crate） | ✅ 零 error 零 warning |
 | 创世宪法 SCALE 自检 | ✅ `constitution SCALE self-test ok` |
 | 全 workspace build / test / clippy | ✅ 83 个测试二进制 1334 passed 0 failed；build/test/clippy 三段 exit=0；0 error 0 rustc warning |
-| 推候选 tag → WASM CI | 待办 |
-| `bake-chainspec.sh --finalize` | 待办 |
+| GitHub WASM CI | ✅ run `30721127038`，本次显示名“创世”，head `9c2ec97b...` |
+| `bake-chainspec.sh --finalize` | ✅ CI WASM，131 秒，创世/宪法/跨端锚点全绿 |
 | 四平台 CI + 三台节点重装 | 待办 |
 | Worker 重部署 + App 发版 | 待办 |
-| 回写 `chainspec-frozen.md` 等文档 | 待办 |
+| 回写 `chainspec-frozen.md` 等文档 | ✅ 新锚点已回写，冻结资产提交 SHA 待提交后补齐 |
 
 ### 宪法文件实测变化
 

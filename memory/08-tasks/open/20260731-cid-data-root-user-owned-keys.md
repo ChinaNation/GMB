@@ -282,17 +282,35 @@
 
 ### 第六步：WASM 候选推送与 GitHub 证明
 
-状态：in progress（最新 `main` 已推送；等待本次显示名称为“创世”的 WASM CI 成功）
+状态：completed（2026-08-01；GitHub WASM 成功并已使用该唯一 artifact 正式冻结）
 
 - 先核对 `main`、候选提交、候选 tag、远端 `origin` 和唯一 `citizenchain-wasm.yml` 触发范围；
   把所有本地修改形成可复现提交，但不提前冻结创世资产。
 - 仅推送用于 WASM CI 的候选 ref，等待 GitHub `CitizenChain WASM` 对该精确提交成功；不得用本地
   WASM、旧 run、其他提交或未完成的 run 代替。
-- WASM CI 成功后再输出 run、commit、artifact 摘要和创世冻结技术方案，等待下一次确认；在冻结
-  完成前不推送其他软件 CI，冻结完成后才按顺序推送 `main` 并等待其余三条软件 CI 全绿。
+- 用户确认直接使用 `main` 上本次成功 run：`30721127038`，head SHA
+  `9c2ec97b91b3236c6268ddd3057a4700a4591cd2`，artifact `8824990228`，digest
+  `sha256:e2dfbd037d62e032a45d2dea00b72112308b7e79ccd26ca2cebfe55e000a33fb`。
+- 三个 WASM 文件集合、非空、大小、SHA-256 与 Blake2-256 均已核验；正式输入
+  `citizenchain.compact.compressed.wasm` 为 1,163,166 字节，SHA-256
+  `2b329862be596f8844457452c37f0beac89c80fec22b101132b35e1b04324a36`。
+- `bake-chainspec.sh --finalize` 已用该 CI WASM 在 131 秒真实物化块 0；宪法、`:code`、
+  节点/App/checkpoint/43 省机构分片/Cloudflare 锚点全部通过，正式
+  `genesis_hash=0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
+  `state_root=0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`。
 - 本步骤不部署；只有 WASM 证明、创世冻结和其他软件 CI 全部成功后，才另行输出部署方案并等待确认。
-- 本次 WASM run 临时使用 `run-name: 创世`；它只允许服务当前候选，WASM 成功并冻结时必须删除，
-  后续运行恢复标准名称 `CitizenChain WASM`。此前取消的 run 均不构成 WASM 成功证明。
+- 本次 WASM run 临时使用的 `run-name: 创世` 已在冻结提交中删除，后续运行恢复标准名称
+  `CitizenChain WASM`。此前取消的 run 均不构成 WASM 成功证明。
+
+### 第七步：冻结提交与其他软件 CI
+
+状态：in progress（冻结资产与文档已生成并通过本地门禁，等待提交、推送和远端 CI）
+
+- 只提交本次冻结的节点 plain SSOT、CitizenApp 链锚点、公权机构 manifest、Cloudflare
+  配置/类型、一次性 CI 名称清理和文档；`citizenchain/runtime/` 无 diff。
+- 推送 `main` 后重新等待 CitizenChain、CitizenApp/Cloudflare、CitizenWallet 软件 CI
+  全部成功；冻结前曾运行的软件 CI 不替代本次冻结后的最终结果。
+- 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
 
 ## 第一步预计修改目录
 

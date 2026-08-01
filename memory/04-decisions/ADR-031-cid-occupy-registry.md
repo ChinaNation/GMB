@@ -115,11 +115,13 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
 
 ### 4.3 部署形态改造(必做,2026-07-04 更新)
 
-- 创世 state 源码口径为 49,593 机构,但正式链仍以 plain spec + 官方创世状态包冻结,避免各节点本地物化产生运行差异。
-- 节点:使用「**plain spec + 官方创世状态包**」。
+- 创世 state 源码口径为 49,593 个公权机构；正式链以冻结 plain spec 为唯一启动配置，
+  release `genesis-state` 只作为仓库外审计制品。
+- 节点使用冻结 plain spec：
   - plain spec 冻结 runtime WASM、genesis patch、bootNodes、properties。
-  - `bake-chainspec.sh` 用 CI WASM 启动临时节点物化块 0,导出 `genesis-state/chains/citizenchain/db`。
-  - 正式安装包内置 `genesis-state/`,节点首启先复制链数据库;缺包时才允许开发/排障回退到 GenesisBuilder 本地物化。
+  - `bake-chainspec.sh` 用 CI WASM 启动临时节点物化块 0，并导出
+    `target/chainspec/genesis-state/` 作为正式创世审计证据。
+  - 四平台安装包不携带 RocksDB；节点首启从冻结 plain spec 本地物化并由节点守卫校验块 0。
   - 当前 plain spec 启动仍会触发 Substrate `GenesisBlockBuilder` 做链初始存储校验,不是重新写库,但仍有分钟级 CPU 成本;首次本地数据准备显示“初始化中”，已有数据库启动显示“启动中”。
 - CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态,公权机构目录用“创世快照缓存 + 链投影增量更新”。
 - 重新创世部署(6 节点 mesh);创世后重跑 CitizenApp 公权机构快照包生成器(死规则:否则机构全断)。
@@ -127,15 +129,16 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
   `genesis_hash=0x840d5b12c541a010783e54069c9168a13d102ba63cd8f3a00263440c1803aad9`
   只保留为历史冻结记录，已被 2026-07-26 正式创世替代。
 - 当前 49,593 个公权机构的唯一正式创世基线由 runtime 源提交
-  `9f61e986`、GitHub `CitizenChain WASM` run
-  `30593994910` 和冻结资产提交 `369cbc5a9a453dc3015aa19116e3382098a8d3bb`
-  生成：`genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`、
-  `state_root=0xa5386e7c0a0222fd030250b533bf73e78e947aec9f6a98dea7c1d5d64881c8c2`、
-  `runtime_wasm_hash=eecd43eb87815e2fe7601ef02856717b3ba7a1204f59998321887a3388fa4e91`、
-  `chainspec_hash=ce353fb3a7b078dce9a6da0c065a4a883df8892882a498336890aea5d04e29b5`、
+  `9c2ec97b91b3236c6268ddd3057a4700a4591cd2`、GitHub `CitizenChain WASM` run
+  `30721127038` 和本次创世资产提交生成：
+  `genesis_hash=0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
+  `state_root=0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`、
+  `runtime_wasm_hash=2b329862be596f8844457452c37f0beac89c80fec22b101132b35e1b04324a36`、
+  `chainspec_hash=b239671c5ed930d39ed69aea9fcc09bfaacc299f3456d19af0a3ed61ab2f3e9c`、
   `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
   2026-07-26 的 `genesis_hash=0xe8f4067de2323dc27b2a2c409fa4b3ab882e4e88dfa6f4a81355f51f8cf8eb45`
-  同样只保留为历史冻结记录，已被 2026-07-31 正式创世替代。
+  和 2026-07-31 的 `genesis_hash=0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`
+  都只保留为历史冻结记录，已被 2026-08-01 正式创世替代。
 
 ### 4.4 规模账(终态)
 
