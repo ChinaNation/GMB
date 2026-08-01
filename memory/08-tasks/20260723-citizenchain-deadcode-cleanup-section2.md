@@ -1,6 +1,6 @@
 # CitizenChain 死代码清理（全仓扫描第 2 节）
 
-任务需求：清理 citizenchain 扫描出的编译器静音、QR 协议孤儿字段标签、`GMB_ROLE_V1` 域分隔符与墓碑注释；对「SCALE 字段序占位」「生成物」「活不变量注释」不做删除。
+任务需求：清理 citizenchain 扫描出的编译器静音、QR 协议孤儿字段标签、旧岗位派生字符串域与墓碑注释；对「SCALE 字段序占位」「生成物」「活不变量注释」不做删除。
 所属模块：citizenchain（node / onchina / runtime / crates/qr-protocol）+ 生成物同步到 citizenapp、citizenwallet + `memory/` 规则文档。
 兄弟卡：[20260723-citizenapp-deadcode-cleanup-section3.md](20260723-citizenapp-deadcode-cleanup-section3.md)（同批扫描第 3 节）。
 
@@ -12,8 +12,8 @@
 ## 定稿（用户 2026-07-23 逐条确认）
 
 1. **`registry_org_code` 删除**。live code 零命中；同批改写 AGENTS.md / agent-rules.md / onchina README 三处当前规则载体，收敛为 `institution_code + workspace` 单源；ADR-025 只加「后续变更」指引，不改历史决策正文。
-2. **`GMB_ROLE_V1` 删除，全仓只留 `QR_V1`**。用户不接受「派生域不受签名规则约束」的边界主张。替代方案：并入既有 `MODULE_TAG` 惯例（`personal-manage/close.rs:112`、`create.rs:81` 的唯一写法），不造任何新常量。
-3. `GMB_CHAT_V1` 同批清掉（仅 4 行注释，从不上线，proto 用 `package gmb.chat.v1` + 数字 `protocol_version`）。
+2. **旧岗位派生字符串域删除，全仓只留 `QR_V1`**。用户不接受「派生域不受签名规则约束」的边界主张。替代方案：并入既有 `MODULE_TAG` 惯例（`personal-manage/close.rs:112`、`create.rs:81` 的唯一写法），不造任何新常量。
+3. 旧 Chat 版本化协议标识同批清掉，proto 使用无版本包名且不保留协议版本字段。
 4. runtime 二次确认：**A+B 全部授权**（2026-07-23）。
 
 ## 检测方法学修正（写入本卡防复发）
@@ -30,7 +30,7 @@
 | 1 第 4 项 | ✅ | 删 `governance_skeleton.rs:984` 多余 `#[test]`，文档注释上移 |
 | 2 第 5 项 | ✅ | **由并发会话完成**，三处判据与本卡一致（保留活约束句，只删回指过去的句子），本卡不重复动 |
 | 3 第 2 项 + 裁定 a | ✅ | 删 14 条 `field_key`（113→99，零误删）；删 2 条 Dart 断言；新增 `fields_yaml_has_no_orphan_entries`；两端生成物重生且逐字节一致；4 处规则文档改写 |
-| 4 裁定 b | ✅ | `GMB_ROLE_V1` / `GMB_CHAT_V1` 全仓归零，全仓 `_V1` 只剩 `QR_V1`；派生域改 `MODULE_TAG`；13 处文档同步；新增协议版本标识硬规则 |
+| 4 裁定 b | ✅ | 旧岗位与 Chat 版本化协议标识全仓归零，只保留 `QR_V1`；派生域改 `MODULE_TAG`；13 处文档同步；新增协议版本标识硬规则 |
 | 5 第 1 项 批 2(node) | ✅ | 6 处整片静音全摘，编译器只吐出 1 件事；B 类 9 行收敛为 3 行 + 中文理由 |
 | 5 第 1 项 批 3(runtime) | ✅ | 6 处处置完毕：4 删 + 1 收窄 + 1 纯净移除 |
 | 5 第 1 项 批 1(onchina) | ✅ | 摘 34 处静音,编译器暴露 84 条;删 3 整文件+约30死项,接线1守卫,保留12组契约字段;onchina 零警告 129 测试绿 |
@@ -96,9 +96,9 @@
 
 1. **理由位置**：仓库惯例把理由写在 `allow` **上一行**（`proposal.rs:226`、`ledger.rs:263`），初版只认同行会误伤合规写法 → 改为取 `allow` 行连同前两行整块判定。
 2. **`grep -v '^\+\+\+'` 在 BRE 下把 `\+` 当重复算子**（严格 grep 直接报错，GNU grep 宽容通过）→ 改用 `-E`。
-3. 版本门禁加代码文件过滤：规则文档必须能点名被禁标识符（「禁止 `GMB_ROLE_V1`」），否则规则正文自己触发门禁。
+3. 版本门禁覆盖受控代码和文档，规则正文使用抽象口径，不再保留历史标识字面量。
 
-用本轮真实改动逆向验证：两条门禁对全部改动**零误报**，对无理由 `allow` 与新增 `GMB_ROLE_V1` 反例均正确拦截。
+用本轮真实改动逆向验证：两条门禁对全部改动**零误报**，对无理由 `allow` 与新增版本化字符串域反例均正确拦截。
 
 **验证记录**
 
@@ -116,7 +116,7 @@
 - **Step 1**：第 4 项，删重复 `#[test]`。清零警告基线，后续摘抑制才有对照。
 - **Step 2**：第 5 项，墓碑注释。纯注释零风险。
 - **Step 3**：第 2 项 + 裁定 a，删 14 条 `field_key` + 重生两端生成物 + 规则文档同批改写 + 加反向孤儿校验测试。
-- **Step 4**：裁定 b，删 `GMB_ROLE_V1` / `GMB_CHAT_V1`，改 `MODULE_TAG` 域 + 12 处文档同步。
+- **Step 4**：裁定 b，删除旧岗位与 Chat 版本化协议标识，改 `MODULE_TAG` 域并同步文档。
 - **Step 5**：第 1 项，分 3 批摘抑制（onchina → node → runtime），逐条判定。
 - **Step 6**：`check-ai-guardrails.sh` 一次性并入两条门禁（`allow` 需中文理由、`_V1` 只许 `QR_V1`）。
 
@@ -169,7 +169,7 @@
 **替代方案**：用既有 `MODULE_TAG` 惯例，不造新常量。`public-manage = b"pub-mgmt"`、`private-manage = b"pri-mgmt"`，域分隔强度不降反升（公权/私权进入不同域）。
 
 ```rust
-// 删 pub const GMB_ROLE_V1
+// 删除旧岗位派生字符串域常量
 pub fn generate_dynamic_role_code(
     module_tag: &[u8],
     cid_number: &[u8], nonce: u64, proposal_id: u64,
@@ -183,7 +183,7 @@ pub fn generate_dynamic_role_code(
 
 **风险已实测**：全仓 `R_<32位大写十六进制>` 字面量为 0 → 无金标向量、无 chainspec 依赖；创世走固定岗位码不经本函数（`GENESIS_TECHNICAL.md:42`）；现有测试只断言形态与确定性，改域后照常通过。开发期已派生动态岗位码会变，链开发期零用户，重新创世即可。
 
-**`GMB_CHAT_V1`（零风险）**：仅 4 行注释 —— `citizenapp/chat/proto/chat_envelope.proto:5`、`lib/chat/chat_flow.dart:161`、`lib/chat/crypto/mls_session.dart:58,132`、`lib/isar/app_isar.dart:575`。改措辞为 `gmb.chat.v1` proto 包 / `protocol_version` 字段，零行为、零 wire 改动。
+**旧 Chat 版本化协议标识**：最终使用无版本 proto 包名并删除协议版本字段，各端按同一真源重新生成。
 
 **规则提醒注释升级（4 处保留但改措辞）**：`citizenapp/lib/signer/signing.dart:15`、`cloudflare/src/shared/signing_message.ts:8`、`cloudflare/src/auth/wallet_signature.ts:4`、`cloudflare/test/auth.test.ts:132` —— 由「禁 `GMB_*_V1`」升级为「全仓唯一版本化协议标识为 `QR_V1`」。
 
@@ -193,7 +193,7 @@ pub fn generate_dynamic_role_code(
 
 **文档同步 12 处**：`CITIZENCHAIN_TECHNICAL.md:200`、`ADR-039:53`、onchina `BACKEND_TECHNICAL.md:162` / `FRONTEND_TECHNICAL.md:113`、`PRIVATE_MANAGE_TECHNICAL.md:17`、`PUBLIC_MANAGE_TECHNICAL.md:18`、`GENESIS_TECHNICAL.md:42`、`unified-protocols.md:33` 与 `:1570`、`unified-naming.md:144`、任务卡 `20260719-institution-role-permission-unify.md:18,77,111`。
 
-**其中 `unified-naming.md:144` 必须优先改** —— 原文「域分隔符唯一命名为 `GMB_ROLE_V1`，不得另造别名」是正向强制该名字的硬规则，不改就是直接的规则-代码冲突。
+**其中 `unified-naming.md:144` 必须优先改** —— 原文曾正向强制旧岗位字符串域，不改就是直接的规则-代码冲突。
 
 ## Step 5 落点
 

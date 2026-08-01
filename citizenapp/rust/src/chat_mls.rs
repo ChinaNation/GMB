@@ -372,7 +372,6 @@ fn create_key_package_json(request_json: *const c_char) -> Result<String, String
         };
     let now = now_millis();
     let response = json!({
-        "protocol_version": 1,
         "cid_number": request.cid_number,
         "device_id": request.device_id,
         "device_public_key_hex": device_public_key_hex,

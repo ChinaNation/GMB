@@ -58,7 +58,7 @@ void main() {
 
   test('plain text that looks like JSON is NOT misclassified as media', () {
     // 早期"能否 jsonDecode"启发式会把这类文本误判为附件;显式 kind 修掉该隐患。
-    const jsonyText = '{"type":"gmb_chat_attachment_v2","file_name":"x"}';
+    const jsonyText = '{"type":"unknown_chat_attachment","file_name":"x"}';
     final decoded = ChatPayloadCodec.decode(jsonyText);
     expect(decoded.kind, ChatMessageKind.text);
     expect(decoded.text, jsonyText);

@@ -36,14 +36,14 @@ subxt 0.43 默认 `DefaultExtrinsicParams` + `inject_account_nonce_and_block`
    但代码原本调 `wait_for_finalized()`，120s 超时常常先于 finality 触发，
    表面错误是 `timed out waiting for finalization`，实际块已上链。
 
-此外发现 `chain/runtime_align.rs` 里 `INSTITUTION_DOMAIN` 历史上被错误声明为
-`&[u8]`，与链端 verifier 用的 `b"GMB_CID_INSTITUTION_V2"`（类型 `&[u8; 23]`）
-SCALE 编码不同（`&[u8]` 多写 1 字节 Compact 长度前缀），导致
+此外发现 `chain/runtime_align.rs` 里历史机构字符串域曾被错误声明为
+`&[u8]`，与链端 verifier 使用的定长字节数组 SCALE 编码不同
+（`&[u8]` 多写 1 字节 Compact 长度前缀），导致
 `build_institution_credential` 算出的 blake2_256 与链端 verifier 算出的不一致，
 链端返回 `Pallet error: OrganizationManage::InvalidCidInstitutionSignature`。
 这是协议对齐 bug，与上述 PoW 链坑无关，但本次一并修掉。
 
-> **尾注 · 2026-04-20**: 上述 `GMB_CID_INSTITUTION_V2` 域名已在
+> **尾注 · 2026-04-20**: 上述历史机构字符串域已在
 > `20260420-unified-GMB-domain` 任务中彻底退役，改用
 > `(GMB = b"GMB", OP_SIGN_INST = 0x13, ...)`。SCALE
 > 类型对齐铁律（`[u8; N]` 无长度前缀）在新方案下依旧适用。

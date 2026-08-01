@@ -406,7 +406,7 @@ char *gmb_chat_mls_decrypt_json(const char *request_json, char **error_out);
 /**
  * 为 CID 钱包换绑暂存、提交或丢弃 MLS 状态的新账户密文。
  *
- * `stage` 只在内存解开旧密文并写旁路目标密文；`commit` 在 finalized 后替换正式
+ * `stage` 只在内存解开此前密文并写旁路新账户密文；`commit` 在 finalized 后替换正式
  * 文件；`discard` 删除旁路文件。任何动作都不会把 OpenMLS 状态明文写盘。
  *
  * # Safety

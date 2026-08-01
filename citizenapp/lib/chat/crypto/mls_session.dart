@@ -69,7 +69,6 @@ class MlsWireMessage {
     List<int> encryptedMetadata = const [],
   }) {
     return ChatEnvelope(
-      protocolVersion: 1,
       envelopeId: envelopeId,
       conversationId: conversationId,
       senderCidNumber: senderCidNumber,

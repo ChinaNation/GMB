@@ -28,7 +28,7 @@ class DeviceSubkeyBridge {
         private const val SIGN_ALG = "SHA256withECDSA"
         private const val COORD_BYTES = 32
 
-        private fun aliasFor(walletIndex: Int) = "gmb_device_subkey_v1_$walletIndex"
+        private fun aliasFor(walletIndex: Int) = "gmb_device_subkey_$walletIndex"
     }
 
     private fun keyStore() = KeyStore.getInstance(KEYSTORE).apply { load(null) }

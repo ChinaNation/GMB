@@ -5,7 +5,7 @@ import { resourceLimit } from '../limits/catalog';
 import { fetchChainIdentityStateByCid } from '../chain/identity';
 
 export interface ChatRelayPayload {
-  type: 'gmb_chat_envelope_v2' | 'gmb_chat_signal_v1';
+  type: 'gmb_chat_envelope' | 'gmb_chat_signal';
   sender_cid_number: string;
   recipient_cid_number: string;
   recipient_device_id: string | null;
@@ -16,6 +16,10 @@ export interface ChatRelayPayload {
   envelope?: string;
   signal?: unknown;
 }
+
+// WebSocket 控制消息类型由 Worker 单源导出，测试锁定精确字面值，禁止另造版本后缀。
+export const CHAT_WS_READY_TYPE = 'gmb_chat_ws_ready' as const;
+export const CHAT_WS_PONG_TYPE = 'gmb_chat_ws_pong' as const;
 
 interface ChatSocketAttachment {
   cid_number: string;
@@ -108,7 +112,7 @@ export class ChatRealtimeObject implements DurableObject {
       connected_at: nowMs(),
     } satisfies ChatSocketAttachment);
     this.state.acceptWebSocket(server, [deviceTag(deviceId)]);
-    server.send(JSON.stringify({ type: 'gmb_chat_ws_ready_v2', server_time: nowMs() }));
+    server.send(JSON.stringify({ type: CHAT_WS_READY_TYPE, server_time: nowMs() }));
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -139,7 +143,7 @@ export class ChatRealtimeObject implements DurableObject {
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
-    if (message === 'ping') socket.send(JSON.stringify({ type: 'gmb_chat_ws_pong_v2' }));
+    if (message === 'ping') socket.send(JSON.stringify({ type: CHAT_WS_PONG_TYPE }));
   }
 
   async webSocketClose(socket: WebSocket) {

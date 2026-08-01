@@ -450,7 +450,7 @@ mod tests {
             "UNKNOWN",
             "institution_create",
             "INSTITUTION_CREATE ",
-            "PROPOSE_ENACT_LAW_V2",
+            "UNKNOWN_OPERATION",
         ] {
             assert!(
                 parse_action_type(bad).is_err(),

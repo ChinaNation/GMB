@@ -17,7 +17,7 @@ ADR-039 已冻结机构岗位权限目标模型。任务卡第 2 步已落地共
 - 已定义 `RoleSubject { cid_number, role_code }`，作为机构业务授权和机构岗位投票资格的唯一主体。
 - 已定义 `BusinessActionId { module_tag, action_code: u32 }`、`RoleBusinessPermission { role_subject, business_action_id, operation }` 和 `AuthorizationSubject` 强类型；个人多签使用 discriminant `1` 的独立 `PersonalMultisig(AccountId)` 变体。
 - `RolePermissionOperation` 的 SCALE discriminant 固定为 `Propose = 0`、`Vote = 1`；`AuthorizationSubject` 固定为 `Institution = 0`、`PersonalMultisig = 1`。
-- 跨端 SCALE 金标唯一文件为 `memory/06-quality/fixtures/institution_role_permission_v1.json`；Node 使用本 crate 共享类型逐字节解码，OnChina、CitizenApp、CitizenWallet 对同一金标严格解码并拒绝尾随字段。
+- 跨端 SCALE 金标唯一文件为受保护测试资产 `memory/06-quality/fixtures/institution_role_permission_v1.json`；Node 使用本 crate 共享类型逐字节解码，OnChina、CitizenApp、CitizenWallet 对同一金标严格解码并拒绝尾随字段。
 - 定义 `InstitutionCapabilityPolicy` 与 `InstitutionRoleAuthorizationQuery`，供业务模块校验“CID 顶层能力 + 岗位权限 + 有效任职”；本 crate 只定义 trait，不保存权限 storage、不选择投票引擎。
 - `business_action.rs` 是稳定 `module_tag/action_code` 与受保护创世岗位固定权限唯一目录；协议升级与决议发行采用同一联合权限矩阵：NRC/PRC 委员岗位拥有 `Propose + Vote`，PRB 正式 `DIRECTOR / 董事` 只有 `Vote`。该目录不选择投票引擎，也不表示尚未迁移的业务已经按岗位执法。
 - 机构内 `role_code` 与 `role_name` 分别唯一；同名多人属于一个岗位的多个任职席位。一个管理员可以担任多个不同岗位，但同一岗位内不得重复占席。

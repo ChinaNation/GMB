@@ -52,7 +52,7 @@ Step 2b 拆成 4 个子步,本次交付 **2b-i · 业务逻辑**:
 
 **新增**:
 - `NodePaymentIntent` 结构:与 runtime `PaymentIntent` 字段逐字段对齐的节点层镜像,独立于 pallet crate,避免循环依赖。
-- `L3_PAY_SIGNING_DOMAIN = b"GMB_L3_PAY_V1"` 常量,与 runtime 端严格一致。
+- `OP_SIGN_L3_PAY` 从 `primitives::sign` 单一真源读取，与 runtime 端严格一致。
 - `NodePaymentIntent::signing_hash()`:重算签名哈希,用于 `sr25519_verify`。
 - `OffchainLedger::accept_payment(intent, sig, current_block, l2_ack_sig)`:完整扫码支付入账(验签 + nonce + 余额 + pending 入账)。
 - `OffchainLedger::accept_payment_with_chain_state(...)`:Step 3 跨行收款方节点入口。同行/本行付款继续用本地 `accounts`;跨行收款时使用链上
@@ -114,7 +114,7 @@ citizenapp(Dart)                   清算行节点(Rust,本步)
 
 2026-04-28 补齐: `l2_ack_sig` 已不再是 `[0u8; 64]` 占位。RPC 入口会先拒绝错路由
 `recipient_bank`、`UserBank` 绑定漂移和手续费不一致,再用清算行管理员密钥对
-`GMB_L2_ACK_V1 || bank_main || SCALE(intent) || payer_sig || accepted_at` 的哈希签名。
+`signing_message(OP_SIGN_L2_ACK, SCALE(bank_main, intent, payer_sig, accepted_at))` 的哈希签名。
 
 ## 4. 编译验证
 
@@ -131,7 +131,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 
 | 层 | 约束 |
 |---|---|
-| 签名哈希 | `blake2_256(b"GMB_L3_PAY_V1" || SCALE(intent))` 逐字节一致:citizenapp Dart / node Rust / runtime pallet |
+| 签名哈希 | `signing_message(OP_SIGN_L3_PAY, SCALE(intent))` 逐字节一致:citizenapp Dart / node Rust / runtime pallet |
 | `NodePaymentIntent` 字段顺序 | 与 runtime `PaymentIntent` 严格一致(tx_id / payer / payer_bank / recipient / recipient_bank / amount / fee / nonce / expires_at) |
 | `PaymentIntent` Hash 语义 | 本步 `intent.tx_id: H256` 由 citizenapp 本地生成(如 `blake2_256(payer||nonce||...)`),runtime 端 `execute_clearing_bank_batch` 通过 `T::Hash::decode(&intent.tx_id.as_bytes())` 兼容 |
 

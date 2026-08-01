@@ -85,7 +85,7 @@ pub mod pallet {
 
     /// 个人多签管理员集合。key 为 personal_account_id。
     ///
-    /// 个人多签不依赖 CID 资料，但管理员同样保存账户、姓、名三字段完整记录。
+    /// 个人多签管理员只要求 `account_id`，不要求 CID、姓或名。
     /// 授权只比较 `account_id`；账户名、创建者和生命周期状态属于 personal-manage。
     #[pallet::storage]
     #[pallet::getter(fn admin_account_of)]

@@ -139,13 +139,19 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         }
     };
 
-    let mut online_peer_ids: HashSet<String> = HashSet::new();
-    let mut remote_light_peer_ids: HashSet<String> = HashSet::new();
+    // 全网节点按角色分成两个互斥集合，都以 peerId 去重。
+    //
+    // 三个对外数字全部由这两个集合直接得出：full = full 集合大小、light = light 集合大小、
+    // online = 两者之和。曾经的写法是 light 汇总全网、online 只取本机直连，再用
+    // `online - light` 反推 full —— 减数与被减数根本不是同一个集合，本机没直连到的轻节点
+    // 每多一个就少算一个全节点，减到负数还被 saturating_sub 压成 0。同源之后守恒由集合本身
+    // 保证，不再需要减法，也不再需要靠猜测本机角色来凑等式。
+    let mut network_full_ids: HashSet<String> = HashSet::new();
+    let mut network_light_ids: HashSet<String> = HashSet::new();
+    // 治理节点计数只认引导节点，按本机与全网汇总到的全部 peerId 匹配。
     let mut local_role_known = false;
     let mut local_is_light = false;
     let mut invalid_peer_count: u64 = 0;
-    let mut local_online_extra: u64 = 0;
-    let mut local_in_online_set = false;
 
     if rpc_ready {
         match rpc_post("system_peers", Value::Array(vec![])) {
@@ -154,11 +160,13 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
                     for p in arr {
                         if let Some(pid_raw) = p.get("peerId").and_then(Value::as_str) {
                             if let Some(pid) = normalize_peer_id(pid_raw) {
-                                online_peer_ids.insert(pid.clone());
+                                // 本机直连到的 peer 同样是全网的一部分，与远程汇总合并去重。
                                 let is_light =
                                     p.get("roles").map(extract_light_role).unwrap_or(false);
                                 if is_light {
-                                    let _ = remote_light_peer_ids.insert(pid);
+                                    let _ = network_light_ids.insert(pid);
+                                } else {
+                                    let _ = network_full_ids.insert(pid);
                                 }
                             } else {
                                 invalid_peer_count = invalid_peer_count.saturating_add(1);
@@ -175,9 +183,9 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
         }
     }
 
-    // 遍历所有引导节点远程查询 system_peers，汇总全网轻节点（按 peerId 去重）。
-    // 使用多线程并行查询，总超时 5 秒，避免阻塞 UI。
-    {
+    // 遍历所有引导节点远程查询 system_peers，按 peerId 去重汇总全网 full/light 节点。
+    // 使用多线程并行查询，总超时 5 秒，避免阻塞 UI；块的返回值是未响应的引导节点数。
+    let unreachable_bootnodes: u64 = {
         const REMOTE_RPC_TIMEOUT: Duration = Duration::from_secs(3);
         const REMOTE_RPC_PORT: u16 = 9944;
         let bootnode_domains: Vec<String> = bootnodes
@@ -186,7 +194,16 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             .map(|n| n.domain.clone())
             .collect();
 
-        let (tx, rx) = std::sync::mpsc::channel::<HashSet<String>>();
+        // 一次遍历同时收 full 与 light：响应里本就带 roles，不必为 full 再发一轮 RPC。
+        // 探测失败必须回传，否则该引导节点视野内的节点静默消失、数字偏低且无从察觉。
+        struct BootnodeProbe {
+            full: HashSet<String>,
+            light: HashSet<String>,
+            reachable: bool,
+        }
+
+        let probed_bootnodes = bootnode_domains.len() as u64;
+        let (tx, rx) = std::sync::mpsc::channel::<BootnodeProbe>();
         let active_threads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
         for domain in bootnode_domains {
@@ -195,7 +212,11 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             active.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             std::thread::spawn(move || {
                 let url = format!("http://{}:{}/", domain, REMOTE_RPC_PORT);
-                let mut light_pids = HashSet::new();
+                let mut probe = BootnodeProbe {
+                    full: HashSet::new(),
+                    light: HashSet::new(),
+                    reachable: false,
+                };
                 if let Ok(peers) = rpc::rpc_post_url(
                     &url,
                     "system_peers",
@@ -203,107 +224,116 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
                     REMOTE_RPC_TIMEOUT,
                     RPC_RESPONSE_LIMIT_LARGE,
                 ) {
+                    probe.reachable = true;
                     if let Some(arr) = peers.as_array() {
                         for p in arr {
-                            let is_light = p.get("roles").map(extract_light_role).unwrap_or(false);
-                            if is_light {
-                                if let Some(pid_raw) = p.get("peerId").and_then(Value::as_str) {
-                                    if let Some(pid) = normalize_peer_id(pid_raw) {
-                                        light_pids.insert(pid);
-                                    }
-                                }
+                            let Some(pid) = p
+                                .get("peerId")
+                                .and_then(Value::as_str)
+                                .and_then(normalize_peer_id)
+                            else {
+                                continue;
+                            };
+                            if p.get("roles").map(extract_light_role).unwrap_or(false) {
+                                probe.light.insert(pid);
+                            } else {
+                                probe.full.insert(pid);
                             }
                         }
                     }
                 }
-                let _ = tx.send(light_pids);
+                let _ = tx.send(probe);
                 active.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             });
         }
         drop(tx); // 关闭发送端，让 rx 在所有线程结束后自然终止
 
         // 最多等 5 秒收集所有线程的结果
+        let mut answered_bootnodes: u64 = 0;
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while let Ok(light_pids) =
+        while let Ok(probe) =
             rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
         {
-            for pid in light_pids {
-                let _ = remote_light_peer_ids.insert(pid);
+            if probe.reachable {
+                answered_bootnodes = answered_bootnodes.saturating_add(1);
             }
+            for pid in probe.full {
+                let _ = network_full_ids.insert(pid);
+            }
+            for pid in probe.light {
+                let _ = network_light_ids.insert(pid);
+            }
+        }
+        // 超时被丢弃的线程同样计为不可达：它们的节点视野没有进入汇总。
+        probed_bootnodes.saturating_sub(answered_bootnodes)
+    };
+
+    // 本机自身：拿到 PeerId 与角色后并入对应集合。本机可能已被某个引导节点看到并
+    // 汇总进来，HashSet 去重保证不会重复计数。
+    let mut local_peer_id: Option<String> = None;
+    if rpc_ready {
+        match rpc_post("system_localPeerId", Value::Array(vec![])) {
+            Ok(v) => match v.as_str().and_then(normalize_peer_id) {
+                Some(pid) => local_peer_id = Some(pid),
+                None => warnings
+                    .push("system_localPeerId 返回为空或格式无效，本机未计入节点数".to_string()),
+            },
+            Err(err) => warnings.push(format!(
+                "读取 system_localPeerId 失败，本机未计入节点数: {err}"
+            )),
+        }
+
+        match rpc_post("system_nodeRoles", Value::Array(vec![])) {
+            Ok(roles) => {
+                local_is_light = extract_light_role(&roles);
+                local_role_known = true;
+            }
+            Err(err) => warnings.push(format!(
+                "读取 system_nodeRoles 失败，无法判定本机轻/全节点: {err}"
+            )),
         }
     }
 
-    if status.running {
-        if rpc_ready {
-            match rpc_post("system_localPeerId", Value::Array(vec![])) {
-                Ok(v) => {
-                    if let Some(pid_raw) = v.as_str() {
-                        if let Some(pid) = normalize_peer_id(pid_raw) {
-                            let _ = online_peer_ids.insert(pid.clone());
-                            local_in_online_set = true;
-                        } else {
-                            local_online_extra = 1;
-                            warnings
-                                .push("system_localPeerId 格式无效，按本机在线+1 估算".to_string());
-                        }
-                    } else {
-                        local_online_extra = 1;
-                        warnings.push("system_localPeerId 返回为空，按本机在线+1 估算".to_string());
-                    }
-                }
-                Err(err) => {
-                    local_online_extra = 1;
-                    warnings.push(format!(
-                        "读取 system_localPeerId 失败，按本机在线+1 估算: {err}"
-                    ));
-                }
+    match (&local_peer_id, local_role_known) {
+        (Some(pid), true) => {
+            if local_is_light {
+                let _ = network_light_ids.insert(pid.clone());
+            } else {
+                let _ = network_full_ids.insert(pid.clone());
             }
-
-            match rpc_post("system_nodeRoles", Value::Array(vec![])) {
-                Ok(roles) => {
-                    local_is_light = extract_light_role(&roles);
-                    local_role_known = true;
-                }
-                Err(err) => warnings.push(format!(
-                    "读取 system_nodeRoles 失败，无法判定本机轻/全节点: {err}"
-                )),
-            }
-        } else {
-            local_online_extra = 1;
         }
+        (Some(_), false) => {
+            // 角色未知时**不猜**。旧实现在这里默认按全节点计入，是为了让
+            // `full + light == online` 这个等式成立而做的猜测；同源之后守恒由集合保证，
+            // 宁可少计本机一台，也不把它归错类。
+            warnings.push("未能判定本机轻/全节点，本机未计入节点数".to_string());
+        }
+        (None, _) => {}
     }
 
     if invalid_peer_count > 0 {
         warnings.push(format!("忽略了 {} 条无效 peerId 记录", invalid_peer_count));
     }
-
-    // full/light 统计需要与 onlineNodes 口径一致：
-    // 远端按唯一 peerId 去重，本机角色未知时按 full 兜底，避免在线口径不守恒。
-    let online_nodes = (online_peer_ids.len() as u64).saturating_add(local_online_extra);
-    let remote_light_nodes = remote_light_peer_ids.len() as u64;
-    let local_light_nodes = if status.running && local_role_known && local_is_light {
-        1
-    } else {
-        0
-    };
-    let light_nodes = remote_light_nodes.saturating_add(local_light_nodes);
-    let remote_online_nodes =
-        (online_peer_ids.len() as u64).saturating_sub(if local_in_online_set { 1 } else { 0 });
-    let remote_full_nodes = remote_online_nodes.saturating_sub(remote_light_nodes);
-    let local_full_nodes = if status.running && (!local_role_known || !local_is_light) {
-        1
-    } else {
-        0
-    };
-    if status.running && !local_role_known {
-        warnings.push("未能判定本机轻/全节点，本机按全节点口径计入 fullNodes".to_string());
+    if unreachable_bootnodes > 0 {
+        // 不可达的引导节点，其视野内的节点不会进入汇总，三个数都会偏低。
+        // 不说出来，用户无从判断数字为何变小。
+        warnings.push(format!(
+            "{} 个引导节点未响应，节点数可能偏低",
+            unreachable_bootnodes
+        ));
     }
+
+    // 三个对外数字同源于上面两个互斥集合，天然守恒，无减法、无兜底猜测。
+    let full_nodes = network_full_ids.len() as u64;
+    let light_nodes = network_light_ids.len() as u64;
+    let online_nodes = full_nodes.saturating_add(light_nodes);
 
     let mut nrc_nodes = 0u64;
     let mut prc_nodes = 0u64;
     let mut prb_nodes = 0u64;
     let mut uncategorized_bootnodes = 0u64;
-    for pid in &online_peer_ids {
+    // 治理节点是引导节点里已在线的那部分；遍历两个集合的并集，与三个数字同源。
+    for pid in network_full_ids.iter().chain(network_light_ids.iter()) {
         if let Some(role) = bootnode_role_map.get(pid) {
             match role.as_str() {
                 "nrc" => nrc_nodes = nrc_nodes.saturating_add(1),
@@ -319,8 +349,6 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             uncategorized_bootnodes
         ));
     }
-
-    let full_nodes = remote_full_nodes.saturating_add(local_full_nodes);
 
     Ok(NetworkOverview {
         online_nodes,

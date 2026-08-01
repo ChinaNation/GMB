@@ -949,7 +949,7 @@ PostgreSQL、助记词派生、签名算法或任何 Secret，也不新增文件
    `Admin { account_id, cid_number, family_name, given_name }`、
    `CitizenSubject { cid_number, account_id }`、
    `InstitutionAdminAssignment.account_id` 和
-   `credential_signer_public_key`。删除已废弃的 `GMB_CHAT_V1` 现行协议标签，
+   `credential_signer_public_key`。删除已废弃的旧 Chat 版本化协议标签，
    Chat 只引用真实 `ChatEnvelope`/Protobuf schema，不另造新的版本化字符串。
    旧任务卡和 ADR 只有在明确说明“已拒绝/已删除旧称”时才可引用历史字符串，不得再
    被当前契约当作有效字段。

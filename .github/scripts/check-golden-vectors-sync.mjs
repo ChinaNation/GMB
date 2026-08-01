@@ -15,6 +15,7 @@
 //      (如 `pubkey(32)` 与 `signer_public_key(32)`),属噪音,强制统一只会逼人改文案凑 CI。
 //   3. 镜像必须是真源的子集:镜像出现真源没有的向量即失败(说明该端自造了向量)。
 //   4. 镜像未覆盖到的真源向量只报告、不失败——各端职责不同,覆盖子集是正常设计。
+//      签名域是安全关键例外:CitizenApp 镜像必须完整覆盖真源,缺一条直接失败。
 //
 // 用法:node .github/scripts/check-golden-vectors-sync.mjs
 // 退出码:0=一致;1=发现漂移或读文件失败。
@@ -44,6 +45,7 @@ const GROUPS = [
     keyFields: ['op_tag', 'scale_payload_hex'],
     valueFields: ['message_hex'],
     topFields: ['domain'],
+    requireAll: true,
     mirrors: [
       'citizenapp/test/signer/fixtures/signing_domain_vectors.json',
       // Worker(TS) 与 citizenwallet 不在此登记:两端都没有镜像文件,分别由
@@ -175,11 +177,13 @@ function checkGroup(group) {
 
     const uncovered = [...canonicalMap.keys()].filter((k) => !mirrorMap.has(k));
     if (uncovered.length > 0) {
-      // 覆盖子集是正常设计(各端职责不同),只提示便于人工判断是否遗漏。
-      console.log(
-        `[golden-vectors] 提示:${mirrorRelative} 未覆盖 ${uncovered.length} 条真源向量:` +
-        ` ${uncovered.join(', ')}`,
-      );
+      const message = `${mirrorRelative} 未覆盖 ${uncovered.length} 条真源向量: ${uncovered.join(', ')}`;
+      if (group.requireAll) {
+        fail(message);
+      } else {
+        // 非签名域允许按端职责覆盖子集，但继续输出便于人工复核。
+        console.log(`[golden-vectors] 提示:${message}`);
+      }
     }
     console.log(
       `[golden-vectors] ${group.name}: ${mirrorRelative} 已比对 ${mirrorMap.size} 条`,

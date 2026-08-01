@@ -23,7 +23,6 @@ export 'chat_envelope.pbenum.dart';
 
 class ChatRoute extends $pb.GeneratedMessage {
   factory ChatRoute({
-    $core.int? protocolVersion,
     $core.String? peerCidNumber,
     $core.String? routeDisplayName,
     $core.String? deviceId,
@@ -34,7 +33,6 @@ class ChatRoute extends $pb.GeneratedMessage {
     $fixnum.Int64? expiresAtMillis,
   }) {
     final result = create();
-    if (protocolVersion != null) result.protocolVersion = protocolVersion;
     if (peerCidNumber != null) result.peerCidNumber = peerCidNumber;
     if (routeDisplayName != null) result.routeDisplayName = routeDisplayName;
     if (deviceId != null) result.deviceId = deviceId;
@@ -57,10 +55,8 @@ class ChatRoute extends $pb.GeneratedMessage {
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ChatRoute',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat'),
       createEmptyInstance: create)
-    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
-        fieldType: $pb.PbFieldType.OU3)
     ..aOS(2, _omitFieldNames ? '' : 'peerCidNumber')
     ..aOS(3, _omitFieldNames ? '' : 'routeDisplayName')
     ..aOS(4, _omitFieldNames ? '' : 'deviceId')
@@ -93,91 +89,81 @@ class ChatRoute extends $pb.GeneratedMessage {
       _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ChatRoute>(create);
   static ChatRoute? _defaultInstance;
 
-  @$pb.TagNumber(1)
-  $core.int get protocolVersion => $_getIZ(0);
-  @$pb.TagNumber(1)
-  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
-  @$pb.TagNumber(1)
-  $core.bool hasProtocolVersion() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearProtocolVersion() => $_clearField(1);
-
   @$pb.TagNumber(2)
-  $core.String get peerCidNumber => $_getSZ(1);
+  $core.String get peerCidNumber => $_getSZ(0);
   @$pb.TagNumber(2)
-  set peerCidNumber($core.String value) => $_setString(1, value);
+  set peerCidNumber($core.String value) => $_setString(0, value);
   @$pb.TagNumber(2)
-  $core.bool hasPeerCidNumber() => $_has(1);
+  $core.bool hasPeerCidNumber() => $_has(0);
   @$pb.TagNumber(2)
   void clearPeerCidNumber() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $core.String get routeDisplayName => $_getSZ(2);
+  $core.String get routeDisplayName => $_getSZ(1);
   @$pb.TagNumber(3)
-  set routeDisplayName($core.String value) => $_setString(2, value);
+  set routeDisplayName($core.String value) => $_setString(1, value);
   @$pb.TagNumber(3)
-  $core.bool hasRouteDisplayName() => $_has(2);
+  $core.bool hasRouteDisplayName() => $_has(1);
   @$pb.TagNumber(3)
   void clearRouteDisplayName() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $core.String get deviceId => $_getSZ(3);
+  $core.String get deviceId => $_getSZ(2);
   @$pb.TagNumber(4)
-  set deviceId($core.String value) => $_setString(3, value);
+  set deviceId($core.String value) => $_setString(2, value);
   @$pb.TagNumber(4)
-  $core.bool hasDeviceId() => $_has(3);
+  $core.bool hasDeviceId() => $_has(2);
   @$pb.TagNumber(4)
   void clearDeviceId() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $core.String get devicePublicKey => $_getSZ(4);
+  $core.String get devicePublicKey => $_getSZ(3);
   @$pb.TagNumber(5)
-  set devicePublicKey($core.String value) => $_setString(4, value);
+  set devicePublicKey($core.String value) => $_setString(3, value);
   @$pb.TagNumber(5)
-  $core.bool hasDevicePublicKey() => $_has(4);
+  $core.bool hasDevicePublicKey() => $_has(3);
   @$pb.TagNumber(5)
   void clearDevicePublicKey() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $core.String get safetyNumber => $_getSZ(5);
+  $core.String get safetyNumber => $_getSZ(4);
   @$pb.TagNumber(6)
-  set safetyNumber($core.String value) => $_setString(5, value);
+  set safetyNumber($core.String value) => $_setString(4, value);
   @$pb.TagNumber(6)
-  $core.bool hasSafetyNumber() => $_has(5);
+  $core.bool hasSafetyNumber() => $_has(4);
   @$pb.TagNumber(6)
   void clearSafetyNumber() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $core.String get nearbyPeerHint => $_getSZ(6);
+  $core.String get nearbyPeerHint => $_getSZ(5);
   @$pb.TagNumber(7)
-  set nearbyPeerHint($core.String value) => $_setString(6, value);
+  set nearbyPeerHint($core.String value) => $_setString(5, value);
   @$pb.TagNumber(7)
-  $core.bool hasNearbyPeerHint() => $_has(6);
+  $core.bool hasNearbyPeerHint() => $_has(5);
   @$pb.TagNumber(7)
   void clearNearbyPeerHint() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $fixnum.Int64 get createdAtMillis => $_getI64(7);
+  $fixnum.Int64 get createdAtMillis => $_getI64(6);
   @$pb.TagNumber(8)
-  set createdAtMillis($fixnum.Int64 value) => $_setInt64(7, value);
+  set createdAtMillis($fixnum.Int64 value) => $_setInt64(6, value);
   @$pb.TagNumber(8)
-  $core.bool hasCreatedAtMillis() => $_has(7);
+  $core.bool hasCreatedAtMillis() => $_has(6);
   @$pb.TagNumber(8)
   void clearCreatedAtMillis() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $fixnum.Int64 get expiresAtMillis => $_getI64(8);
+  $fixnum.Int64 get expiresAtMillis => $_getI64(7);
   @$pb.TagNumber(9)
-  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
+  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(7, value);
   @$pb.TagNumber(9)
-  $core.bool hasExpiresAtMillis() => $_has(8);
+  $core.bool hasExpiresAtMillis() => $_has(7);
   @$pb.TagNumber(9)
   void clearExpiresAtMillis() => $_clearField(9);
 }
 
 class ChatEnvelope extends $pb.GeneratedMessage {
   factory ChatEnvelope({
-    $core.int? protocolVersion,
     $core.String? envelopeId,
     $core.String? conversationId,
     $core.String? senderCidNumber,
@@ -191,7 +177,6 @@ class ChatEnvelope extends $pb.GeneratedMessage {
     $core.List<$core.int>? ratchetTree,
   }) {
     final result = create();
-    if (protocolVersion != null) result.protocolVersion = protocolVersion;
     if (envelopeId != null) result.envelopeId = envelopeId;
     if (conversationId != null) result.conversationId = conversationId;
     if (senderCidNumber != null) result.senderCidNumber = senderCidNumber;
@@ -218,10 +203,8 @@ class ChatEnvelope extends $pb.GeneratedMessage {
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ChatEnvelope',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat'),
       createEmptyInstance: create)
-    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
-        fieldType: $pb.PbFieldType.OU3)
     ..aOS(2, _omitFieldNames ? '' : 'envelopeId')
     ..aOS(3, _omitFieldNames ? '' : 'conversationId')
     ..aOS(4, _omitFieldNames ? '' : 'senderCidNumber')
@@ -262,118 +245,108 @@ class ChatEnvelope extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<ChatEnvelope>(create);
   static ChatEnvelope? _defaultInstance;
 
-  @$pb.TagNumber(1)
-  $core.int get protocolVersion => $_getIZ(0);
-  @$pb.TagNumber(1)
-  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
-  @$pb.TagNumber(1)
-  $core.bool hasProtocolVersion() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearProtocolVersion() => $_clearField(1);
-
   @$pb.TagNumber(2)
-  $core.String get envelopeId => $_getSZ(1);
+  $core.String get envelopeId => $_getSZ(0);
   @$pb.TagNumber(2)
-  set envelopeId($core.String value) => $_setString(1, value);
+  set envelopeId($core.String value) => $_setString(0, value);
   @$pb.TagNumber(2)
-  $core.bool hasEnvelopeId() => $_has(1);
+  $core.bool hasEnvelopeId() => $_has(0);
   @$pb.TagNumber(2)
   void clearEnvelopeId() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $core.String get conversationId => $_getSZ(2);
+  $core.String get conversationId => $_getSZ(1);
   @$pb.TagNumber(3)
-  set conversationId($core.String value) => $_setString(2, value);
+  set conversationId($core.String value) => $_setString(1, value);
   @$pb.TagNumber(3)
-  $core.bool hasConversationId() => $_has(2);
+  $core.bool hasConversationId() => $_has(1);
   @$pb.TagNumber(3)
   void clearConversationId() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $core.String get senderCidNumber => $_getSZ(3);
+  $core.String get senderCidNumber => $_getSZ(2);
   @$pb.TagNumber(4)
-  set senderCidNumber($core.String value) => $_setString(3, value);
+  set senderCidNumber($core.String value) => $_setString(2, value);
   @$pb.TagNumber(4)
-  $core.bool hasSenderCidNumber() => $_has(3);
+  $core.bool hasSenderCidNumber() => $_has(2);
   @$pb.TagNumber(4)
   void clearSenderCidNumber() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $core.String get recipientCidNumber => $_getSZ(4);
+  $core.String get recipientCidNumber => $_getSZ(3);
   @$pb.TagNumber(5)
-  set recipientCidNumber($core.String value) => $_setString(4, value);
+  set recipientCidNumber($core.String value) => $_setString(3, value);
   @$pb.TagNumber(5)
-  $core.bool hasRecipientCidNumber() => $_has(4);
+  $core.bool hasRecipientCidNumber() => $_has(3);
   @$pb.TagNumber(5)
   void clearRecipientCidNumber() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $core.String get senderDeviceId => $_getSZ(5);
+  $core.String get senderDeviceId => $_getSZ(4);
   @$pb.TagNumber(6)
-  set senderDeviceId($core.String value) => $_setString(5, value);
+  set senderDeviceId($core.String value) => $_setString(4, value);
   @$pb.TagNumber(6)
-  $core.bool hasSenderDeviceId() => $_has(5);
+  $core.bool hasSenderDeviceId() => $_has(4);
   @$pb.TagNumber(6)
   void clearSenderDeviceId() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $core.List<$core.int> get mlsWireMessage => $_getN(6);
+  $core.List<$core.int> get mlsWireMessage => $_getN(5);
   @$pb.TagNumber(7)
-  set mlsWireMessage($core.List<$core.int> value) => $_setBytes(6, value);
+  set mlsWireMessage($core.List<$core.int> value) => $_setBytes(5, value);
   @$pb.TagNumber(7)
-  $core.bool hasMlsWireMessage() => $_has(6);
+  $core.bool hasMlsWireMessage() => $_has(5);
   @$pb.TagNumber(7)
   void clearMlsWireMessage() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $core.List<$core.int> get encryptedMetadata => $_getN(7);
+  $core.List<$core.int> get encryptedMetadata => $_getN(6);
   @$pb.TagNumber(8)
-  set encryptedMetadata($core.List<$core.int> value) => $_setBytes(7, value);
+  set encryptedMetadata($core.List<$core.int> value) => $_setBytes(6, value);
   @$pb.TagNumber(8)
-  $core.bool hasEncryptedMetadata() => $_has(7);
+  $core.bool hasEncryptedMetadata() => $_has(6);
   @$pb.TagNumber(8)
   void clearEncryptedMetadata() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $fixnum.Int64 get createdAtMillis => $_getI64(8);
+  $fixnum.Int64 get createdAtMillis => $_getI64(7);
   @$pb.TagNumber(9)
-  set createdAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
+  set createdAtMillis($fixnum.Int64 value) => $_setInt64(7, value);
   @$pb.TagNumber(9)
-  $core.bool hasCreatedAtMillis() => $_has(8);
+  $core.bool hasCreatedAtMillis() => $_has(7);
   @$pb.TagNumber(9)
   void clearCreatedAtMillis() => $_clearField(9);
 
   @$pb.TagNumber(10)
-  $fixnum.Int64 get ttlMillis => $_getI64(9);
+  $fixnum.Int64 get ttlMillis => $_getI64(8);
   @$pb.TagNumber(10)
-  set ttlMillis($fixnum.Int64 value) => $_setInt64(9, value);
+  set ttlMillis($fixnum.Int64 value) => $_setInt64(8, value);
   @$pb.TagNumber(10)
-  $core.bool hasTtlMillis() => $_has(9);
+  $core.bool hasTtlMillis() => $_has(8);
   @$pb.TagNumber(10)
   void clearTtlMillis() => $_clearField(10);
 
   @$pb.TagNumber(11)
-  MlsWireMessageKind get mlsMessageKind => $_getN(10);
+  MlsWireMessageKind get mlsMessageKind => $_getN(9);
   @$pb.TagNumber(11)
   set mlsMessageKind(MlsWireMessageKind value) => $_setField(11, value);
   @$pb.TagNumber(11)
-  $core.bool hasMlsMessageKind() => $_has(10);
+  $core.bool hasMlsMessageKind() => $_has(9);
   @$pb.TagNumber(11)
   void clearMlsMessageKind() => $_clearField(11);
 
   @$pb.TagNumber(12)
-  $core.List<$core.int> get ratchetTree => $_getN(11);
+  $core.List<$core.int> get ratchetTree => $_getN(10);
   @$pb.TagNumber(12)
-  set ratchetTree($core.List<$core.int> value) => $_setBytes(11, value);
+  set ratchetTree($core.List<$core.int> value) => $_setBytes(10, value);
   @$pb.TagNumber(12)
-  $core.bool hasRatchetTree() => $_has(11);
+  $core.bool hasRatchetTree() => $_has(10);
   @$pb.TagNumber(12)
   void clearRatchetTree() => $_clearField(12);
 }
 
 class ChatKeyPackage extends $pb.GeneratedMessage {
   factory ChatKeyPackage({
-    $core.int? protocolVersion,
     $core.String? cidNumber,
     $core.String? deviceId,
     $core.String? devicePublicKey,
@@ -384,7 +357,6 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
     $fixnum.Int64? expiresAtMillis,
   }) {
     final result = create();
-    if (protocolVersion != null) result.protocolVersion = protocolVersion;
     if (cidNumber != null) result.cidNumber = cidNumber;
     if (deviceId != null) result.deviceId = deviceId;
     if (devicePublicKey != null) result.devicePublicKey = devicePublicKey;
@@ -407,10 +379,8 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ChatKeyPackage',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat'),
       createEmptyInstance: create)
-    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
-        fieldType: $pb.PbFieldType.OU3)
     ..aOS(2, _omitFieldNames ? '' : 'cidNumber')
     ..aOS(3, _omitFieldNames ? '' : 'deviceId')
     ..aOS(4, _omitFieldNames ? '' : 'devicePublicKey')
@@ -445,84 +415,75 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<ChatKeyPackage>(create);
   static ChatKeyPackage? _defaultInstance;
 
-  @$pb.TagNumber(1)
-  $core.int get protocolVersion => $_getIZ(0);
-  @$pb.TagNumber(1)
-  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
-  @$pb.TagNumber(1)
-  $core.bool hasProtocolVersion() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearProtocolVersion() => $_clearField(1);
-
   @$pb.TagNumber(2)
-  $core.String get cidNumber => $_getSZ(1);
+  $core.String get cidNumber => $_getSZ(0);
   @$pb.TagNumber(2)
-  set cidNumber($core.String value) => $_setString(1, value);
+  set cidNumber($core.String value) => $_setString(0, value);
   @$pb.TagNumber(2)
-  $core.bool hasCidNumber() => $_has(1);
+  $core.bool hasCidNumber() => $_has(0);
   @$pb.TagNumber(2)
   void clearCidNumber() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $core.String get deviceId => $_getSZ(2);
+  $core.String get deviceId => $_getSZ(1);
   @$pb.TagNumber(3)
-  set deviceId($core.String value) => $_setString(2, value);
+  set deviceId($core.String value) => $_setString(1, value);
   @$pb.TagNumber(3)
-  $core.bool hasDeviceId() => $_has(2);
+  $core.bool hasDeviceId() => $_has(1);
   @$pb.TagNumber(3)
   void clearDeviceId() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $core.String get devicePublicKey => $_getSZ(3);
+  $core.String get devicePublicKey => $_getSZ(2);
   @$pb.TagNumber(4)
-  set devicePublicKey($core.String value) => $_setString(3, value);
+  set devicePublicKey($core.String value) => $_setString(2, value);
   @$pb.TagNumber(4)
-  $core.bool hasDevicePublicKey() => $_has(3);
+  $core.bool hasDevicePublicKey() => $_has(2);
   @$pb.TagNumber(4)
   void clearDevicePublicKey() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $core.String get keyPackageId => $_getSZ(4);
+  $core.String get keyPackageId => $_getSZ(3);
   @$pb.TagNumber(5)
-  set keyPackageId($core.String value) => $_setString(4, value);
+  set keyPackageId($core.String value) => $_setString(3, value);
   @$pb.TagNumber(5)
-  $core.bool hasKeyPackageId() => $_has(4);
+  $core.bool hasKeyPackageId() => $_has(3);
   @$pb.TagNumber(5)
   void clearKeyPackageId() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $core.List<$core.int> get keyPackage => $_getN(5);
+  $core.List<$core.int> get keyPackage => $_getN(4);
   @$pb.TagNumber(6)
-  set keyPackage($core.List<$core.int> value) => $_setBytes(5, value);
+  set keyPackage($core.List<$core.int> value) => $_setBytes(4, value);
   @$pb.TagNumber(6)
-  $core.bool hasKeyPackage() => $_has(5);
+  $core.bool hasKeyPackage() => $_has(4);
   @$pb.TagNumber(6)
   void clearKeyPackage() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $core.String get cipherSuite => $_getSZ(6);
+  $core.String get cipherSuite => $_getSZ(5);
   @$pb.TagNumber(7)
-  set cipherSuite($core.String value) => $_setString(6, value);
+  set cipherSuite($core.String value) => $_setString(5, value);
   @$pb.TagNumber(7)
-  $core.bool hasCipherSuite() => $_has(6);
+  $core.bool hasCipherSuite() => $_has(5);
   @$pb.TagNumber(7)
   void clearCipherSuite() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $fixnum.Int64 get createdAtMillis => $_getI64(7);
+  $fixnum.Int64 get createdAtMillis => $_getI64(6);
   @$pb.TagNumber(8)
-  set createdAtMillis($fixnum.Int64 value) => $_setInt64(7, value);
+  set createdAtMillis($fixnum.Int64 value) => $_setInt64(6, value);
   @$pb.TagNumber(8)
-  $core.bool hasCreatedAtMillis() => $_has(7);
+  $core.bool hasCreatedAtMillis() => $_has(6);
   @$pb.TagNumber(8)
   void clearCreatedAtMillis() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $fixnum.Int64 get expiresAtMillis => $_getI64(8);
+  $fixnum.Int64 get expiresAtMillis => $_getI64(7);
   @$pb.TagNumber(9)
-  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
+  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(7, value);
   @$pb.TagNumber(9)
-  $core.bool hasExpiresAtMillis() => $_has(8);
+  $core.bool hasExpiresAtMillis() => $_has(7);
   @$pb.TagNumber(9)
   void clearExpiresAtMillis() => $_clearField(9);
 }
@@ -561,7 +522,7 @@ class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'PublishChatKeyPackageRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'cidNumber')
     ..aOS(2, _omitFieldNames ? '' : 'deviceId')
@@ -698,7 +659,7 @@ class FetchChatKeyPackagesRequest extends $pb.GeneratedMessage {
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'FetchChatKeyPackagesRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'cidNumber')
     ..aOS(2, _omitFieldNames ? '' : 'requesterCidNumber')
@@ -780,7 +741,7 @@ class ConsumeChatKeyPackageRequest extends $pb.GeneratedMessage {
 
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
       _omitMessageNames ? '' : 'ConsumeChatKeyPackageRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'cidNumber')
     ..aOS(2, _omitFieldNames ? '' : 'keyPackageId')

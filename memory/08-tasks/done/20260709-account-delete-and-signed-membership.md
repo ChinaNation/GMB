@@ -85,9 +85,9 @@
 - **本地清扫遗留（小follow-up，非阻断）**：Chat 附件缓存目录 + Chat 设备绑定 prefs 缓存键(`_deviceBindingCacheKey`,私有于 chat_runtime)未清——均为可再生本地缓存,服务端 A 的 Chat 数据已由 Worker purge 删除;私信明文历史(Isar)已清。
 
 ### 待办：签名协议归位（用户提出，阻塞前必须定）
-- 用户质疑 `GMB_SQUARE_ACTION_V1`。事实：Worker 的广场 BFF 会话鉴权本来就是一套**独立于链上 signing_message/op_tag 的 raw-string 家族**——已存在 `GMB_SQUARE_LOGIN_V1`(登录) + `GMB_SQUARE_DEVICE_BIND_V1`(设备绑定)，`verifyWalletSignature` 直接 `signatureVerify(原文)`。我加的 `GMB_SQUARE_ACTION_V1`(注销/取消) 与这俩同族，非凭空造。
+- 广场 BFF 曾使用独立 raw-string 签名家族；该路线随后已删除，登录、设备绑定和账户动作全部统一到 `signing_message(op_tag)`。
 - 但 `lib/signer/signing.dart` 的单源纪律写死「禁止写 `GMB_*_V1` 字符串域，一律走 `signingMessage(op_tag)=blake2_256(GMB‖op_tag‖scale)`」(canonical=citizenchain primitives::sign)。官网无私钥→需 App 扫码签名回传，走的是 `CITIZEN_QR_V1` 冷签信封；冷签路径签的是 signing_message/op_tag，raw 字符串未必能搭现成 QR 通道。
-- **workflow 综合（signing-landscape-map，四面已核实）**：全仓签名共三层——① `signing_message(op_tag)=blake2_256(GMB‖op_tag‖SCALE)`（citizenchain primitives::sign 单源，op_tag 0x10-0x1A 占，**空闲 0x11/0x12/0x1B-0x1F**）② `QR_V1` 冷签**信封**（传输壳，非被签内容）③ Square-BFF 原始字符串族 `GMB_SQUARE_LOGIN_V1`/`DEVICE_BIND_V1`/`ACTION_V1`（Worker 验，永不上链）。
+- **workflow 综合（signing-landscape-map，四面已核实）**：全仓签名统一为 `signing_message(op_tag)=blake2_256(GMB‖op_tag‖SCALE)`，`QR_V1` 只作为冷签传输信封，不是第二套被签内容。
 - **关键先例**：op_tag 表里**已有一个"Worker 验签、永不上链"的 op_tag = Chat 钱包绑定 0x1A**（cloudflare/src/chat/binding.ts 里就是 `blake2_256(GMB‖0x1A‖SCALE)`，进了 golden vectors）。→ "广场后端动作用统一 op_tag"有现成范式，非语义污染。
 - **官网硬约束**：citizenweb 现为 address-only（Membership.tsx 只 POST 明文，jsqr 解码+base58 正则取地址，无签名库）。官网无私钥→必须 App 扫码签；App QR 冷签只认 op_tag（0x10/0x1A）与链交易，**不该签 raw 字符串**（signing.dart:15-16 禁手拼 GMB_*_V1）。→ 只有 op_tag 路线能让官网扫码往返成立。
 - **用户已拍板 B + 加码：统一全部走 op_tag，删除所有 GMB_*_V1 字符串域，规则钉死**（见 [[feedback_unified_signing_optag_only]]）。
@@ -121,7 +121,7 @@ payload 编码照 0x1A：SCALE_string(文本) ++ u64_le(时间戳)。挑战/绑�
 ### 签名动作基座（防跨动作重放）
 - `cloudflare/src/account/action_challenge.ts`（新）
   - `SignedAction = 'delete_account' | 'cancel_membership'`。
-  - `buildActionPayload` = `GMB_SQUARE_ACTION_V1\naction:<x>\nowner_account:<ss58>\nchallenge_id:<id>\nexpires_at:<ms>`；**action 行入 payload** → A 动作的签名不能用于 B 动作。
+  - 账户动作使用独立 `op_tag` 和规范 SCALE payload；动作字段进入 payload，A 动作的签名不能用于 B 动作。
   - `issueActionChallenge` 复用 `square_login_challenges` 表落挑战；
     `consumeActionSignature` 校验 CID、签名 `account_id`、未用、未过期及 payload 动作一致，
     再执行 sr25519 验签并原子标记 `used_at`。

@@ -105,7 +105,6 @@ finalized 新绑定驱动：先激活新账户派生上下文和新钱包设备�
 `ChatEnvelope` 只保留：
 
 ```text
-protocol_version
 envelope_id
 conversation_id
 sender_cid_number
@@ -129,7 +128,7 @@ ratchet_tree
   "pack_id":"fluent3d","sticker_id":"grinning_face" }  // sticker
 ```
 
-- 收端按 `kind` 确定类型；任何非本协议或坏数据都退化为纯文本、绝不抛错，修掉了早期“内容恰好是 JSON 的文本被误判为附件”的隐患（取代旧的 `gmb_chat_attachment_v2` 启发式）。
+- 收端按 `kind` 确定类型；任何非本协议或坏数据都退化为纯文本、绝不抛错，修掉了早期“内容恰好是 JSON 的文本被误判为附件”的隐患。
 - `image/video/file` 的字节走 WebRTC，以 `attachment_id` 关联；控制消息只带元数据。`sticker` 只承载内置贴纸包 `pack_id + sticker_id`，不传任何字节，本地资源渲染（素材定稿 Microsoft Fluent Emoji 3D，MIT）。
 - 媒体字节与贴纸美术都不进入 `ChatEnvelope`，也不进入任何 Cloudflare 存储。媒体控制元数据随消息保存在本机 `ChatMessageEntity.plaintext`，不改动 Isar schema。
 

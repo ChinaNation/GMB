@@ -46,11 +46,11 @@ fn compact_values() -> Vec<u32> {
     vec![
         0,
         1,
-        63,          // 1 字节上界
-        64,          // 2 字节下界
+        63, // 1 字节上界
+        64, // 2 字节下界
         255,
-        16_383,      // 2 字节上界
-        16_384,      // 4 字节下界
+        16_383, // 2 字节上界
+        16_384, // 4 字节下界
         65_535,
         (1u32 << 30) - 1, // 4 字节上界(各端手写实现的支持上限)
     ]
@@ -61,10 +61,10 @@ fn string_values() -> Vec<String> {
     vec![
         String::new(),
         "a".to_string(),
-        "x".repeat(63), // 长度前缀 1 字节上界
-        "x".repeat(64), // 长度前缀 2 字节下界
-        "中华民族联邦共和国".to_string(), // 每字符 3 字节
-        "公民🇨🇳链".to_string(),          // 含 4 字节 emoji 与区域指示符
+        "x".repeat(63),                           // 长度前缀 1 字节上界
+        "x".repeat(64),                           // 长度前缀 2 字节下界
+        "中华民族联邦共和国".to_string(),         // 每字符 3 字节
+        "公民🧪链".to_string(),                   // 含 4 字节中性 Unicode 码点
         "CN220-CTZN2-198805200-2026".to_string(), // 真实 CID 形态
     ]
 }
@@ -116,7 +116,11 @@ fn compute_vectors() -> (
         .map(|value| {
             // SCALE 对 u64 的 Encode 就是小端 8 字节,与各端 u64Le 同构。
             let encoded = value.encode();
-            assert_eq!(encoded, value.to_le_bytes(), "u64 SCALE 编码应为小端 8 字节");
+            assert_eq!(
+                encoded,
+                value.to_le_bytes(),
+                "u64 SCALE 编码应为小端 8 字节"
+            );
             serde_json::json!({
                 "value": value,
                 "hex": hex_encode(&encoded),

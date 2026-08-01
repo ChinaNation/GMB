@@ -13,8 +13,12 @@ vi.mock('../src/chain/identity', () => ({
 }));
 import { buildChatDeviceBindingMessageBase64Url } from '../src/chat/binding';
 import { assertDevicePublicKeyHex, base64UrlToBytes, bytesToBase64Url } from '../src/chat/codec';
-import { openChatWebSocket, submitChatEnvelope } from '../src/chat/service';
-import { relayChatPayload } from '../src/chat/realtime';
+import { openChatWebSocket, submitChatEnvelope, submitChatSignal } from '../src/chat/service';
+import {
+  CHAT_WS_PONG_TYPE,
+  CHAT_WS_READY_TYPE,
+  relayChatPayload,
+} from '../src/chat/realtime';
 import type { Env, SessionState } from '../src/types';
 
 // 会话绑定钱包账户(设备所有者/绑定签名主体);仍是 64-hex account_id。
@@ -72,7 +76,7 @@ class SessionKv {
   }
 }
 
-function fakeEnv(sent = 1): Env {
+function fakeEnv(sent = 1, onRelay?: (payload: unknown) => void): Env {
   return {
     DB: { prepare: (sql: string) => new ChatStmt(sql) } as unknown as D1Database,
     SQUARE_CACHE: new SessionKv() as unknown as KVNamespace,
@@ -80,6 +84,7 @@ function fakeEnv(sent = 1): Env {
       getByName: () => ({
         fetch: async (request: Request) => {
           if (new URL(request.url).pathname === '/__relay') {
+            onRelay?.(await request.json());
             return Response.json({ ok: true, sent });
           }
           return Response.json({ ok: true, routed: true });
@@ -114,7 +119,10 @@ describe('device-only Chat transport', () => {
   });
 
   it('relays encrypted envelopes without a storage write', async () => {
-    const env = fakeEnv(1);
+    let relayPayload: unknown;
+    const env = fakeEnv(1, (payload) => {
+      relayPayload = payload;
+    });
     const response = await submitChatEnvelope(
       new Request('https://worker.test/v1/chat/envelopes', {
         method: 'POST',
@@ -131,6 +139,44 @@ describe('device-only Chat transport', () => {
     const json = (await response.json()) as { delivery_state: string; recipient_connections: number };
     expect(json.delivery_state).toBe('sent');
     expect(json.recipient_connections).toBe(1);
+    expect(relayPayload).toMatchObject({
+      type: 'gmb_chat_envelope',
+      sender_cid_number: SENDER_CID,
+      recipient_cid_number: RECIPIENT_CID,
+    });
+  });
+
+  it('relays WebRTC signals with the unversioned message type', async () => {
+    let relayPayload: unknown;
+    const response = await submitChatSignal(
+      new Request('https://worker.test/v1/chat/signals', {
+        method: 'POST',
+        headers: { authorization: 'Bearer test-session', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sender_device_id: 'alice-phone',
+          recipient_cid_number: RECIPIENT_CID,
+          signal: { kind: 'offer' },
+        }),
+      }),
+      fakeEnv(1, (payload) => {
+        relayPayload = payload;
+      }),
+    );
+
+    expect((await response.json()) as { delivery_state: string }).toMatchObject({
+      delivery_state: 'sent',
+    });
+    expect(relayPayload).toMatchObject({
+      type: 'gmb_chat_signal',
+      sender_cid_number: SENDER_CID,
+      recipient_cid_number: RECIPIENT_CID,
+      signal: { kind: 'offer' },
+    });
+  });
+
+  it('locks the unversioned WebSocket control message types', () => {
+    expect(CHAT_WS_READY_TYPE).toBe('gmb_chat_ws_ready');
+    expect(CHAT_WS_PONG_TYPE).toBe('gmb_chat_ws_pong');
   });
 
   it('keeps delivery queued when the recipient device is unavailable', async () => {
@@ -175,7 +221,7 @@ describe('device-only Chat transport', () => {
       },
     } as unknown as DurableObjectNamespace;
     const sent = await relayChatPayload(env, {
-      type: 'gmb_chat_envelope_v2',
+      type: 'gmb_chat_envelope',
       sender_cid_number: SENDER_CID,
       recipient_cid_number: RECIPIENT_CID,
       recipient_device_id: null,

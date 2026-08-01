@@ -15,15 +15,15 @@
 
 ## 背景（问题）
 
-仓库签名协议**两套范式并存 + 字符串域散落重复**：
+仓库签名协议历史上曾经**两套范式并存 + 字符串域散落重复**：
 - 范式 A（已统一）：`GMB`(3B) + 1 字节 op_tag 子命名空间。账户派生 0x00-0x06 + 身份/治理签名 `OP_SIGN_*` 0x10-0x14，集中在 primitives。
-- 范式 B（散落）：7 个独立 `b"GMB_<NAME>_V1"` 字符串域，各自在 feature 模块本地定义 + 跨 runtime/node/backend/dart 重复 2-5 份，primitives 零集中定义：
+- 范式 B（已删除）：多个独立版本化字符串域曾在 feature 模块本地定义，并跨 runtime/node/backend/dart 重复 2-5 份，primitives 没有集中定义：
 
 | 字符串域 | 用途 | 重复处 |
 |---|---|---|
-| GMB_L3_PAY_V1 | L3 支付 | runtime batch_item + node ledger + dart×2 + test（5） |
-| GMB_OFFCHAIN_BATCH_V1 | 批次结算 | runtime batch_item + node packer + node signer（3） |
-| GMB_L2_ACK_V1 | L2 确认 | node rpc（1） |
+| 旧 L3 支付字符串域 | L3 支付 | runtime batch_item + node ledger + dart×2 + test（5） |
+| 旧批次结算字符串域 | 批次结算 | runtime batch_item + node packer + node signer（3） |
+| 旧 L2 确认字符串域 | L2 确认 | node rpc（1） |
 | GMB \|\| 0x18 | 管理员激活 | node activation + dart + 冷钱包 + test（4） |
 | GMB \|\| 0x19 | 解密授权 | node admin_unlock + 冷钱包 + test（3） |
 | Chat 节点配对 body schema | Chat 节点配对 | node + dart（2） |
@@ -50,11 +50,12 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
 }
 ```
 - 治理 5 个（0x10-0x14）改调 `signing_message(OP_SIGN_X, (fields).encode())`：**逐字节不变 → 签名不变**。
-- 7 个字符串域改 op_tag：`blake2_256(b"GMB_L3_PAY_V1" || SCALE)` → `signing_message(OP_SIGN_L3_PAY, SCALE)`，**签名字节变**（域前缀 13B→4B），结构归一。
+- 历史字符串域全部改为 op_tag：例如 L3 支付统一为 `signing_message(OP_SIGN_L3_PAY, SCALE)`，结构归一。
 
-### op_tag 注册表（签名段 0x10-0x1F，单一真源 primitives::sign）
-0x10 BIND / 0x11 VOTE / 0x12 POP / 0x13 INST / 0x14 DEREGISTER（不变）
+### op_tag 注册表（签名段 0x10-0x1F，单一真源 `primitives::sign`）
+0x10 CITIZEN_IDENTITY / 0x11 CID_REBIND / 0x12 CID_OCCUPY / 0x13 INST / 0x14 DEREGISTER
 0x15 L3_PAY / 0x16 OFFCHAIN_BATCH / 0x17 L2_ACK / 0x18 ACTIVATE_ADMIN / 0x19 DECRYPT / 0x1A CHAT_DEVICE_BIND
+0x1B SQUARE_LOGIN / 0x1C SQUARE_DEVICE_BIND / 0x1D SQUARE_ACTION / 0x1E GRANDPA_KEY_CHANGE / 0x1F CID_ADMIN_REBIND
 
 ### 单源纪律
 - `primitives::sign` 持 `signing_message` + 全部 `OP_SIGN_*`；Chat 设备绑定只保留 `OP_SIGN_CHAT_DEVICE_BIND`，不得恢复 QR 动作或钱包主私钥验签。

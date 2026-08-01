@@ -12,6 +12,7 @@ import 'package:http/testing.dart';
 /// CID 是 MLS 名册与投递的唯一身份键；当前账户只建立绑定会话。
 const _bobAccountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
+const _aliceCidNumber = 'CN220-CTZN2-100000001-2026';
 const _bobCidNumber = 'CN220-CTZN2-100000002-2026';
 
 void main() {
@@ -149,12 +150,10 @@ ChatCloudTransport _transport(
 }
 
 ChatEnvelope _sampleEnvelope() => ChatEnvelope(
-      protocolVersion: 1,
       envelopeId: 'env-1',
       conversationId: 'dm:alice:bob',
-      senderCidNumber:
-          '0x1111111111111111111111111111111111111111111111111111111111111111',
-      recipientCidNumber: _bobAccountId,
+      senderCidNumber: _aliceCidNumber,
+      recipientCidNumber: _bobCidNumber,
       senderDeviceId: 'alice-phone',
       mlsWireMessage: [1, 2, 3],
       createdAtMillis: Int64(1),
@@ -162,7 +161,7 @@ ChatEnvelope _sampleEnvelope() => ChatEnvelope(
       mlsMessageKind: MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION,
     );
 
-/// Worker 真实响应形状：同时下发 MLS 名册身份 account_id 与寻址主键 cid_number。
+/// Worker 真实响应形状：CID 是 MLS 名册身份，account_id 只是当前绑定元数据。
 Map<String, dynamic> _keyPackageJson() => {
       'account_id': _bobAccountId,
       'cid_number': _bobCidNumber,

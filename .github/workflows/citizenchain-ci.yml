@@ -111,7 +111,6 @@ jobs:
 
   guardrails:
     name: 文档、残留与 pallet 注册表门禁
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取完整变更历史
@@ -121,8 +120,19 @@ jobs:
 
       - name: 检查文档更新与残留清理
         env:
-          BASE_REF: origin/${{ github.base_ref }}
-        run: ./.github/scripts/check-ai-guardrails.sh
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.base_ref }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base_ref="origin/${PR_BASE_REF}"
+          elif [ "$EVENT_NAME" = "push" ] && [[ "$PUSH_BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ ! "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
+            base_ref="$PUSH_BEFORE_SHA"
+          else
+            base_ref="HEAD^"
+          fi
+          BASE_REF="$base_ref" ./.github/scripts/check-ai-guardrails.sh
 
       - name: 校验 pallet 注册表与链上一致
         run: node .github/scripts/check-pallet-registry-sync.mjs

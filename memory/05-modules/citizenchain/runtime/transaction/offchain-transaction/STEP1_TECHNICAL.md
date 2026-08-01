@@ -86,8 +86,8 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
     pub expires_at: BlockNumber,
 }
 
-// 签名消息 = blake2_256("GMB_L3_PAY_V1" || SCALE(intent))
-pub const L3_PAY_SIGNING_DOMAIN: &[u8] = b"GMB_L3_PAY_V1";
+// 签名消息 = signing_message(OP_SIGN_L3_PAY, SCALE(intent))
+pub use primitives::sign::OP_SIGN_L3_PAY;
 ```
 
 citizenapp(Dart 端)必须逐字节对齐 `L3_PAY_SIGNING_DOMAIN` 与 SCALE 编码顺序,否则链上验签失败。

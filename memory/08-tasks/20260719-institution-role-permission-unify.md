@@ -100,7 +100,7 @@
 - runtime 共享类型已落在 `entity-primitives`，`VotePlan`、`VotingEngineKind` 与构造期主体组合校验已落在共享 `votingengine` crate；未写入现有提案 storage，未改变 pallet/call/storage index。
 - `RolePermissionOperation`、`AuthorizationSubject`、`VotingEngineKind` 的 discriminant 和所有结构字段序均由 Rust 单测锁定。
 - Node 使用共享 Rust 类型读取统一金标；OnChina、CitizenApp、CitizenWallet 对同一金标严格解码。CitizenApp 与 CitizenWallet 拒绝非法主体组合和尾随字段。
-- 唯一跨端金标为 `memory/06-quality/fixtures/institution_role_permission_v1.json`，不建立端侧私有协议副本。
+- 唯一跨端金标为受保护测试资产 `memory/06-quality/fixtures/institution_role_permission_v1.json`，不建立端侧私有协议副本。
 - 验收通过：`entity-primitives` 6 项、`votingengine` 4 项、Node fixture 1 项、OnChina fixture 1 项；两个共享 crate 的 `no_std` 检查通过；CitizenApp 6 项、CitizenWallet 97 项目标测试全部通过，目标 Dart 文件 analyze 无问题。
 - 本步骤目标 crate 在仅屏蔽既存 lint（`too_many_arguments`、`unnecessary_lazy_evaluations`、`manual_is_multiple_of`、`type_complexity`）后通过 `clippy -D warnings`；不屏蔽时还会被既存 `primitives` 数字分组等 45 项和上述既存 lint 拦截，本步骤未越界修改这些旧文件。
 - `citizenchain/Cargo.lock` 仅为 `votingengine` 增加已确认的 `entity-primitives` 依赖；Square Post 的既有未提交依赖改动保持不动。

@@ -112,7 +112,7 @@ UI(ready):
        nonce,
        expires_at = currentBlockNumber + 100,        // ~10 分钟缓冲
      }
-  7. digest = blake2b_256("GMB_L3_PAY_V1" ++ scaleEncode(intent))
+  7. digest = signingMessage(OP_SIGN_L3_PAY, scaleEncode(intent))
   8. WalletManager.authenticateForSigning()
        + signWithWalletNoAuth(walletIndex, digest)  → 64B sig
   9. node.submitPayment(intentHex, sigHex) → { tx_id, l2_ack_sig, accepted_at }
@@ -138,9 +138,8 @@ UI(ready):
 [200..204) expires_at     u32  little-endian
 ```
 
-签名域:`b"GMB_L3_PAY_V1"`(13 字节 ASCII,`payment_intent.dart::signingDomain`
-常量与 runtime `offchain_transaction::batch_item::L3_PAY_SIGNING_DOMAIN`
-一致)。
+签名消息统一调用 `signingMessage(OP_SIGN_L3_PAY, scaleEncode(intent))`，
+`OP_SIGN_L3_PAY` 与 runtime `primitives::sign` 注册值一致。
 
 **若 runtime 侧新增/删除 `NodePaymentIntent` 字段**:必须同改 node `ledger.rs`、
 Dart `payment_intent.dart` 布局注释 + 长度 assert 常量、本文档第 4 节表格。

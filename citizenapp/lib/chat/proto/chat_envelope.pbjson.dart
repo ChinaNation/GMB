@@ -35,7 +35,6 @@ final $typed_data.Uint8List mlsWireMessageKindDescriptor = $convert.base64Decode
 const ChatRoute$json = {
   '1': 'ChatRoute',
   '2': [
-    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
     {'1': 'peer_cid_number', '3': 2, '4': 1, '5': 9, '10': 'peerCidNumber'},
     {
       '1': 'route_display_name',
@@ -51,23 +50,25 @@ const ChatRoute$json = {
     {'1': 'created_at_millis', '3': 8, '4': 1, '5': 4, '10': 'createdAtMillis'},
     {'1': 'expires_at_millis', '3': 9, '4': 1, '5': 4, '10': 'expiresAtMillis'},
   ],
+  '9': [
+    {'1': 1, '2': 2},
+  ],
 };
 
 /// Descriptor for `ChatRoute`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List chatRouteDescriptor = $convert.base64Decode(
-    'CglDaGF0Um91dGUSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEi'
-    'YKD3BlZXJfY2lkX251bWJlchgCIAEoCVINcGVlckNpZE51bWJlchIsChJyb3V0ZV9kaXNwbGF5'
-    'X25hbWUYAyABKAlSEHJvdXRlRGlzcGxheU5hbWUSGwoJZGV2aWNlX2lkGAQgASgJUghkZXZpY2'
-    'VJZBIqChFkZXZpY2VfcHVibGljX2tleRgFIAEoCVIPZGV2aWNlUHVibGljS2V5EiMKDXNhZmV0'
-    'eV9udW1iZXIYBiABKAlSDHNhZmV0eU51bWJlchIoChBuZWFyYnlfcGVlcl9oaW50GAcgASgJUg'
-    '5uZWFyYnlQZWVySGludBIqChFjcmVhdGVkX2F0X21pbGxpcxgIIAEoBFIPY3JlYXRlZEF0TWls'
-    'bGlzEioKEWV4cGlyZXNfYXRfbWlsbGlzGAkgASgEUg9leHBpcmVzQXRNaWxsaXM=');
+    'CglDaGF0Um91dGUSJgoPcGVlcl9jaWRfbnVtYmVyGAIgASgJUg1wZWVyQ2lkTnVtYmVyEiwKEn'
+    'JvdXRlX2Rpc3BsYXlfbmFtZRgDIAEoCVIQcm91dGVEaXNwbGF5TmFtZRIbCglkZXZpY2VfaWQY'
+    'BCABKAlSCGRldmljZUlkEioKEWRldmljZV9wdWJsaWNfa2V5GAUgASgJUg9kZXZpY2VQdWJsaW'
+    'NLZXkSIwoNc2FmZXR5X251bWJlchgGIAEoCVIMc2FmZXR5TnVtYmVyEigKEG5lYXJieV9wZWVy'
+    'X2hpbnQYByABKAlSDm5lYXJieVBlZXJIaW50EioKEWNyZWF0ZWRfYXRfbWlsbGlzGAggASgEUg'
+    '9jcmVhdGVkQXRNaWxsaXMSKgoRZXhwaXJlc19hdF9taWxsaXMYCSABKARSD2V4cGlyZXNBdE1p'
+    'bGxpc0oECAEQAg==');
 
 @$core.Deprecated('Use chatEnvelopeDescriptor instead')
 const ChatEnvelope$json = {
   '1': 'ChatEnvelope',
   '2': [
-    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
     {'1': 'envelope_id', '3': 2, '4': 1, '5': 9, '10': 'envelopeId'},
     {'1': 'conversation_id', '3': 3, '4': 1, '5': 9, '10': 'conversationId'},
     {'1': 'sender_cid_number', '3': 4, '4': 1, '5': 9, '10': 'senderCidNumber'},
@@ -94,31 +95,33 @@ const ChatEnvelope$json = {
       '3': 11,
       '4': 1,
       '5': 14,
-      '6': '.gmb.chat.v1.MlsWireMessageKind',
+      '6': '.gmb.chat.MlsWireMessageKind',
       '10': 'mlsMessageKind'
     },
     {'1': 'ratchet_tree', '3': 12, '4': 1, '5': 12, '10': 'ratchetTree'},
+  ],
+  '9': [
+    {'1': 1, '2': 2},
   ],
 };
 
 /// Descriptor for `ChatEnvelope`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List chatEnvelopeDescriptor = $convert.base64Decode(
-    'CgxDaGF0RW52ZWxvcGUSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW'
-    '9uEh8KC2VudmVsb3BlX2lkGAIgASgJUgplbnZlbG9wZUlkEicKD2NvbnZlcnNhdGlvbl9pZBgD'
-    'IAEoCVIOY29udmVyc2F0aW9uSWQSKgoRc2VuZGVyX2NpZF9udW1iZXIYBCABKAlSD3NlbmRlck'
-    'NpZE51bWJlchIwChRyZWNpcGllbnRfY2lkX251bWJlchgFIAEoCVIScmVjaXBpZW50Q2lkTnVt'
-    'YmVyEigKEHNlbmRlcl9kZXZpY2VfaWQYBiABKAlSDnNlbmRlckRldmljZUlkEigKEG1sc193aX'
-    'JlX21lc3NhZ2UYByABKAxSDm1sc1dpcmVNZXNzYWdlEi0KEmVuY3J5cHRlZF9tZXRhZGF0YRgI'
-    'IAEoDFIRZW5jcnlwdGVkTWV0YWRhdGESKgoRY3JlYXRlZF9hdF9taWxsaXMYCSABKARSD2NyZW'
-    'F0ZWRBdE1pbGxpcxIdCgp0dGxfbWlsbGlzGAogASgEUgl0dGxNaWxsaXMSSQoQbWxzX21lc3Nh'
-    'Z2Vfa2luZBgLIAEoDjIfLmdtYi5jaGF0LnYxLk1sc1dpcmVNZXNzYWdlS2luZFIObWxzTWVzc2'
-    'FnZUtpbmQSIQoMcmF0Y2hldF90cmVlGAwgASgMUgtyYXRjaGV0VHJlZQ==');
+    'CgxDaGF0RW52ZWxvcGUSHwoLZW52ZWxvcGVfaWQYAiABKAlSCmVudmVsb3BlSWQSJwoPY29udm'
+    'Vyc2F0aW9uX2lkGAMgASgJUg5jb252ZXJzYXRpb25JZBIqChFzZW5kZXJfY2lkX251bWJlchgE'
+    'IAEoCVIPc2VuZGVyQ2lkTnVtYmVyEjAKFHJlY2lwaWVudF9jaWRfbnVtYmVyGAUgASgJUhJyZW'
+    'NpcGllbnRDaWROdW1iZXISKAoQc2VuZGVyX2RldmljZV9pZBgGIAEoCVIOc2VuZGVyRGV2aWNl'
+    'SWQSKAoQbWxzX3dpcmVfbWVzc2FnZRgHIAEoDFIObWxzV2lyZU1lc3NhZ2USLQoSZW5jcnlwdG'
+    'VkX21ldGFkYXRhGAggASgMUhFlbmNyeXB0ZWRNZXRhZGF0YRIqChFjcmVhdGVkX2F0X21pbGxp'
+    'cxgJIAEoBFIPY3JlYXRlZEF0TWlsbGlzEh0KCnR0bF9taWxsaXMYCiABKARSCXR0bE1pbGxpcx'
+    'JGChBtbHNfbWVzc2FnZV9raW5kGAsgASgOMhwuZ21iLmNoYXQuTWxzV2lyZU1lc3NhZ2VLaW5k'
+    'Ug5tbHNNZXNzYWdlS2luZBIhCgxyYXRjaGV0X3RyZWUYDCABKAxSC3JhdGNoZXRUcmVlSgQIAR'
+    'AC');
 
 @$core.Deprecated('Use chatKeyPackageDescriptor instead')
 const ChatKeyPackage$json = {
   '1': 'ChatKeyPackage',
   '2': [
-    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
     {'1': 'cid_number', '3': 2, '4': 1, '5': 9, '10': 'cidNumber'},
     {'1': 'device_id', '3': 3, '4': 1, '5': 9, '10': 'deviceId'},
     {'1': 'device_public_key', '3': 4, '4': 1, '5': 9, '10': 'devicePublicKey'},
@@ -128,17 +131,19 @@ const ChatKeyPackage$json = {
     {'1': 'created_at_millis', '3': 8, '4': 1, '5': 4, '10': 'createdAtMillis'},
     {'1': 'expires_at_millis', '3': 9, '4': 1, '5': 4, '10': 'expiresAtMillis'},
   ],
+  '9': [
+    {'1': 1, '2': 2},
+  ],
 };
 
 /// Descriptor for `ChatKeyPackage`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List chatKeyPackageDescriptor = $convert.base64Decode(
-    'Cg5DaGF0S2V5UGFja2FnZRIpChBwcm90b2NvbF92ZXJzaW9uGAEgASgNUg9wcm90b2NvbFZlcn'
-    'Npb24SHQoKY2lkX251bWJlchgCIAEoCVIJY2lkTnVtYmVyEhsKCWRldmljZV9pZBgDIAEoCVII'
-    'ZGV2aWNlSWQSKgoRZGV2aWNlX3B1YmxpY19rZXkYBCABKAlSD2RldmljZVB1YmxpY0tleRIkCg'
-    '5rZXlfcGFja2FnZV9pZBgFIAEoCVIMa2V5UGFja2FnZUlkEh8KC2tleV9wYWNrYWdlGAYgASgM'
-    'UgprZXlQYWNrYWdlEiEKDGNpcGhlcl9zdWl0ZRgHIAEoCVILY2lwaGVyU3VpdGUSKgoRY3JlYX'
-    'RlZF9hdF9taWxsaXMYCCABKARSD2NyZWF0ZWRBdE1pbGxpcxIqChFleHBpcmVzX2F0X21pbGxp'
-    'cxgJIAEoBFIPZXhwaXJlc0F0TWlsbGlz');
+    'Cg5DaGF0S2V5UGFja2FnZRIdCgpjaWRfbnVtYmVyGAIgASgJUgljaWROdW1iZXISGwoJZGV2aW'
+    'NlX2lkGAMgASgJUghkZXZpY2VJZBIqChFkZXZpY2VfcHVibGljX2tleRgEIAEoCVIPZGV2aWNl'
+    'UHVibGljS2V5EiQKDmtleV9wYWNrYWdlX2lkGAUgASgJUgxrZXlQYWNrYWdlSWQSHwoLa2V5X3'
+    'BhY2thZ2UYBiABKAxSCmtleVBhY2thZ2USIQoMY2lwaGVyX3N1aXRlGAcgASgJUgtjaXBoZXJT'
+    'dWl0ZRIqChFjcmVhdGVkX2F0X21pbGxpcxgIIAEoBFIPY3JlYXRlZEF0TWlsbGlzEioKEWV4cG'
+    'lyZXNfYXRfbWlsbGlzGAkgASgEUg9leHBpcmVzQXRNaWxsaXNKBAgBEAI=');
 
 @$core.Deprecated('Use publishChatKeyPackageRequestDescriptor instead')
 const PublishChatKeyPackageRequest$json = {

@@ -3,6 +3,15 @@ set -euo pipefail
 
 base_ref="${BASE_REF:-origin/main}"
 
+# 中文注释：全仓禁止中国国旗字符；用 UTF-8 八进制构造，避免门禁源码自身成为命中项。
+forbidden_cn_flag="$(printf '\360\237\207\250\360\237\207\263')"
+forbidden_cn_flag_hits="$(git grep -n -I -F "${forbidden_cn_flag}" -- . || true)"
+if [[ -n "${forbidden_cn_flag_hits}" ]]; then
+  echo "检测到禁止使用的中国国旗字符："
+  printf '%s\n' "${forbidden_cn_flag_hits}"
+  exit 1
+fi
+
 if ! git rev-parse --verify "${base_ref}" >/dev/null 2>&1; then
   branch="${base_ref#origin/}"
   git fetch origin "${branch}" --depth=1
@@ -139,7 +148,7 @@ should_check_chinese_comment_gate() {
   esac
 
   case "$file" in
-    */test/*|*/tests/*|*.g.dart|*/GeneratedPluginRegistrant.*|citizenapp/cloudflare/worker-configuration.d.ts|citizenchain/onchina/frontend/dist/assets/*.js)
+    */test/*|*/tests/*|*.g.dart|*.pb.dart|*.pbjson.dart|*.pbenum.dart|*/GeneratedPluginRegistrant.*|citizenapp/cloudflare/worker-configuration.d.ts|citizenchain/onchina/frontend/dist/assets/*.js)
       return 1
       ;;
     *)
@@ -173,17 +182,16 @@ check_chinese_comment_gate() {
   chinese_comment_hits+=("${file}: 新增 ${added_count} 行实现，但未检测到新增中文注释")
 }
 
-# 中文注释：协议版本标识门禁。全仓唯一允许的版本化协议标识是 QR_V1；
-# 先把 QR_V1 从新增行里剔除，再看是否还剩别的 *_V1 标识符，剩下即拦截。
+# 中文注释：协议版本标识门禁。全仓自定义协议只有 QR_V1 可以带版本号；
+# 其余签名域走 signing_message(op_tag)，非签名哈希域走 MODULE_TAG。
 check_version_tag_gate() {
   local file="$1"
   local added_lines
   local offending
 
-  # 中文注释：只查代码文件。规则文档必须能点名被禁标识符（例如「禁止 GMB_ROLE_V1」），
-  # 把 Markdown 一并纳入会让规则正文自己触发门禁。
   case "$file" in
-    *.rs|*.dart|*.ts|*.tsx|*.js|*.jsx|*.swift|*.kt|*.kts|*.proto|*.sql|*.ya?ml|*.json|*.toml|*.sh|*.py) ;;
+    citizenapp/smoldotpow/*|citizenapp/cloudflare/worker-configuration.d.ts|citizenapp/assets/topup/walletconnect.bundle.js|citizenchain/onchina/frontend/dist/*|citizenchain/node/frontend/dist/*) return 0 ;;
+    *.rs|*.dart|*.ts|*.tsx|*.js|*.jsx|*.swift|*.kt|*.kts|*.proto|*.sql|*.ya?ml|*.json|*.toml|*.sh|*.py|*.md) ;;
     *) return 0 ;;
   esac
 
@@ -194,11 +202,38 @@ check_version_tag_gate() {
     return 0
   fi
 
-  offending="$(printf '%s\n' "$added_lines" | sed 's/QR_V1//g' | grep -E '[A-Za-z0-9]_V1\b' || true)"
+  offending="$(printf '%s\n' "$added_lines" \
+    | sed 's/QR_V1//g' \
+    | grep -E '([A-Za-z0-9]_V[0-9]+([^0-9]|$)|gmb([._-][a-z0-9]+)+[._-]v[0-9]+([^0-9]|$))' \
+    || true)"
 
   if [[ -n "$offending" ]]; then
-    version_tag_hits+=("${file}: 新增行出现非 QR_V1 的版本化标识（签名域走 signing_message(op_tag)，非签名哈希域用 MODULE_TAG）")
+    version_tag_hits+=("${file}: 出现非 QR_V1 的自定义版本化标识（签名域走 signing_message(op_tag)，非签名哈希域用 MODULE_TAG）")
   fi
+}
+
+# 中文注释：不仅拦新增行，还扫描全部受控真源，防止历史协议残留长期躲在文档或未改文件中。
+check_repository_version_tags() {
+  local line
+  local sanitized
+
+  while IFS= read -r line; do
+    sanitized="${line//QR_V1/}"
+    if printf '%s\n' "$sanitized" \
+      | grep -Eq '([A-Za-z0-9]_V[0-9]+([^0-9]|$)|gmb([._-][a-z0-9]+)+[._-]v[0-9]+([^0-9]|$))'; then
+      version_tag_hits+=("${line}")
+    fi
+  done < <(
+    git grep -n -I -E \
+      '[A-Za-z0-9]_V[0-9]+|gmb([._-][a-z0-9]+)+[._-]v[0-9]+' \
+      -- \
+      ':!citizenapp/smoldotpow/**' \
+      ':!citizenapp/cloudflare/worker-configuration.d.ts' \
+      ':!citizenapp/assets/topup/walletconnect.bundle.js' \
+      ':!citizenchain/onchina/frontend/dist/**' \
+      ':!citizenchain/node/frontend/dist/**' \
+      || true
+  )
 }
 
 # 中文注释：编译器抑制门禁。新增 allow(dead_code)/allow(unused...) 必须写明中文理由，
@@ -483,6 +518,8 @@ if [[ "${#changed_code_files[@]}" -gt 0 ]]; then
 fi
 
 rm -f /tmp/gmb_guardrail_hit.txt
+
+check_repository_version_tags
 
 if [[ "${#residual_hits[@]}" -gt 0 ]]; then
   echo "检测到可能未清理的开发残留："

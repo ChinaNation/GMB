@@ -46,7 +46,7 @@
 - 批次因换钥失效时，只有当前队头批次允许推进执行序号，不能跨序号跳过更早批次。
 
 ### 0.5 签名与换钥需求
-- 批次签名消息必须固定为 `blake2_256("GMB_OFFCHAIN_BATCH_V1", institution, batch_seq, batch)`。
+- 批次签名消息必须固定为 `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(institution, batch_seq, batch))`。
 - 入队和直接提交必须使用当前生效验签密钥完成验签。
 - 普通换钥必须走内部投票并延迟生效；紧急换钥必须要求至少两名管理员确认。
 - 已入队批次必须记录 `verify_key_epoch_snapshot`；当纪元落后于当前值时，批次必须作废且不得继续执行。
@@ -84,7 +84,7 @@
    - `recipient` 已绑定且绑定机构一致
 
 ## 3. 签名与验证密钥
-- 批次消息为 `blake2_256("GMB_OFFCHAIN_BATCH_V1", institution, batch_seq, batch)`。
+- 批次消息为 `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(institution, batch_seq, batch))`。
 - 入队路径必须验签（当前机构生效密钥）。
 - 出队处理路径不重复验签；依赖入队验签结果与密钥纪元机制防止旧签名继续执行。
 

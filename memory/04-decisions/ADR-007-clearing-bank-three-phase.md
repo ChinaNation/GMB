@@ -137,7 +137,7 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
   - 链上验 A 签名 → 扣 X 主账户（A 的存款方） → 本金到 Y 主账户 + fee 到 Y 费用账户
 - 同行支付：A、B 都在 X，X 自己作为收款方清算行清算；DepositBalance 内部轧差；fee 进 X 自己费用账户
 - 跨行支付：A 在 X、B 在 Y，**Y 主导**链上原子 2 次 Currency::transfer（X主→Y主 本金 + X主→Y费用 fee）+ DepositBalance 双向同步
-- 用户单笔签名：sr25519 签 PaymentIntent 的 `blake2_256("GMB_L3_PAY_V1" || SCALE(intent))`
+- 用户单笔签名：sr25519 签 `signing_message(OP_SIGN_L3_PAY, SCALE(intent))`
 - 链上 `submit_offchain_batch_v2` 整批原子（with_transaction），失败全回滚
 - 2026-04-28 补齐：批次入口必须同时满足清算行管理员 batch 签名有效、
   `batch_seq == LastClearingBatchSeq[recipient_bank] + 1`、付款/收款双方

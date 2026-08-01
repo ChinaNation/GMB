@@ -45,7 +45,7 @@ pub type TxPool =
 `signing_key: Arc<RwLock<Option<SigningKey>>>` 与 β-1 的 `KeystoreBatchSigner` 共享同一个 slot:
 
 - β-1 `sign_batch`:签**batch 内部的 `batch_signature`**。2026-04-28 起 runtime
-  已严格校验本签名,消息必须与 `GMB_OFFCHAIN_BATCH_V1 || institution || batch_seq || batch_bytes`
+  已严格校验本签名,消息必须与 `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(institution, batch_seq, batch_bytes))`
   保持逐字节一致。
 - β-2-a 外层 `SignedPayload`:签**整个 extrinsic** 的 `TxExtension + call + implicit`,构成 `UncheckedExtrinsic.signature`
 

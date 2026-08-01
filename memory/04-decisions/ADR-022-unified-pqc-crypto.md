@@ -7,7 +7,7 @@ v5 变更(2026-06-21,对抗复审 28 项确认后定稿):
 - 🔴 **`extra` 必带 `account`**(§3/§5):ML-DSA **无公钥恢复**(no ecrecover),General Transaction origin=None 下链端必须靠 extra 内 `account` 查 `AccountPqcKey` 才能取验签公钥;account 是查表 hint,随后被 ML-DSA 签名 + payload 内 account 双重绑定,攻击者填他人 account 也伪造不出签名。
 - 🔴 **fail-safe 拆三语境**(§3/§4):创世初值=phase=A / 正常 Phase B 运营值 / decode 失败 fallback;decode 失败=**sr25519 不冻结 + PQC/bootstrap 关**(保守且瞬态,非永久锁人),不再笼统说"fail-open 到 phase=B"。
 - 🔴 **创世前对 PQC 零改动(2026-06-21 进一步精简,覆盖"烘骨架"口径)**(§16):当前 runtime 已支持创世后 setCode 加 TxExtension/pallet,故 GmbPqcAuth/account-keys/transaction_version 全部后置;**`transaction_version` 0→1 bump 发生在"启用 PQC 的那次 setCode"**(TxExtension 结构变更),不在创世;spec_version 每次 setCode 递增。
-- domain 字面量全文统一 `GMB_PQC_TX_MLDSA65_V1` / `GMB_PQC_BOOTSTRAP_MLDSA65_V1`;`extra=None` 透传澄清(weight 不读 storage,validate 对 sr25519 signed 仍读 AccountPqcKey/PqcPolicy 判已绑定拒);bootstrap 前置 providers 机制纠正(CheckNonce 只查 nonce,费由 ChargeTransactionPayment 拒);txpool DoS 补具体节点级机制;L3/CID 补真实代码行号;HKDF info 字节锁定;sign_response 补定义;seal 明确排除创世冻结。
+- PQC 交易和 bootstrap 未来必须分别登记独立 `op_tag` 并统一调用 `signing_message(op_tag)`；`extra=None` 透传澄清(weight 不读 storage,validate 对 sr25519 signed 仍读 AccountPqcKey/PqcPolicy 判已绑定拒);bootstrap 前置 providers 机制纠正(CheckNonce 只查 nonce,费由 ChargeTransactionPayment 拒);txpool DoS 补具体节点级机制;L3/CID 补真实代码行号;HKDF info 字节锁定;sign_response 补定义;seal 明确排除创世冻结。
 
 ---
 
@@ -103,13 +103,13 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 
 ## 5. 交易载荷 + 验签(反重放域)
 
-**`GmbPqcAuth.extra` 签名 payload(域标签 `DOMAIN_TX = b"GMB_PQC_TX_MLDSA65_V1"`,普通 PQC 交易):**
-`DOMAIN_TX` ++ SCALE(`genesis_hash`、`spec_version`、`transaction_version`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`key_version`、`following_extensions_hash`)。
+**`GmbPqcAuth.extra` 签名 payload（普通 PQC 交易）：**
+`普通 PQC 交易专用 op_tag` 登记后，统一调用 `signing_message(op_tag, SCALE(genesis_hash、spec_version、transaction_version、account、nonce、era_or_deadline、tip、call_hash、key_version、following_extensions_hash))`。
 - 签名内含 `account` 与 extra 内 `account` 是同一值(§3:extra 内 account 是查表 hint,此处进 payload 让签名对 account 承诺,双重绑定)。
 - `ss58_format` 为**纯展示字段**(L2:链上无对应扩展 implicit,不参与一致性比对,链域已由 genesis_hash 隐含)。
-- `sig_alg`/`alg` 算法标识**进 DOMAIN 字面量**(`GMB_PQC_TX_MLDSA65_V1`),不另设字段(H7/rank8 域+算法隔离)。
+- `sig_alg`/`alg` 算法隔离由独立 `op_tag` 承担，不另设字符串域(H7/rank8 域+算法隔离)。
 
-**首笔 bootstrap(域标签 `DOMAIN_BOOTSTRAP = b"GMB_PQC_BOOTSTRAP_MLDSA65_V1"`):** 字段集**与 `GMB_PQC_TX_MLDSA65_V1` 对齐**(补 transaction_version/tip/era_or_deadline,H4),额外含 `pqc_pubkey_hash`。
+**首笔 bootstrap：**使用另行登记的 bootstrap 专用 `op_tag`；字段集与普通 PQC 交易对齐(补 transaction_version/tip/era_or_deadline,H4),额外含 `pqc_pubkey_hash`。
 - 🔴 **(v5)签名格式是算法相关结构,非裸字节**:sr25519 签名固定 64B,ML-DSA-65 签名 ~3309B,ML-DSA 公钥 ~1952B → bootstrap extrinsic body ≈ `sr25519_sig(64B)+ml_dsa_sig(3309B)+ml_dsa_pubkey(1952B)+call` ≈ **5.3KB+,hex 编码 ~10KB+**(QR 必须分片,见 §8 B11)。后续普通 PQC 交易**不带公钥**,只带 ml_dsa_sig(~3309B)。
 
 🔴 **(B3)`following_extensions_hash` 口径 = SDK `inherited_implication` 精确递归编码,不是扁平拼接**:
@@ -117,8 +117,8 @@ PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when
 > 参与 following implicits 的扩展逐一列明:`CheckSpecVersion()`/`CheckTxVersion()`/`CheckNonStakeSender()`/`CheckGenesis(genesis_hash)`/`CheckMortality(immortal→genesis_hash)`/`CheckNonce()`/`CheckWeight()`/`ChargeTransactionPayment()`/`CheckMetadataHash(None,Disabled)`/`WeightReclaim()`。**(M16)immortal 下 CheckMortality.implicit 仍是 genesis hash,不可漏。**
 
 🔴 **(B1)bootstrap challenge 字面构造(钉死)**:
-`sr25519_bootstrap_signature = sr25519_sign(blake2_256(DOMAIN_BOOTSTRAP ++ SCALE(genesis_hash, spec_version, transaction_version, account, pqc_pubkey_hash, key_version, nonce, call_hash, following_extensions_hash)))`。
-硬约束:① sr25519 签名**必须覆盖 `pqc_pubkey_hash`**("我授权这把 PQC 公钥");② 专用 DOMAIN_BOOTSTRAP 前缀与 CID/治理/L3 的 sr25519 签名域不可互换;③ ML-DSA 交易签名**反向覆盖** `blake2_256(sr25519_bootstrap_signature)`(双向交叉绑定,杜绝两签拼接)。card2 单测:挪用其它域 sr25519 签名构造 bootstrap 必拒。
+`sr25519_bootstrap_signature = sr25519_sign(signing_message(op_tag, SCALE(genesis_hash, spec_version, transaction_version, account, pqc_pubkey_hash, key_version, nonce, call_hash, following_extensions_hash)))`，其中 `op_tag` 是登记后的 bootstrap 专用值。
+硬约束:① sr25519 签名**必须覆盖 `pqc_pubkey_hash`**("我授权这把 PQC 公钥");② bootstrap 专用 `op_tag` 与 CID/治理/L3 的 `op_tag` 不可互换;③ ML-DSA 交易签名**反向覆盖** `blake2_256(sr25519_bootstrap_signature)`(双向交叉绑定,杜绝两签拼接)。card2 单测:挪用其它域 sr25519 签名构造 bootstrap 必拒。
 
 **验签顺序(钉死,hash 全 `blake2_256`):**
 - **bootstrap**:① `blake2_256(body.pqc_pubkey)==payload.pqc_pubkey_hash` → ② sr25519 bootstrap challenge(覆盖 pqc_pubkey_hash)→ ③ ML-DSA 交易签名(用 body 公钥,且覆盖 sr25519 签名 hash)→ 通过才 post_dispatch 写。

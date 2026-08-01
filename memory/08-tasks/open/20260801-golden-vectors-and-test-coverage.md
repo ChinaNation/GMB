@@ -216,7 +216,7 @@ pointycastle」，没证明「结果与链端一致」——若 pointycastle 的
 | 破坏方式 | 结果 |
 | --- | --- |
 | 把 `InstitutionCreate` 从链上写降档为本地写 | 红 2 条（逐变体断言 + 计数锁） |
-| `as_str` 改 `GUARD_VOTE` → `GUARD_VOTE_V2`（映射不对称） | 红 2 条（往返测试 + 既有立法测试） |
+| `as_str` 改 `GUARD_VOTE` → `UNKNOWN_GUARD_VOTE`（映射不对称） | 红 2 条（往返测试 + 既有立法测试） |
 
 **回归**：`cargo fmt` 无差异；onchina 全量 **189 passed / 0 failed**；改动仅
 `src/auth/operation_auth.rs` 一个文件。

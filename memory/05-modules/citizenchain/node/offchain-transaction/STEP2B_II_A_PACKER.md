@@ -75,7 +75,7 @@ pub fn batch_signing_message(
 ) -> [u8; 32];
 ```
 
-= `blake2b_256(b"GMB_OFFCHAIN_BATCH_V1" || institution || batch_seq_le || batch_bytes)`
+= `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(institution, batch_seq, batch_bytes))`
 
 2026-04-28 补齐:链上 `submit_offchain_batch_v2` 已严格校验 `batch_signature`,
 并把成功批次写入 `LastClearingBatchSeq[bank]`。本函数必须继续与 runtime

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('ChatEnvelope 只往返 MLS 瞬时投递字段', () {
     final envelope = ChatEnvelope(
-      protocolVersion: 1,
       envelopeId: 'env-1',
       conversationId: 'conv-1',
       senderCidNumber:
@@ -31,7 +30,6 @@ void main() {
 
   test('ChatKeyPackage 不包含消费状态', () {
     final keyPackage = ChatKeyPackage(
-      protocolVersion: 1,
       cidNumber: 'CN220-CTZN2-100000002-2026',
       deviceId: 'bob-phone',
       devicePublicKey: 'aabbcc',
@@ -49,7 +47,6 @@ void main() {
 
   test('ChatRoute 只保存设备和近场路由', () {
     final route = ChatRoute(
-      protocolVersion: 1,
       peerCidNumber:
           '0x2222222222222222222222222222222222222222222222222222222222222222',
       routeDisplayName: 'Bob',

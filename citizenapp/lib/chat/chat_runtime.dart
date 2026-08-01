@@ -1161,7 +1161,7 @@ class ChatRuntime {
     final stopSocket = await context.transport.connectRealtime(
       onMessage: (message) async {
         final type = message['type'];
-        if (type == 'gmb_chat_envelope_v2') {
+        if (type == 'gmb_chat_envelope') {
           final encoded = message['envelope'];
           if (encoded is! String || encoded.isEmpty) return;
           final bytes = _base64UrlDecode(encoded);
@@ -1174,7 +1174,7 @@ class ChatRuntime {
           await onNotice();
           return;
         }
-        if (type == 'gmb_chat_signal_v1') {
+        if (type == 'gmb_chat_signal') {
           // Worker 按身份主键投递信令：发件人以 CID 号标识（与推送/路由同口径）。
           final senderCidNumber = message['sender_cid_number'];
           final signal = message['signal'];

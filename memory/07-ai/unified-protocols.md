@@ -138,7 +138,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 
 ## 5. 当前协议登记
 
-### P-CID-001：CID_NUMBER_V1
+### P-CID-001：CID_NUMBER
 
 - 状态：当前
 - 类型：接口契约 / 编码协议
@@ -239,7 +239,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 平台调价动作：`propose_set_platform_price`，pallet/call 为 `SquarePost/propose_set_platform_price`；必审字段为 `actor_cid_number`、`membership_level`、`new_price_fen`。CitizenWallet 必须严格中文解码并输出标准签名响应二维码，OnChina 负责回扫提交。
 - 禁止兼容：开发期不做旧协议兼容
 - 禁止事项：
-  - 禁止新增 `QR_V2`
+  - 禁止为扫码协议新增其它版本标识
   - 禁止新增第二套扫码协议字符串
   - 禁止把某个 `b.d` 的交易载荷格式称为新扫码协议
   - 禁止各端手写第二套 action registry、中文动作名、字段中文名或签名判定分支
@@ -553,14 +553,14 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `citizenapp/lib/chat/`
   - Cloudflare D1 binding `DB`，唯一生产数据库 `citizenapp-square-db-production`
   - Cloudflare Durable Objects / WebSocket，按**身份主键 `cid_number`** 路由到 `ChatRealtimeObject`（每身份一信箱，换绑后同一 CID 同一信箱）。
-- HTTP API 字段（**收件/归属一律按 `cid_number` 寻址**；`account_id` 只作设备所有者与 MLS 名册身份）：
+- HTTP API 字段（**收件、归属和 MLS 名册身份一律按 `cid_number` 寻址**；`account_id` 只记当前绑定账户与签名授权）：
   - `POST /v1/chat/devices/register`：`device_id`、`device_public_key_hex`、`push_provider`、`push_token`、`binding_signature`、`expires_at`、`nonce`；身份与账户只取 session。响应含 `cid_number`、`account_id`、`device_id`、`device_public_key_hex`、`binding_message`、`expires_at`。
   - `POST /v1/chat/keypackages` 请求：Bearer `session_token`，`cid_number`（须 == session 身份）、`device_id`、`device_public_key_hex`、`key_package_id`、`key_package`、`cipher_suite`、`created_at`、`expires_at`
-  - `GET /v1/chat/keypackages/{cid_number}` 请求：Bearer `session_token`，`limit`；响应 `cid_number` + `key_packages[]`，每项**同时含** `account_id`（MLS 名册身份）与 `cid_number`（寻址主键），二者语义分离不得互相覆盖。
+  - `GET /v1/chat/keypackages/{cid_number}` 请求：Bearer `session_token`，`limit`；响应 `cid_number` + `key_packages[]`，每项同时含 `cid_number`（MLS 名册身份与寻址主键）和 `account_id`（发布时的当前绑定账户）；读取时必须用 finalized 当前绑定精确过滤，`account_id` 不得成为 MLS 身份、寻址键或归属键。
   - `POST /v1/chat/keypackages/consume` 请求：Bearer `session_token`，`cid_number`（目标身份）、`key_package_id`。**不传领取方**——会话即领取者。
   - `POST /v1/chat/envelopes`：`envelope_id`、`sender_device_id`、`recipient_cid_number`、`recipient_device_id`、`envelope`；仅在当前请求内转发。发件人身份由 session 派生，不传。
   - `POST /v1/chat/signals`：`sender_device_id`、`recipient_cid_number`、`recipient_device_id`、`signal`；仅转发 SDP/ICE/设备就绪信令。
-  - `GET /v1/chat/ws`：Bearer session + `x-chat-device`；Worker 内部按 session 派生身份并以 `x-chat-cid-number` 头转交 DO（**客户端不发该头**）。收到 `gmb_chat_envelope_v2` 时客户端立即解密，收到 `gmb_chat_signal_v1` 时交给 WebRTC。
+  - `GET /v1/chat/ws`：Bearer session + `x-chat-device`；Worker 内部按 session 派生身份并以 `x-chat-cid-number` 头转交 DO（**客户端不发该头**）。收到 `gmb_chat_envelope` 时客户端立即解密，收到 `gmb_chat_signal` 时交给 WebRTC。
   - 推送唤醒载荷：`{kind:'chat_wake', sender_cid_number}`，只告知"哪个身份有待发送数据"，不含任何内容。
   - Durable Object binding：`CHAT_REALTIME`，class `ChatRealtimeObject`，对象名称固定为 `cid_number`。
 - D1 表字段：
@@ -1130,7 +1130,6 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `citizenapp/cloudflare/src/chat/`
 - 字段（`sender_cid_number` / `recipient_cid_number` 同时是信封、MLS 名册和
   HTTP 投递的唯一身份字段；当前账户不得进入 ChatEnvelope、ChatRoute 或 KeyPackage）：
-  - `ChatEnvelope.protocol_version`
   - `ChatEnvelope.envelope_id`
   - `ChatEnvelope.conversation_id`
   - `ChatEnvelope.sender_cid_number`
@@ -1145,7 +1144,6 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_UNSPECIFIED`
   - `MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_WELCOME`
   - `MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION`
-  - `ChatRoute.protocol_version`
   - `ChatRoute.peer_cid_number`
   - `ChatRoute.route_display_name`
   - `ChatRoute.device_id`
@@ -1154,7 +1152,6 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `ChatRoute.nearby_peer_hint`
   - `ChatRoute.created_at_millis`
   - `ChatRoute.expires_at_millis`
-  - `ChatKeyPackage.protocol_version`
   - `ChatKeyPackage.cid_number`
   - `ChatKeyPackage.device_id`
   - `ChatKeyPackage.device_public_key`
@@ -1686,11 +1683,11 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `cargo test -p node -p onchina`
   - CitizenApp / CitizenWallet `flutter test`、`flutter analyze`
 
-### P-AUTH-001：ROLE_SUBJECT_V1
+### P-AUTH-001：ROLE_SUBJECT
 
 - 状态：共享类型与跨端 SCALE 已实现；内部、联合、选举、立法投票均已接入 `ProposalVotePlans`、岗位快照和完整岗位席位票据，现有正式业务入口已按岗位授权
 - 类型：授权主体契约 / storage 契约 / 投票参与者契约
-- 唯一真源：架构为 `memory/04-decisions/ADR-039-institution-role-permission-model.md`；共享类型为 `citizenchain/runtime/entity/entity-primitives/src/institution_role.rs` 与 `citizenchain/runtime/votingengine/src/types.rs`；跨端字节金标为 `memory/06-quality/fixtures/institution_role_permission_v1.json`
+- 唯一真源：架构为 `memory/04-decisions/ADR-039-institution-role-permission-model.md`；共享类型为 `citizenchain/runtime/entity/entity-primitives/src/institution_role.rs` 与 `citizenchain/runtime/votingengine/src/types.rs`；跨端字节金标为受保护测试资产 `memory/06-quality/fixtures/institution_role_permission_v1.json`
 - 详细文档：`memory/08-tasks/20260719-institution-role-permission-unify.md`
 - 生产者：public/private entity、创世 seeder、依法通过的岗位治理业务模块
 - 消费者：全部机构业务模块、votingengine、Node、OnChina、CitizenApp、CitizenWallet
@@ -1881,10 +1878,10 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 生产者：`citizenapp`、`citizenwallet`　消费者：`GmbPqcAuth` 扩展 + `account-keys`、`citizenwallet` decoder
 - 字段（扩展 extra）：`account`、`pqc_pubkey`(ML-DSA-65,~1952B)、`alg`(0x02)、`key_version`、`nonce`、`sr25519_bootstrap_signature`、`ml_dsa_signature`（业务 call 是普通 General Transaction call）
 - 编码：General Transaction + `GmbPqcAuth` 扩展 `extra`（**非 pallet call**）
-- payload `GMB_PQC_BOOTSTRAP_V1`（域标签 `DOMAIN_BOOTSTRAP=b"GMB_PQC_BOOTSTRAP_MLDSA65_V1"` 进 preimage，字段集与 GMB_PQC_TX_V1 对齐）：`genesis_hash`、`spec_version`、`transaction_version`、`account`、`pqc_pubkey_hash`、`key_version`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`following_extensions_hash`
+- payload 使用 bootstrap 专用 `op_tag` 并调用 `signing_message(op_tag)`；字段集与普通 PQC 交易对齐：`genesis_hash`、`spec_version`、`transaction_version`、`account`、`pqc_pubkey_hash`、`key_version`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`following_extensions_hash`
 - 规则（验序钉死，hash 全 `blake2_256`）：
   - ① `blake2_256(body.pqc_pubkey) == payload.pqc_pubkey_hash`
-  - ② `sr25519_bootstrap_signature = sr25519_sign(blake2_256(DOMAIN_BOOTSTRAP ++ SCALE(genesis_hash,spec_version,transaction_version,account,pqc_pubkey_hash,key_version,nonce,call_hash,following_extensions_hash)))`——**sr25519 必须覆盖 pqc_pubkey_hash**（防 body 公钥替换），`account`=sr25519 公钥派生的当前 AccountId
+  - ② `sr25519_bootstrap_signature = sr25519_sign(signing_message(bootstrap_op_tag, SCALE(genesis_hash,spec_version,transaction_version,account,pqc_pubkey_hash,key_version,nonce,call_hash,following_extensions_hash)))`——**sr25519 必须覆盖 pqc_pubkey_hash**（防 body 公钥替换），`account`=sr25519 公钥派生的当前 AccountId
   - ③ `ml_dsa_signature` 验交易 payload + `call_hash==blake2_256(body.call)`，且**反向覆盖 `blake2_256(sr25519_bootstrap_signature)`**（双向交叉绑定）
   - 三验过 → origin 转 `Signed(account)` → nonce/扣费/业务 dispatch；**绑定写 `AccountPqcKey` 在 `post_dispatch`**
   - 失败语义：绑定在 post_dispatch（nonce/扣费已跑），**内层 call 失败绑定仍保留、内层失败照常收费**；🔴 **post_dispatch 绝不返回 Err**（否则作废整区块），冲突（已绑定不同值）判定前移 validate 拒
@@ -1903,7 +1900,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 生产者：`citizenapp`、`citizenwallet`　消费者：`GmbPqcAuth` 扩展、`citizenwallet` decoder
 - 字段（扩展 extra）：`account`、`sig`(ML-DSA-65；公钥由链端按 account 从 `AccountPqcKey` 读，交易不带公钥)、`auth_mode`、`key_version`（业务 call 是普通 General Transaction call）
 - 编码：General Transaction + `GmbPqcAuth` 扩展 `extra`（**非 pallet call**）
-- payload `GMB_PQC_TX_V1`（域标签 `DOMAIN_TX=b"GMB_PQC_TX_MLDSA65_V1"`（含算法标识）进 preimage）：`genesis_hash`、`spec_version`、`transaction_version`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`key_version`、`following_extensions_hash`（`ss58_format` 为纯展示字段，链上无对应 implicit，不参与一致性比对）
+- payload 使用普通 PQC 交易专用 `op_tag` 并调用 `signing_message(op_tag)`：`genesis_hash`、`spec_version`、`transaction_version`、`account`、`nonce`、`era_or_deadline`、`tip`、`call_hash`、`key_version`、`following_extensions_hash`（`ss58_format` 为纯展示字段，链上无对应 implicit，不参与一致性比对）
 - 规则（路线 A 定稿）：
   - `GmbPqcAuth` 读 `AccountPqcKey[account].pubkey` 验 ML-DSA 签名 + `call_hash==blake2_256(body.call)` + `alg==AccountPqcKey.alg`（防降级） → **把 origin 转 `Signed(account)`** → 后续 `CheckNonce`/`ChargeTransactionPayment` 走系统标准逻辑
   - 🔴 `following_extensions_hash` = SDK `inherited_implication` **精确递归编码**（`ImplicationParts{base,explicit,implicit}`，非扁平拼接；嵌套 tuple 下与链端 `inherited_implication.encode()` 逐字节对拍 `mod.rs:712-869`），覆盖 CheckGenesis/CheckMortality(immortal→genesis)/CheckNonce/ChargeTransactionPayment/CheckMetadataHash(Disabled→None)/WeightReclaim 等 implicit

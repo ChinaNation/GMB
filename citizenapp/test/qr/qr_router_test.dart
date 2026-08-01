@@ -132,7 +132,7 @@ void main() {
     });
 
     test('should return unknown for JSON with unknown proto', () {
-      final raw = jsonEncode({'p': 'UNKNOWN_V99', 'foo': 'bar'});
+      final raw = jsonEncode({'p': 'UNKNOWN_PROTO', 'foo': 'bar'});
       final result = router.route(raw);
       expect(result.type, QrRouteType.unknown);
     });

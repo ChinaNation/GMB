@@ -232,9 +232,8 @@
 - Chat、通讯录继续由当前钱包账户材料在客户端按 CID、绑定版本、`account_id` 和用途直接派生；
   本地与云端保存密文，Worker 没有用户数据主密钥、恢复密钥或解密路径。存在旧账户签名时可在
   同一次换绑交互中完成旧密文解密、新账户重加密；不存在旧账户签名时新账户不能解密历史私密数据。
-- 签名协议命名仍有硬规则残留：Chat 的 protobuf 包名和在线协议仍使用 `gmb.chat.v1`、
-  `gmb_chat_*_v1/v2`；统一协议文档仍出现 `ROLE_SUBJECT_V1` 及 PQC 草案 `*_V1` 标识，与“全仓
-  唯一允许的版本化协议标识是 `QR_V1`”冲突。
+- 签名协议命名曾存在硬规则残留：Chat 的 protobuf 包名、在线消息类型、统一协议文档和 PQC
+  草案仍使用额外版本化标识，与“全仓唯一允许的版本化协议标识是 `QR_V1`”冲突。
 - 安全测试覆盖残留：黄金向量同步脚本虽退出 0，但报告 CitizenApp 镜像缺少 CID 换绑 `0x11`
   和 GRANDPA 换钥 `0x1e` 两条 canonical 向量；其中 CitizenApp 实际实现 CID 自助换绑签名，
   `0x11` 应升级为跨端同步的强制向量，不能仅依赖算法单测。
@@ -244,6 +243,54 @@
   新增格式错误推翻，以本追加记录为准。
 - 结论：在格式阻断、协议命名残留、关键换绑黄金向量缺口、注释文档残留、工作树不干净以及当前
   HEAD 尚无 GitHub CI/WASM 证明全部处理并重新复审前，不得把当前 HEAD 冻结、创世或部署。
+
+### 第五步：冻结候选阻断清理与本地验收
+
+状态：completed（2026-08-01 本地修复、残留清理和全量验收完成；未推送、未冻结、未部署）
+
+- 仅修复 `scale_codec_golden.rs` 的 Rust 格式，不改变测试取值、SCALE、runtime 逻辑或创世状态。
+- 清理 fullnode 手续费收款钱包绑定和个人多签管理员的错误注释，不改变既有安全模型。
+- 全仓删除 GMB 自定义的非 `QR_V1` 版本化协议标识；Chat 的 protobuf、Worker、App、测试和文档
+  使用无版本业务名，不保留旧消息类型兼容。Substrate 官方 JSON-RPC 方法名按官方原名保留。
+- CitizenApp 签名域镜像补齐 canonical `0x11`、`0x1e`，并把该组覆盖从提示升级为缺失即失败。
+- SCALE 字符串金标中的中国国旗字符改为中性四字节 Unicode 测试值，并在 AI 门禁和规则中
+  永久禁止全仓代码、测试、夹具、注释、文档、配置及生成物恢复中国国旗字符。
+- 完成本地全量门禁、测试和真实运行验收后，先输出候选 tag、远端 ref、WASM workflow 和风险，
+  单独取得推送许可；本步骤不推送、不触发远端 CI、不冻结、不部署。
+
+#### 第五步验收记录
+
+- 全仓中国国旗字符残留为 0；SCALE 金标改用中性四字节 Unicode 测试值，Rust 金标 3 项通过。
+  AI 门禁已将该禁令覆盖代码、测试、夹具、注释、文档、配置和生成物。
+- `cargo fmt --all -- --check`、全 workspace/all-targets `cargo check`、`cargo test` 和
+  `cargo clippy -- -D warnings` 全部退出 0；CID、奖励双重防重、投票/候选、宪法三层编号、
+  个人多签、矿工收款账户绑定、OnChina 管理员与订阅换绑扣费相关测试均通过。
+- CitizenApp `flutter analyze` 零问题，1092 项 Flutter 测试通过、5 项按既有原生库条件跳过；
+  Rust OpenMLS 11 项通过。Pixel 8a / Android 16 真机完成 Keystore 子钥删除后重建新密钥的
+  仪器测试，`:app:connectedDebugAndroidTest` 与 ARM/ARM64 Debug APK 构建均成功。
+- CitizenWallet `flutter analyze` 零问题，282 项测试和 Debug APK 构建通过；OnChina 前端构建
+  与 5 项测试、节点前端构建通过。
+- Cloudflare Worker 绑定类型和 TypeScript 检查通过，33 个测试文件、256 项测试全部通过；
+  全新临时 D1 的 60 条 schema 命令成功。真实本地 Worker 的 `/health` 返回 200，未携带钱包
+  Session 写入 Chat 信封返回 401；Worker 不取得用户私有数据密钥或明文。
+- 金标镜像强制覆盖 canonical `0x11` 和 `0x1e`，14 条签名、2 + 2 条二进制前缀、10 条账户
+  派生向量全部一致；pallet 注册表 34 项、宪法 SCALE、自启动协议、冻结 chainspec、AI 门禁、
+  `actionlint`、`git diff --check` 和额外版本化协议残留扫描全部通过。
+- 构建成功后已把 `citizenchain/target` 与 `citizenapp/rust/target` 内全部 `incremental` 目录移入
+  废纸篓，复查为 0；工作树没有混入构建产物或临时文件。未推送 GitHub、未触发远端 CI、
+  未冻结、未创世、未部署。
+
+### 第六步：WASM 候选推送与 GitHub 证明
+
+状态：pending（必须先取得当前任务的单独远端推送许可）
+
+- 先核对 `main`、候选提交、候选 tag、远端 `origin` 和唯一 `citizenchain-wasm.yml` 触发范围；
+  把所有本地修改形成可复现提交，但不提前冻结创世资产。
+- 仅推送用于 WASM CI 的候选 ref，等待 GitHub `CitizenChain WASM` 对该精确提交成功；不得用本地
+  WASM、旧 run、其他提交或未完成的 run 代替。
+- WASM CI 成功后再输出 run、commit、artifact 摘要和创世冻结技术方案，等待下一次确认；在冻结
+  完成前不推送其他软件 CI，冻结完成后才按顺序推送 `main` 并等待其余三条软件 CI 全绿。
+- 本步骤不部署；只有 WASM 证明、创世冻结和其他软件 CI 全部成功后，才另行输出部署方案并等待确认。
 
 ## 第一步预计修改目录
 

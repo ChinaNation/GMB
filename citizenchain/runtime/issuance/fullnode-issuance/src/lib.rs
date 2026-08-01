@@ -255,7 +255,7 @@ pub mod pallet {
                 } // 理论上不应发生，发生则不发奖励
             };
 
-            // 只有共识 digest 证明真实出过块的账户，才允许后续绑定奖励接收账户。
+            // 只记录共识 digest 证明的真实出块高度；绑定奖励接收账户无需等待首次出块。
             LastAuthoredBlockByMiner::<T>::insert(&author, block_number);
 
             // 已绑定奖励接收账户则发到该账户，未绑定则默认发到矿工自身账户。

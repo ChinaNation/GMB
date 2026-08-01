@@ -334,7 +334,7 @@ export async function submitChatEnvelope(request: Request, env: Env): Promise<Re
     throw new HttpError(413, 'chat_envelope_too_large', 'Chat 密文超过服务端上限');
   }
   const sent = await relayChatPayload(env, {
-    type: 'gmb_chat_envelope_v2',
+    type: 'gmb_chat_envelope',
     sender_cid_number: senderCidNumber,
     recipient_cid_number: recipientCidNumber,
     recipient_device_id: recipientDeviceId,
@@ -371,7 +371,7 @@ export async function submitChatSignal(request: Request, env: Env): Promise<Resp
     throw new HttpError(400, 'invalid_chat_signal', 'Chat 信令格式不合法');
   }
   const sent = await relayChatPayload(env, {
-    type: 'gmb_chat_signal_v1',
+    type: 'gmb_chat_signal',
     sender_cid_number: senderCidNumber,
     recipient_cid_number: recipientCidNumber,
     recipient_device_id: optionalDeviceId(body.recipient_device_id),

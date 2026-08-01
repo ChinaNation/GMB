@@ -131,7 +131,7 @@ every 30s (spawned task)
 本轮把占位字段接成可验收闭环:
 
 - `submit_payment` 不再返回 `[0u8;64]` ACK,而是复用 `KeystoreBatchSigner` 对
-  `GMB_L2_ACK_V1 || bank_main || SCALE(intent) || payer_sig || accepted_at` 签名。
+  `signing_message(OP_SIGN_L2_ACK, SCALE(bank_main, intent, payer_sig, accepted_at))` 签名。
 - RPC 入 pending 前会读链上 `UserBank[payer]`、`UserBank[recipient]` 与
   `L2FeeRateBp[recipient_bank]`,提前拒绝错路由、绑定漂移、未配置费率和手续费不一致。
 - `OffchainPacker` 启动时读取链上 `LastClearingBatchSeq[bank]`,下一批从 `last + 1`

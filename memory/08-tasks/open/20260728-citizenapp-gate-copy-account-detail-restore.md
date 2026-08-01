@@ -130,7 +130,7 @@
 - [x] 二次 UI 修正：账户二维码从账户名后方移至账户卡独立右上角；Widget 测试断言二维码
   与账户名之间保留明显横向间隔，Pixel 8a 实测语义边界为 `[880,363][985,468]`。
 - [x] 私钥认证真因修复：Pixel 8a 原生日志确认共享 KEK
-  `gmb_strict_kek_v1_1` 缺失，旧代码在 `BiometricPrompt` 前把 `null` 强转为
+  已删除的旧 Keystore alias 缺失，旧代码在 `BiometricPrompt` 前把 `null` 强转为
   `PrivateKey`；现改为明确报告设备安全存储中的账户私钥不可用。
 - [x] 共享 KEK 生命周期修复：`deleteAccountKey` 只删目标账户密文，
   `deleteWalletKey` 只在整钱包删除/回滚时调用；补充子账户删除后账户0仍可解锁、

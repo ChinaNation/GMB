@@ -33,7 +33,7 @@ revert,用户 L3 付款看似成功实则全挂。
 
 每组 fixture 锁两个 hex 期望:
 - `encoded_hex`:SCALE 编码 204 字节(5×32 + 16+16 + 8 + 4)的 hex
-- `signing_hash_hex`:`blake2_256(b"GMB_L3_PAY_V1" ++ encoded)` 的 hex(32 字节 → 64 hex 字符)
+- `signing_hash_hex`:`signing_message(OP_SIGN_L3_PAY, encoded)` 的 hex(32 字节 → 64 hex 字符)
 
 ## 3. 锁定的 signing hashes
 

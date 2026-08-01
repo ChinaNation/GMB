@@ -653,8 +653,8 @@ class ChatStore {
 
   /// 注销用户：清除该 CID 在本机的全部 Chat 历史与队列。
   ///
-  /// Cloudflare 端 A 的设备登记由 Worker purge 删除；本地 Isar 是 A 私信**明文**
-  /// 的唯一残留处，须一并清空以做到零残留。
+  /// Cloudflare 端 A 的设备登记由 Worker purge 删除；本地 Isar 是 A 私信密文与
+  /// 本地队列的唯一残留处，须一并清空以做到零残留。
   Future<void> clearAllForCidNumber(String cidNumber) {
     return _walletIsar.writeTxn((isar) async {
       final conversations = await isar.chatConversationEntitys

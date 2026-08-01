@@ -1,5 +1,5 @@
 {
-  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 覆盖哈希域 op_tag(0x10/0x12/0x13-0x17/0x1A-0x1D/0x1F);message_hex 逐字节取自 runtime/primitives/tests/fixtures/signing_domain_vectors.json,与冷钱包/链端一致。 【镜像】真源在 citizenchain/runtime/primitives/tests/fixtures/signing_domain_vectors.json，本文件是供本端金标测试独立回归的副本。不得在此自造向量或单方面改值；需要新向量请先在真源登记。CI 由 .github/scripts/check-golden-vectors-sync.mjs 比对。",
+  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 完整覆盖真源全部 op_tag；message_hex 逐字节取自 runtime/primitives/tests/fixtures/signing_domain_vectors.json，与冷钱包/链端一致。 【镜像】真源在 citizenchain/runtime/primitives/tests/fixtures/signing_domain_vectors.json，本文件是供本端金标测试独立回归的副本。不得在此自造向量或单方面改值；需要新向量请先在真源登记。CI 由 .github/scripts/check-golden-vectors-sync.mjs 强制完整比对。",
   "domain": "GMB",
   "vectors": [
     {
@@ -7,6 +7,12 @@
       "name": "OP_SIGN_CITIZEN_IDENTITY",
       "op_tag": "0x10",
       "scale_payload_hex": "0102030405060708"
+    },
+    {
+      "message_hex": "d477515eb1cb4ec972e7a3635f895ecd7f12e34b525cfdcc283fbd3a0f8f3270",
+      "name": "cid_rebind",
+      "op_tag": "0x11",
+      "scale_payload_hex": "0011223344556677"
     },
     {
       "message_hex": "d33919e352038d7bd62172b0530362fb6ef0da3990e27b56ea9325195fc6b1a6",
@@ -61,6 +67,12 @@
       "name": "OP_SIGN_SQUARE_ACTION",
       "op_tag": "0x1d",
       "scale_payload_hex": "73712d616374696f6e"
+    },
+    {
+      "message_hex": "b8f4a33924ded16f83713cdf1ac5e107eee6fa2b935b966fa960f24f497b78cc",
+      "name": "OP_SIGN_GRANDPA_KEY_CHANGE",
+      "op_tag": "0x1e",
+      "scale_payload_hex": "6772616e6470612d6b65792d6368616e6765"
     },
     {
       "message_hex": "6611a18d502a601be15c46ae57d88d364901d4f8836dca6912c21e6234614a3e",

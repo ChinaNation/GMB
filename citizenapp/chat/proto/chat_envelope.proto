@@ -1,15 +1,15 @@
 syntax = "proto3";
 
-package gmb.chat.v1;
+package gmb.chat;
 
-// 跨端 Chat 信封真源（proto 包 gmb.chat.v1，版本由 protocol_version 字段表达）。
+// 跨端 Chat 信封真源。字段编号承担 wire 演进，不另设版本化协议标识。
 //
 // OpenMLS 标准 wire bytes 放在内层；本文件只定义外层瞬时投递、Chat 路由记录、
 // KeyPackage 发布结构。Chat 身份只认 CID；当前钱包账户只在外层 Session
 // 完成签名授权，不进入 MLS 名册、会话 ID 或消息归属。
 
 message ChatRoute {
-  uint32 protocol_version = 1;
+  reserved 1;
   string peer_cid_number = 2;
   string route_display_name = 3;
   string device_id = 4;
@@ -27,7 +27,7 @@ enum MlsWireMessageKind {
 }
 
 message ChatEnvelope {
-  uint32 protocol_version = 1;
+  reserved 1;
   string envelope_id = 2;
   string conversation_id = 3;
   string sender_cid_number = 4;
@@ -42,7 +42,7 @@ message ChatEnvelope {
 }
 
 message ChatKeyPackage {
-  uint32 protocol_version = 1;
+  reserved 1;
   string cid_number = 2;
   string device_id = 3;
   string device_public_key = 4;
