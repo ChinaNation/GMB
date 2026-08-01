@@ -487,7 +487,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                   ),
                   child: const Icon(Icons.account_balance_wallet_rounded,
-                      color: AppTheme.textTertiary, size: 22),
+                      color: AppTheme.primaryLight, size: 22),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

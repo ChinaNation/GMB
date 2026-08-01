@@ -61,15 +61,6 @@ class _ManualHero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '密钥地图 · 第 1 部分',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: 10),
-          Text(
             '一个钱包，五层关系',
             style: TextStyle(
               color: AppTheme.textPrimary,
@@ -78,16 +69,7 @@ class _ManualHero extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-          SizedBox(height: 6),
-          Text(
-            '从可手抄的备份，到可公开的地址',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-              height: 1.45,
-            ),
-          ),
-          SizedBox(height: 12),
+          SizedBox(height: 8),
           Divider(color: AppTheme.border),
           SizedBox(height: 10),
           Row(
@@ -192,13 +174,99 @@ class _KeyMap extends StatelessWidget {
           children: [
             for (var i = 0; i < _steps.length; i++) ...[
               _KeyStepRow(step: _steps[i]),
-              if (i != _steps.length - 1) const SizedBox(height: 10),
+              // 保密/公开的分界:上一步仍是 secret、下一步已公开时插入分界线。
+              // 判据取自 _steps 的 secret 字段本身,不写死索引 ——
+              // 日后增删步骤或调整顺序,分界线自动跟着走。
+              if (i != _steps.length - 1 &&
+                  _steps[i].secret &&
+                  !_steps[i + 1].secret)
+                const _SecrecyBoundary()
+              else if (i != _steps.length - 1)
+                const SizedBox(height: 10),
             ],
           ],
         ),
       ],
     );
   }
+}
+
+/// 保密区与公开区的分界:一条横虚线，上方右对齐「以上保密」、下方左对齐「以下公开」。
+///
+/// 两个标签错开对齐，避免在窄屏上挤到一起。配色沿用步骤卡的语义色：
+/// 保密系 [AppTheme.gold]、公开系 [AppTheme.accent]。
+class _SecrecyBoundary extends StatelessWidget {
+  const _SecrecyBoundary();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '以上保密',
+              style: TextStyle(
+                color: AppTheme.gold,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          SizedBox(height: 4),
+          CustomPaint(
+            painter: _DashedLinePainter(color: AppTheme.border),
+            size: Size(double.infinity, 1),
+          ),
+          SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '以下公开',
+              style: TextStyle(
+                color: AppTheme.accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 横向虚线。Flutter 没有内置虚线 Divider，用画笔按 dash/gap 步进绘制。
+class _DashedLinePainter extends CustomPainter {
+  const _DashedLinePainter({required this.color});
+
+  final Color color;
+
+  static const double _dash = 5;
+  static const double _gap = 4;
+  static const double _strokeWidth = 1;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = _strokeWidth;
+    final y = size.height / 2;
+    for (var x = 0.0; x < size.width; x += _dash + _gap) {
+      // 末段可能不足一个 dash，收敛到右边界，避免越界绘制。
+      final end = (x + _dash).clamp(0.0, size.width);
+      canvas.drawLine(Offset(x, y), Offset(end, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedLinePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _KeyStepRow extends StatelessWidget {

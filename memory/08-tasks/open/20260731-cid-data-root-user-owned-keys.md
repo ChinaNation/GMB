@@ -209,6 +209,42 @@
 - 汇总拟冻结提交、候选 tag、唯一 WASM workflow、预计触发范围与风险，单独取得远端推送
   许可；本步骤不推送、不触发 CI、不执行 `bake --finalize`。
 
+#### 第四步最终只读复审追加（2026-08-01）
+
+状态：blocked（当前 HEAD 不能作为新的创世冻结候选；本次仅审计并记录，不修改代码、runtime、
+创世资产、workflow 或部署状态）
+
+- 复审基线为本地主分支 `main` 的 `2c04394576e36dc5e8ed6dea517ca8e970b45aee`；该提交领先
+  `origin/main` 5 个提交，GitHub 上没有该提交的 CitizenChain CI 或 CitizenChain WASM 成功记录。
+- 当前 runtime 相对已冻结的 `origin/main` 存在实质代码变化；仓库现有冻结 plain chainspec、
+  创世哈希和 WASM 来源仍明确指向 CI runtime source `9f61e986...`、资产提交 `369cbc5a...` 与
+  WASM run `30593994910`。既有冻结资产内部校验仍通过，但不能作为当前 HEAD 的 CI WASM 证明。
+- 工作树存在本任务之外的未提交修改 `citizenwallet/lib/ui/home_page.dart`；本次未触碰该文件。
+  未提交工作树也不满足冻结候选必须可复现、不可变和可精确追溯的条件。
+- 新发现的确定 CI 阻断：`cargo fmt --all -- --check` 在
+  `citizenchain/runtime/primitives/tests/scale_codec_golden.rs` 第 46、61、116 行对应代码处失败。
+  本次只读审计未执行格式修复。
+- 四条 workflow 数量和职责仍正确：CitizenApp CI 已包含 Cloudflare，CitizenChain CI 包含 Rust、
+  OnChina、节点前端及打包覆盖，官网没有独立 CI；`actionlint` 通过。
+- CID 换绑、奖励 CID + `account_id` 双重防重、投票和候选 CID 唯一键、竞选内容资格、机构管理员
+  finalized 链上真源、个人多签账户治理、宪法“章全局唯一、节同章唯一、条全局唯一”均按已确认
+  安全模型实现；宪法 SCALE 自检、启动守卫、pallet 注册表和 AI Guardrails 通过。
+- Chat、通讯录继续由当前钱包账户材料在客户端按 CID、绑定版本、`account_id` 和用途直接派生；
+  本地与云端保存密文，Worker 没有用户数据主密钥、恢复密钥或解密路径。存在旧账户签名时可在
+  同一次换绑交互中完成旧密文解密、新账户重加密；不存在旧账户签名时新账户不能解密历史私密数据。
+- 签名协议命名仍有硬规则残留：Chat 的 protobuf 包名和在线协议仍使用 `gmb.chat.v1`、
+  `gmb_chat_*_v1/v2`；统一协议文档仍出现 `ROLE_SUBJECT_V1` 及 PQC 草案 `*_V1` 标识，与“全仓
+  唯一允许的版本化协议标识是 `QR_V1`”冲突。
+- 安全测试覆盖残留：黄金向量同步脚本虽退出 0，但报告 CitizenApp 镜像缺少 CID 换绑 `0x11`
+  和 GRANDPA 换钥 `0x1e` 两条 canonical 向量；其中 CitizenApp 实际实现 CID 自助换绑签名，
+  `0x11` 应升级为跨端同步的强制向量，不能仅依赖算法单测。
+- 注释和文档残留：fullnode 手续费收款钱包绑定注释仍声称必须先真实出块；个人多签注释仍声称
+  管理员完整保存姓、名；Chat 本地存储注释仍使用“明文”旧口径；两张黄金向量任务卡实施和验收
+  已全部完成但仍留在 `open/`；本任务卡此前记录的“全 workspace fmt 通过”已被当前 HEAD 的
+  新增格式错误推翻，以本追加记录为准。
+- 结论：在格式阻断、协议命名残留、关键换绑黄金向量缺口、注释文档残留、工作树不干净以及当前
+  HEAD 尚无 GitHub CI/WASM 证明全部处理并重新复审前，不得把当前 HEAD 冻结、创世或部署。
+
 ## 第一步预计修改目录
 
 - `citizenapp/lib/security/`：代码；建立当前钱包直接派生和公开绑定元数据，删除旧密钥模型。
