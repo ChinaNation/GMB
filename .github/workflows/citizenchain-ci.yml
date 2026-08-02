@@ -202,6 +202,12 @@ jobs:
       - name: 校验宪法创世 SCALE 解码器
         run: python3 citizenchain/scripts/check-constitution-genesis.py --self-test
 
+      # Tauri generate_context! 在 Rust 编译期读取 frontendDist，必须先生成真实前端产物。
+      - name: 构建公民链节点前端
+        run: |
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
+
       - name: 检查 Rust 格式
         working-directory: citizenchain
         run: cargo fmt --all -- --check
@@ -227,11 +233,6 @@ jobs:
       # 复用上一步已装好的依赖,不重复 npm ci。
       - name: 测试 OnChina 前端
         run: npm --prefix citizenchain/onchina/frontend test
-
-      - name: 构建公民链节点前端
-        run: |
-          npm --prefix citizenchain/node/frontend ci
-          npm --prefix citizenchain/node/frontend run build
 
       - name: 清理本次 Rust 增量缓存
         if: ${{ success() }}

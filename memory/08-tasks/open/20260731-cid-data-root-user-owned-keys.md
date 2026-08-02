@@ -327,6 +327,10 @@
   `cargo check` 因 `glib-sys` 找不到 `glib-2.0.pc` 失败。全工程 job 必须覆盖 Linux
   Tauri crate，本次补齐同 workflow 桌面 Linux job 已使用的 GTK、WebKit、AppIndicator、
   RSVG 等系统包，不通过排除 crate 或缩小 workspace 绕过。
+- CitizenChain run `30723723256` 已通过系统库阶段并编译到节点二进制，随后因 Tauri
+  `frontendDist=frontend/dist` 尚未生成而失败。现有节点前端构建步骤此前错误地排在 Rust
+  全 workspace 验证之后；本次将同一步骤前移到 Rust 编译之前，不提交空目录或构建产物，
+  不绕过 `tauri::generate_context!`。
 - 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
 
 ## 第一步预计修改目录
