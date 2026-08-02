@@ -39,7 +39,7 @@
 1. `curl -skD - https://onchina.local:8964/ -o /dev/null` → 应含 `cache-control: no-cache`
 2. `curl -skD - https://onchina.local:8964/assets/index-BH-jNQdT.js -o /dev/null` → 应含
    `cache-control: public, max-age=31536000, immutable`
-3. `curl -skD - https://onchina.local:8964/api/v1/health -o /dev/null` → **不应**含
+3. `curl -skD - https://onchina.local:8964/api/health -o /dev/null` → **不应**含
    `cache-control`（中间件只包静态服务，不碰 API）
 
 外加一次浏览器/WebView 硬刷新——本修复对已缓存旧 `index.html` 的客户端无效（见「主要风险」）。

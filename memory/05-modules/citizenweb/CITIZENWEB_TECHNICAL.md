@@ -35,7 +35,7 @@ npm run build
 ## 3.2. 会员订阅页
 
 - `/membership` 是 CitizenApp 官网会员订阅入口，共三档会员并列卡（ADR-036，与身份彻底解耦）：**自由会员 `freedom`($2.99) / 民主会员 `democracy`($9.99) / 薪火会员 `spark`($99.99)**。任意身份可订阅任意档，官网无身份门槛、卡内不含身份字段（身份改由 CitizenApp 电子护照展示）。每卡展示会员权益（聊天单文件上限 10MB/100MB/5GB、动态、文章）+ 价格 + 订阅按钮。
-- 官网订阅先调用 `POST /v1/square/membership/subscribe/challenge`（响应含 `current` 当前订阅态，供官网判定 新订阅/升档/降档/续订），CitizenApp 钱包扫码签名后调用 `POST /v1/square/membership/subscribe`。**一钱包一订阅（ADR-033）**：无活跃订阅→创建 Stripe Checkout Session（返回 `checkout_url`）；已有活跃订阅→在同一订阅上按 `action` 分派——升档 `upgraded`/`upgrade_pending`(返回 `payment_url` 付差价)、降档 `downgraded`(剩余价值进 Stripe 信用余额)、续订 `resumed`、无操作 `already_subscribed`，绝不新建第二个订阅。官网不保存会员状态、不保存本地法币金额、不接触 Stripe secret。
+- 官网订阅先调用 `POST /square/membership/subscribe/challenge`（响应含 `current` 当前订阅态，供官网判定 新订阅/升档/降档/续订），CitizenApp 钱包扫码签名后调用 `POST /square/membership/subscribe`。**一钱包一订阅（ADR-033）**：无活跃订阅→创建 Stripe Checkout Session（返回 `checkout_url`）；已有活跃订阅→在同一订阅上按 `action` 分派——升档 `upgraded`/`upgrade_pending`(返回 `payment_url` 付差价)、降档 `downgraded`(剩余价值进 Stripe 信用余额)、续订 `resumed`、无操作 `already_subscribed`，绝不新建第二个订阅。官网不保存会员状态、不保存本地法币金额、不接触 Stripe secret。
 - 支付方式与 USDC（ADR-034 段4，官网订阅面板）：**卡 / USDC** 二选一。卡走上面的 subscribe 分派；USDC 分「购买/续费」（选季/年，`SigningKind=usdc-purchase` → `/prepaid/challenge`+`/prepaid`，金额=月数×月费无折扣，付成功跳 `checkout_url`）与「换档」（`usdc-change` → `/prepaid/change/challenge`+`/prepaid/change`，challenge 响应 `preview{kind,amount_cents?,new_days?}` 在签名弹窗展示；降/平档即时切档出文案、升档跳 `checkout_url`）。官网只是操作入口、不展示当前会员态（会员态展示在 CitizenApp）。
 - 取消入口（ADR-034 段4，一个入口按支付方式识别）：`/cancel/challenge`+`/cancel` 签名后，Worker 按 `subscription_source` 分派并回 `cancel_kind`——卡=`stripe`（`cancel_at_period_end` 到期取消）、USDC=`usdc_prepaid`（无自动续、到期自然失效，不动订阅）；官网据 `cancel_kind` 出对应文案。无活跃订阅→`no_active_subscription`。
 - 换档金额预览：challenge 响应带 `preview`（Worker 按当期剩余周期比例本地估算的 `{kind, amount_cents}`），官网在签名弹窗展示「升档需补 $X / 降档 $Y 转权益」（估算，实际以 Stripe proration 为准）。
@@ -48,7 +48,7 @@ npm run build
 ## 3.3. 公民宪法页（读链）
 
 - `/constitution` tab 位于导航「白皮书」与「关于我们」之间（`Header.tsx` navItems），lazy 加载 `pages/Constitution.tsx`，UI 复用白皮书 `whitepaper-*` 样式（左目录树 + 右正文 + 回顶），另加 `constitution-*`（版本标签、不可修改徽章、章标题复位）。
-- 数据源：`GET {VITE_API_URL||'/api'}/v1/constitution`（Cloudflare Worker），返回结构化 `citizenapp.constitution.v1`：`{version, content_hash, version_label{cn,en}, immutable_articles[], chapters[章>节>条>款 + 中英]}`。官网用 **JSX 直接渲染**（无 `dangerouslySetInnerHTML`），中英并列、条级「不可修改条款 · Immutable」徽章、顶部版本标签、底部链上内容摘要。
+- 数据源：`GET {VITE_API_URL||'/api'}/constitution`（Cloudflare Worker），返回结构化 `citizenapp.constitution`：`{version, content_hash, version_label{cn,en}, immutable_articles[], chapters[章>节>条>款 + 中英]}`。官网用 **JSX 直接渲染**（无 `dangerouslySetInnerHTML`），中英并列、条级「不可修改条款 · Immutable」徽章、顶部版本标签、底部链上内容摘要。
 - Worker 侧（`citizenapp/cloudflare/src/chain/constitution.ts`）：经 CF Access 反代用**已放行的 `state_getStorage`** RAW 读 `Laws[0]`→显式 `effective_version`（只展示已生效版，不露待生效修宪版，ADR-027 §6.1）→`LawVersions[0][v]` / `LawVersionLabels[0][v]` / `ConstitutionImmutableManifest`，TS 逐字节 SCALE 解码（字段序对齐 runtime `legislation-yuan`；`houses` 为 `Vec<CidNumber>`，每项按 SCALE `Vec<u8>` 读取），KV 短缓存 `CONSTITUTION_TTL_SECONDS`（缺省 300s，修宪后一个 TTL 内刷新）。安全口径与节点 `constitution_getDocument` 一致（RAW 读，不走可被恶意升级伪造的 runtime API）。
 - 该页公开只读，Worker guard 早返回放行、无会话门禁；解码器单测以真 `constitution.scale` 为夹具（`test/constitution.test.ts`）。
 

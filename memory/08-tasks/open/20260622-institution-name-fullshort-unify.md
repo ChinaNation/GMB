@@ -94,7 +94,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 3. **后端(Tier 2)**:模板 `cid_short_name_suffix` 按目标表改造,`GOV_TEMPLATE_VERSION` 已升级,目录 hash 能触发 strict 检查。
 4. **数据库结构**:启动期删除旧展示缓存列;搜索与排序只查 `cid_number / cid_full_name / cid_short_name`。
 5. **前端/移动端/冷钱包**:机构名称统一为 `cidFullName/cidShortName/cidFullNameEn/cidShortNameEn`(JSON/API 仍为 `cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en`);生成器和生成物同步改造。
-6. **查重接口名**:旧查重路径与旧前端函数已改为 `/api/v1/institution/check-cid-full-name` 与 `checkCidFullName`。
+6. **查重接口名**:旧查重路径与旧前端函数已改为 `/api/institution/check-cid-full-name` 与 `checkCidFullName`。
 
 ## 关键文件:行
 - `citizencode/backend/gov/service.rs` 常量投影 / 模板 PROVINCE:144-211 CITY:213-310 TOWN:312-343 / mismatch 比对
@@ -116,7 +116,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 
 - 命名规范文件 `memory/07-ai/institution-naming.md`:已补常量补充机构 NSN/NRP/FDA/NGB/ARM/NAV/AIR/SPF/JOS/ARC/NVC/AFC/SFC/NGC,以及省/市/镇模板机构的中文全称、中文简称、英文全称规范、英文简称规范和行政区代码字段。
 - 省代码表校验:通过,`memory/07-ai/institution-naming.md` 43 个省代码与 `citizencode/backend/china/china.sqlite` 的 `provinces.code` 全量一致。
-- 后端模板:已统一 `PSN/PRP/CGOV/CEDU/TGOV` 的简称模板,`GOV_TEMPLATE_VERSION` 升级为 `gov-deterministic-v7`。
+- 后端模板:已统一 `PSN/PRP/CGOV/CEDU/TGOV` 的简称模板,`GOV_TEMPLATE_VERSION` 升级为 `gov-deterministic`。
 - 对账性能修正:省/市 scope 在目标生成阶段生效,`china.sqlite` 哈希改为进程内缓存,避免 `reconcile-gov --changed-only` 逐省重复全量生成和重复哈希。
 - 残留修正(2026-06-27 修订):公安局 `CPOL` 已废弃历史专用种子,统一并入普通市级公权机构模板;清理旧 helper 作用域残留后用当前源码重新编译通过。
 - `cargo check --manifest-path citizencode/backend/Cargo.toml`:通过。

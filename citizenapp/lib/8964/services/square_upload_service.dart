@@ -113,7 +113,7 @@ class SquareUploadService implements SquareContentUploader {
 
     final trimmedTitle = title?.trim() ?? '';
     final manifestBytes = _canonicalJsonBytes({
-      'schema': 'citizenapp.square.post.v1',
+      'schema': 'citizenapp.square.post',
       'account_id': accountId,
       'post_category': postCategory.workerValue,
       // 普通动态的唯一规范形态省略 content_format/title；文章才显式写入。

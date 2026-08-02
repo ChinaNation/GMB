@@ -28,7 +28,6 @@ class IdentityBadgeSnapshotStore {
   })  : _preferences = preferences,
         _nowProvider = nowProvider ?? DateTime.now;
 
-  static const _schemaVersion = 1;
   static const _keyPrefix = 'identity_badge_snapshot_by_cid:';
   static const _allowedLevels = {'visitor', 'voting', 'candidate'};
 
@@ -53,7 +52,7 @@ class IdentityBadgeSnapshotStore {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic> ||
-          decoded['schema_version'] != _schemaVersion ||
+          decoded.length != 3 ||
           decoded['cid_number'] != normalizedCidNumber ||
           decoded['identity_level'] is! String ||
           !_allowedLevels.contains(decoded['identity_level']) ||
@@ -93,7 +92,6 @@ class IdentityBadgeSnapshotStore {
     }
 
     final payload = jsonEncode({
-      'schema_version': _schemaVersion,
       'cid_number': normalizedCidNumber,
       'identity_level': identityLevel,
       'updated_at_millis': _nowProvider().millisecondsSinceEpoch,

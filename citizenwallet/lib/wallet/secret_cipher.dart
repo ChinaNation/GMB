@@ -16,7 +16,7 @@ import '../security/secure_storage.dart';
 class SecretCipher {
   const SecretCipher._();
 
-  static const String _aekKey = 'wallet.internal.aek.v1';
+  static const String _aekKey = 'wallet.internal.aek';
   static const int _ivLen = 12;
   static const int _tagLen = 16;
   static const int _keyLen = 32;
@@ -26,7 +26,7 @@ class SecretCipher {
   static Future<Uint8List>? _aekInitialization;
   static final RegExp _aekHexPattern = RegExp(r'^[0-9a-f]{64}$');
   static final RegExp _walletSecretKeyPattern =
-      RegExp(r'^wallet\.master\.0x[0-9a-f]{64}\.(seed_hex|mnemonic)\.v1$');
+      RegExp(r'^wallet\.master\.0x[0-9a-f]{64}\.(seed_hex|mnemonic)$');
 
   /// 用 AEK 加密明文机密,返回 Base64 密文。
   static Future<String> encrypt(

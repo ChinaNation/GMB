@@ -1,4 +1,4 @@
-# 任务卡：设备子钥懒绑定 + 链上费率常量下发 + 注册前余额闸
+# 任务卡：设备子钥实际缺钥初始化 + 链上费率常量下发 + 注册前余额闸
 
 > 状态：**执行中**。跨 citizenchain runtime + CitizenApp + Cloudflare Worker 三端。
 > 前置：`20260717-citizenapp-stablecoin-topup.md` 的 2026-07-29 节（充值鉴权与 CID 解耦）已完成，充值可充到任意钱包账户。
@@ -12,7 +12,11 @@
 
 ## 用户定稿（不得偏离）
 
-- **子钥绑定与 CID 注册解耦，改懒绑定**。理由：用户可以只用 CitizenApp 的钱包、交易等功能，这些不需要 CID。注册 CID 时签名是因为**要扣钱**；注册子钥是因为**要用广场/聊天/通讯录等需 CID 的场景**。所以用户注册 CID 之后并不马上注册子钥，而是**初次进入需要 CID 的页面时**才注册。两次签名分属两个不同的用户动作，天然分开。
+- **页面进入与钱包账户私钥彻底解耦**。广场、Chat、创作者、通讯录、会员/订阅页面进入
+  时只判断 CID，registered 直接放行，不增加任何设备子钥页面、按钮或门禁状态。已有 P-256 子钥
+  与设备用途钥直接静默使用；只有真实登录被 Worker 明确拒绝为
+  `device_not_registered`，或真实数据解密发现用途钥缺失/失效时，才鉴权一次生成全部
+  所需子钥并继续原业务。相同 `account_id` 不得因 revision 变化重复读取 child。
 - **交易费常量单源属于区块链常量库**。全仓库只有 `primitives::fee_policy` 一处，禁止在 App、Worker 或任何其它地方另立交易费常量。客户端只能从链上读。
 - 链端一次把链上收费三项都下发，「今后其他链上交易也用得到」。
 - 已授权本次修改 `citizenchain/runtime/`（runtime 二次确认硬规则已满足）。
@@ -39,13 +43,21 @@
 
 顺带清掉既有违规副本 `square_publish_service.dart` 的 `publishFeeFen = 10` / `accountExistentialDepositFen = 111`，改为读链。
 
-### 3. 设备子钥懒绑定
+### 3. 设备子钥与设备数据钥按实际缺钥初始化
 
 - 删 `WalletManager._registerDeviceSubkey` 及 `createWallet`/`importWallet` 两处调用；建钱包回到纯本地，不依赖 Worker。
-- `rebindDeviceSubkeyToAccountId` 改名 `bindDeviceSubkeyToAccountId`（同时承担首次绑定与换绑）。
-- 触发点 = `IdentityRegistrationGate`：判定 `registered` 准备放行时，若本机子钥尚未绑到当前身份账户，先绑（弹一次生物识别）再放行。五处 gate（广场/聊天/通讯录/创作者/会员）共用。
-- 多 gate 并发挂载 → in-flight Future 去重。
-- 绑定失败不放行（与 gate 现有 fail-closed 一致），给重试；不影响钱包/交易 tab。
+- `IdentityRegistrationGate` 只判断 CID；registered 直接渲染功能页，不检查设备子钥。
+- 广场/Chat 的真实登录先用现有 P-256 子钥静默签名；只有 Worker 返回
+  `device_not_registered` 才调用 `registerDeviceSubkeyForBinding`，鉴权一次后登记并重试。
+- Chat/MLS/附件/通讯录先静默解封现有用途钥；只有真实数据访问发现缺钥或封装失效时，
+  才调用独立的 `ensureDeviceDataKeysForBinding` 鉴权一次生成并重试。
+- 两条入口各自拥有静态 single-flight 和失败回滚，精确键均为
+  `(genesis_hash, cid_number, account_id)`；P-256 登记绝不生成或删除本地数据钥，本地数据钥
+  生成绝不调用设备登记、Turnstile 或 Worker；已有对应材料时读取 child 次数为 0。
+- CID 注册/换绑 finalized 只激活公开绑定并完成已授权的数据交接，不预生成数据钥，也不
+  登记 P-256 子钥。
+- CID 换绑目标必须是不同 `account_id`；相同账户在读取私钥、构造交易或数据交接前拒绝。
+- 后台推送预热只补已有 device_id/public_key 的登记，不创建 MLS、不解密数据、不读 child。
 - Worker `device/register` 读到「无 CID」时旁路 45 秒身份缓存强制回源链读一次（用户可能刚注册完 CID 就进广场，缓存里还是注册前的旧值）。
 
 ### 4. 注册前余额闸
@@ -63,34 +75,143 @@
 - `citizenapp/lib/rpc/`（代码）：`chain_rpc.dart` 加 metadata 常量读取入口。
 - `citizenapp/lib/wallet/core/`（代码+残留清理）：`wallet_manager.dart` 删建钱包时子钥注册、方法改名。
 - `citizenapp/lib/wallet/pages/`（代码+残留清理）：`create_wallet_onboarding_page.dart` fail-closed 注释与文案同步。
-- `citizenapp/lib/my/myid/`（代码）：`identity_registration_gate.dart` 懒绑定+并发去重；`myid_page.dart` 余额闸与充值跳转。
+- `citizenapp/lib/my/myid/`（代码+残留清理）：`identity_registration_gate.dart` 只保留 CID 判定并直接放行；`myid_page.dart` 余额闸与充值跳转。
 - `citizenapp/lib/8964/services/`（代码+残留清理）：`square_publish_service.dart` 删硬编码费率常量改读链。
 - `citizenapp/lib/transaction/onchain-topup/`（代码）：`_RailCard` 换真实币标。
 - `citizenapp/assets/icons/`（资源）：新增 `usdc.svg`、`usdt.svg`。
 - `citizenapp/pubspec.yaml`（配置）：注册两枚 SVG。
 - `citizenapp/cloudflare/src/{auth,chain}/`（代码）：子钥注册端点「无 CID」时强制回源链读。
-- `citizenchain/.../tests/`、`citizenapp/cloudflare/test/`、`citizenapp/test/`（测试）：常量暴露、缓存旁路、懒绑定、余额闸三分支。
+- `citizenchain/.../tests/`、`citizenapp/cloudflare/test/`、`citizenapp/test/`（测试）：常量暴露、缓存旁路、页面零子钥初始化、真实缺钥一次初始化、余额闸三分支。
 - `memory/07-ai/`、`memory/08-tasks/`、`memory/01-architecture/`（文档）：更新死契约文字、本卡、架构文档。
 
 ## 死契约变更（已获用户确认）
 
-`square-session-never-lazy-register` 原文「注册只在钱包创建」需更新为「子钥注册在初次进入需 CID 页面时」。该契约的立契理由是**后台 `ensureSession` 路径懒注册会 ANR**；本次触发点是前台、用户可见、用户主动进页面，不碰后台路径，立契理由不受影响。
+`square-session-never-lazy-register` 固定为：后台推送预热绝不注册设备、绝不读取账户 child；
+前台真实 Session 只有在 Worker 明确返回 `device_not_registered` 时才鉴权一次生成子钥。
 
 ## 执行记录
+
+- **2026-08-02 · 无版本生产 Worker 发布完成（第 2 步）**
+  - **根因与边界**：App 唯一生产根已经是 `https://www.crcfrcn.com/api`，业务请求使用
+    `/square`、`/chat`、`/chain`、`/security` 无版本路径，但线上 Worker 仍停留在旧
+    `/api/v1/*` 路由，所以广场显示加载失败，创作者与会员显示“接口不存在”，聊天和
+    通讯录的登录失败又被上层误呈现成设备安全验证。本步骤只发布当前 Worker 契约，未修改
+    第 1 步的数据钥、P-256 登记、页面门禁或钱包私钥读取逻辑。
+  - **路径收敛**：Worker 入口只剥离唯一部署前缀 `/api`；业务路由、资源白名单、App
+    请求和 bootstrap schema 全部使用无版本名称，不保留 `/v1` 兼容。bootstrap 返回的
+    `square_base_url`、`chat_base_url`、`media_base_url` 会保留请求所在的 `/api` 部署前缀，
+    避免下发不存在的同域根路径。
+  - **Durable Object / 数据边界**：`ChatRealtimeObject` 没有新增、重命名或删除，部署沿用
+    Cloudflare 已应用的 `v1` 迁移标记，不伪造第二次 migration。CitizenConsole 只执行
+    production D1 连通性与表完整性只读检查、Secret 同步和 Worker 发布；没有重建或清空
+    D1、KV、R2、Queue。
+  - **自动化验证**：Worker 全量 **33 files / 258 tests** 通过；`npm run typecheck`、
+    `npm run types:check`、Wrangler dry-run 全部通过。CitizenApp 的 bootstrap、广场、Chat、
+    创作者、会员、通讯录、CID 门禁、设备子钥定向测试 **64/64** 通过；`flutter analyze`
+    零问题。跨端测试现同时锁定 App 的 `/api` 生产根、无版本业务路径、Worker 路由白名单，
+    并断言旧 `/v1` 路径必须 404。
+  - **生产发布**：通过 CitizenConsole 两次 Touch ID 于 2026-08-02 发布成功，Cloudflare
+    Worker Version ID 为 `78f87b74-4f39-4fb5-a7e0-c9f7d9b4e81d`。真实线上验收确认
+    `/api/health`、`/api/chain/bootstrap`、`/api/security/config` 均为 200；广场、创作者、
+    会员、通讯录、Chat 的无会话请求均命中真实接口并返回 401，不再返回 404；旧
+    `/api/v1/*` 明确返回 404。bootstrap schema 为 `citizenapp.chain.bootstrap`，三条
+    service URL 均正确保留 `https://www.crcfrcn.com/api`。
+  - **真机边界**：已连接 OnePlus 6T / Android 11 上现有 CitizenApp 可正常启动；当前选中
+    钱包没有注册 CID，页面按产品规则停在“需要注册身份”，因此本轮不伪造“已注册 CID
+    逐页点击”结果，也不擅自注册或切换用户钱包。已注册页面的路径命中由真实生产 HTTP
+    与上述跨端、页面定向测试共同覆盖。
+
+- **2026-08-02 · 本地数据钥与 P-256 设备登记彻底拆分完成（第 1 步）**
+  - `ensureDeviceDataKeysForBinding` 只补生成缺少的本地用途钥；不调用设备登记、Turnstile
+    或 Worker。`registerDeviceSubkeyForBinding` 只在 Worker 明确返回
+    `device_not_registered` 后登记 P-256 子钥；不生成、覆盖或删除本地数据钥。
+  - 两类入口分别使用独立静态 single-flight、独立成功标记和独立失败回滚；相同
+    `(genesis_hash, cid_number, account_id)` 的同类并发只读取一次 child。P-256 登记失败
+    保留全部数据钥密文；本地数据钥生成失败保留 P-256 登记标记。
+  - CID 注册/自主换绑/注册局换绑 finalized 已移除设备密钥初始化，只激活公开绑定并完成
+    已授权的数据交接。广场与 Chat 只在 Worker 未登记响应后进入 P-256 登记。
+  - 测试新增“本地数据钥不受登记后端失败影响、两类独立并发去重、只补缺项、双方失败
+    互不回滚、相同账户伪换绑零 child 读取、finalized 零 P-256 登记”等断言。定向测试
+    **49/49**；`flutter analyze` 零问题；全量 `flutter test --concurrency=1` 为
+    **1098 passed / 5 skipped / 0 failed**，5 项仍是纯 Dart 宿主无原生 `libsmoldot` 守卫。
+  - `flutter build apk --debug`、`:app:compileDebugAndroidTestKotlin` 均成功；连接的 OnePlus
+    6T / Android 11 上 `connectedDebugAndroidTest` **2/2** 通过。debug APK 真机冷启动 12 秒
+    无 `HW_SEED_VAULT`、`BiometricPrompt` 或 `FATAL EXCEPTION` 日志。此前 Pixel 8a 本轮未连接。
+  - 本步骤没有修改或部署 Worker，没有新增任务卡、页面、按钮、授权状态或兼容分支；生产
+    Worker 部署仍严格留给第 2 步单独确认。
+
+- **2026-08-02 · 页面授权错误流程订正完成**
+  - **页面边界**：`IdentityRegistrationGate` 已删除设备授权状态、检查、按钮和重试入口；
+    广场、Chat、创作者、通讯录、会员/订阅只判断 CID，registered 直接渲染真功能。
+  - **密钥边界（第二次订正）**：已有 P-256 设备子钥和设备用途钥均静默使用，读取账户
+    child 次数为 0。Worker 真实返回 `device_not_registered` 时只进入
+    `registerDeviceSubkeyForBinding`；数据访问真实发现用途钥缺失/失效时只进入
+    `ensureDeviceDataKeysForBinding`。两条流程不再共用生成、登记或失败回滚。
+  - **并发与换绑**：两类进程级 single-flight 分开保存，唯一键均为
+    `(genesis_hash, cid_number, account_id)`；同一账户的同类并发只读一次 child。
+    相同 `account_id` 的 revision 变化不是换绑，已在读取 child、签名、构造交易和数据交接前拒绝。
+    CID finalized 不调用任一缺钥入口。
+  - **测试**：`flutter analyze` 零问题；广场、Chat、通讯录、会员、创作者、CID 门禁、
+    会话缺钥回调和钱包密钥状态机定向测试 **104/104**；
+    `flutter test --concurrency=1` 全量 **1093 passed / 5 skipped / 0 failed**。5 项 skip 是纯 Dart 宿主无原生 `libsmoldot` 的既有守卫。
+  - **Android 真实验收**：`flutter build apk --debug` 成功；
+    `:app:compileDebugAndroidTestKotlin` 成功；Pixel 8a / Android 16 上
+    `connectedDebugAndroidTest` **2/2** 通过，覆盖 P-256 删钥重建、设备数据钥 seal/open、
+    AAD 不匹配拒绝和删钥后旧密文失效。锁屏状态的首次执行按设计返回 `DEVICE_LOCKED`；
+    解锁后原实现直接全绿，未删除 `setUnlockedDeviceRequired(true)` 安全约束。
+  - **运行态边界**：debug APK 已真机安装启动，首屏 12 秒无 `HW_SEED_VAULT` 读取和生物识别。
+    该 debug 安装无既有钱包/CID 数据，因此不冒充已完成“真 CID 账户逐页点击”验收；
+    已注册页面的直接放行由定向页面测试和全量测试覆盖。
+  - **iOS 验收**：新 Swift 通道与 `AppDelegate.swift` 通过 `swiftc -frontend -parse`，
+    Xcode 工程通过 `plutil -lint`；本机 `xcode-select` 只指向 CommandLineTools，无法执行完整 iOS 构建或真机验收。
+  - **文档与残留**：安全规则、CitizenApp 架构、Wallet、Chat、User 技术文档和既有相关任务记录已同步；
+    被否决的页面授权文案、页面授权接口和完成标记残留已清零。
+    本次订正未新建任务卡。
+
+- **2026-08-02 · 页面生物识别修复第一次实现（错误，已彻底撤销）**
+  - **根因**：五个需 CID 页面共用的 `IdentityRegistrationGate` 在 `registered` 分支自动执行
+    设备登记；多个 Gate/MyIdService 实例会在页面进入、广播重判和链健康恢复时并发或反复
+    触发，而旧设备登记/聊天与通讯录用途钥准备会读取账户 child，因此只有已注册 CID 的
+    用户反复弹出生物识别，未注册用户停在注册门禁而不触发。
+  - **错误点**：这一版错误增加了页面级设备状态和按钮，导致既有 CID 用户因缺少新增
+    ready 标记被阻断。该产品流程不属于用户需求，现已从代码、测试和技术文档删除。
+  - **设备数据钥金库**：新增 Android Keystore AES-GCM 与 iOS Secure Enclave ECIES 独立
+    命名空间，封装 Chat/MLS/附件/通讯录用途钥；已有钥静默读取，真实缺钥才鉴权一次生成。
+    删除钱包会同步清理设备数据钥和密文索引。
+  - **全局并发去重**：`WalletManager` 用静态 single-flight，精确键为
+    `(genesis_hash, cid_number, account_id)`；相同钱包账户并发只执行一次缺钥初始化。
+  - **换绑约束**：相同 `account_id` 不是换绑，已在身份上下文、签名、交易构造和数据交接
+    之前直接拒绝；只有不同 `AccountId` 才可进入正式换绑。
+  - **后台边界**：推送预热只重登已有 device_id/public_key，不创建 MLS、不解密数据、
+    不读取 child；绑定 finalized 收敛只处理正式注册/有效换绑业务。
+  - **测试**：新增/完善门禁、MyId、WalletManager、设备金库与删除清理覆盖；断言页面进入
+    页面进入不调用子钥初始化、已有子钥读取 child 为 0、真实缺钥只读一次、跨实例并发
+    只执行一次、相同 AccountId 换绑在签名前拒绝。
+  - **原生验收**：Android `flutter build apk --debug` 成功；现有 instrumented test 补入
+    设备数据钥 seal/open、AAD 不匹配拒绝及删钥后旧密文失效，
+    `:app:compileDebugAndroidTestKotlin` 编译成功。iOS 新 Swift 文件通过
+    `swiftc -frontend -parse`，Xcode 工程通过 `plutil -lint`。本机仅安装 CommandLineTools、
+    没有完整 Xcode，且项目缺 Flutter `.metadata`，因此本轮无法执行 iOS 真机构建和两端
+    真机生物识别交互验收；该限制不伪装成已完成真机验收。
+  - **文档与残留**：安全规则、CitizenApp 架构、钱包、Chat、用户技术文档已同步；旧
+    页面级设备状态、按钮、旧初始化入口与误导注释已清零。未新建任务卡。
 
 - **2026-07-29 · 全部落地**
   - **链端**（`runtime/transaction/onchain`）：pallet Config 加 `OnchainMinFee` / `OnchainFeeRate` / `VoteFlatFee` 三个 `#[pallet::constant]`；`configs.rs` 用 `ConstU128<{ primitives::fee_policy::… }>` 与 `parameter_types! RuntimeOnchainFeeRate` 绑定，**只转发不另立数字**。pallet 测试 mock 同步绑定，并新增守卫用例 `exposed_fee_constants_forward_fee_policy_exactly`（逐项 assert 等于 `fee_policy` 真源，有人在绑定处改写数字立刻红）。`cargo test -p onchain` **22/22**，`cargo check -p citizenchain` 整体通过。未动 storage / call 索引 / genesis / 收费逻辑。
   - **客户端读常量**：`chain_rpc.dart` 加 `fetchPalletConstant` / `fetchPalletConstantU128` / `fetchMinSelfPayBalanceFen`（`= OnchainMinFee + Balances.ExistentialDeposit`）。走已有 `metadata.chainInfo.constants`，零新依赖、零新网络往返（metadata 已缓存）。常量缺失抛 `StateError` 由调用方 fail-closed，不兜默认值。
   - **删掉 Dart 侧费率副本**：`square_publish_service.dart` 的 `publishFeeFen = 10` / `accountExistentialDepositFen = 111` / `minimumPublishBalanceFen` 三个常量**全删**，改为 `SquarePublishBalanceReader.fetchMinSelfPayBalanceFen()` 读链。全仓 grep 三个符号已零命中。
-  - **子钥懒绑定**：删 `WalletManager._registerDeviceSubkey` 及 `createWallet`/`importWallet` 两处调用（建钱包回到纯本地、不依赖 Worker）；`rebindDeviceSubkeyToAccountId` → `bindDeviceSubkeyToAccountId`（首次绑定与换绑共用）；`MyIdService.ensureDeviceSubkeyBound()` 带 in-flight 去重，未注册 CID 直接拒（后端不收）；`IdentityRegistrationGate` 新增 `_GateStatus.bindFailed` + `subkeyBinder` 注入点 + `debugSubkeyBinder` 测试钩子，放行前按需绑定、失败不放行且不自愈（要弹生物识别，只能用户点重试）。
+  - **当时的子钥懒绑定（已由 2026-08-02 新边界替代）**：建钱包/导入钱包不注册设备；
+    当时曾把设备登记放在需 CID 页面门禁的自动放行路径。该设计会让多个常驻 Gate 在页面
+    进入时触发账户 child 读取，现已彻底删除，禁止恢复。
   - **修掉一个被时机变更打破的旧假设**：完成标记不能在钱包创建时写基线，否则会
     谎称设备已绑定。最终实现按 finalized
     `(cid_number, binding_revision, account_id)` 激活当前钱包派生上下文，只由真实完成路径推进。
   - **Worker**：`chain/identity.ts` 新增 `fetchChainIdentityStateFreshIfUnbound`（缓存无 CID 才回源，有 CID 直接采信不多打链）；`auth/service.ts` 的 `registerDeviceSubkey` 改用它。
   - **币轨图标**：新增 `assets/icons/usdc.svg`（`#2775CA`）、`usdt.svg`（`#26A17B`），手写 SVG、无外部依赖；`_RailCard` 按 `rail.token` 渲染，未登记币种回退 USDC 底图不崩页；`pubspec.yaml` 已注册。
-  - **测试**：Worker `typecheck` 干净 + `vitest run` **205/205**（新增身份缓存旁路两例：无 CID 回源、有 CID 不回源）。Flutter `dart analyze lib test` **零问题**；`test/my/myid/` **65/65**（新增懒绑定三例 + 余额闸两例 + 门禁绑定两例）、`test/myid_page_test.dart` **20/20**（新增余额闸三分支）、`test/wallet/` **145/145**（原「门禁0 子钥强绑定」三例按新契约重写为「建钱包不注册子钥 + 唯一绑定入口」）、`test/8964/square_publish_service_test.dart` **8/8**。
-  - **⚠️ 更正一处误判（2026-07-29 复盘）**：本卡上一版曾写「全量约 40 项失败是既有干扰、与本任务无关」——**这是错的**，当时只单跑了两个不相干文件就下结论。复查发现那 40 项**绝大多数正是本次 gate 改动引起的连锁**：`IdentityRegistrationGate` 放行前新增「按需绑子钥」，默认绑定器 `MyIdService().ensureDeviceSubkeyBound` 会 new 真 `ChainRpc` 打 smoldot；被 gate 包裹的页面测试只注入了 `debugResolver` 桩、没配套桩绑定器，导致放行前触发真链读、`pumpAndSettle timed out`，并把 `--concurrency=1` 下的后续套件一起带崩。**根因证据**：`square_home_page_test.dart` 单跑当时 0/4，报 `pumpAndSettle timed out` + `[ChainRpc] 使用 smoldot 轻节点模式`。
-  - **修复**：唯一测试 helper `test/support/identity_gate_test_util.dart` 的 `useRegisteredIdentityGate()` 在设 `debugResolver` 的同时注入 no-op `debugSubkeyBinder`（tearDown 一并清）。这是所有被 gate 包裹的页面测试的统一绕过点，一改全覆盖。
+  - **当时的测试**：Worker `typecheck` 干净 + `vitest run` **205/205**；Flutter `dart analyze lib test` **零问题**。当时为页面自动登记新增的用例已随错误设计于 2026-08-02 删除，由“页面直接放行 + 真实缺钥一次初始化”回归用例取代。
+  - **⚠️ 更正一处误判（2026-07-29 复盘）**：本卡上一版曾写「全量约 40 项失败是既有干扰、与本任务无关」——**这是错的**，当时只单跑了两个不相干文件就下结论。复查发现那 40 项**绝大多数正是当时 Gate 自动登记设备改动引起的连锁**：被 Gate 包裹的页面测试只注入身份解析桩，自动登记路径却创建真实链客户端，导致 `pumpAndSettle timed out`。该自动登记设计已在 2026-08-02 删除。
+  - **当时的测试修复**：统一 Gate 测试 helper 当时曾注入设备登记替身；
+    2026-08-02 已将设备状态与替身全部删除，测试直接断言 registered 页面只渲染真功能且没有额外按钮。
   - **全量绿**：修复后 `flutter test --concurrency=1` 全量 **1017 passed / 5 skipped / 0 failed（`All tests passed!`）**。4 个受影响文件单跑复核：`square_home_page` 4/4、`chat_tab` 20/20、`membership_page` 21/21、`contact_book` 9/9。5 个 skipped 是无 native libsmoldot 时的既有 skip 守卫（`smoldot_native_probe`），非失败。
   - **真实验收的边界（如实记录）**：链端只做到 `cargo test` + 整体 `cargo check`；常量经 metadata 下发到客户端、余额闸与懒绑定的端到端真机验证**需要正式链可出块**，而正式链当前仍被 `20260717-citizenapp-stablecoin-topup.md` 记录的创世/节点守卫不一致阻塞，故本轮**未做真机端到端**。Worker 侧新分支由单测覆盖（`device/register` 的活体验证同样依赖链）。
   - **文档**：`memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md` §4.5 补「设备子钥懒绑定」与「注册前余额闸 + 交易费常量单源」两条；死契约 `square-session-never-lazy-register` 已更新子钥注册时机并说明为何不放松 ANR 立契理由。
@@ -117,5 +238,5 @@
 
 ## 待办（下一步）
 
-- 正式链恢复出块后补真机端到端：① 新钱包能建成（不再被 `cid_not_bound` 阻断）；② 注册前余额闸三分支；③ 初次进广场触发子钥绑定；④ 客户端确实从 metadata 读到三个费率常量。
+- 正式链恢复出块后补真机端到端：① 新钱包能建成（不再被 `cid_not_bound` 阻断）；② 注册前余额闸三分支；③ 已有子钥进入广场零生物识别，Worker 确认缺钥时只鉴权一次并继续原登录；④ 客户端确实从 metadata 读到三个费率常量。
 - 币标（USDC/USDT SVG）未做真机/模拟器目视确认。

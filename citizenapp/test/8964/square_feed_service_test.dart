@@ -25,7 +25,7 @@ void main() {
     final client = SquareApiClient(
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
-        expect(request.url.path, '/v1/square/feed/recommended');
+        expect(request.url.path, '/square/feed/recommended');
         return http.Response(
           '''
           {
@@ -104,7 +104,7 @@ void main() {
     final client = SquareApiClient(
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
-        expect(request.url.path, '/v1/square/uploads/prepare');
+        expect(request.url.path, '/square/uploads/prepare');
         expect(request.headers['authorization'], 'Bearer sqs_test');
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body['post_category'], 'campaign');
@@ -164,7 +164,7 @@ void main() {
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
         expect(request.method, 'DELETE');
-        expect(request.url.path, '/v1/square/posts/sqp_old');
+        expect(request.url.path, '/square/posts/sqp_old');
         expect(request.headers['authorization'], 'Bearer sqs_test');
         return http.Response(
           jsonEncode({'ok': true, 'post_id': 'sqp_old'}),
@@ -182,7 +182,7 @@ void main() {
 
   test('SquareApiClient 严格解析本人副本原始字节并携带设备请求证明', () async {
     final manifestBytes = utf8.encode(jsonEncode({
-      'schema': 'citizenapp.square.post.v1',
+      'schema': 'citizenapp.square.post',
       'account_id':
           '0x8888888888888888888888888888888888888888888888888888888888888888',
       'post_category': 'normal',
@@ -194,7 +194,7 @@ void main() {
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
         expect(request.method, 'GET');
-        expect(request.url.path, '/v1/square/posts/self');
+        expect(request.url.path, '/square/posts/self');
         expect(request.url.queryParameters['limit'], '5');
         expect(request.headers['authorization'], 'Bearer sqs_test');
         expect(request.headers['x-device-signature'], isNotEmpty);

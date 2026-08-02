@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:citizenapp/transaction/personal-manage/personal_manage_models.dart';
 
-/// 提案展示号(双层 ID 设计,spec_version v1)。
+/// 提案展示号（双层 ID 设计）。
 ///
 /// 链上 `ProposalDisplayId[u64] = ProposalDisplayMeta { year: u16, seq_in_year: u32 }`
 /// 反查表的客户端镜像。主键 `proposal_id` 全局单调与展示号解耦,渲染层基于

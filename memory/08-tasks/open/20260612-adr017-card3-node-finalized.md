@@ -20,7 +20,7 @@
 7. `node/src/governance/organization-manage/chain.rs`:删本地 `fetch_finalized_head`;实勘 3 处 state_getStorage 原本已传 finalized_hash(C 类保留),真正裸读是 `state_getKeysPaged` 翻页循环 1 处——补钉 `fetch_institution_detail` 同一 finalized 快照哈希(不经 chain_query 单页函数,保证 key 列举与 storage 读取钉同一块)。
 8. `node/src/transaction/duoqian_transfer/proposal.rs`:删本地 `fetch_finalized_head`/`fetch_finalized_storage`/`rpc_post`,SafetyFund/Sweep 两处读取改收口(原已 finalized,仅合并实现)。
 9. `node/src/transaction/offchain_transaction/endpoint.rs`:1 处 A 类(ClearingBankNodes)改收口,删本地 rpc_post。
-10. `node/src/settings/fee-address/mod.rs`:1 处 A 类(RewardWalletByMiner 绑定状态查询)改收口。
+10. `node/src/settings/reward_account.rs`:1 处 A 类(`RewardAccountIdByMiner` 绑定状态查询)改收口。
 11. `node/src/home/rpc/mod.rs`:删本地 `finalized_block_hash`(4 份重复之一),3 处调用(finalized 高度/总发行/永久质押)改收口。
 
 ### A 类替换计数

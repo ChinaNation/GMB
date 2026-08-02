@@ -10,6 +10,7 @@ import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
+import 'package:citizenapp/wallet/core/device_data_key_vault.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import '../support/fake_secure_seed_store.dart';
@@ -94,11 +95,66 @@ class _RecordingDeviceSubkey extends DeviceSubkey {
   final Set<int> failingWalletIndexes = <int>{};
 
   @override
+  Future<String> publicKeyHex(int walletIndex) async =>
+      '04${List<String>.filled(64, '11').join()}';
+
+  @override
   Future<void> delete(int walletIndex) async {
     deletedWalletIndexes.add(walletIndex);
     if (failingWalletIndexes.contains(walletIndex)) {
       throw StateError('设备子钥删除失败');
     }
+  }
+}
+
+/// 纯内存设备数据钥金库。测试验证钱包层状态机，不依赖原生 Keystore/SE 通道。
+class _MemoryDeviceDataKeyVault extends DeviceDataKeyVault {
+  final Map<int, Map<String, Uint8List>> values =
+      <int, Map<String, Uint8List>>{};
+  final List<int> deletedWalletIndexes = <int>[];
+  final Set<int> failingWalletIndexes = <int>{};
+  int sealCount = 0;
+  int openCount = 0;
+  int? failSealAt;
+
+  String _aadKey(Uint8List aad) => _hex(aad);
+
+  @override
+  Future<String> seal({
+    required int walletIndex,
+    required Uint8List plaintext,
+    required Uint8List aad,
+  }) async {
+    sealCount++;
+    if (sealCount == failSealAt) {
+      throw const DeviceDataKeyVaultException('测试设备数据钥封装失败');
+    }
+    values.putIfAbsent(walletIndex, () => <String, Uint8List>{})[_aadKey(aad)] =
+        Uint8List.fromList(plaintext);
+    return 'sealed:$walletIndex:${_aadKey(aad)}';
+  }
+
+  @override
+  Future<Uint8List> open({
+    required int walletIndex,
+    required String blob,
+    required Uint8List aad,
+  }) async {
+    openCount++;
+    final value = values[walletIndex]?[_aadKey(aad)];
+    if (value == null) {
+      throw const DeviceDataKeyVaultException('测试设备数据钥不存在');
+    }
+    return Uint8List.fromList(value);
+  }
+
+  @override
+  Future<void> delete(int walletIndex) async {
+    deletedWalletIndexes.add(walletIndex);
+    if (failingWalletIndexes.contains(walletIndex)) {
+      throw const DeviceDataKeyVaultException('测试设备数据钥删除失败');
+    }
+    values.remove(walletIndex);
   }
 }
 
@@ -127,6 +183,7 @@ void main() {
   late FakeSecureSeedStore fakeStore;
   late _MemoryBlobStore contactBlobStore;
   late _RecordingDeviceSubkey deviceSubkey;
+  late _MemoryDeviceDataKeyVault deviceDataKeyVault;
 
   // 动钱动权验证已上移到 WalletManager 的硬件金库读 child；单测里把 local_auth
   // channel 打桩为「验证通过」，让纯 Dart 环境不因缺插件而抛。
@@ -140,6 +197,8 @@ void main() {
     WalletManager.debugContactKeyStore = contactBlobStore;
     deviceSubkey = _RecordingDeviceSubkey();
     WalletManager.debugDeviceSubkey = deviceSubkey;
+    deviceDataKeyVault = _MemoryDeviceDataKeyVault();
+    WalletManager.debugDeviceDataKeyVault = deviceDataKeyVault;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(localAuthChannel, (call) async {
       switch (call.method) {
@@ -163,7 +222,7 @@ void main() {
   });
 
   group('WalletManager — 热钱包创建/导入/删除（ROOTLESS）', () {
-    test('通讯录密钥只由当前钱包派生且不落安全存储', () async {
+    test('通讯录已有用途钥静默读取；实际缺钥时只鉴权一次生成', () async {
       final manager = WalletManager();
       final created = await manager.importWallet(_mnemonicA);
       final accountId = created.accountId;
@@ -175,17 +234,53 @@ void main() {
         accountId: accountId,
       );
 
+      fakeStore.readCount = 0;
       final material =
           await manager.ensureContactKeyMaterialForAccountId(accountId);
-
       expect(material.encryptionKey, hasLength(32));
       expect(material.indexKey, hasLength(32));
       expect(material.encryptionKey, isNot(material.indexKey));
-      expect(
-        contactBlobStore.values.keys,
-        [AccountDataBindingStore.activeBindingKey],
-        reason: '安全存储只允许保存公开绑定元数据，不保存派生密钥',
+      expect(fakeStore.readCount, 1, reason: '真实缺钥只允许读取一次账户 child');
+
+      final second =
+          await manager.ensureContactKeyMaterialForAccountId(accountId);
+      expect(second.encryptionKey, material.encryptionKey);
+      expect(second.indexKey, material.indexKey);
+      expect(fakeStore.readCount, 1, reason: '已有用途钥必须直接静默使用');
+      expect(deviceDataKeyVault.sealCount, 7);
+      expect(deviceDataKeyVault.openCount, 4);
+    });
+
+    test('设备数据钥实际丢失时鉴权一次重建，后续静默读取', () async {
+      final manager = WalletManager();
+      final created = await manager.importWallet(_mnemonicA);
+      final accountId = created.accountId;
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'GD-CTZN1-TEST',
+        bindingRevision: 1,
+        accountId: accountId,
       );
+
+      final first =
+          await manager.ensureContactKeyMaterialForAccountId(accountId);
+      first.dispose();
+      fakeStore.readCount = 0;
+      // 模拟 Keystore / Secure Enclave 中的设备数据钥真实丢失，
+      // 但公开绑定和密文仍在；这才是允许读取账户 child 的鉴权场景。
+      deviceDataKeyVault.values.clear();
+
+      final rebuilt =
+          await manager.ensureContactKeyMaterialForAccountId(accountId);
+      expect(rebuilt.encryptionKey, hasLength(32));
+      expect(rebuilt.indexKey, hasLength(32));
+      expect(fakeStore.readCount, 1, reason: '硬件数据钥真实丢失只允许鉴权一次');
+
+      final silent =
+          await manager.ensureContactKeyMaterialForAccountId(accountId);
+      expect(silent.encryptionKey, rebuilt.encryptionKey);
+      expect(silent.indexKey, rebuilt.indexKey);
+      expect(fakeStore.readCount, 1, reason: '重建后必须恢复设备金库静默读取');
     });
 
     test('create/import/delete 只存账户0 child，不存种子/助记词', () async {
@@ -215,6 +310,10 @@ void main() {
       expect(await manager.getWallets(), isEmpty);
       expect(fakeStore.accountKeys, isEmpty);
       expect(deviceSubkey.deletedWalletIndexes, [created.profile.walletIndex]);
+      expect(
+        deviceDataKeyVault.deletedWalletIndexes,
+        [created.profile.walletIndex],
+      );
 
       final imported = await manager.importWallet(_mnemonicA);
       expect(imported.walletIndex, 1);
@@ -230,6 +329,10 @@ void main() {
       expect(fakeStore.accountKeys, isEmpty);
       expect(
         deviceSubkey.deletedWalletIndexes,
+        [created.profile.walletIndex, imported.walletIndex],
+      );
+      expect(
+        deviceDataKeyVault.deletedWalletIndexes,
         [created.profile.walletIndex, imported.walletIndex],
       );
     });
@@ -264,6 +367,7 @@ void main() {
       await manager.deleteAccount(account1.accountId);
 
       expect(deviceSubkey.deletedWalletIndexes, isEmpty);
+      expect(deviceDataKeyVault.deletedWalletIndexes, isEmpty);
       expect(fakeStore.accountKeys.containsKey(account1.accountId), isFalse);
       expect(
         await WalletIsar.instance.read(
@@ -275,6 +379,7 @@ void main() {
 
       await manager.deleteWallet(wallet.walletIndex);
       expect(deviceSubkey.deletedWalletIndexes, [wallet.walletIndex]);
+      expect(deviceDataKeyVault.deletedWalletIndexes, [wallet.walletIndex]);
       expect(contactBlobStore.values, isEmpty);
       expect(
         await WalletIsar.instance.read(
@@ -302,6 +407,7 @@ void main() {
       expect(fakeStore.accountKeys, isEmpty);
       expect(contactBlobStore.values, isEmpty);
       expect(deviceSubkey.deletedWalletIndexes, [hot.walletIndex]);
+      expect(deviceDataKeyVault.deletedWalletIndexes, [hot.walletIndex]);
       expect(
           deviceSubkey.deletedWalletIndexes, isNot(contains(cold.walletIndex)));
     });
@@ -313,6 +419,7 @@ void main() {
       final wallet = await manager.importWallet(_mnemonicA);
       failingStore.failAccountKeyDeletion = true;
       deviceSubkey.failingWalletIndexes.add(wallet.walletIndex);
+      deviceDataKeyVault.failingWalletIndexes.add(wallet.walletIndex);
 
       await expectLater(
         manager.deleteWallet(wallet.walletIndex),
@@ -323,6 +430,7 @@ void main() {
             allOf(
               contains('账户 child 删除失败'),
               contains('设备子钥删除失败'),
+              contains('设备数据钥删除失败'),
             ),
           ),
         ),
@@ -331,6 +439,7 @@ void main() {
       expect(await manager.getWallets(), isEmpty);
       expect(failingStore.deletedWalletKeyIndexes, [wallet.walletIndex]);
       expect(deviceSubkey.deletedWalletIndexes, [wallet.walletIndex]);
+      expect(deviceDataKeyVault.deletedWalletIndexes, [wallet.walletIndex]);
     });
 
     test('importWallet 拒绝非法助记词', () async {
@@ -375,7 +484,10 @@ void main() {
         bindingRevision: 1,
         accountId: walletA.accountId,
       );
-      final keyA = await manager.deriveDataKeyForCurrentBinding(
+      final bindingA =
+          await manager.accountDataBindingForAccountId(walletA.accountId);
+      await manager.ensureDeviceDataKeysForBinding(bindingA);
+      final keyA = await manager.readDataKeyForCurrentBinding(
         walletA.accountId,
         LocalKeyPurpose.chat,
       );
@@ -401,7 +513,10 @@ void main() {
         bindingRevision: 2,
         accountId: walletB.accountId,
       );
-      final keyB = await manager.deriveDataKeyForCurrentBinding(
+      final bindingB =
+          await manager.accountDataBindingForAccountId(walletB.accountId);
+      await manager.ensureDeviceDataKeysForBinding(bindingB);
+      final keyB = await manager.readDataKeyForCurrentBinding(
         walletB.accountId,
         LocalKeyPurpose.chat,
       );
@@ -430,7 +545,7 @@ void main() {
     });
   });
 
-  group('设备子钥懒绑定：建钱包不注册子钥', () {
+  group('实际缺钥一次生成：页面门禁不参与', () {
     tearDown(() => WalletManager.subkeyRegistrar = null);
 
     /// 一旦被调用即抛，用来证明建钱包/导入根本不会走到子钥注册。
@@ -463,13 +578,35 @@ void main() {
       expect(fakeStore.accountKeys[profile.accountId], isNotNull);
     });
 
-    test('bindDeviceSubkeyToCurrentBinding 才是唯一绑定入口，按 CID 当前账户签证明', () async {
+    test('真实通讯录数据缺钥只生成本地数据钥，登记后端失败也不受影响', () async {
+      WalletManager.subkeyRegistrar = failingRegistrar;
+      final manager = WalletManager();
+      final profile = await manager.importWallet(_mnemonicA);
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: profile.accountId,
+      );
+      fakeStore.readCount = 0;
+
+      final material =
+          await manager.ensureContactKeyMaterialForAccountId(profile.accountId);
+
+      expect(material.encryptionKey, hasLength(32));
+      expect(material.indexKey, hasLength(32));
+      expect(fakeStore.readCount, 1);
+      expect(deviceDataKeyVault.sealCount, 7);
+    });
+
+    test('Worker 确认未登记后才按 CID 当前账户签 P-256 绑定证明', () async {
       String? seenCidNumber;
       int? seenBindingRevision;
       String? seenAccountId;
       final manager = WalletManager();
       final created = await manager.createWallet();
-      // 建钱包阶段一次都不该调 registrar；绑定只在进入需 CID 页面时由门禁触发。
+      // 建钱包、页面门禁和数据钥生成都不调用 registrar；只有 Worker 确认设备未登记
+      // 后才进入远端登记入口。
       WalletManager.subkeyRegistrar = ({
         required int walletIndex,
         required String cidNumber,
@@ -483,17 +620,25 @@ void main() {
         final signature = await signBinding(Uint8List(32));
         expect(signature.startsWith('0x'), isTrue);
       };
-      await manager.bindDeviceSubkeyToCurrentBinding(
+      await _activateAccountDataBinding(
+        manager,
         cidNumber: 'CN220-CTZN2-198805200-2026',
         bindingRevision: 1,
         accountId: created.profile.accountId,
       );
+      final binding = await manager.accountDataBindingForAccountId(
+        created.profile.accountId,
+      );
+      fakeStore.readCount = 0;
+      expect(fakeStore.readCount, 0);
+      await manager.registerDeviceSubkeyForBinding(binding);
       expect(seenCidNumber, 'CN220-CTZN2-198805200-2026');
       expect(seenBindingRevision, 1);
       expect(seenAccountId, created.profile.accountId);
+      expect(fakeStore.readCount, 1);
     });
 
-    test('同一绑定重复调用只登记一次；换绑改变版本或账户即重新登记', () async {
+    test('本地数据钥并发生成全局去重，只读取一次 child，且绝不登记 P-256', () async {
       var registrations = 0;
       final manager = WalletManager();
       final created = await manager.createWallet();
@@ -507,26 +652,174 @@ void main() {
         registrations++;
         await signBinding(Uint8List(32));
       };
-      Future<void> bind(int revision) =>
-          manager.bindDeviceSubkeyToCurrentBinding(
-            cidNumber: 'CN220-CTZN2-198805200-2026',
-            bindingRevision: revision,
-            accountId: created.profile.accountId,
-          );
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: created.profile.accountId,
+      );
+      final binding = await manager.accountDataBindingForAccountId(
+        created.profile.accountId,
+      );
+      fakeStore.readCount = 0;
 
-      // 登记要签名、签名要弹生物识别。五处门禁各自持有一个 MyIdService 实例，
-      // 进程内去重挡不住，只有落本机的标记才能保证不重复弹。
-      await bind(1);
-      await bind(1);
-      await bind(1);
-      expect(registrations, 1);
+      await Future.wait(<Future<void>>[
+        WalletManager().ensureDeviceDataKeysForBinding(binding),
+        WalletManager().ensureDeviceDataKeysForBinding(binding),
+        manager.ensureDeviceDataKeysForBinding(binding),
+      ]);
+      expect(registrations, 0);
+      expect(fakeStore.readCount, 1);
+      expect(deviceDataKeyVault.sealCount, 7);
 
-      // 换绑推进 binding_revision → 标记名随之改变 → 必须重新登记。
-      await bind(2);
-      expect(registrations, 2);
+      await manager.ensureDeviceDataKeysForBinding(binding);
+      expect(registrations, 0);
+      expect(fakeStore.readCount, 1, reason: '已有数据钥的相同账户不得再次读取 child');
     });
 
-    test('登记失败不写标记，下次仍会重试', () async {
+    test('P-256 登记拥有独立全局并发去重，不生成本地设备数据钥', () async {
+      var registrations = 0;
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      WalletManager.subkeyRegistrar = ({
+        required int walletIndex,
+        required String cidNumber,
+        required int bindingRevision,
+        required String accountId,
+        required Future<String> Function(Uint8List bindingMessage) signBinding,
+      }) async {
+        registrations++;
+        await signBinding(Uint8List(32));
+      };
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: created.profile.accountId,
+      );
+      final binding = await manager.accountDataBindingForAccountId(
+        created.profile.accountId,
+      );
+      fakeStore.readCount = 0;
+
+      await Future.wait(<Future<void>>[
+        WalletManager().registerDeviceSubkeyForBinding(binding),
+        WalletManager().registerDeviceSubkeyForBinding(binding),
+        manager.registerDeviceSubkeyForBinding(binding),
+      ]);
+
+      expect(registrations, 1);
+      expect(fakeStore.readCount, 1);
+      expect(deviceDataKeyVault.sealCount, 0);
+    });
+
+    test('本地数据钥只补缺少的用途，不覆盖已经存在的用途密文', () async {
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: created.profile.accountId,
+      );
+      final binding = await manager.accountDataBindingForAccountId(
+        created.profile.accountId,
+      );
+      await manager.ensureDeviceDataKeysForBinding(binding);
+      final dataBlobNames = contactBlobStore.values.keys
+          .where((key) => key.startsWith('citizenapp_device_data_key_'))
+          .toList(growable: false);
+      expect(dataBlobNames, hasLength(7));
+      final retained = <String, String>{
+        for (final name in dataBlobNames.skip(1))
+          name: contactBlobStore.values[name]!,
+      };
+      await contactBlobStore.delete(dataBlobNames.first);
+      fakeStore.readCount = 0;
+
+      await manager.ensureDeviceDataKeysForBinding(binding);
+
+      expect(fakeStore.readCount, 1);
+      expect(deviceDataKeyVault.sealCount, 8, reason: '只允许补封装缺少的一把用途钥');
+      for (final entry in retained.entries) {
+        expect(contactBlobStore.values[entry.key], entry.value);
+      }
+    });
+
+    test('本地数据钥生成失败只回滚本次数据 blob，不删除 P-256 登记标记', () async {
+      var registrations = 0;
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      WalletManager.subkeyRegistrar = ({
+        required int walletIndex,
+        required String cidNumber,
+        required int bindingRevision,
+        required String accountId,
+        required Future<String> Function(Uint8List bindingMessage) signBinding,
+      }) async {
+        registrations++;
+        await signBinding(Uint8List(32));
+      };
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: created.profile.accountId,
+      );
+      final binding = await manager.accountDataBindingForAccountId(
+        created.profile.accountId,
+      );
+      await manager.registerDeviceSubkeyForBinding(binding);
+      final markerNames = contactBlobStore.values.keys
+          .where((key) => key.startsWith('citizenapp_cid_subkey_bound_'))
+          .toList(growable: false);
+      expect(markerNames, hasLength(1));
+      deviceDataKeyVault.failSealAt = 3;
+
+      await expectLater(
+        manager.ensureDeviceDataKeysForBinding(binding),
+        throwsA(isA<DeviceDataKeyVaultException>()),
+      );
+
+      expect(registrations, 1);
+      expect(contactBlobStore.values[markerNames.single], '1');
+      expect(
+        contactBlobStore.values.keys.where(
+          (key) => key.startsWith('citizenapp_device_data_key_'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('相同 account_id 不得用新 revision 伪装换绑，两类入口拒绝前均不读 child', () async {
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: created.profile.accountId,
+      );
+      fakeStore.readCount = 0;
+      final invalid = AccountDataBinding(
+        genesisHash: _genesisHash,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 2,
+        accountId: created.profile.accountId,
+      );
+
+      await expectLater(
+        manager.ensureDeviceDataKeysForBinding(invalid),
+        throwsA(isA<WalletAuthException>()),
+      );
+      await expectLater(
+        manager.registerDeviceSubkeyForBinding(invalid),
+        throwsA(isA<WalletAuthException>()),
+      );
+      expect(fakeStore.readCount, 0);
+    });
+
+    test('P-256 登记失败不删除已生成的数据钥，重试也不重新封装数据钥', () async {
       var registrations = 0;
       final manager = WalletManager();
       final created = await manager.createWallet();
@@ -540,18 +833,41 @@ void main() {
         registrations++;
         if (registrations == 1) throw Exception('后端登记失败');
       };
-      Future<void> bind() => manager.bindDeviceSubkeyToCurrentBinding(
-            cidNumber: 'CN220-CTZN2-198805200-2026',
-            bindingRevision: 1,
-            accountId: created.profile.accountId,
-          );
+      await _activateAccountDataBinding(
+        manager,
+        cidNumber: 'CN220-CTZN2-198805200-2026',
+        bindingRevision: 1,
+        accountId: created.profile.accountId,
+      );
+      final binding = await manager.accountDataBindingForAccountId(
+        created.profile.accountId,
+      );
+      await manager.ensureDeviceDataKeysForBinding(binding);
+      final dataBlobs = Map<String, String>.fromEntries(
+        contactBlobStore.values.entries.where(
+          (entry) => entry.key.startsWith('citizenapp_device_data_key_'),
+        ),
+      );
+      expect(dataBlobs, hasLength(7));
+      expect(deviceDataKeyVault.sealCount, 7);
+      fakeStore.readCount = 0;
 
-      await expectLater(bind(), throwsA(isA<Exception>()));
-      await bind();
+      await expectLater(
+        manager.registerDeviceSubkeyForBinding(binding),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        Map<String, String>.fromEntries(
+          contactBlobStore.values.entries.where(
+            (entry) => entry.key.startsWith('citizenapp_device_data_key_'),
+          ),
+        ),
+        dataBlobs,
+      );
+      await manager.registerDeviceSubkeyForBinding(binding);
       expect(registrations, 2);
-      // 第二次成功后标记落地，第三次不再登记。
-      await bind();
-      expect(registrations, 2);
+      expect(fakeStore.readCount, 2, reason: '两次远端登记尝试各鉴权一次');
+      expect(deviceDataKeyVault.sealCount, 7, reason: '登记失败与重试不得碰数据钥');
     });
   });
 

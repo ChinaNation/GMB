@@ -212,10 +212,34 @@ impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIde
     }
 }
 
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TestBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl BenchmarkHelper<u64, pallet::SignatureOf<Test>> for TestBenchmarkHelper {
+    fn signer() -> (sp_core::sr25519::Public, u64) {
+        let public = sp_io::crypto::sr25519_generate(0.into(), None);
+        let mut account_id = [0u8; 8];
+        account_id.copy_from_slice(&public.0[..8]);
+        (public, u64::from_le_bytes(account_id))
+    }
+
+    fn sign(signer: &sp_core::sr25519::Public, message: &[u8]) -> pallet::SignatureOf<Test> {
+        sp_io::crypto::sr25519_sign(0.into(), signer, message)
+            .expect("benchmark signer exists")
+            .0
+            .to_vec()
+            .try_into()
+            .expect("sr25519 signature fits")
+    }
+}
+
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxCitizenSignatureLength = MaxCitizenSignatureLength;
     type CitizenIdentityAuthority = TestCitizenIdentityAuthority;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = TestBenchmarkHelper;
     type OnVotingIdentityRegistered = ();
     type TimeProvider = FixedTime;
     type MaxPopulationDaysPerBlock = MaxPopulationDaysPerBlock;
@@ -901,7 +925,8 @@ fn self_rebind_rejects_a_historical_authorization_after_two_later_rotations() {
 #[test]
 fn admin_rebind_cid_account_id_moves_binding_to_new_account_id() {
     new_test_ext().execute_with(|| {
-        // 注册局占号绑账户 1(匿名),用户丢钥后由注册局代换绑到账户 2。
+        // 注册局占号绑账户 1（匿名），随后由有权限注册局直接换绑到账户 2；
+        // 本入口只要求注册局鉴权与新账户签名，不要求当前账户签名。
         occupy_tag_as("adm1", 1);
         let cid_bytes = citizen_cid_number("adm1");
         let expires_at = rebind_expires_at();
@@ -946,13 +971,17 @@ fn admin_rebind_cid_account_id_rebinds_civic_cid_with_scoped_registrar() {
     new_test_ext().execute_with(|| {
         let cid_bytes = citizen_cid_number("0001");
         occupy_tag("0001");
-        assert_ok!(CitizenIdentity::register_voting_identity(
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            voting_payload(1, &cid_bytes),
+            candidate_payload(1, &cid_bytes),
             valid_signature(),
         ));
+        let voting_identity_before =
+            VotingIdentityByCid::<Test>::get(cid(&cid_bytes)).expect("voting identity exists");
+        let candidate_identity_before = CandidateIdentityByCid::<Test>::get(cid(&cid_bytes))
+            .expect("candidate identity exists");
         let expires_at = rebind_expires_at();
         assert_ok!(CitizenIdentity::admin_rebind_cid_account_id(
             RuntimeOrigin::signed(100),
@@ -965,14 +994,26 @@ fn admin_rebind_cid_account_id_rebinds_civic_cid_with_scoped_registrar() {
             rebind_signature(2, &cid_bytes, 1, 2, 1, expires_at),
         ));
         assert_eq!(AccountIdByCid::<Test>::get(cid(&cid_bytes)), Some(2));
-        assert!(VotingIdentityByCid::<Test>::contains_key(cid(&cid_bytes)));
+        // 投票、候选资料始终按 CID 存储；换绑只替换当前签名账户，不迁移或改写资料。
+        assert_eq!(
+            VotingIdentityByCid::<Test>::get(cid(&cid_bytes)),
+            Some(voting_identity_before)
+        );
+        assert_eq!(
+            CandidateIdentityByCid::<Test>::get(cid(&cid_bytes)),
+            Some(candidate_identity_before)
+        );
         assert!(CitizenIdentity::citizen_subject(&1).is_none());
+        assert!(CitizenIdentity::voting_subject(&1, &town_scope()).is_none());
+        assert!(CitizenIdentity::candidate_subject(&1, &town_scope()).is_none());
         assert_eq!(
             CitizenIdentity::citizen_subject(&2)
                 .expect("实名 CID 应由新钱包继续使用")
                 .cid_number,
             cid(&cid_bytes)
         );
+        assert!(CitizenIdentity::voting_subject(&2, &town_scope()).is_some());
+        assert!(CitizenIdentity::candidate_subject(&2, &town_scope()).is_some());
     });
 }
 
@@ -2379,5 +2420,161 @@ fn permanent_cid_update_keeps_registry_record_active() {
                 .status,
             CidRecordStatus::Active
         );
+    });
+}
+
+// ─── CidCount 有效 CID 计数 ─────────────────────────────────────────
+
+/// 创世登记条数直接就是初始计数：挖矿页读到的第一个数字必须等于创世公民数。
+#[test]
+fn cid_count_starts_at_genesis_binding_len() {
+    let registrar = registrar_cid_number();
+    new_test_ext_with_cid_bindings(vec![
+        (
+            cid(&citizen_cid_number("count-genesis-a")),
+            41,
+            registrar.clone(),
+        ),
+        (cid(&citizen_cid_number("count-genesis-b")), 42, registrar),
+    ])
+    .execute_with(|| {
+        assert_eq!(CidCount::<Test>::get(), 2);
+    });
+}
+
+/// 无创世登记时计数为 0，不是 `ValueQuery` 默认值巧合，而是没有任何 Active 记录。
+#[test]
+fn cid_count_is_zero_without_any_occupied_cid() {
+    new_test_ext().execute_with(|| {
+        assert_eq!(CidCount::<Test>::get(), 0);
+        assert_eq!(CidRegistry::<Test>::iter().count(), 0);
+    });
+}
+
+/// 自助占号每成功一个 +1。
+#[test]
+fn cid_count_increments_on_self_occupy() {
+    new_test_ext().execute_with(|| {
+        assert_eq!(CidCount::<Test>::get(), 0);
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&citizen_cid_number("count-self-1")),
+        ));
+        assert_eq!(CidCount::<Test>::get(), 1);
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(2),
+            cid(&citizen_cid_number("count-self-2")),
+        ));
+        assert_eq!(CidCount::<Test>::get(), 2);
+    });
+}
+
+/// 注册局占即绑同样 +1，与自助口径一致。
+#[test]
+fn cid_count_increments_on_registrar_occupy() {
+    new_test_ext().execute_with(|| {
+        occupy_tag_as("count-reg-1", 1);
+        assert_eq!(CidCount::<Test>::get(), 1);
+        occupy_tag_as("count-reg-2", 2);
+        assert_eq!(CidCount::<Test>::get(), 2);
+    });
+}
+
+/// 幂等重入不得加 1：同账户同 CID 重复提交只是恢复路径，链上没有新登记记录。
+/// 少了这条守卫，用户建档失败重试一次就把计数虚增一个，且永远无法回落。
+#[test]
+fn cid_count_stays_flat_on_idempotent_reoccupy() {
+    new_test_ext().execute_with(|| {
+        let cid_bytes = citizen_cid_number("count-idem");
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        assert_eq!(CidCount::<Test>::get(), 1);
+        // 同账户同 CID 重放：do_occupy_cid 走幂等分支，不写库也不计数。
+        assert_ok!(CitizenIdentity::self_occupy_cid(
+            RuntimeOrigin::signed(1),
+            cid(&cid_bytes),
+        ));
+        assert_eq!(CidCount::<Test>::get(), 1);
+        assert_eq!(CidRegistry::<Test>::iter().count(), 1);
+    });
+}
+
+/// 注册局吊销 −1，且墓碑仍留在登记表里：计数只跟 Active，不跟记录条数。
+#[test]
+fn cid_count_decrements_on_revoke_cid_while_tombstone_remains() {
+    new_test_ext().execute_with(|| {
+        occupy_tag_as("count-revoke", 1);
+        assert_eq!(CidCount::<Test>::get(), 1);
+
+        assert_ok!(CitizenIdentity::revoke_cid(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&citizen_cid_number("count-revoke")),
+        ));
+        assert_eq!(CidCount::<Test>::get(), 0);
+        // 墓碑不删除：登记表仍有 1 条记录，但它已不是有效 CID。
+        assert_eq!(CidRegistry::<Test>::iter().count(), 1);
+        assert_eq!(
+            CidRegistry::<Test>::get(cid(&citizen_cid_number("count-revoke")))
+                .expect("tombstone kept")
+                .status,
+            CidRecordStatus::Revoked
+        );
+    });
+}
+
+/// 身份吊销联动路径（`revoke_identity`）同样 −1：两条吊销入口共用 tombstone helper，
+/// 任何一条漏减都会让计数永久偏高。
+#[test]
+fn cid_count_decrements_on_revoke_identity() {
+    new_test_ext().execute_with(|| {
+        occupy_tag_as("count-revoke-id", 1);
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            voting_payload(1, &citizen_cid_number("count-revoke-id")),
+            valid_signature(),
+        ));
+        assert_eq!(CidCount::<Test>::get(), 1);
+
+        assert_ok!(CitizenIdentity::revoke_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&citizen_cid_number("count-revoke-id")),
+        ));
+        assert_eq!(CidCount::<Test>::get(), 0);
+    });
+}
+
+/// 迁移只回填 Active：升级前的墓碑不得计入，否则升级当场把计数抬高。
+#[test]
+fn init_cid_count_migration_counts_only_active_records() {
+    use frame_support::traits::OnRuntimeUpgrade;
+
+    new_test_ext().execute_with(|| {
+        occupy_tag_as("count-mig-a", 1);
+        occupy_tag_as("count-mig-b", 2);
+        occupy_tag_as("count-mig-c", 3);
+        assert_ok!(CitizenIdentity::revoke_cid(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            cid(&citizen_cid_number("count-mig-c")),
+        ));
+        assert_eq!(CidRegistry::<Test>::iter().count(), 3);
+
+        // 模拟升级前状态：计数器尚未存在，读到 ValueQuery 默认值 0。
+        CidCount::<Test>::kill();
+        assert_eq!(CidCount::<Test>::get(), 0);
+
+        // 测试 runtime 的 DbWeight 是 ()，返回恒为零权重，断言权重没有意义；
+        // 这里只校验回填结果：2 条 Active + 1 条墓碑 → 只数 Active。
+        let _ = crate::migrations::InitCidCount::<Test>::on_runtime_upgrade();
+        assert_eq!(CidCount::<Test>::get(), 2);
     });
 }

@@ -108,7 +108,7 @@ class _RecordingFeedSource implements SquareFeedSource {
 }
 
 /// 按分类返回不同夹具的假数据源；模拟 Worker 对每个 feed 端点各自过滤
-/// （关注流走 `/v1/square/feed/following` 的 JOIN 结果）。
+/// （关注流走 `/square/feed/following` 的 JOIN 结果）。
 class _KindFeedSource implements SquareFeedSource {
   _KindFeedSource({this.following = const <SquarePost>[]});
 

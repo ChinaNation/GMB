@@ -17,7 +17,7 @@ use frame_system::RawOrigin;
 mod benchmarks {
     use super::*;
 
-    fn active_platform_state<T: Config>() -> SubscriptionState {
+    fn active_platform_state() -> SubscriptionState {
         SubscriptionState {
             plan: SubscriptionPlan::Platform {
                 membership_level: MembershipLevel::Freedom,
@@ -35,7 +35,6 @@ mod benchmarks {
     fn benchmark_cid<T: Config>(account_id: &T::AccountId) -> CidNumberOf<T> {
         T::CitizenIdentity::benchmark_seed_identity(account_id)
             .try_into()
-            .ok()
             .expect("benchmark CID must fit SquarePost bounds")
     }
 
@@ -56,7 +55,7 @@ mod benchmarks {
             1,
         );
 
-        let post_id: PostIdOf<T> = post_id.try_into().ok().expect("benchmark post id fits");
+        let post_id: PostIdOf<T> = post_id.try_into().expect("benchmark post id fits");
         assert!(SquarePosts::<T>::contains_key(post_id));
     }
 
@@ -65,7 +64,7 @@ mod benchmarks {
         let caller: T::AccountId = whitelisted_caller();
         let caller_cid_number = benchmark_cid::<T>(&caller);
         let key = (caller_cid_number.clone(), IssuerKey::Platform);
-        Subscriptions::<T>::insert(&key, active_platform_state::<T>());
+        Subscriptions::<T>::insert(&key, active_platform_state());
         RenewalSchedule::<T>::insert(2u64.to_be_bytes(), &key, ());
         RenewalIndex::<T>::insert(&key, 2u64);
 
@@ -87,7 +86,7 @@ mod benchmarks {
         let subscriber_cid_number = benchmark_cid::<T>(&subscriber_account_id);
         let key = (subscriber_cid_number, IssuerKey::Platform);
         PlatformPrice::<T>::insert(MembershipLevel::Freedom, 199_900u128);
-        Subscriptions::<T>::insert(&key, active_platform_state::<T>());
+        Subscriptions::<T>::insert(&key, active_platform_state());
         RenewalSchedule::<T>::insert(2u64.to_be_bytes(), &key, ());
         RenewalIndex::<T>::insert(&key, 2u64);
 

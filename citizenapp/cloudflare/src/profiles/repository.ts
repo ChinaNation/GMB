@@ -14,7 +14,7 @@ import { validateUploadBytes } from '../limits/upload';
 import { putR2Object } from '../limits/storage';
 import { resourceLimit } from '../limits/catalog';
 
-const PROFILE_SCHEMA = 'citizenapp.square.profile.v1' as const;
+const PROFILE_SCHEMA = 'citizenapp.square.profile' as const;
 
 /// 空资料包默认值。首次访问、从未编辑的身份返回此结构，展示名/签名交由客户端兜底。
 export function defaultProfileDoc(cidNumber: string): CitizenProfileDoc {

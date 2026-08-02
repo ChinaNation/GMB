@@ -54,7 +54,7 @@
       (事件→CID)+ worker 每块投影 + 断点续读复用现有 + 作用域解析(仅城市节点,联邦跳过)。
 - [x] M3 联邦 drill-in:chain_runtime for_each_chain_citizen_cid_in_scope / for_each_chain_private_institution_cid
       扫描 + projection::drill_in_project_scope + HTTP handler drill_in_project_city
-      (POST /api/v1/admin/registry/drill-in-project,联邦+省级访问控制,越省 403)。
+      (POST /api/admin/registry/drill-in-project,联邦+省级访问控制,越省 403)。
 - [x] 收尾:移除 allow(dead_code)、零警告零死代码;onchina cargo test 138 passed/0 failed。
 
 全部完成(2026-07-24)。验证:onchina cargo check 通过零警告;cargo test 138 全绿(9 投影含保正本)。

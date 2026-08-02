@@ -456,7 +456,7 @@ mod scale_contract_tests {
     fn fixture_case(name: &str) -> Vec<u8> {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../memory/06-quality/fixtures/institution_role_permission_v1.json"
+            "/../../memory/06-quality/fixtures/institution_role_permission.json"
         )))
         .expect("岗位权限 fixture 必须是合法 JSON");
         let encoded = fixture["cases"]

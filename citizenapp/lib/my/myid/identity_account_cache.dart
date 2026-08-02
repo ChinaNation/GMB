@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import 'identity_account_resolver.dart';
@@ -12,7 +14,9 @@ import 'identity_account_resolver.dart';
 class IdentityAccountCache {
   IdentityAccountCache({
     IdentityAccountResolver? resolver,
-  }) : _resolver = resolver ?? IdentityAccountResolver();
+    ChainRpc? chainRpc,
+  })  : _resolver = resolver ?? IdentityAccountResolver(chainRpc: chainRpc),
+        _chainRpc = chainRpc ?? ChainRpc();
 
   /// 全 App 共享单例(生产);高频调用方直接用 [instance],无需逐个注入。
   static IdentityAccountCache _instance = IdentityAccountCache();
@@ -27,6 +31,7 @@ class IdentityAccountCache {
   static void resetDebugInstance() => _instance = IdentityAccountCache();
 
   final IdentityAccountResolver _resolver;
+  final ChainRpc _chainRpc;
 
   ResolvedIdentity? _cached;
   int _cachedRevision = -1;
@@ -64,6 +69,25 @@ class IdentityAccountCache {
   Future<String?> accountId({bool allowChainRead = true}) async =>
       (await resolve(allowChainRead: allowChainRead))?.accountId;
 
+  /// 实际业务发现设备子钥缺失时读取 finalized 当前绑定上下文。
+  ///
+  /// 这里只读取公开链上信息，不读取钱包账户 child；页面门禁不得用它制造额外状态。
+  Future<AccountDataBinding?> binding({bool allowChainRead = true}) async {
+    final resolved = await resolve(allowChainRead: allowChainRead);
+    final snapshot = resolved?.snapshot;
+    if (resolved == null || snapshot == null) return null;
+    final genesisHash = await _chainRpc.fetchGenesisHash();
+    if (genesisHash.length != 32) {
+      throw StateError('创世哈希无效，无法初始化当前账户设备子钥');
+    }
+    return AccountDataBinding(
+      genesisHash: '0x${_lowerHex(genesisHash)}',
+      cidNumber: snapshot.cidNumber,
+      bindingRevision: snapshot.bindingRevision,
+      accountId: resolved.accountId,
+    );
+  }
+
   Future<ResolvedIdentity?> _resolveFresh(int revision) async {
     final resolved = await _resolver.resolve();
     _cached = resolved;
@@ -76,4 +100,7 @@ class IdentityAccountCache {
     _cached = null;
     _cachedRevision = -1;
   }
+
+  static String _lowerHex(List<int> bytes) =>
+      bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
 }

@@ -76,10 +76,10 @@ pub trait CidAccountQuery<AccountId> {
 ```rust
 pub struct PaymentIntent<AccountId, BlockNumber> {
     pub tx_id: H256,
-    pub payer: AccountId,
-    pub payer_bank: AccountId,
-    pub recipient: AccountId,
-    pub recipient_bank: AccountId,
+    pub payer_account_id: AccountId,
+    pub payer_bank_cid: InstitutionCidNumber,
+    pub recipient_account_id: AccountId,
+    pub recipient_bank_cid: InstitutionCidNumber,
     pub amount: u128,
     pub fee: u128,
     pub nonce: u64,
@@ -90,7 +90,10 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
 pub use primitives::sign::OP_SIGN_L3_PAY;
 ```
 
-citizenapp(Dart 端)必须逐字节对齐 `L3_PAY_SIGNING_DOMAIN` 与 SCALE 编码顺序,否则链上验签失败。
+citizenapp（Dart 端）必须逐字节对齐唯一
+`signing_message(OP_SIGN_L3_PAY, SCALE(intent))` 与字段顺序，否则链上验签失败。runtime
+清算 pallet 的签名账户在编译期固定为官方 `AccountId32`，并以完整32字节构造 sr25519
+`Public`；禁止截取泛型 SCALE 编码推断公钥。
 
 ## 6. 新增 Storage
 

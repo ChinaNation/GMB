@@ -64,8 +64,7 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    // 全新创世直接采用最终布局，不保留历史迁移版本。
-    // 开发期无存量链数据；岗位权限、nonce 与永久占用表按最终结构直接以 v2 创世。
+
     const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::config]

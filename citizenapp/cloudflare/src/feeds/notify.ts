@@ -28,7 +28,7 @@ async function countUnreadSince(
   return row?.n ?? 0;
 }
 
-/// GET /v1/square/notify/unread —— 双游标红点计数。
+/// GET /square/notify/unread —— 双游标红点计数。
 /// square_unread 驱动广场底部 tab，following_unread 驱动关注子 tab；无已读行时游标视为 0。
 export async function getNotifyUnreadRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
@@ -53,7 +53,7 @@ export async function getNotifyUnreadRoute(request: Request, env: Env): Promise<
   });
 }
 
-/// POST /v1/square/notify/read {scope:'square'|'following'} —— 推进对应游标到当前时间，红点归零。
+/// POST /square/notify/read {scope:'square'|'following'} —— 推进对应游标到当前时间，红点归零。
 /// scope 只映射到固定列名，无注入面；另一游标保持不变（进广场只清广场，关注仍留）。
 export async function markNotifyReadRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);

@@ -29,30 +29,30 @@ GMB **当前继续用 sr25519 签名**(链上已有真实用户);**未来通过�
 ## 2. 账户与地址模型 + KDF(铁律)
 
 ```
-助记词 → miniSecretFromEntropy → AccountSeedV1(32B 绝密) → sr25519 public key → AccountId/地址
+助记词 → miniSecretFromEntropy → account_seed(32B 绝密) → sr25519 public key → AccountId/地址
 ```
-- `AccountId` 永远=sr25519 锚点;不允许用 ML-DSA 公钥/哈希生成新地址。⚠️ **model B(2026-07-27)已推翻"sr25519 派生路径不改 / 地址逐字节不变"** —— 见下修订块;`AccountSeedV1` 不再是单账户 master,而是**每账户各自的 32B child mini-secret**。
+- `AccountId` 永远=sr25519 锚点;不允许用 ML-DSA 公钥/哈希生成新地址。⚠️ **model B(2026-07-27)已推翻"sr25519 派生路径不改 / 地址逐字节不变"** —— 见下修订块;`account_seed` 不再是单账户 master,而是**每账户各自的 32B child mini-secret**。
 
 > 🔴 **修订(2026-07-27,model B 全 `//index` 无根派生 —— 取代 2026-07-26 model A HD 口径)**
-> 见任务卡 `memory/08-tasks/open/20260727-citizenwallet-modelb-index-derivation.md`。钱包为 substrate 官方 HD 但**无 bare 根**:**一套助记词 → 全 `//index` 硬派生账户**。下文 `AccountSeedV1`(记作 `AccountSeedV1_N`)= **该账户各自的 32B child mini-secret**,不再是单一 master。
+> 见任务卡 `memory/08-tasks/open/20260727-citizenwallet-modelb-index-derivation.md`。钱包为 substrate 官方 HD 但**无 bare 根**:**一套助记词 → 全 `//index` 硬派生账户**。下文 `account_seed`(记作 `account_seed_N`)= **该账户各自的 32B child mini-secret**,不再是单一 master。
 > - **账户 0 = `<助记词>//0` 硬派生(不再是 bare `fromSeed`)**;账户 N = `<助记词>//N`。每账户各自独立 child mini-secret(32B)→ 各自 sr25519 公钥/AccountId/ss58;**单账户私钥泄漏只伤该账户**,不牵连同钱包其它账户,也无"根"可牵连。
-> - **推翻三不变量**:原"sr25519 `fromSeed` 直出 / `AccountSeedV1` 逐字节不变 / sr25519 地址逐字节不变"**作废**——账户0 地址随 `//0` 全变。开发期零用户 → **无迁移,已重新创世**:citizenchain 创世全部机构管理员 + 程伟公钥 bare→`//0` 已替换(见 modelb 卡 S3.1;旧 `9c3e…1068` 已由程伟新 `//0` 取代)。
+> - **推翻三不变量**:原"sr25519 `fromSeed` 直出 / `account_seed` 逐字节不变 / sr25519 地址逐字节不变"**作废**——账户0 地址随 `//0` 全变。开发期零用户 → **无迁移,已重新创世**:citizenchain 创世全部机构管理员 + 程伟公钥 bare→`//0` 已替换(见 modelb 卡 S3.1;旧 `9c3e…1068` 已由程伟新 `//0` 取代)。
 > - **child mini-secret 提取**:`SecretUri.fromStr('//N').junctions` 的 cc → `MiniSecretKey.hardDeriveMiniSecretKey([], cc)`;不变式 `fromSeed(child_N) == 助记词//N` 逐字节(金标 `citizenwallet/test/wallet/derivation_golden_test.dart` 钉死;`//Alice` 对齐 substrate 权威向量)。
-> - **ML-DSA-65 每账户派生**:账户 N 的种子 = 其 child mini-secret(`AccountSeedV1_N`;账户0=`//0` child),再走下方同一 `HKDF-SHA512(…, info)`。info 串与 KDF 定义不变;golden vector(含 ξ)按账户逐一钉。
+> - **ML-DSA-65 每账户派生**:账户 N 的种子 = 其 child mini-secret(`account_seed_N`;账户0=`//0` child),再走下方同一 `HKDF-SHA512(…, info)`。info 串与 KDF 定义不变;golden vector(含 ξ)按账户逐一钉。
 > - sr25519 分支仍**绝不套 HKDF**;`AccountId` 仍=sr25519 锚点。PQC 切换机制(bootstrap→绑定→PQC 主签)不变,按账户独立进行(见 card3)。
 
 **派生规则(只两支;sr25519 不套 HKDF):**
 ```
-sr25519 地址锚点: sr25519.fromSeed(AccountSeedV1_N) -> AccountId      ← AccountSeedV1_N = 助记词//N child(账户0=//0), 绝不经 HKDF
-ML-DSA-65 签名:   HKDF-SHA512(AccountSeedV1_N, info="GMB/account/ml-dsa-65/seed32/v1") -> ξ(32B) -> KeyGen_internal(ξ)
+sr25519 地址锚点: sr25519.fromSeed(account_seed_N) -> AccountId      ← account_seed_N = 助记词//N child(账户0=//0), 绝不经 HKDF
+ML-DSA-65 签名:   HKDF-SHA512(account_seed_N, info="GMB/account/ml-dsa-65/seed32") -> ξ(32B) -> KeyGen_internal(ξ)
 ```
 > ⚠️ sr25519 分支**绝不套 HKDF**(`HKDF(seed)≠seed`→地址变);账户**不再派生 ML-KEM**(决策3)。
 
 **KDF 精确定义(钉死 golden vector):**
-- HKDF-SHA512(RFC5869)Extract-then-Expand;`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1_N[32B])`(model B:`AccountSeedV1_N`=该账户 child mini-secret,账户0=//0),域分离全靠 `info`。
-- 🔴 **`info` 是字面 ASCII 字符串 `"GMB/account/ml-dsa-65/seed32/v1"`(无 null 结尾、无独立长度前缀字节;串内 `seed32` 只是输出长度的字面标识,不是要额外塞一个长度域字节)**。Rust 传 `&[u8]`,Dart 按 UTF-8 编码;golden vector 锁死这串的精确字节序列(31 字节),三端(Rust 二进制 / iOS-Android FFI / Dart)必须逐字节一致,否则 KDF 输出发散→跨端公钥不同。
+- HKDF-SHA512(RFC5869)Extract-then-Expand;`PRK=HKDF-Extract(salt=空, IKM=account_seed_N[32B])`(model B:`account_seed_N`=该账户 child mini-secret,账户0=//0),域分离全靠 `info`。
+- 🔴 **`info` 是字面 ASCII 字符串 `"GMB/account/ml-dsa-65/seed32"`(无 null 结尾、无独立长度前缀字节;串内 `seed32` 只是输出长度的字面标识,不是要额外塞一个长度域字节)**。Rust 传 `&[u8]`,Dart 按 UTF-8 编码;golden vector 锁死这串的精确字节序列(31 字节),三端(Rust 二进制 / iOS-Android FFI / Dart)必须逐字节一致,否则 KDF 输出发散→跨端公钥不同。
 - ML-DSA-65:`HKDF-Expand(PRK, info, L=32)` → 32B ξ,**直接当 ξ** 喂 FIPS204 `KeyGen_internal(ξ)`。
-- **ML-DSA-87(algo 0x03 预留)未来如启用,须用独立 info(如 `"GMB/account/ml-dsa-87/.../v1"`)+ 独立 AccountPqcKey schema/version,不复用 65 的 info,不塞进 `BoundedVec<2048>`。**
+- **ML-DSA-87(algo 0x03 预留)未来如启用,须用独立 info(如 `"GMB/account/ml-dsa-87/..."`)+ 独立 AccountPqcKey schema/version,不复用 65 的 info,不塞进 `BoundedVec<2048>`。**
 - 🔴 **(B8)强制选用暴露 `KeyGen_internal(ξ)` seed-API 的库**(fips204 锁定版本);**删除一切 DRBG fallback**——库不暴露 ξ-API 则换库,不接受 DRBG 替代(否则同助记词跨端派生不同公钥)。库名+版本+API 名钉进 card1 spike。
 - **golden vector** 必须含中间量 ξ 与最终 {sr25519 SS58, ML-DSA-65 公钥},供冷/热/链/后端逐字节对拍;库升级须重跑。
 
@@ -172,7 +172,7 @@ L3 批量支付的 payer/batch 授权**必须与链上账户签名同源**,否�
 ## 10. Chat / 传输加密(独立线,不阻塞;账户不派生 KEM)
 
 - Chat/MLS 机密性 = X-Wing/ML-KEM-768 混合(换 libcrux provider);TLS = X25519MLKEM768;对称 AES-256/ChaCha20-256。**KEM 不当身份认证**。
-- 🔴 **(决策3)账户不派生 ML-KEM**:Chat/TLS 的 ML-KEM 密钥是 **MLS 设备/会话密钥 + 传输层密钥,与 `AccountSeedV1` 无关**,走前向保密 rekey;绝不复用账户密钥做 Chat 会话。
+- 🔴 **(决策3)账户不派生 ML-KEM**:Chat/TLS 的 ML-KEM 密钥是 **MLS 设备/会话密钥 + 传输层密钥,与 `account_seed` 无关**,走前向保密 rekey;绝不复用账户密钥做 Chat 会话。
 - 🔴 **(决策6)card0 不动 Chat**:Chat ciphersuite(AES-128→256 + X-Wing)**一次性由 card6 完成**,card0 不碰 Chat,避免 MLS 套件二次变更破坏已有会话。
 
 ## 11. 必须先做的技术 spike(card1 闸门,绿了才进 card2/card3)

@@ -87,45 +87,50 @@
 **目标**：后台握手（广场 session / Chat 设备绑定）不再静默读 sr25519 seed（硬件绑定后会弹），改用 per-wallet **P-256 硬件子钥**（Keystore/SE，`PURPOSE_SIGN`、**无 user-auth** → 静默硬件 ECDSA，私钥永不出硬件；passkey 式）。
 
 **现有后端**（`citizenapp/cloudflare`，唯一 production API `https://www.crcfrcn.com/api`）：
-- `POST /v1/square/auth/challenge` → 最新 finalized 双向绑定先解析 CID，再将
+- `POST /square/auth/challenge` → 最新 finalized 双向绑定先解析 CID，再将
   `account_id ‖ cid_number ‖ challenge_id ‖ expires_at` SCALE payload 存入 D1
   `square_login_challenges`；客户端固定走 `OP_SIGN_SQUARE_LOGIN` 摘要，不存在字符串域。
-- `POST /v1/square/auth/session` → 按 `(cid_number, device_id)` 读取登记的 P-256 公钥，
+- `POST /square/auth/session` → 按 `(cid_number, device_id)` 读取登记的 P-256 公钥，
   使用 Workers Web Crypto ES256 验证设备请求；会话同时保存 CID 与签发时 `account_id`。
 - 路由手写于 `src/routes.ts`；migrations 顺序编号 `0001..0007`；Env 有 `DB:D1Database` / `FEED_CACHE:KVNamespace`。
 
 **协议**：
 1. **子钥**：per-wallet P-256（Keystore `PURPOSE_SIGN` 无 auth / iOS SE）。
-2. **绑定（首次进入需 CID 功能时一次性执行）**：当前绑定账户对
+2. **登记（只在 Worker 确认缺钥时执行）**：当前绑定账户对
    `signing_message(OP_SIGN_SQUARE_DEVICE_BIND, account_id ‖ p256_public_key ‖ issued_at)`
-   签名，调用 `POST /v1/square/auth/device/register`；Worker 验签并从 finalized 双向绑定
+   签名，调用 `POST /square/auth/device/register`；Worker 验签并从 finalized 双向绑定
    解析 `cid_number` 后落库。建钱包时尚无 CID，禁止提前注册。
-3. **握手（静默 P-256）**：challenge 不变；client 用 P-256 子钥签 `signing_payload`（静默）；`session` 查该 owner 已注册 p256_pubkey → **Web Crypto ES256** 验（`subtle.verify({name:ECDSA,hash:SHA-256})`）；无绑定 → 401 `device_not_registered` → client 注册后重试。
+3. **握手（静默 P-256）**：challenge 不变；client 用 P-256 子钥签 `signing_payload`（静默）；`session` 查该 owner 已注册 p256_pubkey → **Web Crypto ES256** 验（`subtle.verify({name:ECDSA,hash:SHA-256})`）；无绑定 → 401 `device_not_registered`，只有前台真实登录流程才鉴权一次初始化后重试。
 4. **格式**：pubkey=裸未压缩点 65B(`0x04||X||Y`) hex；sig=裸 `r||s` 64B hex（client 把平台 DER→raw）。
 5. **D1**：`square_device_subkeys` 以 `(cid_number, device_id)` 为主键，保存当次绑定
    `account_id`、P-256 公钥与时间；同一身份允许多设备，换绑后旧账户由 guard 失效。
 6. **client 接入**：广场与 Chat 静默登录统一使用 `DeviceSubkey.signRawHex`；Android
    Keystore 与 iOS Secure Enclave 原生桥均已实现。
 
-**当前决策**：clean cutover；设备子钥只在首次进入需 CID 功能时经
-`IdentityRegistrationGate` 绑定。后台登录遇 `device_not_registered` 直接失败，禁止后台
-读取账户 child 或弹出生物识别。
+**当前决策**：clean cutover；`IdentityRegistrationGate` 只判断 CID，registered 直接放行，
+不检查或初始化设备子钥。已有子钥静默使用；前台真实登录只在 Worker 明确返回
+`device_not_registered` 时调用 `registerDeviceSubkeyForBinding` 鉴权一次登记并重试。该入口与
+本地数据钥 `ensureDeviceDataKeysForBinding` 使用独立 single-flight 和失败回滚，任何一方失败
+不得生成、覆盖或删除另一方材料。CID finalized 与后台登录不调用这两条缺钥入口，禁止读取
+账户 child 或弹出生物识别。
 
 **后端实现（当前基线）**：
 - `migrations/0001_square_core.sql`：`square_device_subkeys(cid_number, device_id, account_id, ...)`。
 - `src/auth/device_subkey.ts`：`buildDeviceBindingSigningMessage` 使用唯一 op_tag 摘要；
   `assertP256PublicKeyHex` 校验 65B 裸点，`verifyP256Signature` 使用 Web Crypto ES256。
 - `src/auth/service.ts`：`registerDeviceSubkey`（sr25519 验绑定证明 → upsert）；`createSession` 验签 **sr25519 → ES256**（查子钥，无则 401 `device_not_registered`）。
-- `src/routes.ts` 挂 `POST /v1/square/auth/device/register`；`types.ts` 加 `DeviceSubkeyRow`。
+- `src/routes.ts` 挂 `POST /square/auth/device/register`；`types.ts` 加 `DeviceSubkeyRow`。
 - 测试 `test/device_subkey.test.ts` 5 例（ES256 往返/0x前缀/篡改/畸形/pubkey 校验），全套 **72/72 绿**、typecheck 干净。**未 `wrangler deploy`、未 apply migration**——等 App 端就绪，与 App 发布**同步 clean cutover**（deploy 属对外操作，需用户明确许可）。
 
-**客户端当前状态**：Android/iOS 原生 P-256、Dart `DeviceSubkey`、三处静默登录、
-CID 页面懒绑定和 `HardwareBoundSeedVault` 均已接通；不存在钱包创建注册或后台懒注册分支。
+**客户端当前状态**：Android/iOS 原生 P-256、Dart `DeviceSubkey`、三处静默登录和
+`HardwareBoundSeedVault` 均已接通；CID 页面门禁不处理设备子钥，真实登录收到
+`device_not_registered` 才鉴权一次登记；不存在钱包创建、CID finalized 或后台推送预热
+注册分支。本地数据钥只由真实数据访问缺钥触发，且不调用登记后端或 Turnstile。
 
 **native P-256 + Dart DeviceSubkey 落地记录（2026-07-09）**：
 - Android `DeviceSubkeyBridge.kt`（通道 `org.citizenapp/device_subkey`：`publicKey`/`sign`/`delete`）：Keystore EC P-256 `PURPOSE_SIGN` **无 auth** 静默硬件 ECDSA；导出裸点 65B、返回平台 DER 签名。`MainActivity` 挂通道。
 - Dart `lib/wallet/core/device_subkey.dart`：`DeviceSubkey`（publicKeyHex / signRaw / signRawHex / delete）+ `derEcdsaToRaw`（DER→裸 r||s，去符号 0 前导 / 左补）+ hex 工具。单测 `test/wallet/device_subkey_test.dart` **8/8**（DER 三形态 + 通道往返 + null 错误），analyze 干净。
-- 三处静默路径与 CID 页面绑定门禁现均已接入；钱包创建路径明确不注册设备子钥。
+- 三处静默路径均已接入；CID 页面门禁不处理设备子钥，钱包创建路径不注册设备子钥。
 - ⚠️ worker 全套 **71/72**：唯一 fail=`chain_confirm.test.ts` 存储回收（expected 1024 to be 0），**与本任务无关**——来自并发合入的 account-deletion/session-index 代码，非本 P-256 改动引起（不碰 posts/storage）；typecheck 干净、`device_subkey`/`auth` 全绿。
 
 **Chat 路径范围澄清（重要）**：静默签名有两类，别搞混：
@@ -136,11 +141,9 @@ CID 页面懒绑定和 `HardwareBoundSeedVault` 均已接通；不存在钱包�
 
 全部 code-complete、`flutter analyze` 0 error、全套单测 **458 passed / 5 skipped / 0 failed（`--concurrency=1`，Isar 并行须串行，见 [[feedback_isar_is_community_fork]]）**：
 - **WalletManager 切硬件金库**：`_store = HardwareBoundSeedVault()`；删 local_auth / `_requireBiometric` / `debugLocalAuth` / `signWithWallet(requireAuth)` 参数——「每次动钱动权验证」现由硬件金库读 seed 的**原子生物识别**实现；`verifyWalletAccess` / `getSeedHex` / `getMnemonic` 去软门禁。
-- **子钥注册**：`DeviceSubkeyRegistrar` 仅由 CID 功能门禁触发；钱包创建与导入只保存
-  账户 child，不调用注册器。
+- **子钥注册**：`DeviceSubkeyRegistrar` 仅由正式 CID 注册/有效换绑，或前台真实会话被 Worker 明确拒绝为 `device_not_registered` 时调用；页面门禁、钱包创建/导入和后台预热均不调用。
 - **3 静默路径改子钥**：`square_session_provider` / `square_compose_signers.signLogin` /
-  `chat_runtime._signSquareLoginPayload` → `DeviceSubkey.signRawHex`；后台不存在
-  `device_not_registered` 懒注册重试。
+  `chat_runtime._signSquareLoginPayload` → `DeviceSubkey.signRawHex`；前台真实登录可在 Worker 确认缺钥后初始化一次，后台不传入该回调。
 - **Chat 设备绑定**（罕见）保持 sr25519：`_signWalletPayload` 去 `requireAuth:false` → 读硬件金库弹一次。
 - 当前创世基线与客户端只保留 `account_id + cid_number + device_id` 契约，不保留历史字段、
   历史字符串签名域、旧钱包双读或兼容登录。
@@ -157,14 +160,15 @@ CID 页面懒绑定和 `HardwareBoundSeedVault` 均已接通；不存在钱包�
 3. logcat：后台每几秒读 `tier=strict`（严档 seed）→ 弹窗，decrypt SUCCESS。
 4. 死循环：旧钱包（idx=1，旧格式/未注册）→ 后台会话 401 `device_not_registered` → **Step 3 加的懒注册在后台读 seed 弹验证** → 注册没成 → 又 401 → 又弹；多服务 × 重试 = 狂弹。
 **Step 3 设计缺陷**：后台流程不该碰硬件 seed；懒注册在后台弹窗错误。**单测用 fake 没跑真实后台流，骗过了验证 → 没做 e2e 就部署+装机是判断失误。**
-**修复**：删掉后台懒注册；后台永不读取账户 child、不弹生物识别。子钥绑定只允许在
-用户主动进入需 CID 功能时由门禁完成，失败则停留在门禁并明确报错。
+**当时修复**：先删掉后台自动初始化，保证后台不读取账户 child、不弹生物识别。
+**2026-08-02 订正**：同时删除页面门禁中的子钥绑定、状态和按钮；registered 页面直接进入功能，只有前台真实登录或数据解密确认缺钥时才鉴权一次初始化。
 **真机验证**：新 App 静置 14s，后台零 `HW_SEED_VAULT` 读取 = **弹窗消失 ✅**。
 **同期对齐（并行 agent 的 ADR-026 SCALE 迁移）**：签名统一走 `signing_message(op_tag)`（登录 0x1b / 设备绑定 0x1c），登录/绑定签名器参数改 `Uint8List` 摘要；`WalletSubkeyRegistrar.signBinding` 同步改 `Uint8List`。app 编译净、worker 92 测试绿、worker 部署 `6bf9ecd1`。
 **协议端到端已验（2026-07-09 脚本对线上 worker）**：真 sr25519 主钥 + P-256 子钥跑 `register → challenge → session` **全 200**、换到 `session_token`（SCALE `signing_message` 逐字节对，测试行已清）。
 
 **运行态结论**：创建钱包只静默写账户 child 信封，不注册设备子钥；后台无任何账户
-child 读取或生物识别弹窗。首次进入需 CID 功能时由用户前台完成一次绑定。
+child 读取或生物识别弹窗；页面进入不检查子钥。已有子钥静默使用；P-256 只由 Worker
+未登记响应触发登记，本地数据钥只由真实数据缺钥触发生成，两条流程完全独立。
 **教训铁律**：硬件金库/签名类改动，**真机 e2e 通过后才部署**，绝不靠 fake 单测就上线。
 
 ## Step 0 结果（2026-07-09 Android PASS）

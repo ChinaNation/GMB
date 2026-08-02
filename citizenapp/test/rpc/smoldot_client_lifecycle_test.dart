@@ -623,7 +623,7 @@ String _cacheEnvelopeRaw({
   Map<String, dynamic> extra = const {},
 }) {
   return jsonEncode({
-    'schema': 'citizenapp.smoldot.database.v1',
+    'schema': 'citizenapp.smoldot.database',
     'genesis_hash': genesisHash,
     'finalized_block_number': finalizedBlockNumber,
     'finalized_block_hash': _hashForHeight(finalizedBlockNumber),

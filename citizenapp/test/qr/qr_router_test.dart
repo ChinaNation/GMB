@@ -15,7 +15,7 @@ void main() {
   group('QrRouter QR_V1', () {
     test('should route login sign_request', () {
       final raw = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': QrKind.signRequest.code,
         'i': 'ch-0123456789abcdef',
         'e': 1090,
@@ -33,7 +33,7 @@ void main() {
 
     test('should route user_transfer', () {
       final raw = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': QrKind.userTransfer.code,
         'i': 'tx-0123456789abcdef',
         'e': 1600,
@@ -52,7 +52,7 @@ void main() {
 
     test('should route user_contact fixed code', () {
       final raw = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': QrKind.userContact.code,
         'b': {
           'cid_number': 'CN001-CTZN-000000001-2026',
@@ -66,7 +66,7 @@ void main() {
 
     test('旧 contact_name 用户码和未知字段直接拒绝', () {
       final old = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': QrKind.userContact.code,
         'b': {
           'ss58_address': 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT',
@@ -74,7 +74,7 @@ void main() {
         },
       });
       final extra = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': QrKind.userContact.code,
         'b': {
           'cid_number': 'CN001-CTZN-000000001-2026',
@@ -90,7 +90,7 @@ void main() {
 
     test('should route sign_request', () {
       final raw = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': QrKind.signRequest.code,
         'i': 'req-0123456789abcdef',
         'e': 1090,
@@ -139,7 +139,7 @@ void main() {
 
     test('should route wallet_code', () {
       final raw = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': QrKind.walletCode.code,
         'b': {
           'account_id':
@@ -157,7 +157,7 @@ void main() {
       // k=5 已回收给钱包码；旧 chat_node_pairing 载荷靠 body 字段集精确匹配拒绝，
       // 不需要专门的拒绝分支。
       final raw = jsonEncode({
-        'p': QrProtocol.v1,
+        'p': QrProtocol.qrV1,
         'k': 5,
         'b': {
           'node_peer_id': '12D3Koo',

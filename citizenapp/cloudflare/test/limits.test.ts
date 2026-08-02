@@ -21,32 +21,32 @@ describe('Cloudflare 统一资源限制', () => {
   });
 
   it('在进入风控和 D1 前拒绝未登记路由', () => {
-    expect(() => assertKnownRoute('GET', '/v1/unknown')).toThrowError(HttpError);
-    expect(() => assertKnownRoute('POST', '/v1/square/reports')).toThrowError(HttpError);
+    expect(() => assertKnownRoute('GET', '/unknown')).toThrowError(HttpError);
+    expect(() => assertKnownRoute('POST', '/square/reports')).toThrowError(HttpError);
     // finalized 换绑不再由客户端携此前账户签名二次清理；已删除 endpoint 必须彻底下线。
-    expect(() => assertKnownRoute('POST', '/v1/square/rebind/revoke')).toThrowError(
+    expect(() => assertKnownRoute('POST', '/square/rebind/revoke')).toThrowError(
       HttpError
     );
-    expect(assertKnownRoute('PUT', '/v1/square/uploads/media')).toBe('square_image_hd');
-    expect(assertKnownRoute('GET', '/v1/square/contacts')).toBe('api_json_small');
-    expect(assertKnownRoute('PUT', `/v1/square/contacts/${'ab'.repeat(32)}`)).toBe('contact_ciphertext');
+    expect(assertKnownRoute('PUT', '/square/uploads/media')).toBe('square_image_hd');
+    expect(assertKnownRoute('GET', '/square/contacts')).toBe('api_json_small');
+    expect(assertKnownRoute('PUT', `/square/contacts/${'ab'.repeat(32)}`)).toBe('contact_ciphertext');
   });
 
   it('拒绝没有 Content-Length 或声明超限的写请求', () => {
-    expect(() => assertRequestBodyLimit(new Request('https://worker.test/v1/chat/signals', {
+    expect(() => assertRequestBodyLimit(new Request('https://worker.test/chat/signals', {
       method: 'POST',
       body: '{}',
-    }), '/v1/chat/signals')).toThrow(expect.objectContaining({ code: 'content_length_required' }));
+    }), '/chat/signals')).toThrow(expect.objectContaining({ code: 'content_length_required' }));
 
-    expect(() => assertRequestBodyLimit(new Request('https://worker.test/v1/chat/signals', {
+    expect(() => assertRequestBodyLimit(new Request('https://worker.test/chat/signals', {
       method: 'POST',
       headers: { 'content-length': String(64 * 1024 + 1) },
-    }), '/v1/chat/signals')).toThrow(expect.objectContaining({ code: 'request_too_large' }));
+    }), '/chat/signals')).toThrow(expect.objectContaining({ code: 'request_too_large' }));
   });
 
   it('没有可信声明长度时仍在流读取阶段截断', async () => {
     const bytes = new Uint8Array(512 * 1024 + 1);
-    const request = new Request('https://worker.test/v1/square/profile/assets', {
+    const request = new Request('https://worker.test/square/profile/assets', {
       method: 'PUT',
       body: bytes,
     });

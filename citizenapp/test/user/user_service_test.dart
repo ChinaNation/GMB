@@ -35,7 +35,7 @@ class _FakeWalletManager extends WalletManager {
   /// 固定当前钱包用途子钥，避免测试触碰硬件金库或平台通道。
   /// 只替换密钥来源，通讯录本地 KV 仍走真实 AES-256-GCM。
   @override
-  Future<Uint8List> deriveDataKeyForCurrentBinding(
+  Future<Uint8List> readDataKeyForCurrentBinding(
     String accountId,
     LocalKeyPurpose purpose, {
     String? context,
@@ -170,7 +170,7 @@ class _HandoverWalletManager extends WalletManager {
   }
 
   @override
-  Future<Uint8List> deriveDataKeyForCurrentBinding(
+  Future<Uint8List> readDataKeyForCurrentBinding(
     String accountId,
     LocalKeyPurpose purpose, {
     String? context,
@@ -178,7 +178,7 @@ class _HandoverWalletManager extends WalletManager {
       _key(accountId, purpose, context: context);
 
   @override
-  Future<List<Uint8List>> deriveDataKeysForBinding(
+  Future<List<Uint8List>> deriveDataKeysForBindingHandover(
     AccountDataBinding binding,
     List<({String? context, LocalKeyPurpose purpose})> requests,
   ) async =>

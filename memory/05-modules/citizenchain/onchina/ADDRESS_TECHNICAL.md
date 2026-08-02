@@ -31,9 +31,9 @@ citizenchain/onchina/frontend/address/
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| `GET` | `/api/v1/admin/address/names` | 查询某省市镇下的地址名称列表 |
-| `GET` | `/api/v1/admin/address/items` | 查询某地址名称编号下的完整地址列表 |
-| `POST` | `/api/v1/admin/address/chain-call` | 构造 AddressRegistry 裸 SCALE call data |
+| `GET` | `/api/admin/address/names` | 查询某省市镇下的地址名称列表 |
+| `GET` | `/api/admin/address/items` | 查询某地址名称编号下的完整地址列表 |
+| `POST` | `/api/admin/address/chain-call` | 构造 AddressRegistry 裸 SCALE call data |
 
 ## 4. 权限
 

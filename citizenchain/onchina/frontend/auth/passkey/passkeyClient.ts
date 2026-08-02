@@ -114,7 +114,7 @@ function passkeyBrowserError(error: unknown, fallback: string): Error {
 export async function registerPasskey(auth: AdminAuth): Promise<void> {
   ensurePasskeyAvailable();
   const begin = await adminRequest<PasskeyBeginResponse<ServerCreationOptions>>(
-    "/api/v1/admin/auth/passkey/register/begin",
+    "/api/admin/auth/passkey/register/begin",
     auth,
     { method: "POST" },
   );
@@ -156,7 +156,7 @@ export async function registerPasskey(auth: AdminAuth): Promise<void> {
       extensions: credential.getClientExtensionResults(),
     },
   };
-  await adminRequest("/api/v1/admin/auth/passkey/register/finish", auth, {
+  await adminRequest("/api/admin/auth/passkey/register/finish", auth, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -167,7 +167,7 @@ export async function registerPasskey(auth: AdminAuth): Promise<void> {
 export async function assertPasskey(auth: AdminAuth): Promise<string> {
   ensurePasskeyAvailable();
   const begin = await adminRequest<PasskeyBeginResponse<ServerRequestOptions>>(
-    "/api/v1/admin/auth/passkey/assert/begin",
+    "/api/admin/auth/passkey/assert/begin",
     auth,
     { method: "POST" },
   );
@@ -205,7 +205,7 @@ export async function assertPasskey(auth: AdminAuth): Promise<string> {
     },
   };
   const result = await adminRequest<PasskeyAssertionResponse>(
-    "/api/v1/admin/auth/passkey/assert/finish",
+    "/api/admin/auth/passkey/assert/finish",
     auth,
     {
       method: "POST",
@@ -223,7 +223,7 @@ interface PasskeyStatusResponse {
 /** 查询当前管理员是否已注册 passkey(驱动操作列红点 / 登录默认跳转)。 */
 export async function getPasskeyStatus(auth: AdminAuth): Promise<boolean> {
   const result = await adminRequest<PasskeyStatusResponse>(
-    "/api/v1/admin/auth/passkey/status",
+    "/api/admin/auth/passkey/status",
     auth,
     { method: "GET" },
   );

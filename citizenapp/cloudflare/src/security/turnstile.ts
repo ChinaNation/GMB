@@ -59,7 +59,7 @@ export function turnstileConfigRoute(env: Env): Response {
   return jsonResponse({
     ok: true,
     enabled: Boolean(env.TURNSTILE_SITEKEY && env.TURNSTILE_SECRET),
-    verify_path: '/v1/security/turnstile'
+    verify_path: '/security/turnstile'
   });
 }
 

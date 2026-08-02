@@ -1,5 +1,5 @@
 // 国家储委会顶级 Section：直接渲染国家储委会机构详情页（单机构，无列表层）。
-// 特权动作：协议升级、开发升级、安全基金转账提案 — 仅国家储委会管理员可发起。
+// 特权动作：协议升级、安全基金转账提案 — 仅国家储委会管理员可发起。
 import { useState } from 'react';
 import { AdminListPage } from '../admins';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
@@ -7,7 +7,7 @@ import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateMultisigTransferPage } from '../transaction/multisig/CreateProposalPage';
 import { SafetyFundProposalPage } from '../transaction/multisig/SafetyFundProposalPage';
 import { SweepProposalPage } from '../transaction/multisig/SweepProposalPage';
-import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upgrade';
+import { ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import { GrandpaKeyChangePage } from './grandpa-key/GrandpaKeyChangePage';
 import type { AdminSignerMatch } from './types';
 
@@ -21,7 +21,6 @@ type NrcView =
   | { page: 'create-proposal'; orgType: number; cidFullName: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
   | { page: 'protocol-upgrade'; adminSigners: AdminSignerMatch[] }
   | { page: 'grandpa-key'; adminSigners: AdminSignerMatch[] }
-  | { page: 'developer-upgrade'; adminSigners: AdminSignerMatch[] }
   | { page: 'propose-safety-fund'; actorCidNumber: string; institution_account_id: string; adminSigners: AdminSignerMatch[] }
   | { page: 'propose-sweep'; actorCidNumber: string; institution_account_id: string; cidFullName: string; adminSigners: AdminSignerMatch[] };
 
@@ -87,16 +86,6 @@ export function NrcSection() {
     );
   }
 
-  if (view.page === 'developer-upgrade') {
-    return (
-      <DeveloperUpgradePage
-        adminSigners={view.adminSigners}
-        onBack={backToDetail}
-        onSuccess={backToDetail}
-      />
-    );
-  }
-
   if (view.page === 'propose-safety-fund') {
     return (
       <SafetyFundProposalPage
@@ -140,9 +129,6 @@ export function NrcSection() {
       }
       onChangeGrandpaKey={(aw) =>
         setView({ page: 'grandpa-key', adminSigners: aw })
-      }
-      onCreateDeveloperUpgrade={(aw) =>
-        setView({ page: 'developer-upgrade', adminSigners: aw })
       }
       onCreateSafetyFund={(actorCidNumber, institution_account_id, aw) =>
         setView({ page: 'propose-safety-fund', actorCidNumber, institution_account_id, adminSigners: aw })

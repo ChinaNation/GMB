@@ -1082,7 +1082,7 @@ mod tests {
         entries
     }
 
-    /// 一份合法待生效态:v1 仍生效、v2 待生效。
+    /// 一份合法待生效态：创世版本仍生效，修订版本待生效。
     fn valid_pending_state(pending_articles: Vec<MArticle>) -> Vec<(Vec<u8>, Vec<u8>)> {
         vec![
             (

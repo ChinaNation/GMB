@@ -22,14 +22,13 @@ type Props = {
   onCreateProposal?: (cidNumber: string, orgType: number, cidFullName: string, institution_account_id: string, adminSigners: AdminSignerMatch[]) => void;
   onCreateProtocolUpgrade?: (adminSigners: AdminSignerMatch[]) => void;
   onChangeGrandpaKey?: (adminSigners: AdminSignerMatch[]) => void;
-  onCreateDeveloperUpgrade?: (adminSigners: AdminSignerMatch[]) => void;
   onCreateSafetyFund?: (cidNumber: string, institution_account_id: string, adminSigners: AdminSignerMatch[]) => void;
   onCreateSweep?: (cidNumber: string, institution_account_id: string, cidFullName: string, adminSigners: AdminSignerMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onChangeGrandpaKey, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
+export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onChangeGrandpaKey, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -301,13 +300,6 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
                 disabled={!isAdmin || !onCreateProtocolUpgrade}
                 onClick={() => isAdmin && onCreateProtocolUpgrade?.(adminSigners)}
               >协议升级</button>
-              {detail.orgType === 0 && (
-                <button
-                  className="proposal-type-button"
-                  disabled={!isAdmin || !onCreateDeveloperUpgrade}
-                  onClick={() => isAdmin && onCreateDeveloperUpgrade?.(adminSigners)}
-                >开发升级</button>
-              )}
             </>
           )}
         </div>

@@ -274,7 +274,7 @@ class MultisigTransferService {
     return _rpc.fetchFinalizedBalance(institution.mainAccountId);
   }
 
-  // ──── 双层 ID 与反向索引(spec_version v1)────
+  // ──── 双层 ID 与反向索引 ────
 
   /// 查询提案展示号:`ProposalDisplayId[proposal_id] = ProposalDisplayMeta { year, seq_in_year }`。
   ///
@@ -415,14 +415,13 @@ class MultisigTransferService {
     final decoded = await _proposalQuery.fetchProposalMeta(proposalId);
     if (decoded == null) return null;
 
-    // 双层 ID v1:同时查 ProposalDisplayId 反查表(失败不阻塞,fallback null)
+    // 双层 ID：同时查 ProposalDisplayId 反查表（失败不阻塞，fallback null）。
     ProposalDisplayMeta? displayMeta;
     try {
       displayMeta = await fetchProposalDisplayId(proposalId);
     } catch (e) {
       // 展示号缺失不阻断主流程，但必须留痕，否则 RPC 故障会伪装成"无展示号"。
-      AppLog.d(
-          '[MultisigTransfer] fetchProposalDisplayId($proposalId) 失败: $e');
+      AppLog.d('[MultisigTransfer] fetchProposalDisplayId($proposalId) 失败: $e');
     }
 
     return ProposalMeta(
@@ -499,7 +498,7 @@ class MultisigTransferService {
           }
         }
       }
-      // 双层 ID v1:为这一批 meta 同步 batch 拉 ProposalDisplayId 并 patch 进 meta
+      // 双层 ID：为这一批 meta 同步批量读取 ProposalDisplayId 并回填。
       final displayMap = await fetchProposalDisplayIdBatch(uncachedMetaIds);
       for (final id in uncachedMetaIds) {
         final meta = cachedMetas[id];
@@ -994,10 +993,10 @@ class MultisigTransferService {
       // proposer: AccountId32 (32 bytes)
       final proposerBytes = data.sublist(offset, offset + 32);
 
-      final beneficiarySs58 =
-          Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix);
-      final proposerSs58 =
-          Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix);
+      final beneficiarySs58 = Keyring()
+          .encodeAddress(Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix);
+      final proposerSs58 = Keyring()
+          .encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix);
 
       return TransferProposalInfo(
         proposalId: proposalId,
@@ -1230,12 +1229,12 @@ class MultisigTransferService {
         proposalId: proposalId,
         actorCidNumber: actorCid.$1,
         institutionAccountId: institutionAccountId,
-        beneficiary:
-            Keyring().encodeAddress(Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix),
+        beneficiary: Keyring().encodeAddress(
+            Uint8List.fromList(beneficiaryBytes), kGmbSs58Prefix),
         amountFen: amountBig,
         remark: remark,
-        proposer:
-            Keyring().encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix),
+        proposer: Keyring()
+            .encodeAddress(Uint8List.fromList(proposerBytes), kGmbSs58Prefix),
       );
     } catch (e) {
       // SCALE 解码失败必须留痕，与"确实不是安全基金提案"区分开。

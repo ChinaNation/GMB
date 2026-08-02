@@ -1,5 +1,6 @@
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -8,10 +9,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 后端会话握手用**默认热钱包的 P-256 硬件设备子钥静默签名**（不读 seed、不弹
 /// 生物识别）换取 session token，由 [SquareApiClient] 内部按 accountId 缓存复用。
 ///
-/// 子钥绑定由 [IdentityRegistrationGate] 在用户初次进入需 CID 页面时按需完成（经
-/// [WalletManager.bindDeviceSubkeyToCurrentBinding]，弹一次生物识别）；后台会话流程**绝不读
-/// seed、绝不弹窗、绝不懒注册**——拿不到 session（无热钱包 / 子钥未绑）时广场与聊天按
-/// **不可用**处理，绝不在此补注册。
+/// 已有子钥直接静默登录。只有实际登录被 Worker 明确拒绝为 `device_not_registered` 时，
+/// 才鉴权一次生成并登记子钥，然后重试原登录；页面门禁不检查、不生成设备子钥。
 class SquareSessionProvider {
   SquareSessionProvider({
     SquareApiClient? client,
@@ -57,6 +56,8 @@ class SquareSessionProvider {
         );
         return '0x$raw';
       },
+      onDeviceNotRegistered: () =>
+          _registerMissingDeviceSubkey(identityAccountId),
     );
   }
 
@@ -74,6 +75,27 @@ class SquareSessionProvider {
         final raw = await _deviceSubkey.signRawHex(walletIndex, loginMessage);
         return '0x$raw';
       },
+      onDeviceNotRegistered: () => _registerMissingDeviceSubkey(accountId),
     );
+  }
+
+  /// Worker 是设备登记状态真源；只有它明确报告缺钥时才进入一次钱包鉴权。
+  Future<void> _registerMissingDeviceSubkey(String accountId) async {
+    AccountDataBinding? binding;
+    try {
+      binding = await _walletManager.accountDataBindingForAccountId(accountId);
+    } on WalletAuthException {
+      binding = await _identityCache.binding();
+    }
+    if (binding == null || binding.accountId != accountId) {
+      throw const WalletAuthException('CID 当前绑定账户与登录账户不一致');
+    }
+    await _walletManager.activateAccountDataBinding(
+      genesisHash: binding.genesisHash,
+      cidNumber: binding.cidNumber,
+      bindingRevision: binding.bindingRevision,
+      accountId: binding.accountId,
+    );
+    await _walletManager.registerDeviceSubkeyForBinding(binding);
   }
 }

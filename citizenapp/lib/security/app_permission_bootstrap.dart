@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppPermissionBootstrap {
   AppPermissionBootstrap._();
 
-  static const String guideSeenKey = 'app.permissions.bootstrap.seen.v1';
+  static const String guideSeenKey = 'app.permissions.bootstrap.seen';
   static const MethodChannel _channel =
       MethodChannel('org.citizenapp/permissions');
 

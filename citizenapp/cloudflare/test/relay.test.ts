@@ -82,7 +82,7 @@ function buildEnv(level: string | null = 'spark') {
 
 function req(method: string, body?: unknown): Request {
   // init 走 readJson,按 pathname 查路由限额,故用真实 init 路径;ack 不读 body,路径无关。
-  return new Request('https://x/v1/chat/relay/init', {
+  return new Request('https://x/chat/relay/init', {
     method,
     headers: { authorization: 'Bearer tok', 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),

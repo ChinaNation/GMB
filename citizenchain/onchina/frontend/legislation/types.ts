@@ -78,7 +78,7 @@ export interface HouseRef {
   cidNumber: string;
 }
 
-/** 本机构可发起的提案候选(发起菜单单源自后端 /api/v1/legislation/proposable)。 */
+/** 本机构可发起的提案候选(发起菜单单源自后端 /api/legislation/proposable)。 */
 export interface ProposableCandidate {
   category: ProposalCategory;
   tier: number;

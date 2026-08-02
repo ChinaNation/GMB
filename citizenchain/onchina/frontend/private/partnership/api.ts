@@ -1,4 +1,4 @@
-// 合伙企业 API。调用 `/api/v1/private/partnership`,不得回退到旧聚合接口。
+// 合伙企业 API。调用 `/api/private/partnership`,不得回退到旧聚合接口。
 
 import type { AdminAuth } from '../../auth/types';
 import type {

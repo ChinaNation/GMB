@@ -43,7 +43,7 @@ passport_valid_until
 
 - 重写 `citizenapp/lib/my/myid/myid_service.dart`：删除 `SharedPreferences myid.*` 本机档案状态和 OnChina 本地状态接口依赖，改为扫描本机钱包列表并读取 finalized `CitizenIdentity::VotingIdentityByAccount`。
 - 重写 `citizenapp/lib/my/myid/myid_page.dart`：页面只展示投票账户、身份 CID 号、状态、有效期；删除护照号、选择钱包、更换钱包、钱包二维码、扫码签名入口。
-- 删除 `citizenapp/lib/my/myid/myid_api.dart` 和 OnChina 旧 `/api/v1/app/myid/status` handler/route/model DTO，避免本地库状态冒充链上真源。
+- 删除 `citizenapp/lib/my/myid/myid_api.dart` 和 OnChina 旧 `/api/app/myid/status` handler/route/model DTO，避免本地库状态冒充链上真源。
 
 ### 阶段 2：唯一身份钱包与认证图标
 

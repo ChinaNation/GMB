@@ -75,7 +75,7 @@ required = (
 missing = [key for key in required if not manifest.get(key)]
 if missing:
     raise SystemExit(f"创世状态包 manifest 缺少字段:{','.join(missing)}")
-if manifest["package_format"] != "citizenchain-genesis-state-v1":
+if manifest["package_format"] != "citizenchain-genesis-state":
     raise SystemExit("创世状态包 manifest.package_format 无效")
 if manifest["chain_id"] != "citizenchain":
     raise SystemExit("创世状态包 manifest.chain_id 无效")
@@ -345,7 +345,12 @@ def sha256_file(path):
             h.update(chunk)
     return h.hexdigest()
 
-if manifest.get("schema_version") != 2 or manifest.get("chain_id") != "citizenchain":
+expected_manifest_fields = {
+    "chain_id", "snapshot_block_number", "snapshot_block_hash",
+    "genesis_hash", "state_root", "chainspec_hash", "public_institution_root",
+    "version", "shard_hashes", "provinces",
+}
+if manifest.get("chain_id") != "citizenchain" or set(manifest) != expected_manifest_fields:
     raise SystemExit("公权机构 manifest 身份无效")
 if manifest.get("snapshot_block_number") != 0:
     raise SystemExit("创世公权机构缓存必须钉死块 0")
@@ -448,7 +453,7 @@ def sha256_runtime_code(path):
     return hashlib.sha256(bytes.fromhex(code[2:])).hexdigest()
 
 manifest = {
-    "package_format": "citizenchain-genesis-state-v1",
+    "package_format": "citizenchain-genesis-state",
     "chain_id": "citizenchain",
     "artifact_stage": artifact_stage,
     "snapshot_block_number": 0,

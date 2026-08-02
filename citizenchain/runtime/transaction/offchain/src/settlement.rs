@@ -22,12 +22,12 @@
 //!
 //! 节点 packer 收齐多笔 → 提交 `submit_offchain_batch` 走到这里。
 
-use codec::{Decode, Encode};
+use codec::Decode;
 use frame_support::{
     ensure,
     traits::{Currency, ExistenceRequirement::KeepAlive},
 };
-use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
+use sp_core::sr25519::Signature as Sr25519Signature;
 use sp_io::crypto::sr25519_verify;
 use sp_runtime::{traits::SaturatedConversion, DispatchResult};
 
@@ -70,7 +70,7 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
 /// [`submitter`] 提交该批次的清算行管理员
 /// [`actor_cid_number`] 本次交易的机构唯一主键
 /// [`institution_account_id`] 批次归属的清算行主账户(= **收款方**清算行)
-/// [`batch`] SCALE 编码过的 V2 批次数据(已在 extrinsic 入口完成 BoundedVec 长度校验)
+/// [`batch`] SCALE 编码过的批次数据（已在 extrinsic 入口完成 `BoundedVec` 长度校验）。
 ///
 /// 偿付预检按 **付款方清算行** 做(每个 payer_bank_cid 各自统计扣减总额),因为
 /// 跨行支付的链上 Currency 流出来自付款方清算账户。同一批次内可能有多个 payer_bank_cid。
@@ -199,11 +199,11 @@ fn execute_single_item<T: Config>(
     // 1. 验 L3 签名
     let intent = item.to_intent();
     let msg = intent.signing_hash();
-    let payer_pk = pubkey_from_accountid::<T>(&item.payer_account_id)?;
+    let payer_public_key = crate::sr25519_public_from_account_id(&item.payer_account_id);
     let sig = Sr25519Signature::try_from(&item.payer_sig[..])
         .map_err(|_| Error::<T>::InvalidL3Signature)?;
     ensure!(
-        sr25519_verify(&sig, &msg, &payer_pk),
+        sr25519_verify(&sig, &msg, &payer_public_key),
         Error::<T>::InvalidL3Signature
     );
 
@@ -298,17 +298,6 @@ fn execute_single_item<T: Config>(
         fee_amount: item.fee_amount,
     });
     Ok(())
-}
-
-/// 把 `T::AccountId` 编码取前 32 字节作为 sr25519 公钥。
-fn pubkey_from_accountid<T: Config>(acc: &T::AccountId) -> Result<Sr25519Public, Error<T>> {
-    let encoded = acc.encode();
-    if encoded.len() < 32 {
-        return Err(Error::<T>::InvalidL3Signature);
-    }
-    let mut arr = [0u8; 32];
-    arr.copy_from_slice(&encoded[..32]);
-    Ok(Sr25519Public::from_raw(arr))
 }
 
 /// 从清算行 CID 直接取省行政区 shard key(CID 第一段 R5 前 2 字符)。

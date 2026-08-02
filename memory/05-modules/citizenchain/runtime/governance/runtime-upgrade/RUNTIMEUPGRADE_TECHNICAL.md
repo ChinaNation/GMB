@@ -57,7 +57,8 @@
 
 节点侧边界：
 - node 后端 `runtime_upgrade` 只负责读取 wasm、构建协议升级 call data、生成签名请求、提交签名交易。
-- node 前端 `runtime-upgrade` 只负责协议升级/开发升级页面交互和签名流程。
+- node 前端 `runtime-upgrade` 只负责协议升级页面交互和签名流程。
+- `developer_direct_upgrade` 属于开发者动作，node 端不提供任何入口，只由公民控制台冷签发起；链端 call 与 QR 登记必须保留。
 - node 的 `runtime_upgrade` 不获取人口快照、不接收联合签名上下文、不拥有投票引擎状态、不展示投票终态。
 - 协议升级提案详情展示真实状态时必须以 `VotingEngine::Proposals.status` 为准，`runtime-upgrade` 摘要里不保存业务状态字段。
 

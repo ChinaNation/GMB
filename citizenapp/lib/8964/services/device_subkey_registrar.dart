@@ -11,7 +11,8 @@ typedef TurnstileTokenProvider = Future<String?> Function();
 /// 编排 P-256 设备子钥注册：取子钥公钥 → 构造 `signing_message(OP_SIGN_SQUARE_DEVICE_BIND)`
 /// 32B 摘要 → sr25519 主钥签摘要 → 上报后端。
 ///
-/// 于**钱包创建时**调用：用内存里刚派生的 sr25519 keypair 签名（零额外弹窗）。
+/// 仅在 Worker 明确返回 `device_not_registered` 后调用：读取当前绑定账户 child 完成
+/// 一次鉴权签名。钱包创建、CID finalized、页面进入与后台预热均不得调用。
 class DeviceSubkeyRegistrar {
   static TurnstileTokenProvider? turnstileTokenProvider;
 

@@ -150,8 +150,9 @@ class _ChatAccount {
 ///
 /// 页面层不直接操作 OpenMLS、Cloudflare 瞬时转发、近场通道和 Isar。
 /// 这个服务负责读取身份账户所在钱包、建立设备身份，并把聊天发送
-/// /同步接到正式 transport。登录和设备绑定只使用硬件 P-256 设备子钥；钱包
-/// seed、钱包主私钥和生物识别不得进入任何 Chat 初始化或收发路径。
+/// /同步接到正式 transport。已有 P-256 设备子钥和数据用途钥均静默使用；实际登录由
+/// Worker 确认 P-256 未登记后才登记，实际数据访问确认数据钥缺失后才生成，两条流程
+/// 独立且页面门禁均不参与。
 class ChatRuntime {
   ChatRuntime({
     ChatStore? store,
@@ -266,7 +267,7 @@ class ChatRuntime {
     if (accountId == null || accountId.isEmpty) {
       throw StateError('无身份账户，无法读取附件加密密钥');
     }
-    return _walletManager.deriveDataKeyForCurrentBinding(
+    return _walletManager.readDataKeyForCurrentBinding(
       accountId,
       LocalKeyPurpose.attachment,
     );
@@ -321,14 +322,14 @@ class ChatRuntime {
     required AccountDataBinding target,
   }) async {
     _validateHandover(source, target);
-    final sourceKeys = await _walletManager.deriveDataKeysForBinding(
+    final sourceKeys = await _walletManager.deriveDataKeysForBindingHandover(
       source,
       const <({LocalKeyPurpose purpose, String? context})>[
         (purpose: LocalKeyPurpose.attachment, context: null),
         (purpose: LocalKeyPurpose.mls, context: null),
       ],
     );
-    final targetKeys = await _walletManager.deriveDataKeysForBinding(
+    final targetKeys = await _walletManager.deriveDataKeysForBindingHandover(
       target,
       const <({LocalKeyPurpose purpose, String? context})>[
         (purpose: LocalKeyPurpose.attachment, context: null),
@@ -436,7 +437,6 @@ class ChatRuntime {
       }
     }
     await _invalidateAccountContext(current.accountId);
-    await ensureReady(current.accountId);
   }
 
   Future<List<Directory>> _mlsDeviceDirectories(
@@ -520,6 +520,61 @@ class ChatRuntime {
   Future<void> ensureReady(String accountId) async {
     final account = await _readAccount(expectedAccountId: accountId);
     await _readyContext(account);
+  }
+
+  /// 首帧后台仅补推送登记，不创建 MLS 状态、不解密聊天数据，也不读取钱包账户 child。
+  ///
+  /// 尚未由用户进入 Chat 建立过 device_id/device_public_key 时直接跳过；后续进入 Chat
+  /// 会在已有设备用途钥时静默初始化；真实缺钥由前台实际业务处理。
+  Future<void> prewarmPushRegistrationSilently(String accountId) async {
+    final account = await _readAccount(expectedAccountId: accountId);
+    final prefs = await _prefs;
+    final deviceId = prefs.getString(_kDeviceId) ?? '';
+    final devicePublicKey = prefs.getString(_kDevicePublicKeyHex) ?? '';
+    if (deviceId.isEmpty || devicePublicKey.isEmpty) return;
+
+    var session = await _squareApiClient.ensureSession(
+      accountId: account.accountId,
+      signLoginPayload: (payload) => _signSquareLoginPayload(account, payload),
+    );
+    if (session.cidNumber != account.cidNumber ||
+        session.bindingRevision != account.bindingRevision ||
+        session.accountId != account.accountId) {
+      _squareApiClient.clearSession(account.accountId);
+      session = await _squareApiClient.ensureSession(
+        accountId: account.accountId,
+        signLoginPayload: (payload) =>
+            _signSquareLoginPayload(account, payload),
+      );
+    }
+    final identity = ChatDevice(
+      cidNumber: account.cidNumber,
+      deviceId: deviceId,
+      devicePublicKey: devicePublicKey,
+    );
+    final transport = _cloudTransportFactory?.call(
+          accountId: account.accountId,
+          localDeviceId: identity.deviceId,
+          serviceBaseUrl: _squareApiClient.baseUri,
+          sessionToken: session.sessionToken,
+        ) ??
+        ChatCloudTransport(
+          accountId: account.accountId,
+          localDeviceId: identity.deviceId,
+          serviceBaseUrl: _squareApiClient.baseUri,
+          sessionToken: session.sessionToken,
+          requestSigner: session.signRequest,
+        );
+    try {
+      await _ensureDeviceRegistered(
+        account: account,
+        identity: identity,
+        prefs: prefs,
+        transport: transport,
+      );
+    } finally {
+      transport.dispose();
+    }
   }
 
   /// 默认账户切换或本机 Chat 数据清理时精确失效该账户上下文。
@@ -1358,12 +1413,12 @@ class ChatRuntime {
     required SharedPreferences prefs,
     MlsKeyPackage? initialKeyPackage,
   }) async {
-    // 后台会话握手绝不读 seed / 不弹窗 / 不懒注册：子钥由门禁在进入需 CID 页面时按需绑定。
-    // 未注册设备（旧格式钱包 / 尚未进过需 CID 页面）在此直接会话失败，按不可用降级处理，
-    // 绝不在合并主线程弹 Turnstile。
+    // 这是用户实际进入 Chat 后的会话需求：已有 P-256 子钥静默登录；Worker 明确报告
+    // device_not_registered 时才鉴权一次生成并登记。后台推送预热仍不传该回调。
     var session = await _squareApiClient.ensureSession(
       accountId: account.accountId,
       signLoginPayload: (payload) => _signSquareLoginPayload(account, payload),
+      onDeviceNotRegistered: () => _registerMissingDeviceSubkey(account),
     );
     if (session.cidNumber != account.cidNumber ||
         session.bindingRevision != account.bindingRevision ||
@@ -1373,6 +1428,7 @@ class ChatRuntime {
         accountId: account.accountId,
         signLoginPayload: (payload) =>
             _signSquareLoginPayload(account, payload),
+        onDeviceNotRegistered: () => _registerMissingDeviceSubkey(account),
       );
     }
     if (session.cidNumber != account.cidNumber ||
@@ -1547,6 +1603,12 @@ class ChatRuntime {
     return '0x$raw';
   }
 
+  Future<void> _registerMissingDeviceSubkey(_ChatAccount account) async {
+    final binding =
+        await _walletManager.accountDataBindingForAccountId(account.accountId);
+    await _walletManager.registerDeviceSubkeyForBinding(binding);
+  }
+
   Future<_ChatAccount> _readAccount({String? expectedAccountId}) async {
     // CID 是永久身份主键；当前绑定账户负责签名、鉴权与派生本版本私有数据密钥。
     final wallet = await _walletManager.getDefaultWallet();
@@ -1556,16 +1618,22 @@ class ChatRuntime {
     if (!wallet.isHotWallet) {
       throw StateError('身份账户必须是热钱包');
     }
-    final identity = await _identityCache.resolve();
-    final cidNumber = identity?.snapshot?.cidNumber ?? '';
-    final bindingRevision = identity?.snapshot?.bindingRevision ?? 0;
-    final accountId = identity?.accountId ?? '';
+    final binding = await _identityCache.binding();
+    final cidNumber = binding?.cidNumber ?? '';
+    final bindingRevision = binding?.bindingRevision ?? 0;
+    final accountId = binding?.accountId ?? '';
     if (cidNumber.isEmpty || bindingRevision <= 0 || accountId.isEmpty) {
       throw StateError('当前钱包尚未注册 CID，无法使用聊天');
     }
     if (expectedAccountId != null && accountId != expectedAccountId) {
       throw StateError('身份账户已切换，请重新进入聊天');
     }
+    await _walletManager.activateAccountDataBinding(
+      genesisHash: binding!.genesisHash,
+      cidNumber: cidNumber,
+      bindingRevision: bindingRevision,
+      accountId: accountId,
+    );
     return _ChatAccount(
       walletIndex: wallet.walletIndex,
       cidNumber: cidNumber,
@@ -1607,12 +1675,12 @@ class ChatRuntime {
       accountId: accountId,
     );
     final safeDevice = _safePath(deviceId);
-    // MLS 状态（设备签名私钥 + 群 ratchet 秘密）落盘必须加密：取当前绑定钱包
-    // 账户的 mls 用途子钥，Rust native 与 Dart pending 队列共用同一把。
+    // MLS 状态（设备签名私钥 + 群 ratchet 秘密）落盘必须加密：已有 mls 用途钥从
+    // 设备数据钥金库静默解封，真实缺钥时才鉴权一次生成。
     return MlsStateStore(
       Directory('${bindingDirectory.path}/mls/$safeDevice'),
       ownerCidNumber: ownerCidNumber,
-      stateKey: await _walletManager.deriveDataKeyForCurrentBinding(
+      stateKey: await _walletManager.readDataKeyForCurrentBinding(
         accountId,
         LocalKeyPurpose.mls,
       ),

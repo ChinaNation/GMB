@@ -8,7 +8,7 @@
 
 - `OnchainChargeAdapter`：实现 `pallet-transaction-payment::OnChargeTransaction`，消费 runtime 给出的唯一费用路由并执行链上交易费、投票费扣款。
 - `OnchainExecutionFeeCharger`：供投票通过后的业务回调从已经核验的确切账户收取链上资金执行费；计算、ED、事件和分账与外层交易完全一致。
-- `OnchainFeeRouter`：将已扣手续费按 80% / 10% / 10% 分给当前块作者绑定的奖励钱包、国家储委会费用账户和安全基金账户。
+- `OnchainFeeRouter`：将已扣手续费按 80% / 10% / 10% 分给当前块作者绑定的奖励接收账户、国家储委会费用账户和安全基金账户。
 
 本模块不维护费用类别表、不维护机构身份或管理员表，也不使用 weight、length 或动态 multiplier 计算制度费用。
 
@@ -46,7 +46,8 @@
 
 机构发起提案、机构资料操作和机构账户操作属于链上操作，由该 CID 的费用账户支付最低 0.1 元。只有后续管理员执行 `cast_*` 等实际投票时，才由投票签名者支付 1 元。
 
-Fullnode 不是机构。`bind_reward_wallet` / `rebind_reward_wallet` 由全节点自己的私钥签名，并由该签名者支付 0.1 元。
+Fullnode 不是机构。`bind_reward_account` / `rebind_reward_account` 由全节点自己的 `powr`
+账户签名，并由该签名者支付 0.1 元。
 
 ## 4. tip 与框架费用
 
@@ -87,11 +88,11 @@ FeePaid { who: 实际付款账户, fee: 完整手续费 }
 
 分账常量同样来自 `primitives::fee_policy`：
 
-- 全节点奖励钱包：80%。
+- 全节点奖励接收账户：80%。
 - 国家储委会费用账户：10%。
 - 安全基金账户：10%。
 
-块作者缺失、奖励钱包未绑定或任一制度账户无法安全入账时，对应 credit 被销毁并发出 `FeeShareBurnt { reason, amount }`，绝不转给未知账户。原因包括：
+块作者缺失、奖励接收账户未绑定或任一制度账户无法安全入账时，对应 credit 被销毁并发出 `FeeShareBurnt { reason, amount }`，绝不转给未知账户。原因包括：
 
 - `AuthorMissing`
 - `WalletUnbound`

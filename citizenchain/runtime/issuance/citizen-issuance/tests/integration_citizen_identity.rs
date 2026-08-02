@@ -148,10 +148,39 @@ impl frame_support::traits::UnixTime for FixedTime {
     }
 }
 
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TestCitizenIdentityBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl citizen_identity::BenchmarkHelper<u64, citizen_identity::pallet::SignatureOf<Test>>
+    for TestCitizenIdentityBenchmarkHelper
+{
+    fn signer() -> (sp_core::sr25519::Public, u64) {
+        let public = sp_io::crypto::sr25519_generate(0.into(), None);
+        let mut account_id = [0u8; 8];
+        account_id.copy_from_slice(&public.0[..8]);
+        (public, u64::from_le_bytes(account_id))
+    }
+
+    fn sign(
+        signer: &sp_core::sr25519::Public,
+        message: &[u8],
+    ) -> citizen_identity::pallet::SignatureOf<Test> {
+        sp_io::crypto::sr25519_sign(0.into(), signer, message)
+            .expect("benchmark signer exists")
+            .0
+            .to_vec()
+            .try_into()
+            .expect("sr25519 signature fits")
+    }
+}
+
 impl citizen_identity::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxCitizenSignatureLength = MaxCitizenSignatureLength;
     type CitizenIdentityAuthority = TestCitizenIdentityAuthority;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = TestCitizenIdentityBenchmarkHelper;
     type OnVotingIdentityRegistered = CitizenIssuance;
     type TimeProvider = FixedTime;
     type MaxPopulationDaysPerBlock = MaxPopulationDaysPerBlock;

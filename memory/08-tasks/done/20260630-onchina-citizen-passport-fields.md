@@ -28,7 +28,7 @@
 - `flutter analyze`
 - `flutter test test/myid_page_test.dart`
 - CitizenApp 电子护照页不展示内部 `wallet_pubkey`,只展示 SS58 钱包地址。
-- OnChina 本地服务以真实 PostgreSQL 启动并通过 `/api/v1/health`。
+- OnChina 本地服务以真实 PostgreSQL 启动并通过 `/api/health`。
 - 搜索确认前端不再展示 `wallet_pubkey`,新公民流程不再出现旧绑定态和旧选举范围字段。
 
 ## 状态
@@ -40,6 +40,6 @@
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`
 - `npm --prefix citizenchain/onchina/frontend run build`
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`
-- 临时 PostgreSQL + OnChina 本地服务启动成功,`GET /api/v1/health` 返回 `status=UP`。
+- 临时 PostgreSQL + OnChina 本地服务启动成功,`GET /api/health` 返回 `status=UP`。
 - `flutter analyze`（`citizenapp`）
 - `flutter test test/myid_page_test.dart`（`citizenapp`）

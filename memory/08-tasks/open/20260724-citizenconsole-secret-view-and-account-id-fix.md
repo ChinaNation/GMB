@@ -7,7 +7,7 @@
 排查 `citizenconsole/test/settle.test.mjs` 「H1 并发锁」失败(实为 6/6 全挂)时,顺带核出充值发币链路两处问题:
 
 1. **测试夹具过期**:settle 单测 `CONFIG` 用了弃用键 `TOKEN_CONTRACTS`,而代码已按币种分键 `TOKEN_USDC/TOKEN_USDT`(`topup/routes.mjs:14`)。`cfg.tokenContracts=[]` → 白名单 fail-closed 守卫返回 400,胜出调用拿 400 而非 200。已修:夹具键改 `TOKEN_USDC`。
-2. **🔴 致命契约不匹配**:Worker `/v1/square/topup/settlement/pending` 吐目标地址字段 `account_id`(`citizenapp/cloudflare/src/topup/settlement.ts:56`),控制台却读 `order.gmb_address`(`routes.mjs:292` / `ledger.mjs:42`)。仓库已统一账户字段为 `account_id`(commit `44d29b4c`),控制台因整目录 gitignore 漏掉这次扫描。运行时 `destAccountId=undefined` → @polkadot 编码 AccountId32 抛错 → 每笔真单发币必被强制转异常,**币永远发不出**。单测 stub 伪造了 `gmb_address` 掩盖了它。
+2. **🔴 致命契约不匹配**:Worker `/square/topup/settlement/pending` 吐目标地址字段 `account_id`(`citizenapp/cloudflare/src/topup/settlement.ts:56`),控制台却读 `order.gmb_address`(`routes.mjs:292` / `ledger.mjs:42`)。仓库已统一账户字段为 `account_id`(commit `44d29b4c`),控制台因整目录 gitignore 漏掉这次扫描。运行时 `destAccountId=undefined` → @polkadot 编码 AccountId32 抛错 → 每笔真单发币必被强制转异常,**币永远发不出**。单测 stub 伪造了 `gmb_address` 掩盖了它。
 
 ## 决策
 - **account_id 对齐(方案 A)**:改控制台向全仓 `account_id` 看齐,不动已部署 Worker。`destSs58` 形参一并更名 `destAccountId`(消除误导性命名残桩——值本是 hex AccountId,非 SS58 串)。

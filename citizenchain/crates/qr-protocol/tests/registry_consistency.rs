@@ -183,7 +183,7 @@ fn hash_only_is_limited_to_runtime_upgrade() {
 /// 反向校验:fields.yaml 不得积累无人引用的孤儿中文名。
 ///
 /// `required_fields_all_have_chinese_labels` 只做 actions → fields 单向校验,
-/// 缺这条反向校验正是 14 条孤儿标签堆积到 v1 的成因。
+/// 缺这条反向校验正是历史孤儿标签堆积的成因。
 #[test]
 fn fields_yaml_has_no_orphan_entries() {
     let actions = actions().expect("actions.yaml 必须可解析");

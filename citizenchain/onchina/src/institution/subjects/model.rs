@@ -288,7 +288,7 @@ pub struct DeleteAccountInput {
     pub proposer_role_code: String,
 }
 
-/// /api/v1/institutions/list 的列表过滤维度(查询参数,不是存储 category)。
+/// /api/institutions/list 的列表过滤维度(查询参数,不是存储 category)。
 ///
 /// JY 教育机构统一归教育 tab,私权目标类型归 private tab,公权目录仍承接公权本体
 /// 和公权下属非法人:

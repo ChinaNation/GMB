@@ -78,15 +78,15 @@ void main() {
       final isar = await WalletIsar.instance.db();
       final expires = await isar.appKvEntitys
           .filter()
-          .keyEqualTo('wallet.session.attest.expires_at_millis.v1')
+          .keyEqualTo('wallet.session.attest.expires_at_millis')
           .findFirst();
       final policy = await isar.appKvEntitys
           .filter()
-          .keyEqualTo('wallet.session.attest.policy.v1')
+          .keyEqualTo('wallet.session.attest.policy')
           .findFirst();
       final payload = await isar.appKvEntitys
           .filter()
-          .keyEqualTo('wallet.session.attest.last_payload.v1')
+          .keyEqualTo('wallet.session.attest.last_payload')
           .findFirst();
 
       expect(expires?.intValue, state.expiresAtMillis);

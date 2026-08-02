@@ -319,11 +319,8 @@ Future<void> _completeRegistryHandover({
           current: target,
           previous: previous,
         );
-        await walletManager.bindDeviceSubkeyToCurrentBinding(
-          cidNumber: target.cidNumber,
-          bindingRevision: target.bindingRevision,
-          accountId: target.accountId,
-        );
+        // finalized 只完成公开绑定与数据交接；设备数据钥按真实数据缺钥生成，P-256
+        // 子钥只在 Worker 明确报告未登记时登记，禁止在此额外读取目标账户 child。
         await handover.completeFinalizedBinding(target);
         WalletManager.notifyIdentityBindingChanged();
         return;

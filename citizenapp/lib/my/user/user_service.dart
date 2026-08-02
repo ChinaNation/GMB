@@ -41,7 +41,7 @@ class UserProfileState {
 }
 
 class UserProfileService {
-  static const String _kProfile = 'user.profile.state.v2';
+  static const String _kProfile = 'user.profile.state';
 
   Future<UserProfileState> getState() async {
     final prefs = await SharedPreferences.getInstance();

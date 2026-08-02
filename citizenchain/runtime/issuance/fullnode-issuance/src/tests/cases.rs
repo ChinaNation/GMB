@@ -7,7 +7,6 @@ fn bind_reward_account_only_once() {
         let reward_account_id = account(2);
         let reward_account_id_2 = account(3);
 
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
@@ -66,7 +65,6 @@ fn reward_issued_within_range_when_bound() {
     new_test_ext().execute_with(|| {
         let miner = account(11);
         let reward_account_id = account(22);
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
@@ -124,7 +122,6 @@ fn no_reward_outside_reward_range() {
     new_test_ext().execute_with(|| {
         let miner = account(55);
         let reward_account_id = account(66);
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
@@ -160,7 +157,6 @@ fn reward_issued_on_end_boundary_block() {
     new_test_ext().execute_with(|| {
         let miner = account(77);
         let reward_account_id = account(88);
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
@@ -190,7 +186,6 @@ fn reward_accumulates_across_multiple_blocks() {
     new_test_ext().execute_with(|| {
         let miner = account(91);
         let reward_account_id = account(92);
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
@@ -265,31 +260,25 @@ fn reward_issued_to_miner_when_reward_account_not_bound() {
 }
 
 #[test]
-fn miner_can_bind_after_first_authored_block() {
+fn prebound_reward_account_receives_first_authored_block_reward() {
     new_test_ext().execute_with(|| {
         let miner = account(104);
         let reward_account_id = account(105);
-        MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
-        // 首次出块前没有绑定资格，首次奖励仍进入矿工身份账户。
-        <FullnodeIssuance as Hooks<u32>>::on_finalize(1);
-        assert_eq!(
-            Balances::free_balance(miner.clone()),
-            primitives::pow_const::FULLNODE_BLOCK_REWARD
-        );
-        assert_eq!(LastAuthoredBlockByMiner::<Test>::get(&miner), Some(1));
-
+        // 矿工可在首次出块前预绑定收款账户，首块奖励直接进入该账户。
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
         ));
+        MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
-        <FullnodeIssuance as Hooks<u32>>::on_finalize(2);
+        <FullnodeIssuance as Hooks<u32>>::on_finalize(1);
+        assert_eq!(Balances::free_balance(miner.clone()), 0);
         assert_eq!(
             Balances::free_balance(reward_account_id),
             primitives::pow_const::FULLNODE_BLOCK_REWARD
         );
-        assert_eq!(LastAuthoredBlockByMiner::<Test>::get(&miner), Some(2));
+        assert_eq!(LastAuthoredBlockByMiner::<Test>::get(&miner), Some(1));
     });
 }
 
@@ -299,7 +288,6 @@ fn reward_account_can_be_rebound_by_miner() {
         let miner = account(111);
         let reward_account_id_1 = account(112);
         let reward_account_id_2 = account(113);
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id_1
@@ -332,7 +320,6 @@ fn rebind_rejects_miner_reward_account() {
     new_test_ext().execute_with(|| {
         let miner = account(114);
         let reward_account_id = account(115);
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
@@ -357,7 +344,6 @@ fn rebind_rejects_unchanged_reward_account() {
     new_test_ext().execute_with(|| {
         let miner = account(116);
         let reward_account_id = account(117);
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id.clone()
@@ -399,7 +385,6 @@ fn reward_goes_to_new_reward_account_id_after_rebind() {
         let reward_account_id_1 = account(132);
         let reward_account_id_2 = account(133);
 
-        mark_miner_authored(&miner, 1);
         assert_ok!(FullnodeIssuance::bind_reward_account(
             RuntimeOrigin::signed(miner.clone()),
             reward_account_id_1.clone()

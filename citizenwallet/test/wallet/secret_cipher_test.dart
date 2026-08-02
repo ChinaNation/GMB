@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:citizenwallet/wallet/secret_cipher.dart';
 
 void main() {
-  const associatedData = 'wallet.master.test.seed_hex.v1';
+  const associatedData = 'wallet.master.test.seed_hex';
 
   group('SecretCipher', () {
     setUp(() {
@@ -48,12 +48,12 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       const storage = FlutterSecureStorage();
-      expect(await storage.read(key: 'wallet.internal.aek.v1'), isNull);
+      expect(await storage.read(key: 'wallet.internal.aek'), isNull);
     });
 
     test('存在钱包密文但 AEK 缺失时禁止创建', () async {
       FlutterSecureStorage.setMockInitialValues({
-        'wallet.master.0x${'11' * 32}.seed_hex.v1': 'orphaned',
+        'wallet.master.0x${'11' * 32}.seed_hex': 'orphaned',
       });
       SecretCipher.clearCache();
       expect(
@@ -67,7 +67,7 @@ void main() {
 
     test('非法 AEK 不会被覆盖', () async {
       FlutterSecureStorage.setMockInitialValues({
-        'wallet.internal.aek.v1': 'invalid',
+        'wallet.internal.aek': 'invalid',
       });
       SecretCipher.clearCache();
       expect(
@@ -78,7 +78,7 @@ void main() {
         throwsA(isA<FormatException>()),
       );
       const storage = FlutterSecureStorage();
-      expect(await storage.read(key: 'wallet.internal.aek.v1'), 'invalid');
+      expect(await storage.read(key: 'wallet.internal.aek'), 'invalid');
     });
 
     test('加密后解密得到原文', () async {
@@ -233,7 +233,7 @@ void main() {
       expect(
         () => SecretCipher.decrypt(
           encrypted,
-          associatedData: 'wallet.master.other.mnemonic.v1',
+          associatedData: 'wallet.master.other.mnemonic',
         ),
         throwsA(isA<FormatException>()),
       );

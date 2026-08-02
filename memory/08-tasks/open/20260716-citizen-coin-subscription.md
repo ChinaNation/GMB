@@ -253,7 +253,7 @@
 - 工作台类型已拆分为注册局、私权、司法、立法、其它公权和非法人机构。私权机构管理员仍从链上中国统一入口扫码登录，但只进入本机构信息、`admins` 和经授权模块，不复用注册局的公民、机构目录或登记 UI。
 - 平台会员模块只在当前绑定 CID 与 finalized `PlatformCidNumber` 精确一致时下发；查询与发起前读取同一 finalized 区块的三档 `PlatformPrice`，链读、CID、节点绑定或链上 `admins` 任一无法确认均 fail-closed，PostgreSQL 不保存价格副本。
 - 调价提案严格构造 `SquarePost::propose_set_platform_price`，仅调用现有统一内部投票引擎。OnChina 不实现投票资格、计票、推进或执行，也不保存投票表。
-- 链签流程已收口到唯一 core 实现和统一 `POST /api/v1/admin/chain/submit`：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后统一验签、dry-run、提交并等待进块；旧公民专属提交 URL 和业务专属提交实现已移除。
+- 链签流程已收口到唯一 core 实现和统一 `POST /api/admin/chain/submit`：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后统一验签、dry-run、提交并等待进块；旧公民专属提交 URL 和业务专属提交实现已移除。
 - prepare 与 submit 都重新核对当前节点绑定、准确平台 CID 和链上 active `admins`，防止 prepare 后撤权继续提交。调价外部交易继续经过统一交易收费；投票引擎系统执行不追加签名或外部交易。
 - 唯一二维码 registry 已登记 `propose_set_platform_price` 与中文字段。CitizenWallet 严格显示公民链基金会 CID、目标档位和新价格，并拒绝未知档位、零价、截断、尾随字节、call/action 不一致及非标准载荷。
 - OnChina 140 项测试、CitizenWallet signer 139 项测试、二维码 registry 一致性和单注册表守卫全部通过；前端生产构建和 Dart 静态分析通过。
@@ -310,7 +310,7 @@
 
 因公民链基金会是**永久固定**的平台订阅机构，`PlatformCidNumber` 这层「可写存储」本身就是错误抽象。正确修复是把平台 CID 收敛为**创世常量单源**，而不是补一个可写存储的绑定入口。
 
-> 部署模型更正（覆盖本卡第 1 节的「禁止重新创世 / StorageVersion 原地升级」约束，仅限本步）：GMB 全系开发期、零用户，本步按**重新创世**落地，**不做任何迁移**。原设想的 v2→v3 迁移已撤销；`square-post` 的整套迁移机制（`migration.rs`、`on_runtime_upgrade` 等 hooks、`MigrationBlocked`、`ensure_subscription_ready` 迁移门禁）在重新创世模型下均为死代码，作为残留**直接删除**。
+> 部署模型更正（覆盖本卡第 1 节的“禁止重新创世 / StorageVersion 原地升级”约束，仅限本步）：GMB 全系开发期、零用户，本步按**重新创世**落地，**不做任何迁移**。原设想的历史迁移已撤销；`square-post` 的整套迁移机制（`migration.rs`、`on_runtime_upgrade` 等 hooks、`MigrationBlocked`、`ensure_subscription_ready` 迁移门禁）在重新创世模型下均为死代码，作为残留**直接删除**。
 
 ### 17.2 目标态
 

@@ -1037,13 +1037,13 @@ class UserContactService {
   /// 用 `LocalKeyPurpose.contactsLocal` 而**不复用云端通讯录钥**:两者域隔离,
   /// 本地密文被拿到也不等于同时暴露云端密文。
   Future<Uint8List> _localKvKey(_ContactOwner owner) =>
-      _walletManager.deriveDataKeyForCurrentBinding(
+      _walletManager.readDataKeyForCurrentBinding(
         owner.accountId,
         LocalKeyPurpose.contactsLocal,
       );
 
   Future<Uint8List> _localKvKeyForBinding(AccountDataBinding binding) async {
-    return (await _walletManager.deriveDataKeysForBinding(
+    return (await _walletManager.deriveDataKeysForBindingHandover(
       binding,
       const <({LocalKeyPurpose purpose, String? context})>[
         (purpose: LocalKeyPurpose.contactsLocal, context: null),

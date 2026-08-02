@@ -66,7 +66,7 @@ class ChainBootstrapApi {
   final Duration timeout;
 
   Future<ChainBootstrapManifest> fetchManifest() async {
-    final uri = Uri.parse('$baseUrl/v1/chain/bootstrap');
+    final uri = Uri.parse('$baseUrl/chain/bootstrap');
     final response = await _http.get(uri, headers: const {
       'accept': 'application/json',
     }).timeout(timeout);
@@ -107,7 +107,7 @@ class ChainBootstrapManifest {
   final ChainBootstrapSecurity security;
 
   factory ChainBootstrapManifest.fromJson(Map<String, dynamic> json) {
-    if (_string(json, 'schema') != 'citizenapp.chain.bootstrap.v2') {
+    if (_string(json, 'schema') != 'citizenapp.chain.bootstrap') {
       throw const ChainBootstrapApiException('链启动清单 schema 不匹配');
     }
     if (json['ok'] != true) {
@@ -281,7 +281,7 @@ class ChainBootstrapServices {
 
   bool get signedExtrinsicRelayIsSafe =>
       !signedExtrinsicRelayEnabled ||
-      signedExtrinsicRelayPath == '/v1/chain/extrinsics/relay';
+      signedExtrinsicRelayPath == '/chain/extrinsics/relay';
 
   factory ChainBootstrapServices.fromJson(Map<String, dynamic> json) {
     final relay = _map(json, 'signed_extrinsic_relay');
@@ -380,7 +380,7 @@ String? _relayPath(Map<String, dynamic> json) {
   if (!enabled) {
     return null;
   }
-  if (value == '/v1/chain/extrinsics/relay') {
+  if (value == '/chain/extrinsics/relay') {
     return value as String;
   }
   throw const ChainBootstrapApiException(

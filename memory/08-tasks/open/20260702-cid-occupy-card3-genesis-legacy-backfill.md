@@ -11,7 +11,7 @@
 ## 处理决策
 
 1. **国/省级常量 296:** 遍历全部 7 个 `china_*` 数组写入 `Institutions`、制度要求的完整协议账户集合和地址反向索引；NJD/FRG 管理员特例保留；国家 NSN/NRP 固定在 `CHINA_LF`。
-2. **模板派生机构 49,297(2026-07-04 调整为创世到市):数据不手写、不进 chainspec。** 命名与机构集真源 = onchina `gov/service.rs` 确定性模板(gov-deterministic-v8,已由用户统一命名),**搬进 primitives 作为链上/链下单源**(onchina 改引用):
+2. **模板派生机构 49,297(2026-07-04 调整为创世到市):数据不手写、不进 chainspec。** 命名与机构集真源 = onchina `gov/service.rs` 确定性模板(gov-deterministic,已由用户统一命名),**搬进 primitives 作为链上/链下单源**(onchina 改引用):
    - 组装规则(全 296 常量+模板逆向验证零例外):`cid_short_name = 行政区显示名 + cid_short_name_suffix`、`cid_full_name = 行政区显示名 + cid_full_name_suffix`;
    - 创世派生范围:省级部门 11 类×43 省=473 + 市级 17 类×2,872=48,824;
    - 非创世范围:镇级 14 类×39,087 镇=547,218,由注册局按真实运行期需要注册上链;

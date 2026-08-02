@@ -29,7 +29,7 @@ export const governanceApi = {
     invoke<ProposalListItem[]>('get_institution_proposals', { cidNumber }),
   getInstitutionProposalPage: (cidNumber: string, startId: number, count: number) =>
     invoke<ProposalPageResult>('get_institution_proposal_page', { cidNumber, startId, count }),
-  // 双层 ID + 反向索引(spec_version v1)
+  // 双层 ID + 反向索引
   getProposalDisplay: (proposalId: number) =>
     invoke<ProposalDisplayMeta | null>('get_proposal_display', { proposalId }),
   listProposalsByInstitutionCode: (institutionCode: string) =>

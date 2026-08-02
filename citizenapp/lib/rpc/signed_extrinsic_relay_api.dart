@@ -29,7 +29,7 @@ class SignedExtrinsicRelayApi {
         ),
         _http = httpClient ?? http.Client();
 
-  static const relayPath = '/v1/chain/extrinsics/relay';
+  static const relayPath = '/chain/extrinsics/relay';
   static const maxExtrinsicBytes = 64 * 1024;
 
   final String baseUrl;
@@ -99,7 +99,7 @@ class SignedExtrinsicRelayResult {
 
   factory SignedExtrinsicRelayResult.fromJson(Map<String, dynamic> json) {
     if (json['ok'] != true ||
-        json['schema'] != 'citizenapp.chain.extrinsic_relay.v1') {
+        json['schema'] != 'citizenapp.chain.extrinsic_relay') {
       throw const SignedExtrinsicRelayApiException('签名交易广播响应 schema 不匹配');
     }
     final result = SignedExtrinsicRelayResult(

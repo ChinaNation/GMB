@@ -55,7 +55,7 @@ export interface ConstitutionChapter {
 
 export interface ConstitutionDocument {
   ok: true;
-  schema: 'citizenapp.constitution.v1';
+  schema: 'citizenapp.constitution';
   version: number;
   content_hash: string;
   version_label: { cn: string; en: string | null } | null;
@@ -379,7 +379,7 @@ export async function fetchConstitutionDocument(env: Env): Promise<ConstitutionD
 
   return {
     ok: true,
-    schema: 'citizenapp.constitution.v1',
+    schema: 'citizenapp.constitution',
     version,
     content_hash: contentHash,
     version_label: versionLabel,
@@ -391,9 +391,9 @@ export async function fetchConstitutionDocument(env: Env): Promise<ConstitutionD
 }
 
 /// KV 短缓存 key：宪法全局单文档，无需按用户分片。
-const CONSTITUTION_CACHE_KEY = 'constitution_document:v1';
+const CONSTITUTION_CACHE_KEY = 'constitution_document';
 
-/// 公开 GET /v1/constitution：官网「公民宪法」tab 数据源。
+/// 公开 GET /constitution：官网「公民宪法」tab 数据源。
 /// 命中 KV 缓存直接返回；未命中读链解码后回写 KV，让一个 TTL 内的重复访问不再打节点。
 export async function constitutionRoute(_request: Request, env: Env): Promise<Response> {
   const cached = await readCachedDocument(env);

@@ -163,7 +163,7 @@ void main() {
       String? authHeader;
       final client = _client(MockClient((request) async {
         authHeader = request.headers['authorization'];
-        expect(request.url.path, '/v1/square/users/$_owner');
+        expect(request.url.path, '/square/users/$_owner');
         return _ok({'ok': true, 'profile': _profileJson(isFollowing: true)});
       }));
 
@@ -201,7 +201,7 @@ void main() {
         limit: 2,
       );
 
-      expect(seen!.path, '/v1/square/users/$_owner/posts');
+      expect(seen!.path, '/square/users/$_owner/posts');
       expect(seen!.queryParameters['category'], 'campaign');
       expect(seen!.queryParameters['limit'], '2');
       expect(page.posts.single.postId, 'c1');
@@ -255,7 +255,7 @@ void main() {
       final client = _client(MockClient((_) async => http.Response('', 200)));
       expect(
         client.mediaUrl('profile/acct/avatar'),
-        'https://example.com/v1/square/media/profile/acct/avatar',
+        'https://example.com/square/media/profile/acct/avatar',
       );
     });
 

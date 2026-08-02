@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { apiRouteUrl } from '../limits/request';
 import { jsonResponse, parsePositiveInt } from '../shared/http';
 import { CHAIN_EXTRINSIC_RELAY_PATH, isChainExtrinsicRelayEnabled } from './extrinsic_relay';
 
@@ -6,7 +7,7 @@ const DEFAULT_BOOTSTRAP_TTL_SECONDS = 300;
 
 export interface ChainBootstrapResponse {
   ok: true;
-  schema: 'citizenapp.chain.bootstrap.v2';
+  schema: 'citizenapp.chain.bootstrap';
   generated_at: number;
   cache_ttl_seconds: number;
   chain: {
@@ -65,7 +66,6 @@ export function buildChainBootstrapResponse(
   request: Request,
   env: Env
 ): ChainBootstrapResponse {
-  const origin = new URL(request.url).origin;
   const bootnodes = parseBootnodes(env.CHAIN_BOOTNODES);
   const cacheTtlSeconds = parsePositiveInt(
     env.BOOT_TTL_SECONDS,
@@ -75,7 +75,7 @@ export function buildChainBootstrapResponse(
 
   return {
     ok: true,
-    schema: 'citizenapp.chain.bootstrap.v2',
+    schema: 'citizenapp.chain.bootstrap',
     generated_at: Date.now(),
     cache_ttl_seconds: cacheTtlSeconds,
     chain: {
@@ -106,9 +106,11 @@ export function buildChainBootstrapResponse(
       min_peer_count_hint: 1
     },
     services: {
-      square_base_url: `${origin}/v1/square`,
-      chat_base_url: `${origin}/v1/chat`,
-      media_base_url: `${origin}/v1/square/media`,
+      // 生产 Worker 挂载在同域 `/api/*`，返回给 App 的服务根必须保留该部署前缀；
+      // 本地直接挂载业务路由时则保持无前缀，不能在 manifest 中凭空丢失或增加入口层。
+      square_base_url: apiRouteUrl(request, '/square', {}),
+      chat_base_url: apiRouteUrl(request, '/chat', {}),
+      media_base_url: apiRouteUrl(request, '/square/media', {}),
       signed_extrinsic_relay: {
         enabled: relayEnabled,
         path: relayEnabled ? CHAIN_EXTRINSIC_RELAY_PATH : null

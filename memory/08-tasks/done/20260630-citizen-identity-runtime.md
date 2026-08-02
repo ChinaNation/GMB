@@ -31,7 +31,7 @@
 - `flutter analyze` 检查 CitizenApp/CitizenWallet 相关文件通过。
 - `npm --prefix citizenchain/onchina/frontend run build` 通过。
 - `npm --prefix citizenchain/node/frontend run build` 通过。
-- 真实 OnChina 服务健康检查通过;首次行政区自动校准约 150 秒后 `/api/v1/health` 返回 `UP`。
+- 真实 OnChina 服务健康检查通过;首次行政区自动校准约 150 秒后 `/api/health` 返回 `UP`。
 - `git diff --check -- citizenchain citizenapp citizenwallet docs memory` 通过。
 
 ## 状态

@@ -34,7 +34,7 @@ class _SquareTurnstilePageState extends State<SquareTurnstilePage> {
     // 在 initState 同步 loadRequest 会把主线程占满卡首帧输入派发（ANR 同源），推迟到首帧后。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _controller.loadRequest(Uri.parse('$base/v1/security/turnstile'));
+      _controller.loadRequest(Uri.parse('$base/security/turnstile'));
     });
   }
 

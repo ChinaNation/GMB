@@ -125,8 +125,8 @@
   new_account_id, expected_binding_revision, expires_at, new_account_signature)`：
   finalized 读取当前账户/revision → 匿名任一 CREG/FRG 或 civic 同市 CREG/对应省 FRG →
   新账户对完整 `CidRebindAuthorization` 走 `0x1F` 控制证明 → 一账户一 CID →
-  `rebind_account_id` + `CidAccountIdRebound`。**注册局授权无当前账户签名要求**(当前钱包
-  不可用时仍可换绑；有当前签名时可另行完成 Chat、通讯录交接)。
+  `rebind_account_id` + `CidAccountIdRebound`。**注册局授权无当前账户签名要求**（无论当前
+  钱包是否可用都可直接办理；有当前签名时可在客户端同次完成 Chat、通讯录交接）。
 - **专用签名域 `OP_SIGN_CID_ADMIN_REBIND=0x1F`(E1,用户拍板)**:防注册局把占号阶段(0x12)截获的签名重放成换绑,强制目标账户新鲜授权。`SIGN_OP_TAGS[14]` + 金标 `c8d1bf2d…`。四端镜像留 S8。
 - 新 trait 方法 `verify_admin_rebind_signature`(6 处 impl 全同步)+ 错误 `InvalidAdminRebindSignature` + helper + weights(3)/benchmark。
 - 测试覆盖：匿名换绑、civic 同市 CREG/对应省 FRG 换绑、跨辖区拒、未占拒、非注册局拒、
@@ -147,7 +147,7 @@
 
 ### ④a-1 —— **完成 ✅(2026-07-27,onchina 145 tests 0 failed + byte-golden)**
 - `encode_occupy_cid_call` 新字节布局:`[10][6] Compact+actor_cid ‖ Compact+actor_role ‖ Compact+cid ‖ account_id(32裸字节) ‖ Compact+occupy_signature`(删 commitment/residence)→ **字节契约恢复**;byte-golden `encode_occupy_cid_call_byte_golden` 钉死。
-- 三段式:`prepare_citizen_occupy`(校验+`cid_seed`发号+pending 会话,返回 cid_number)→ 新 `submit_citizen_occupy`(验 `OP_SIGN_CID_OCCUPY` over `(cid_number,account_id)`+建 call+promote 会话+返回管理员冷签请求)→ `submit_chain_sign`(冷签+`persist_citizen_record` 写 account_id 占即绑落库)。新路由 `/api/v1/admin/citizens/occupy/submit`。
+- 三段式:`prepare_citizen_occupy`(校验+`cid_seed`发号+pending 会话,返回 cid_number)→ 新 `submit_citizen_occupy`(验 `OP_SIGN_CID_OCCUPY` over `(cid_number,account_id)`+建 call+promote 会话+返回管理员冷签请求)→ `submit_chain_sign`(冷签+`persist_citizen_record` 写 account_id 占即绑落库)。新路由 `/api/admin/citizens/occupy/submit`。
 - `chain_sign_sessions` 加 pending purpose `CITIZEN_OCCUPY_PENDING` + `promote_chain_sign_session` 回填 call_data/nonce/signing_hash;`AdminCreateCitizenInput`/`ValidatedCitizenInput` 加 `cid_type`(CTZN\|NATP,必填);`cid_registry_lookup` 收敛为 `Result<bool>`(占用=存在,含墓碑)删 `OnChainCidRecord`(占即绑后 commitment 链上算,onchina 发号只判空闲)。
 - **档案暂仍必填**(护照/DB 逻辑未动)。
 
@@ -171,7 +171,7 @@ onchina admin_rebind 三段式入口(与 occupy 同构,全 `account_id`):
   并签发完整模板，不要求本地档案→`submit_citizen_rebind` 复查同一当前账户/revision/
   授权有效期后建 call+promote→`submit_chain_sign` 在 finalized 精确状态核验后更新存在的
   本地投影；本地无档案时链上换绑仍可完成。
-- 路由 `/api/v1/admin/citizens/rebind/{prepare,submit}`;byte-golden `0a07…`。
+- 路由 `/api/admin/citizens/rebind/{prepare,submit}`;byte-golden `0a07…`。
 - **本局限制已删除**：换绑资格只取链上 finalized CID 状态与注册局辖区授权，本地无档案
   不得成为拒绝条件。
 

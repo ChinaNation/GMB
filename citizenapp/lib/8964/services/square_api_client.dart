@@ -512,7 +512,7 @@ class SquareApiClient
     try {
       return await _establishSession(accountId, signLoginPayload);
     } on SquareApiException catch (e) {
-      // 设备子钥未注册（首次 / 换机 / 重装）→ 懒注册后重试一次。
+      // Worker 确认设备子钥未登记时，才交给前台真实业务初始化一次并重试。
       if (e.errorCode != 'device_not_registered' ||
           onDeviceNotRegistered == null) {
         rethrow;
@@ -526,7 +526,7 @@ class SquareApiClient
     String accountId,
     SquareLoginSigner signLoginPayload,
   ) async {
-    final challenge = await _postJson('/v1/square/auth/challenge', {
+    final challenge = await _postJson('/square/auth/challenge', {
       'account_id': accountId,
     });
     final signingPayloadHex = challenge['signing_payload_hex'];
@@ -549,7 +549,7 @@ class SquareApiClient
       scalePayload: hexToBytes(signingPayloadHex),
     );
     final signature = await signLoginPayload(loginMessage);
-    final session = await _postJson('/v1/square/auth/session', {
+    final session = await _postJson('/square/auth/session', {
       'challenge_id': challengeId,
       'account_id': accountId,
       'signature': signature,
@@ -598,8 +598,8 @@ class SquareApiClient
   }) {
     return _consumeAccountAction(
       accountId: accountId,
-      challengePath: '/v1/square/account/delete/challenge',
-      confirmPath: '/v1/square/account/delete',
+      challengePath: '/square/account/delete/challenge',
+      confirmPath: '/square/account/delete',
       signAction: signAction,
     );
   }
@@ -655,7 +655,7 @@ class SquareApiClient
     required String bindingSignatureHex,
     String? turnstileToken,
   }) async {
-    await _postJson('/v1/square/auth/device/register', {
+    await _postJson('/square/auth/device/register', {
       'account_id': accountId,
       'p256_public_key': p256PublicKeyHex,
       'issued_at': issuedAt,
@@ -666,7 +666,7 @@ class SquareApiClient
 
   Future<SquareMembershipState> fetchMembership(SquareSession session) async {
     final data = await _getJson(
-      '/v1/square/membership',
+      '/square/membership',
       session: session,
     );
     final membership = data['membership'];
@@ -709,7 +709,7 @@ class SquareApiClient
     String? membershipLevel,
   }) async {
     await _postJson(
-      '/v1/square/membership/confirm',
+      '/square/membership/confirm',
       {
         'tx_hash': txHash,
         'block_hash': blockHashHex,
@@ -734,7 +734,7 @@ class SquareApiClient
       query.add('cursor=${Uri.encodeQueryComponent(cursor)}');
     }
     final data = await _getJson(
-      '/v1/square/contacts?${query.join('&')}',
+      '/square/contacts?${query.join('&')}',
       session: session,
     );
     final rawItems = data['items'];
@@ -757,7 +757,7 @@ class SquareApiClient
     required SquareEncryptedContact contact,
   }) async {
     await _putJson(
-      '/v1/square/contacts/${Uri.encodeComponent(contact.contactId)}',
+      '/square/contacts/${Uri.encodeComponent(contact.contactId)}',
       <String, Object?>{
         'binding_revision': contact.bindingRevision,
         'account_id': contact.accountId,
@@ -780,7 +780,7 @@ class SquareApiClient
     final revision = bindingRevision ?? session.bindingRevision;
     final bindingAccountId = accountId ?? session.accountId;
     await _deleteJson(
-      '/v1/square/contacts/${Uri.encodeComponent(contactId)}'
+      '/square/contacts/${Uri.encodeComponent(contactId)}'
       '?binding_revision=$revision&account_id=${Uri.encodeQueryComponent(bindingAccountId)}',
       session: session,
     );
@@ -796,7 +796,7 @@ class SquareApiClient
     required List<SquareUploadMediaRequest> mediaItems,
   }) async {
     final data = await _postJson(
-      '/v1/square/uploads/prepare',
+      '/square/uploads/prepare',
       {
         'post_category': postCategory.workerValue,
         'content_format': contentFormat.workerValue,
@@ -865,7 +865,7 @@ class SquareApiClient
     required String contentHash,
   }) async {
     final data = await _postJson(
-      '/v1/square/uploads/complete',
+      '/square/uploads/complete',
       {
         'upload_id': uploadId,
         'manifest_hash': manifestHash,
@@ -890,7 +890,7 @@ class SquareApiClient
     required String txHash,
   }) async {
     final data = await _postJson(
-      '/v1/square/posts/confirm',
+      '/square/posts/confirm',
       {
         'post_id': postId,
         'block_hash': blockHashHex,
@@ -928,7 +928,7 @@ class SquareApiClient
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     final data = await _getJson(
-      '/v1/square/posts/self?$query',
+      '/square/posts/self?$query',
       session: session,
     );
     final rawItems = data['items'];
@@ -1006,7 +1006,7 @@ class SquareApiClient
     required String postId,
   }) async {
     await _deleteJson(
-      '/v1/square/posts/${Uri.encodeComponent(postId)}',
+      '/square/posts/${Uri.encodeComponent(postId)}',
       session: session,
     );
   }
@@ -1018,7 +1018,7 @@ class SquareApiClient
     SquareSession? session,
   }) async {
     final data = await _getJson(
-      '/v1/square/feed/${feedKind.workerValue}?limit=$limit',
+      '/square/feed/${feedKind.workerValue}?limit=$limit',
       session: session,
     );
     final posts = data['posts'];
@@ -1036,7 +1036,7 @@ class SquareApiClient
   /// 在 Image.network headers 中携带 Bearer。广场主媒体直接使用 Images / Stream URL。
   String mediaUrl(String objectKey) {
     final encoded = objectKey.split('/').map(Uri.encodeComponent).join('/');
-    return '$baseUrl/v1/square/media/$encoded';
+    return '$baseUrl/square/media/$encoded';
   }
 
   /// 拉取某身份（cid_number）的用户主页资料（公开可读；带 session 时附带 is_following）。
@@ -1046,7 +1046,7 @@ class SquareApiClient
     SquareSession? session,
   }) async {
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(cidNumber)}',
+      '/square/users/${Uri.encodeComponent(cidNumber)}',
       session: session,
     );
     final profile = data['profile'];
@@ -1080,7 +1080,7 @@ class SquareApiClient
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(cidNumber)}/posts?$query',
+      '/square/users/${Uri.encodeComponent(cidNumber)}/posts?$query',
       session: session,
     );
     final posts = data['posts'];
@@ -1106,7 +1106,7 @@ class SquareApiClient
     required String sha256Hex,
   }) async {
     final data = await _postJson(
-      '/v1/square/profile/assets/prepare',
+      '/square/profile/assets/prepare',
       {
         'kind': kind,
         'content_type': contentType,
@@ -1178,7 +1178,7 @@ class SquareApiClient
       if (bannerObjectKey != null) 'banner_object_key': bannerObjectKey,
       if (bannerContentHash != null) 'banner_content_hash': bannerContentHash,
     };
-    final data = await _putJson('/v1/square/profile', body, session: session);
+    final data = await _putJson('/square/profile', body, session: session);
     final profile = data['profile'];
     if (profile is! Map<String, dynamic>) {
       throw const SquareApiException('更新资料响应缺少资料数据');
@@ -1193,7 +1193,7 @@ class SquareApiClient
     required String followedCidNumber,
   }) async {
     await _postJson(
-      '/v1/square/follows',
+      '/square/follows',
       {'followed_cid_number': followedCidNumber},
       session: session,
     );
@@ -1205,7 +1205,7 @@ class SquareApiClient
     required String followedCidNumber,
   }) async {
     await _deleteJson(
-      '/v1/square/follows/${Uri.encodeComponent(followedCidNumber)}',
+      '/square/follows/${Uri.encodeComponent(followedCidNumber)}',
       session: session,
     );
   }
@@ -1218,7 +1218,7 @@ class SquareApiClient
     required bool enabled,
   }) async {
     await _putJson(
-      '/v1/square/follows/${Uri.encodeComponent(followedCidNumber)}/notify',
+      '/square/follows/${Uri.encodeComponent(followedCidNumber)}/notify',
       {'enabled': enabled},
       session: session,
     );
@@ -1228,7 +1228,7 @@ class SquareApiClient
   Future<({int squareUnread, int followingUnread})> fetchNotifyUnread({
     required SquareSession session,
   }) async {
-    final data = await _getJson('/v1/square/notify/unread', session: session);
+    final data = await _getJson('/square/notify/unread', session: session);
     return (
       squareUnread: (data['square_unread'] as num?)?.toInt() ?? 0,
       followingUnread: (data['following_unread'] as num?)?.toInt() ?? 0,
@@ -1241,7 +1241,7 @@ class SquareApiClient
     required String scope,
   }) async {
     await _postJson(
-      '/v1/square/notify/read',
+      '/square/notify/read',
       {'scope': scope},
       session: session,
     );
@@ -1264,7 +1264,7 @@ class SquareApiClient
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     final data = await _getJson(
-      '/v1/square/users/${Uri.encodeComponent(cidNumber)}/follows?$query',
+      '/square/users/${Uri.encodeComponent(cidNumber)}/follows?$query',
       session: session,
     );
     final rawEntries = data['entries'];

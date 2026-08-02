@@ -12,11 +12,12 @@
   禁止写入 Cloudflare D1、KV 或 Durable Object Storage。大媒体 R2 中转只允许保存端侧
   E2E 加密的短期密文，并按既定领取确认或 24 小时生命周期删除。
 - CitizenApp 通讯录明文只能保存在用户设备；Cloudflare D1 只允许保存由 CID 当前链上
-  绑定钱包账户的 child mini-secret 在端侧直接派生的单联系人 AES-256-GCM 密文、以目标
+  绑定钱包账户用途钥在端侧生成的单联系人 AES-256-GCM 密文、以目标
   `cid_number` 计算的 HMAC `contact_id`、公开密钥上下文 `binding_revision + account_id`、
   nonce、MAC 和更新时间。派生上下文必须绑定
   `genesis_hash + cid_number + binding_revision + account_id + purpose`。同一钱包账户在
-  新设备导入后可重新派生相同用途密钥；换绑后的新账户使用自己的 child 派生新密钥。
+  新设备经一次明确钱包级授权后可重新派生相同用途密钥；换绑后的新账户在正式换绑
+  作用域内使用自己的 child 派生新密钥。
   有当前账户签名时，同一次换绑流程必须先用当前账户解密 Chat、通讯录，再用新账户重
   加密；没有当前账户签名时，新账户可以控制 CID，但不能解密此前历史私有密文。联系人
   CID、联系人钱包账户、SS58、私人备注、公开昵称、关系明文及用途密钥禁止以明文进入 Cloudflare；
@@ -42,6 +43,11 @@
   钱包 KEK 和该 `walletIndex` 的设备子钥；只有被删账户拥有本机当前激活 CID 绑定时，
   才清该 CID 当前绑定公开元数据和内存用途子钥。任一安全存储删除失败不得阻断其它项，
   全部尝试后统一报告；冷钱包和删除非末账户不得误删整钱包共享设备子钥。
+- CitizenApp 的 Chat、MLS、附件和通讯录用途钥必须由独立设备数据钥硬件封装：Android
+  使用无用户认证要求的 Keystore AES-256-GCM 钥，iOS 使用独立 application tag 的
+  Secure Enclave P-256 ECIES 钥。AAD 必须精确包含 `wallet_index + genesis_hash +
+  cid_number + binding_revision + account_id + purpose + context`。设备数据钥不得复用
+  钱包严档 KEK 或 P-256 签名子钥；整钱包删除时必须连同封装硬件钥与密文 blob 清除。
 - CID 的唯一控制凭证是链上当前绑定钱包账户。私有数据密钥只能由该账户的 child
   mini-secret 在 CitizenApp 本地直接派生，Worker、D1、R2、注册局和链节点都不得成为
   第二密钥持有人或恢复方。换绑 finalized 后，新账户立即接管 CID、公开数据、授权与
@@ -49,7 +55,19 @@
   同次换绑中只对 Chat 与通讯录执行端内重加密交接；不能签名时，新账户不能直接解密此前
   私有密文，流程也不得要求此前账户、设备、助记词或缓存参与。密码学上无法撤回此前账户
   已知的密钥。绑定版本必须单调推进，同版本不同创世、CID 或账户失败关闭。
-- 换绑 finalized 后，App 必须按新绑定激活用途派生上下文和新钱包设备子钥，撤销不匹配
+- 账户 child 只允许在正式交易签名、明确钱包级鉴权、CID 注册/有效换绑交易签名、换绑
+  密文交接、真实数据访问确认本地设备数据钥缺失/失效，或 Worker 在真实登录中明确返回
+  `device_not_registered` 时读取。进入或切换广场、Chat、创作者、通讯录、会员/订阅页面
+  不得检查、生成或阻断任何设备密钥；已有 P-256 子钥与设备用途钥必须直接静默使用。
+  本地数据钥生成与 P-256 设备登记必须使用独立入口、独立全局 single-flight 和独立失败
+  回滚：前者只派生并硬件封装缺少的数据钥，绝不调用设备登记或 Turnstile；后者只登记
+  P-256 子钥，绝不生成、覆盖或删除本地数据钥。两者均按
+  `(genesis_hash, cid_number, account_id)` 去重，相同钱包账户不得因 `binding_revision`
+  变化再次读取 child。后台推送预热不得触发。CID 换绑目标 `account_id` 必须与当前不同；
+  相同账户在读取私钥、构造交易或暂存交接数据之前直接拒绝。
+- 换绑 finalized 后，App 只激活新绑定公开元数据并完成已明确授权的数据交接，不预生成
+  本地数据钥、不登记 P-256 设备子钥；后续分别由真实数据缺钥和 Worker 未登记响应触发。
+  App 随后撤销不匹配
   Session，等待此前 Chat HTTP/WebSocket/MLS 上下文完全关闭后再建立新上下文。Worker
   必须按 finalized 三元组清除旧挑战、Session、设备子钥、Chat 设备和 KeyPackage；实时
   连接关闭失败必须返回失败，禁止把旧连接仍存活的状态视为收敛完成。
@@ -88,6 +106,13 @@
 - 文档未更新视为未完成
 - 主要 review 问题未处理不能发布
 - 目标结构和真实运行态验收未完成时不能发布
+- `runtime-benchmarks` 只能生成真实 benchmark 账户、签名和计时夹具，不得以 feature
+  条件改变生产验签、权限、状态转换或错误结果。正式候选 WASM 构建必须显式禁用该
+  feature，并由构建闸门拒绝误配。
+- 正式候选 WASM 必须从空 `target` 构建；上传前必须对随后上传的同一份压缩 WASM
+  检查 `RuntimeVersion.apis` 不含 FRAME Benchmark API，并通过 NodeGuard 的公民身份
+  四签名域行为探针。只验证另一份本地 runtime、Rust 单元测试或源码 feature 列表不能
+  代替最终 `:code` 验收。
 - 本机部署只能从根 `citizenconsole/` 控制台进入；该目录属于本机私有运维工具，整目录
   必须由 Git 忽略，不得提交或推送；`.runtime/`、日志、编译产物和私密文件同样不得脱离
   该边界。服务只监听 `127.0.0.1`，使用随机 HttpOnly 会话 Cookie、严格 Origin 校验、

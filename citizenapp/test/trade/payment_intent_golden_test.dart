@@ -100,6 +100,28 @@ void main() {
       expect(_hexLower(intent.signingHash()), _hexLower(viaPrimitive));
     });
 
+    test('相同 PaymentIntent 在其它操作码下生成不同签名消息', () {
+      final intent = NodePaymentIntent(
+        txId: _filledBytes(32, 0x00),
+        payer: _filledBytes(32, 0x01),
+        payerBankCid: _cid('LN001-NRC0G-944805165-2026'),
+        recipient: _filledBytes(32, 0x03),
+        recipientBankCid: _cid('LN001-NRC0G-944805165-2026'),
+        amount: BigInt.from(10000),
+        fee: BigInt.from(5),
+        nonce: BigInt.from(1),
+        expiresAt: 100,
+      );
+      final batchOperationMessage = signingMessage(
+        opTag: kOpSignOffchainBatch,
+        scalePayload: intent.scaleEncode(),
+      );
+      expect(
+        _hexLower(intent.signingHash()),
+        isNot(_hexLower(batchOperationMessage)),
+      );
+    });
+
     test('scaleEncode bank 字段用 Compact(len)||bytes(变长)', () {
       final cid = _cid('LN001-NRC0G-944805165-2026'); // 26 字节
       final intent = NodePaymentIntent(

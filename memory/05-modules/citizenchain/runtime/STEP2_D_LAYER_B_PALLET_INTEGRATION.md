@@ -20,7 +20,7 @@ Step C 把 pallet 代码压缩到 434 行,但也把 20+ 个 pallet 测试(大多
 **不做**:
 - dev chain 启动(需 chain_spec.rs 加 dev preset,属于 Layer C)
 - citizenapp Flutter E2E(太重,回报低)
-- 跨行 `submit_offchain_batch_v2` 场景(需要第二个清算行 fixture,留 Step 3)
+- 跨行 `submit_offchain_batch` 场景(需要第二个清算行 fixture,留 Step 3)
 
 ---
 
@@ -93,7 +93,7 @@ impl offchain_transaction::Config for Test {
 | `switch_requires_zero_balance` | 有余额时切回同家 → `NewBankSameAsCurrent`(路径测试) |
 | `switch_after_withdraw_all_works` | 提现清零后切回同家仍 `NewBankSameAsCurrent`(需 Step 3 fixture 扩展成跨行再补) |
 
-### `submit_offchain_batch_v2` 核心(3 个)
+### `submit_offchain_batch` 核心(3 个)
 
 | 测试 | 断言 |
 |---|---|
@@ -139,7 +139,7 @@ test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured
 ## 6. 变更记录
 
 - 2026-04-20:Step D 落地,`src/tests.rs` 新建 562 行 8 个测试(其中 3 个
-  是 submit_offchain_batch_v2 的端到端覆盖);`lib.rs` 追加 `#[cfg(test)] mod tests;`
+  是 submit_offchain_batch 的端到端覆盖);`lib.rs` 追加 `#[cfg(test)] mod tests;`
   声明。pallet 测试从 10 ok → 20 ok。
 - 2026-05-07:runtime pallet 测试目录统一整改,`src/tests.rs` 拆分为
   `src/tests/{mod.rs(174 行 mock+helper), cases.rs(600 行 11 用例)}`。

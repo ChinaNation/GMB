@@ -78,7 +78,7 @@ citizenapp                清算行节点                             链上 run
 30s tick        → packer.pack_and_submit
                 → submitter.submit  → pool.submit_one  →  TxPool
                                                            ↓
-                                                      submit_offchain_batch_v2
+                                                      submit_offchain_batch
                                                            ↓
                                                       settlement::execute
                                                            ↓
@@ -104,7 +104,7 @@ new_best block  ← import_notification_stream
 ### 4.1 为何订 `import_notification_stream` 而非 `finality_notification_stream`
 
 - **延迟**:扫码支付要求端到端 ≤30 秒。等 GRANDPA finality(~1-2 分钟)会让用户/商户长期看到"待确认"状态,体验差。
-- **reorg 安全**:runtime 层已在 `OffchainTransaction::submit_offchain_batch_v2` 里通过 `BatchNonce` + `accepted_tx_ids` 防重;reorg 时同一 `tx_id` 的 `on_payment_settled` 即使被重复调用,`ledger.pending` 中找不到(已被前次清理)就是 no-op。
+- **reorg 安全**:runtime 层已在 `OffchainTransaction::submit_offchain_batch` 里通过 `BatchNonce` + `accepted_tx_ids` 防重;reorg 时同一 `tx_id` 的 `on_payment_settled` 即使被重复调用,`ledger.pending` 中找不到(已被前次清理)就是 no-op。
 - **简洁**:只处理 `notification.is_new_best` 过滤掉 reorg 出去的分支 block,避免把已回滚块里的事件再次分发。
 
 ### 4.2 为何直接读 `System::Events` storage 而非用 Substrate 的 `EventProvider`

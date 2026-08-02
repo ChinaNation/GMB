@@ -50,11 +50,11 @@ use frame_support::{
 use frame_system::limits::{BlockLength, BlockWeights};
 use onchain::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
-#[cfg(not(feature = "runtime-benchmarks"))]
 use sp_core::sr25519;
 use sp_core::Void;
-#[cfg(not(feature = "runtime-benchmarks"))]
 use sp_io::crypto::sr25519_verify;
+#[cfg(feature = "runtime-benchmarks")]
+use sp_runtime::{traits::IdentifyAccount, MultiSigner};
 use sp_runtime::{traits::One, Perbill};
 use sp_version::RuntimeVersion;
 
@@ -180,7 +180,9 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             // 这是用户代币治理唯一入口铁律的链端兜底。
             RuntimeCall::Assets(_) => false,
             // 未启用模块:onchain-issuance(ADR-011 用户代币,当前为空壳)与
-            // offchain-transaction(链下清算行,业务未启用)一律 reject 外部 extrinsic。
+            // offchain-transaction(链下清算行,业务未启用)一律 reject 直接外部调用。
+            // offchain-transaction 的开户、充值、提现、换行、批次、费率和节点登记
+            // 全部保持整体禁用；任何单个调用均不得因 origin 或参数不同绕过本过滤器。
             // 后续启用必须另行确认完整业务规则、岗位权限和指定投票引擎，并通过
             // runtime 升级删除对应分支；不能只解除过滤就宣称业务可用。
             RuntimeCall::OnchainIssuance(_) => false,
@@ -1236,7 +1238,6 @@ impl address_registry::Config for Runtime {
     type MaxAddressDetailLen = ConstU32<128>;
 }
 
-#[cfg(not(feature = "runtime-benchmarks"))]
 fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> {
     if signature.len() != 64 {
         return None;
@@ -1244,6 +1245,60 @@ fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> 
     let mut sig_raw = [0u8; 64];
     sig_raw.copy_from_slice(signature);
     Some(sr25519::Signature::from_raw(sig_raw))
+}
+
+/// 公民身份四个签名域共用的唯一 sr25519 验签实现。
+///
+/// benchmark 与生产 runtime 必须执行同一函数；feature 只能改变 benchmark 夹具，
+/// 绝不能改变密码学验证结果。
+fn verify_citizen_identity_sr25519_signature(
+    account_id: &AccountId,
+    payload: &[u8],
+    signature: &citizen_identity::pallet::SignatureOf<Runtime>,
+    op_tag: u8,
+) -> bool {
+    let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
+        return false;
+    };
+    let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+        return false;
+    };
+    let public = sr25519::Public::from_raw(raw_account);
+    let message = primitives::sign::signing_message(op_tag, payload);
+    sr25519_verify(&signature, &message, &public)
+}
+
+/// FRAME benchmark 的临时 sr25519 签名夹具。
+///
+/// 使用 Polkadot SDK host crypto 把私钥只放在 benchmark externalities keystore；
+/// runtime 代码和链上 Storage 均不保存 benchmark 私钥。
+#[cfg(feature = "runtime-benchmarks")]
+pub struct RuntimeCitizenIdentityBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl citizen_identity::BenchmarkHelper<AccountId, citizen_identity::pallet::SignatureOf<Runtime>>
+    for RuntimeCitizenIdentityBenchmarkHelper
+{
+    fn signer() -> (sr25519::Public, AccountId) {
+        let public = sp_io::crypto::sr25519_generate(0.into(), None);
+        let account_id = MultiSigner::Sr25519(public).into_account();
+        (public, account_id)
+    }
+
+    #[allow(clippy::expect_used)]
+    fn sign(
+        signer: &sr25519::Public,
+        message: &[u8],
+    ) -> citizen_identity::pallet::SignatureOf<Runtime> {
+        // BenchmarkHelper trait 不返回 Result；夹具缺失或越界属于基准环境配置错误，必须停止。
+        let signature = sp_io::crypto::sr25519_sign(0.into(), signer, message)
+            .expect("benchmark keystore must contain the generated sr25519 signer");
+        signature
+            .0
+            .to_vec()
+            .try_into()
+            .expect("sr25519 signature must fit the runtime signature bound")
+    }
 }
 
 // 机构自定义账户关闭由签名账户提交明确 CID 与岗位码；业务 pallet 通过统一岗位授权
@@ -1450,27 +1505,12 @@ impl
         payload: &[u8],
         signature: &citizen_identity::pallet::SignatureOf<Runtime>,
     ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (account_id, payload);
-            return !signature.is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
-                return false;
-            };
-            let public = sr25519::Public::from_raw(raw_account);
-            let msg = primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
-                payload,
-            );
-            sr25519_verify(&signature, &msg, &public)
-        }
+        verify_citizen_identity_sr25519_signature(
+            account_id,
+            payload,
+            signature,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+        )
     }
 
     fn verify_rebind_signature(
@@ -1478,25 +1518,12 @@ impl
         payload: &[u8],
         signature: &citizen_identity::pallet::SignatureOf<Runtime>,
     ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (account_id, payload);
-            return !signature.is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
-                return false;
-            };
-            let public = sr25519::Public::from_raw(raw_account);
-            let msg =
-                primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_REBIND, payload);
-            sr25519_verify(&signature, &msg, &public)
-        }
+        verify_citizen_identity_sr25519_signature(
+            account_id,
+            payload,
+            signature,
+            primitives::sign::OP_SIGN_CID_REBIND,
+        )
     }
 
     fn can_manage_anonymous_cid(
@@ -1539,25 +1566,12 @@ impl
         payload: &[u8],
         signature: &citizen_identity::pallet::SignatureOf<Runtime>,
     ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (account_id, payload);
-            return !signature.is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
-                return false;
-            };
-            let public = sr25519::Public::from_raw(raw_account);
-            let msg =
-                primitives::sign::signing_message(primitives::sign::OP_SIGN_CID_OCCUPY, payload);
-            sr25519_verify(&signature, &msg, &public)
-        }
+        verify_citizen_identity_sr25519_signature(
+            account_id,
+            payload,
+            signature,
+            primitives::sign::OP_SIGN_CID_OCCUPY,
+        )
     }
 
     fn verify_admin_rebind_signature(
@@ -1565,27 +1579,12 @@ impl
         payload: &[u8],
         signature: &citizen_identity::pallet::SignatureOf<Runtime>,
     ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (account_id, payload);
-            return !signature.is_empty();
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Ok(raw_account) = <[u8; 32]>::try_from(account_id.as_ref()) else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
-                return false;
-            };
-            let public = sr25519::Public::from_raw(raw_account);
-            let msg = primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
-                payload,
-            );
-            sr25519_verify(&signature, &msg, &public)
-        }
+        verify_citizen_identity_sr25519_signature(
+            account_id,
+            payload,
+            signature,
+            primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
+        )
     }
 
     #[cfg(feature = "runtime-benchmarks")]
@@ -1625,6 +1624,8 @@ impl citizen_identity::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxCitizenSignatureLength = ConstU32<64>;
     type CitizenIdentityAuthority = RuntimeCitizenIdentityAuthority;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = RuntimeCitizenIdentityBenchmarkHelper;
     type OnVotingIdentityRegistered = CitizenIssuance;
     type TimeProvider = crate::Timestamp;
     type MaxPopulationDaysPerBlock = ConstU32<366>;
@@ -1691,7 +1692,9 @@ impl square_post::SquarePostCitizenIdentityProvider<AccountId>
     }
 
     #[cfg(feature = "runtime-benchmarks")]
+    #[allow(clippy::expect_used)]
     fn benchmark_seed_identity(account_id: &AccountId) -> Vec<u8> {
+        // Benchmark 接口必须返回有效 CID；种子未形成双向绑定时立即停止，禁止伪造默认身份。
         <RuntimeCitizenIdentityReader as votingengine::CitizenIdentityReader<AccountId>>::benchmark_seed_identity(
             account_id,
             &citizen_identity::PopulationScope::Country,
@@ -2524,11 +2527,11 @@ impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
         {
             // benchmark 需要衡量治理编排本身的真实路径，
             // 但不应真的改写 runtime :code 存储，因此这里使用成功的 no-op 执行器。
-            return if code.is_empty() || pow_params.validate().is_err() || activate_at == 0 {
+            if code.is_empty() || pow_params.validate().is_err() || activate_at == 0 {
                 Err(sp_runtime::DispatchError::Other("empty runtime code"))
             } else {
                 Ok(())
-            };
+            }
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
@@ -2740,7 +2743,9 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
     }
 
     #[cfg(feature = "runtime-benchmarks")]
+    #[allow(clippy::expect_used)]
     fn benchmark_seed_institution_voter(cid_number: &[u8], voter: &AccountId) {
+        // Benchmark 接口不返回 Result；无效机构 CID 或越界夹具必须立即停止，不能静默降级。
         let institution_code =
             cid_institution_code(cid_number).expect("benchmark institution CID must be valid");
         assert!(

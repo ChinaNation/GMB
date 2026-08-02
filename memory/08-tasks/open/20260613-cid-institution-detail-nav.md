@@ -31,7 +31,7 @@
 - 2026-06-13：更新 CID 前端布局文档，统一连接式详情页和市注册局城市入口口径。
 - 2026-06-13：验证 `npm run build` 通过；`npm run dev` 构建通过，预览启动因固定端口 `5179` 已被既有本机服务占用而按 strictPort 失败；已确认 `http://localhost:5179` 返回新构建资源。
 - 2026-06-13：追加修复市注册局身份ID显示不全问题；原因是前端省级只取公权目录前 300 条再筛 `CITY_REGISTRY`，导致分页截断。
-- 2026-06-13：后端 `/api/v1/institutions/official` 增加 `org_code` 精确过滤；前端市注册局表格改为 `org_code=CITY_REGISTRY` 读取完整列表。
+- 2026-06-13：后端 `/api/institutions/official` 增加 `org_code` 精确过滤；前端市注册局表格改为 `org_code=CITY_REGISTRY` 读取完整列表。
 - 2026-06-13：按 BrixUI Tabs 参考升级共享详情 UI：增加标题区、图标 tab、连接式选中态、账户数量徽标，并清理旧 UI 注释口径。
 - 2026-06-13：验证 `cargo check`、`npm run build` 通过；本机 `http://localhost:5179` 返回最新前端资源。
 - 2026-06-13：补齐账户列表序号列，将机构信息 tab 图标改为房屋图标，并修正联邦注册局账户新建按钮仅联邦注册局机构管理员可见。

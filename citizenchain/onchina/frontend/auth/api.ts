@@ -93,7 +93,7 @@ export async function createAdminQrSignRequest(input: {
   origin: string;
   session_id: string;
 }): Promise<AdminQrSignRequestResult> {
-  return request<AdminQrSignRequestResult>('/api/v1/admin/auth/qr/sign-request', {
+  return request<AdminQrSignRequestResult>('/api/admin/auth/qr/sign-request', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -105,7 +105,7 @@ export async function queryAdminQrLoginResult(
   sessionId: string,
 ): Promise<AdminQrLoginStatus> {
   const q = `?challenge_id=${encodeURIComponent(challengeId)}&session_id=${encodeURIComponent(sessionId)}`;
-  return request<AdminQrLoginStatus>(`/api/v1/admin/auth/qr/result${q}`, {
+  return request<AdminQrLoginStatus>(`/api/admin/auth/qr/result${q}`, {
     method: 'GET',
   });
 }
@@ -116,7 +116,7 @@ export async function completeAdminQrLogin(input: {
   account_id: string;
   signature: string;
 }): Promise<AdminLoginCompleteResult> {
-  return request<AdminLoginCompleteResult>('/api/v1/admin/auth/qr/complete', {
+  return request<AdminLoginCompleteResult>('/api/admin/auth/qr/complete', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -127,7 +127,7 @@ export async function confirmNodeBinding(input: {
   binding_challenge_id: string;
   candidate_id: string;
 }): Promise<AdminVerifyResult> {
-  return request<AdminVerifyResult>('/api/v1/admin/auth/node-binding/confirm', {
+  return request<AdminVerifyResult>('/api/admin/auth/node-binding/confirm', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -137,7 +137,7 @@ export async function confirmNodeBinding(input: {
 /** 主动登出:通知后端销毁 session。best-effort,不阻塞前端退出流程。 */
 export async function adminLogout(auth: AdminAuth): Promise<void> {
   try {
-    await request<string>('/api/v1/admin/auth/logout', {
+    await request<string>('/api/admin/auth/logout', {
       method: 'POST',
       headers: adminHeaders(auth),
     });
@@ -147,7 +147,7 @@ export async function adminLogout(auth: AdminAuth): Promise<void> {
 }
 
 export async function checkAdminAuth(auth: AdminAuth): Promise<AdminAuthCheck> {
-  return request<AdminAuthCheck>('/api/v1/admin/auth/check', {
+  return request<AdminAuthCheck>('/api/admin/auth/check', {
     headers: adminHeaders(auth),
   });
 }

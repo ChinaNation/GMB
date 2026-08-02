@@ -34,7 +34,6 @@
   - `MiningDashboard { income, records, warning }`
 - 进程内缓存：
   - `MiningComputationCache`
-    - `cache_version`
     - `chain_genesis_hash`
     - `last_processed_height / last_processed_hash`
     - `total_fee_fen / total_reward_fen`
@@ -50,7 +49,7 @@
    - `chain_getBlock`
    - `fee_blockFees`
    - `state_getStorage(Timestamp.Now)`
-   - 若区块作者是当前本节点矿工，再查询 `state_getStorage(FullnodeIssuance::RewardWalletByMiner, block_hash)`
+   - 若区块作者是当前本节点矿工，再查询 `state_getStorage(FullnodeIssuance::RewardAccountIdByMiner, block_hash)`
 4. 更新累计收益、按 UTC 天收益桶、最近 20 条记录。
 5. 返回聚合结果。
 
@@ -59,10 +58,10 @@
 收益口径说明：
 
 - 铸块奖励：
-  - 若该区块结束时矿工已绑定奖励钱包，则奖励到账到绑定钱包。
+  - 若该区块结束时矿工已绑定奖励账户，则奖励到账到该账户。
   - 若未绑定，则奖励到账到矿工自身账户。
 - 手续费：
-  - 若该区块结束时矿工已绑定奖励钱包，则只统计矿工实际可得的 80% 手续费分成。
+  - 若该区块结束时矿工已绑定奖励账户，则只统计矿工实际可得的 80% 手续费分成。
   - 若未绑定，则手续费矿工分成会被销毁，挖矿页按 0 统计，不再显示整块总手续费。
 
 ## 5. 一致性控制
@@ -73,7 +72,7 @@
   - 缓存高度高于当前链高，或
   - 缓存末块 hash 与链上不一致
   会自动重置缓存后重建。
-- 旧版本地缓存文件不会因为版本号变化直接丢弃；已知旧版本会迁移到当前 `cache_version` 后回写。
+- 缓存结构严格拒绝未知字段；结构变化后旧缓存直接失效并按 finalized 区块重建，不保留迁移或兼容分支。
 - 当收益口径发生变化时，旧缓存会迁移为“清空后重算”，避免旧口径继续污染页面。
 - RPC 链指纹与 genesis hash 按请求实时校验，不跨请求永久缓存，避免节点重启或端口复用后误信任旧结果。
 
@@ -82,7 +81,7 @@
 - RPC 不可用/链指纹不匹配：返回空统计 + `warning`。
 - 增量刷新失败：返回最近缓存 + `warning`。
 - 本节点矿工账号读取失败：返回最近缓存 + `warning`，不清空既有统计。
-- 区块手续费读取、奖励钱包绑定状态读取或时间戳读取部分失败：返回统计结果，并在 `warning` 标注失败计数。
+- 区块手续费读取、奖励账户绑定状态读取或时间戳读取部分失败：返回统计结果，并在 `warning` 标注失败计数。
 
 ## 7. RPC 健壮性
 

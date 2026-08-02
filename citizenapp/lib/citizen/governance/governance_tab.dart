@@ -15,9 +15,9 @@ import 'package:citizenapp/ui/page_transitions.dart';
 import 'package:citizenapp/ui/widgets/pressable_card.dart';
 
 const String governanceProvincialCouncilOrderPrefsKey =
-    'governance.institution_order.prc.v1';
+    'governance.institution_order.prc';
 const String governanceProvincialBankOrderPrefsKey =
-    'governance.institution_order.prb.v1';
+    'governance.institution_order.prb';
 const String _governanceProvincialCouncilIconAsset =
     'assets/icons/government-line.svg';
 const String _governanceProvincialBankIconAsset = 'assets/icons/bank.svg';

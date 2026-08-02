@@ -245,7 +245,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     const { env, db, kv, keyPair } = await setup();
 
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+      await createLoginChallenge(req('/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     expect(challenge.op_tag).toBe(0x1b);
     expect(challenge.cid_number).toBe(TEST_CID);
@@ -260,7 +260,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     );
     const session = await jsonBody(
       await createSession(
-        req('/v1/square/auth/session', {
+        req('/square/auth/session', {
           account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature
@@ -284,13 +284,13 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
   it('rejects a signature over the wrong message', async () => {
     const { env, keyPair } = await setup();
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+      await createLoginChallenge(req('/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     // 对错误 payload 签名 → 摘要不符 → 拒。
     const badSignature = await signChallenge(keyPair, 0x1b, '00'.repeat(8));
     await expect(
       createSession(
-        req('/v1/square/auth/session', {
+        req('/square/auth/session', {
           account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature: badSignature
@@ -323,12 +323,12 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
         checked_at: 2
       });
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+      await createLoginChallenge(req('/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
 
     await expect(
       createSession(
-        req('/v1/square/auth/session', {
+        req('/square/auth/session', {
           account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature: `0x${'00'.repeat(64)}`
@@ -341,7 +341,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
   it('并发提交同一挑战时只签发一个 Session', async () => {
     const { env, db, kv, keyPair } = await setup();
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+      await createLoginChallenge(req('/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     const signature = await signChallenge(
       keyPair,
@@ -355,8 +355,8 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     };
 
     const results = await Promise.allSettled([
-      createSession(req('/v1/square/auth/session', requestBody), env),
-      createSession(req('/v1/square/auth/session', requestBody), env)
+      createSession(req('/square/auth/session', requestBody), env),
+      createSession(req('/square/auth/session', requestBody), env)
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     const rejected = results.find((result) => result.status === 'rejected');
@@ -369,7 +369,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
   it('KV 写入失败后仍烧毁挑战且不留下孤立 Session', async () => {
     const { env, db, kv, keyPair } = await setup();
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+      await createLoginChallenge(req('/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     const signature = await signChallenge(
       keyPair,
@@ -380,7 +380,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
 
     await expect(
       createSession(
-        req('/v1/square/auth/session', {
+        req('/square/auth/session', {
           account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature
@@ -393,7 +393,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     expect(db.sessions.size).toBe(0);
     await expect(
       createSession(
-        req('/v1/square/auth/session', {
+        req('/square/auth/session', {
           account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature
@@ -406,7 +406,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
   it('D1 哈希索引写入失败时回滚 KV，且不保存明文 token', async () => {
     const { env, db, kv, keyPair } = await setup();
     const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
+      await createLoginChallenge(req('/square/auth/challenge', { account_id: ACCOUNT_ID }), env)
     );
     const signature = await signChallenge(
       keyPair,
@@ -417,7 +417,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
 
     await expect(
       createSession(
-        req('/v1/square/auth/session', {
+        req('/square/auth/session', {
           account_id: ACCOUNT_ID,
           challenge_id: challenge.challenge_id,
           signature
@@ -482,11 +482,11 @@ describe('受保护请求 finalized 绑定复查', () => {
       cid_number: TEST_CID,
       checked_at: Date.now()
     });
-    const request = new Request('https://worker.test/v1/square/feed/recommended', {
+    const request = new Request('https://worker.test/square/feed/recommended', {
       headers: { authorization: `Bearer ${token}` }
     });
 
-    await expect(guardRequest(request, env, '/v1/square/feed/recommended'))
+    await expect(guardRequest(request, env, '/square/feed/recommended'))
       .rejects.toMatchObject({ status: 401, code: 'cid_binding_changed' });
   });
 });

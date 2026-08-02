@@ -106,7 +106,7 @@ plist 是 launchd **socket 激活**（`Sockets.Listeners` 127.0.0.1:8888，`RunA
 `$HOME/Library/Application Support/gmb.dev/onchina-tls`。原实现是 `rm -rf` 整个 `gmb.dev`，
 **会连 TLS 一起删掉**，与「保留 TLS 证书」的新要求直接冲突。故当前目录改为逐项遍历删除。
 
-`gmb.dev` 下有**两个** TLS 目录，性质不同，均保留：
+`gmb` 与 `gmb.dev` 下**各有两个** TLS 目录，性质不同，均保留：
 
 - `onchina-tls/` —— OnChina 的 CA 根证书与私钥（`onchina-org-root-ca.key`）。
   **删掉不可逆**：重新生成即是另一个 CA，已签发的机构证书全部作废。
@@ -119,13 +119,28 @@ plist 是 launchd **socket 激活**（`Sockets.Listeners` 127.0.0.1:8888，`RunA
 
 `china.sqlite` 在仓库内（`citizenchain/onchina/src/cid/china/china.sqlite`），属冻结资产，天然不受影响。
 
-旧产品目录（`gmb`、两个旧 bundle id 的 Application Support 与 Containers）**整体删除**——
-当前产品不读取它们，其中的旧 `tls/` 早已失效。
+**本机并行两套节点数据**，由 `node/src/shared/security.rs` 按构建 profile 分目录：
+
+| 目录 | 归属 | 常量 |
+| --- | --- | --- |
+| `gmb` | 正式安装版 | `PROD_APP_DATA_DIR_NAME` |
+| `gmb.dev` | `scripts/run.sh` 开发版 | `DEV_APP_DATA_DIR_NAME` |
+
+两者都是**当前**目录，同规则处理：保留 TLS、其余逐项删。
+
+**已修正的一处误判**：初版把 `gmb` 写进了「旧产品遗留目录整体删除」清单，注释还写着
+「当前产品不读取它们」。实际 `lsof` 抓到正式版进程正在读写 `gmb/chains`——它是活的。
+后果是点「删除全部数据」会连正式版的 `tls/` 一并删掉，与用户明确要求的「两个 TLS 目录
+都不许删」直接冲突。当时只看到 `gmb` 与 `gmb.dev` 并存、后者时间戳更新就下了结论，
+没有查 `security.rs` 的 profile 常量。
+
+旧产品目录现在只剩两个真正废弃的旧 bundle id（`org.chinanation.citizenchain.desktop`、
+`org.citizenappchain.desktop` 的 Application Support 与 Containers），**整体删除**。
 
 #### 安全设计
 
-- 遍历根**硬编码** `$HOME/Library/Application Support/gmb.dev`，不用可被 `GMB_APP_DATA_DIR`
-  覆盖的 `$app_data_dir`：那个变量一旦被改写，整目录遍历就会指向任意位置
+- 遍历根**硬编码**两条（`gmb` 与 `gmb.dev`），不用可被 `GMB_APP_DATA_DIR` 覆盖的
+  `$app_data_dir`：那个变量一旦被改写，整目录遍历就会指向任意位置
 - `shopt -s dotglob` 让隐藏项也进入遍历，否则点开头的残留数据被静默留下；`nullglob` 防空目录产生字面 `*`
 - 每项删除后复验 `[[ ! -e ]]`，未删净立即 exit 1
 - 旧目录仍走 case 白名单 + Finder 兜底（不清空整个废纸篓）
@@ -175,7 +190,7 @@ if (prior?.gmb_tx_hash && prior?.gmb_block_hash
 
 **守卫**：抽出函数单独跑用例，全部符合预期。拒绝 `china.sqlite`、仓库根、仓库内源码目录、
 **软链穿透进仓库**、`$HOME`、`Application Support` 根、`.runtime/topup-ledger.json` 与
-`.runtime` 内任何路径；放行 `gmb.dev/chains` 与旧 `gmb` 目录。
+`.runtime` 内任何路径；放行 `gmb/chains` 与 `gmb.dev/chains`。
 
 **测试有效性（变异验证）**：「每个 rm 前必须有守卫」这条断言，在原文件检出 0 漏网；
 分别去掉 `entry` 守卫、去掉 `pg_data_dir` 守卫、新增一个裸 `rm` —— 三种变异全部被检出，

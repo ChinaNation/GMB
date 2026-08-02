@@ -22,7 +22,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::governance::signing::{
     payload_b64, public_key_b64, sha256_hash_public, QrSignRequest, QrSignResponse,
-    SignRequestBody, PROTOCOL_VERSION, QR_KIND_SIGN_REQUEST, QR_KIND_SIGN_RESPONSE,
+    SignRequestBody, QR_KIND_SIGN_REQUEST, QR_KIND_SIGN_RESPONSE, QR_V1,
 };
 use primitives::sign::{
     binary_domain_prefix, decrypt_admin_payload, BINARY_PREFIX_LEN, DECRYPT_ADMIN_CID_LEN,
@@ -138,7 +138,7 @@ pub fn build_decrypt_admin_request(
 
     let now = now_secs();
     let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
+        proto: QR_V1.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
         expires_at: now + DEFAULT_TTL_SECS,
@@ -191,9 +191,9 @@ pub fn verify_and_decrypt_admin(
     let response: QrSignResponse =
         serde_json::from_str(&input.response_json).map_err(|e| format!("解析签名响应失败:{e}"))?;
 
-    if response.proto != PROTOCOL_VERSION {
+    if response.proto != QR_V1 {
         return Err(format!(
-            "协议版本不匹配:期望 {PROTOCOL_VERSION},实际 {}",
+            "协议版本不匹配:期望 {QR_V1},实际 {}",
             response.proto
         ));
     }

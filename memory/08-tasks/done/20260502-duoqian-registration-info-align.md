@@ -12,7 +12,7 @@ CID 资格候选查询选择私法人股份公司及其所属非法人,再用注
 
 ## 边界规则
 
-- CID 查询与注册分开:查询详情仍走 `/api/v1/app/institutions/:cid_number`,注册信息只走 `/registration-info`。
+- CID 查询与注册分开:查询详情仍走 `/api/app/institutions/:cid_number`,注册信息只走 `/registration-info`。
 - DUOQIAN 机构注册 payload 只保留三项业务字段和凭证安全字段。
 - 节点前端账户列表必须由 CID 返回的 `account_names[]` 生成,不再写死账户名。
 - 清理旧 DTO、旧注释、旧参数和旧文档残留。
@@ -37,7 +37,7 @@ CID 资格候选查询选择私法人股份公司及其所属非法人,再用注
 
 ## 验收
 
-- 节点软件注册信息拉取只调用 `/api/v1/app/institutions/:cid_number/registration-info`。
+- 节点软件注册信息拉取只调用 `/api/app/institutions/:cid_number/registration-info`。
 - `propose_create_institution` 的业务注册字段只剩 `cid_number / cid_full_name / account_names[]`。
 - 节点端 call_data 与 runtime 参数顺序一致,包含 `province + signer_admin_pubkey`。
 - 前端账户输入行来自 CID `account_names[]`。

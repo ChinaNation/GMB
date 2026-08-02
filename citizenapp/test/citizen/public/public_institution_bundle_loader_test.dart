@@ -184,11 +184,11 @@ void main() {
       catalogVersion: 'seed',
     );
     final kv = FakeDataVersionKv()
-      ..globalVersion = 'v1'
+      ..globalVersion = 'before'
       ..provinceVersions = {'中枢省': 'cz-1', '岭南省': 'ln-1'};
     final bundle = _MapBundle({
       'assets/public_institutions/manifest.json': _instManifest(
-        version: 'v2',
+        version: 'after',
         provinces: const [
           {'province_name': '中枢省', 'manifest_version': 'cz-2'}, // 变了
           {'province_name': '岭南省', 'manifest_version': 'ln-1'}, // 不变
@@ -229,7 +229,7 @@ void main() {
     expect(store.byId['C']!.cidFullName, '新增机构'); // 新增
     expect(store.byId.containsKey('X'), isTrue); // 岭南省没动,X 仍在
     expect(store.lastUpsertCids, ['A', 'C']); // 只写改名/新增,不重写整省
-    expect(kv.globalVersion, 'v2');
+    expect(kv.globalVersion, 'after');
     expect(kv.provinceVersions, {'中枢省': 'cz-2', '岭南省': 'ln-1'});
   });
 
@@ -248,12 +248,12 @@ void main() {
       catalogVersion: 'seed',
     );
     final kv = FakeDataVersionKv()
-      ..globalVersion = 'v1'
+      ..globalVersion = 'before'
       ..provinceVersions = {'岭南省': 'ln-1'};
     // 全局 version 变了(强制进入逐省比对),但岭南省 manifest_version 没变 → 不 reconcile。
     final bundle = _MapBundle({
       'assets/public_institutions/manifest.json': _instManifest(
-        version: 'v2',
+        version: 'after',
         provinces: const [
           {'province_name': '岭南省', 'manifest_version': 'ln-1'},
         ],
@@ -268,8 +268,8 @@ void main() {
     expect(changed, isFalse);
     expect(store.upsertCalls, upsertBefore); // 没读分片、没 upsert
     expect(store.deleteCalls, deleteBefore);
-    // 但全局 version 仍落到 v2(完成标记)。
-    expect(kv.globalVersion, 'v2');
+    // 但全局 version 仍落到 after(完成标记)。
+    expect(kv.globalVersion, 'after');
   });
 
   test('manifest 缺省级版本表 → 不写库、不删除本地数据', () async {

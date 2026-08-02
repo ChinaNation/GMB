@@ -49,30 +49,30 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - 注销中的媒体存储总量释放与 `square_media_assets`、帖子、上传索引删除必须由同一个
   D1 原子 batch 提交；Images、Stream、R2 或 KV 清理中途失败时不得预先扣减
   `resource_totals`，重试成功只允许释放一次。
-- 本地 `CitizenProfileCache` v3 以 `cid_number` 为唯一缓存键；注销后的资料缓存必须调用
+- 本地 `CitizenProfileCache` 以 `cid_number` 为唯一缓存键；注销后的资料缓存必须调用
   `clear(cid_number)`。`account_id` 只用于清除该账户的 API Session 与 Chat 本地数据，
   禁止用它删除 CID 资料缓存。
 
 ## Worker 接口（详见 unified-protocols P-API-CITIZENAPP-002）
-- `GET /v1/square/posts/self?limit=5&cursor=...`：必须携带本人 Bearer session 与 P-256
+- `GET /square/posts/self?limit=5&cursor=...`：必须携带本人 Bearer session 与 P-256
   设备请求证明；Worker 只按 session `cid_number` 返回本人已发布内容的原始 manifest
   base64、链锚和 Worker 时间。D1 `object_keys_json` 必须与 `account_id + post_id` 生成的
   唯一规范 manifest 路径完全一致；空清单、额外键或错误路径均整页拒绝。帖子/上传/
   manifest 三组哈希或归属任一不一致时同样整页拒绝；不返回媒体字节、路径、临时 URL，
   不增加公共浏览量。
-- `GET /v1/square/users/:cid_number`：profile + 计数 + 认证 + is_following（公开可读，带 session 反映登录者视角）。
-- `GET /v1/square/users/:cid_number/posts?category=&limit=&cursor=`：按作者分页（all/normal/campaign）。
-- `GET /v1/square/users/:cid_number/follows?type=following|followers`：关注/粉丝列表分页。
-- `PUT /v1/square/profile`：本人写 display_name/bio/头像背景 key（返回与 GET 同构）。
-- `POST /v1/square/profile/assets/prepare` + `PUT /v1/square/profile/assets`：
+- `GET /square/users/:cid_number`：profile + 计数 + 认证 + is_following（公开可读，带 session 反映登录者视角）。
+- `GET /square/users/:cid_number/posts?category=&limit=&cursor=`：按作者分页（all/normal/campaign）。
+- `GET /square/users/:cid_number/follows?type=following|followers`：关注/粉丝列表分页。
+- `PUT /square/profile`：本人写 display_name/bio/头像背景 key（返回与 GET 同构）。
+- `POST /square/profile/assets/prepare` + `PUT /square/profile/assets`：
   每个身份固定使用 `profile/{cid_number}/avatar` 与
   `profile/{cid_number}/banner` 两个对象键，并由同域 Worker 校验实际字节、MIME、
   图片文件头、尺寸与 sha256 后覆盖写 R2；头像 512KiB/1024×1024，背景
   1536KiB/1920×720，并发上传也不可能增加对象数。内容不上链。
   `cid_number` 只从 Worker session 派生并经统一路径校验，不接受客户端上传属主、
   SS58、AccountId 或任意字符串清洗。
-- `GET /v1/square/media/<object_key>`：必须携带钱包 Bearer session，只允许读取固定头像/背景键；`Image.network` 使用 session header，服务端不要求该只读图片请求附加 P-256 签名。
-- 关注/取关复用已有 `POST/DELETE /v1/square/follows`。
+- `GET /square/media/<object_key>`：必须携带钱包 Bearer session，只允许读取固定头像/背景键；`Image.network` 使用 session header，服务端不要求该只读图片请求附加 P-256 签名。
+- 关注/取关复用已有 `POST/DELETE /square/follows`。
 
 ## 前端结构（lib/8964/profile）
 - `user_profile_page.dart`：`NestedScrollView + SliverAppBar(pinned,expandedHeight:372) + FlexibleSpaceBar + bottom:分类TabBar + TabBarView`；cache-first 加载 + session-aware is_following。展开高度为昵称、SS58、CID、签名和三项计数保留独立空间，避免窄屏与分类标签重叠。

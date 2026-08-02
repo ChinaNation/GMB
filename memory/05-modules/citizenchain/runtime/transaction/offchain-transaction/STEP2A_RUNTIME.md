@@ -14,14 +14,14 @@
 Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 
 - 新增 3 个子模块:`fee_config.rs` / `solvency.rs` / `settlement.rs`
-- 新增 1 个结构:`batch_item::OffchainBatchItemV2`
+- 新增 1 个结构:`batch_item::OffchainBatchItem`
 - 新增 4 个 Storage:`L2FeeRateBp` / `L2FeeRateProposed` / `MaxL2FeeRateBp` / `LastClearingBatchSeq`
 - 新增 5 个 Event:`L2FeeRateProposed` / `L2FeeRateActivated` / `MaxL2FeeRateUpdated` / `PaymentSettled` / `ClearingBankBatchSettled`
 - 新增 Error 覆盖清算行结算、费率、偿付、batch 签名与用户绑定一致性:
   `InstitutionMismatch` / `ExpiredIntent` / `L2FeeRateNotConfigured` / `InvalidL3Signature` /
   `InvalidL2FeeRate` / `SolvencyProtected` / `InvalidBatchSignature` / `InvalidBatchSeq` /
   `UserBankMismatch`
-- 新增 3 个 Call:`submit_offchain_batch_v2`(34)/ `propose_l2_fee_rate`(40)/ `set_max_l2_fee_rate`(41)
+- 新增 3 个 Call:`submit_offchain_batch`(34)/ `propose_l2_fee_rate`(40)/ `set_max_l2_fee_rate`(41)
 - 机构授权 trait 方法统一为 `CidAccountQuery::is_institution_admin(actor_cid_number, who)`；账户查询只证明具体机构账户归属，不承担管理员身份语义
 - 扩展 `on_initialize`:激活到期费率提案
 - runtime 层 `MultisigCidAccountQuery` 按 CID 实现 `is_institution_admin`
@@ -56,22 +56,22 @@ Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 ### 2.3 `settlement.rs`
 
 清算行批次的新 execute 路径:
-- `execute_clearing_bank_batch(submitter, institution_main, batch)`:批次级执行入口
+- `execute_clearing_bank_batch(submitter, actor_cid_number, institution_account_id, batch)`:批次级执行入口
   - 批次级预检:submitter 管理员身份 / batch_signature / batch_seq / UserBank 绑定一致性 / 费率正确性 / 偿付充足
   - 逐笔 `execute_single_item`:L3 签名验证 / nonce / 分账(同行 vs 跨行)/ 防重放
 - 费率按 **收款方清算行** `L2FeeRateBp[recipient_bank]` 计算
 - 手续费**全部归收款方清算行的费用账户**,无省储行分成
 
-### 2.4 `batch_item::OffchainBatchItemV2`
+### 2.4 `batch_item::OffchainBatchItem`
 
-与现有 `OffchainBatchItem` 并存的新批次项:
+当前批次项：
 ```rust
-pub struct OffchainBatchItemV2<AccountId, BlockNumber> {
+pub struct OffchainBatchItem<AccountId, BlockNumber> {
     pub tx_id: H256,
-    pub payer: AccountId,
-    pub payer_bank: AccountId,
-    pub recipient: AccountId,
-    pub recipient_bank: AccountId,
+    pub payer_account_id: AccountId,
+    pub payer_bank_cid: InstitutionCidNumber,
+    pub recipient_account_id: AccountId,
+    pub recipient_bank_cid: InstitutionCidNumber,
     pub transfer_amount: u128,
     pub fee_amount: u128,
     pub payer_sig: [u8; 64],   // L3 sr25519 签名
@@ -81,6 +81,16 @@ pub struct OffchainBatchItemV2<AccountId, BlockNumber> {
 ```
 
 `to_intent()` 反向构造 `PaymentIntent` 用于重算签名哈希验签。
+
+### 2.4.1 `AccountId32` 与 sr25519 验签边界
+
+- offchain pallet 的 `Config` 在编译期限定
+  `frame_system::Config<AccountId = sp_runtime::AccountId32>`；L3 和批次管理员签名均固定为
+  sr25519。
+- `AccountId32` 使用完整32字节转换为 sr25519 `Public`，禁止把泛型 `AccountId` 的 SCALE
+  编码截取前32字节。未来若更换账户类型，必须先显式重审清算签名模型，否则编译失败。
+- 此约束不修改 Storage、Extrinsic、SCALE 字段、签名消息、扣费或清算规则；有效的现有
+  sr25519 `AccountId32` 行为不变。
 
 ### 2.5 `bank_check::CidAccountQuery::is_institution_admin`
 
@@ -99,14 +109,14 @@ MaxL2FeeRateBp: StorageValue<u32>                // 全局上限
 LastClearingBatchSeq<Bank, u64>                  // 已成功落账的最新批次序号
 ```
 
-2026-04-28 补齐:`LastClearingBatchSeq` 与 batch 级签名一起启用。`submit_offchain_batch_v2`
+2026-04-28 补齐:`LastClearingBatchSeq` 与 batch 级签名一起启用。`submit_offchain_batch`
 要求 `batch_seq == LastClearingBatchSeq[bank] + 1`,并只在 settlement 成功后推进序号。
 
 ### 3.2 Call(3 个新)
 
 | call_index | 方法 | 费用 | 归类 |
 |---|---|---|---|
-| 34 | `submit_offchain_batch_v2` | sum(fee) × 0.1% 最低 0.1 元 | 链下资金交易 |
+| 34 | `submit_offchain_batch` | sum(fee) × 0.1% 最低 0.1 元 | 链下资金交易 |
 | 40 | `propose_l2_fee_rate(actor_cid_number, institution_account, new_rate)` | 0.1 元/次，由 actor CID 的唯一费用账户支付 | 机构链上操作 |
 | 41 | `set_max_l2_fee_rate(new_max)`(Root) | 免费 | 治理执行 |
 
@@ -122,7 +132,7 @@ LastClearingBatchSeq<Bank, u64>                  // 已成功落账的最新批�
 - `runtime/src/configs/mod.rs`:生产 runtime 使用
   `offchain_transaction::weights::SubstrateWeight<Runtime>`
 - `weights.rs`:为 `bind_clearing_bank` / `deposit` / `withdraw` /
-  `switch_bank` / `submit_offchain_batch_v2(items)` / 费率治理 /
+  `switch_bank` / `submit_offchain_batch(items)` / 费率治理 /
   清算行节点声明三类 Call 提供非零保守权重
 - `benchmarks.rs`:当前不挂空的 `#[benchmarks]` 模块，避免
   `frame-benchmarking` 在全 runtime `runtime-benchmarks` 构建时生成非法代码。
@@ -131,7 +141,7 @@ LastClearingBatchSeq<Bank, u64>                  // 已成功落账的最新批�
   清算行节点 fixture 后，再恢复可执行 benchmark 入口。
 
 当前权重不是自动 benchmark 产物,但已经替换掉空权重占位,并覆盖
-`submit_offchain_batch_v2` 的按 item 线性增长。
+`submit_offchain_batch` 的按 item 线性增长。
 
 ## 4. 与 Step 1 的兼容关系
 
@@ -142,9 +152,9 @@ LastClearingBatchSeq<Bank, u64>                  // 已成功落账的最新批�
 | `InstitutionRateBp`(旧省储行费率) | 保留,Step 2d 删 |
 | `bind_clearing_institution`(call_index 9) | 保留,Step 2d 删 |
 | `bind_clearing_bank` / `deposit` / `withdraw` / `switch_bank`(30~33) | 保留,依然工作 |
-| `UserBank` / `DepositBalance` / `BankTotalDeposits` / `L3PaymentNonce` | 保留,被 V2 清算路径正式使用 |
+| `UserBank` / `DepositBalance` / `BankTotalDeposits` / `L3PaymentNonce` | 保留，被当前清算路径正式使用 |
 
-2026-04-28 补齐:V2 settlement 现在显式要求 `UserBank[payer] == item.payer_bank`
+2026-04-28 补齐：批量结算现在显式要求 `UserBank[payer] == item.payer_bank`
 且 `UserBank[recipient] == item.recipient_bank`,防止移动端或节点绕过 UI 构造出绑定漂移的批次。
 
 ## 5. 编译验证
@@ -160,7 +170,7 @@ $ cargo check -p offchain-transaction
 ## 6. 后续 Step 2b / 2c / 2d 清单
 
 **Step 2b · Node**:
-- `offchain/settlement/packer.rs::pack_and_submit` 补实现:取 ledger pending → 组 `OffchainBatchItemV2` → 多签 → 调 `submit_offchain_batch_v2`
+- `offchain/settlement/packer.rs::pack_and_submit` 补实现:取 ledger pending → 组 `OffchainBatchItem` → 多签 → 调 `submit_offchain_batch`
 - `offchain/ledger.rs.accept_payment` 完整实现(签名验证 + 本地扣款 + 加入 pending)
 - `offchain/gossip.rs` 新建:清算行间 libp2p 协议推送 `{intent, a_sig, sender_ack}`
 - `offchain/rpc.rs` 增补 `offchain_submitPayment` + WS 订阅
@@ -191,7 +201,7 @@ $ cargo check -p offchain-transaction
 
 ## 8. 变更记录
 
-- 2026-04-19:Step 2a 落地,Runtime 新增 3 子模块 + V2 结构 + 3 Storage + 3 Call + hook 扩展,零编译错误。
+- 2026-04-19：Step 2a 落地，Runtime 新增 3 子模块 + 当前批量结构 + 3 Storage + 3 Call + hook 扩展，零编译错误。
 - 2026-04-28:批次级安全补齐:新增 `LastClearingBatchSeq`,严格校验
   `batch_signature` / `batch_seq`,settlement 增加 `UserBank` 绑定一致性校验;
   runtime `spec_version` 3 → 4,`transaction_version` 保持 2;单测增至 23 个并通过。

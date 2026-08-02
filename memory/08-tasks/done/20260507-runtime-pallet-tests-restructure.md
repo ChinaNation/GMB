@@ -85,8 +85,8 @@
 pallet 业务文件中的就地单测(5 处,共 18 个 #[test]):
 - `transaction/offchain-transaction/src/bank_check.rs`(5)
 - `transaction/offchain-transaction/src/batch_item.rs`(5)
-- `votingengine/internal-vote/src/migrations/v1.rs`(3)
-- `votingengine/joint-vote/src/migrations/v1.rs`(3)
+- 当时的 internal-vote 历史迁移测试（3 个，迁移源码现已删除）
+- 当时的 joint-vote 历史迁移测试（3 个，迁移源码现已删除）
 - `otherpallet/cid-system/src/duoqian_info/{mod.rs, tests.rs}`(2,子模块自带 tests.rs)
 
 primitives crate 内的就地单测(6 处,共 19 个 #[test]):primitives 是常量/类型/纯函数库,每个文件最多 1-7 个测试,各自紧贴自家被测函数,搬到 src/tests/ 反而增加无谓间接层。
@@ -222,7 +222,7 @@ runtime/<pallet>: 拆 tests/ 目录
 - 修复 / 改写已有测试用例
 - 优化 mock runtime 设计
 - 调整 benchmarks.rs 结构(本次只动 tests)
-- 调整 migrations/v1.rs 中的就地单元测试(形态 D 不动)
+- 调整当时历史迁移源码中的就地单元测试（形态 D 不动；迁移源码现已删除）
 
 ## 10. 增量补做(2026-05-07 同日延伸)
 

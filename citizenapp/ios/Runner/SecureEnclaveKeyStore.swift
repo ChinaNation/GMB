@@ -105,16 +105,24 @@ final class SecureEnclaveKeyStore {
   func decrypt(
     ciphertext: Data,
     tag: Data,
+    protection: Protection = .currentBiometry,
     reason: String
   ) throws -> Data {
-    let context = LAContext()
-    context.localizedReason = reason
-    context.localizedFallbackTitle = ""
-    context.touchIDAuthenticationAllowableReuseDuration = 0
+    let context: LAContext
+    switch protection {
+    case .currentBiometry:
+      context = LAContext()
+      context.localizedReason = reason
+      context.localizedFallbackTitle = ""
+      context.touchIDAuthenticationAllowableReuseDuration = 0
+    case .deviceOnly:
+      // 日常数据用途钥只允许无 UI 的本设备硬件解封；设备尚不可用时直接失败关闭。
+      context = nonInteractiveContext()
+    }
 
     let privateKey = try loadPrivateKey(
       tag: tag,
-      protection: .currentBiometry,
+      protection: protection,
       createIfMissing: false,
       authenticationContext: context
     )

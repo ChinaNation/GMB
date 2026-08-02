@@ -42,7 +42,7 @@ describe('citizen profile repository', () => {
   it('round-trips a profile doc through R2', async () => {
     const env = fakeEnv();
     const doc: CitizenProfileDoc = {
-      schema: 'citizenapp.square.profile.v1',
+      schema: 'citizenapp.square.profile',
       cid_number: targetCid,
       display_name: '轻节点',
       bio: '链上公民',
@@ -73,7 +73,7 @@ describe('citizen profile repository', () => {
   });
 });
 
-describe('GET /v1/square/users/:account', () => {
+describe('GET /square/users/:account', () => {
   it('reports counts, certification and follow state for the viewer', async () => {
     const env = fakeEnv({
       // 目标身份的两条已发布帖(归属键 cid_number = targetCid)。
@@ -95,7 +95,7 @@ describe('GET /v1/square/users/:account', () => {
     });
 
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
       targetCid
     );
@@ -120,7 +120,7 @@ describe('GET /v1/square/users/:account', () => {
       membership: { membership_level: 'freedom' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${candidateCid}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${candidateCid}`, { authToken: 'tok' }),
       env,
       candidateCid
     );
@@ -138,7 +138,7 @@ describe('GET /v1/square/users/:account', () => {
       membership: { membership_level: 'democracy', subscription_status: 'cancelled' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
       targetCid
     );
@@ -155,7 +155,7 @@ describe('GET /v1/square/users/:account', () => {
       identity: { identity_level: 'candidate', cid_number: candidateCid }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${candidateCid}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${candidateCid}`, { authToken: 'tok' }),
       env,
       candidateCid
     );
@@ -173,7 +173,7 @@ describe('GET /v1/square/users/:account', () => {
     // 不因链上不可用而报错。
     const env = fakeEnv({ posts: [], follows: [] });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
       targetCid
     );
@@ -190,14 +190,14 @@ describe('GET /v1/square/users/:account', () => {
   });
 });
 
-describe('PUT /v1/square/profile', () => {
+describe('PUT /square/profile', () => {
   it('persists display_name and bio for the session cid', async () => {
     const env = fakeEnv({
       session: { token: 'tok', account_id: accountId },
       identity: { identity_level: 'voting', cid_number: targetCid }
     });
     const response = await putProfileRoute(
-      request('https://w/v1/square/profile', {
+      request('https://w/square/profile', {
         method: 'PUT',
         authToken: 'tok',
         body: { display_name: '  轻节点  ', bio: '个性签名' }
@@ -215,7 +215,7 @@ describe('PUT /v1/square/profile', () => {
     const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
-        request('https://w/v1/square/profile', {
+        request('https://w/square/profile', {
           method: 'PUT',
           authToken: 'tok',
           body: { avatar_object_key: `profile/${viewer}/avatar` }
@@ -229,7 +229,7 @@ describe('PUT /v1/square/profile', () => {
     const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
-        request('https://w/v1/square/profile', {
+        request('https://w/square/profile', {
           method: 'PUT',
           authToken: 'tok',
           body: { avatar_object_key: `profile/${targetCid}/avatar_extra` }
@@ -243,7 +243,7 @@ describe('PUT /v1/square/profile', () => {
     const env = fakeEnv({ session: { token: 'tok', account_id: accountId } });
     await expect(
       putProfileRoute(
-        request('https://w/v1/square/profile', {
+        request('https://w/square/profile', {
           method: 'PUT',
           authToken: 'tok',
           body: { display_name: 'x'.repeat(41) }
@@ -254,7 +254,7 @@ describe('PUT /v1/square/profile', () => {
   });
 });
 
-describe('GET /v1/square/users/:account/posts', () => {
+describe('GET /square/users/:account/posts', () => {
   it('filters by category and paginates by cursor', async () => {
     const env = fakeEnv({
       identity: { identity_level: 'voting', cid_number: targetCid },
@@ -298,7 +298,7 @@ describe('GET /v1/square/users/:account/posts', () => {
     query: string
   ): Promise<{ posts: Array<{ post_id: string }>; next_cursor: number | null }> {
     const response = await getUserPostsRoute(
-      request(`https://w/v1/square/users/${targetCid}/posts?${query}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${targetCid}/posts?${query}`, { authToken: 'tok' }),
       env,
       targetCid
     );
@@ -309,7 +309,7 @@ describe('GET /v1/square/users/:account/posts', () => {
   }
 });
 
-describe('GET /v1/square/users/:account/follows', () => {
+describe('GET /square/users/:account/follows', () => {
   it('lists following and followers ordered by recency', async () => {
     const env = fakeEnv({
       identity: { identity_level: 'voting', cid_number: targetCid },
@@ -339,7 +339,7 @@ describe('GET /v1/square/users/:account/follows', () => {
     next_cursor: number | null;
   }> {
     const response = await getUserFollowsRoute(
-      request(`https://w/v1/square/users/${targetCid}/follows?${query}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${targetCid}/follows?${query}`, { authToken: 'tok' }),
       env,
       targetCid
     );
@@ -390,7 +390,7 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
       session: { token: 'tok', account_id: viewer }
     });
     const response = await setFollowNotifyRoute(
-      request(`https://w/v1/square/follows/${targetCid}/notify`, {
+      request(`https://w/square/follows/${targetCid}/notify`, {
         method: 'PUT',
         authToken: 'tok',
         body: { enabled: false }
@@ -405,7 +405,7 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
     const env = fakeEnv({ session: { token: 'tok', account_id: viewer } });
     await expect(
       setFollowNotifyRoute(
-        request(`https://w/v1/square/follows/${targetCid}/notify`, {
+        request(`https://w/square/follows/${targetCid}/notify`, {
           method: 'PUT',
           authToken: 'tok',
           body: { enabled: 'yes' }
@@ -417,7 +417,7 @@ describe('post notify (is_notifying + PUT .../notify)', () => {
 
   async function readProfile(env: Env): Promise<{ profile: Record<string, unknown> }> {
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${targetCid}`, { authToken: 'tok' }),
+      request(`https://w/square/users/${targetCid}`, { authToken: 'tok' }),
       env,
       targetCid
     );

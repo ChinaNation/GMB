@@ -22,7 +22,7 @@ const SERVER_CERT_FILE: &str = "onchina-server.crt";
 const SERVER_KEY_FILE: &str = "onchina-server.key";
 const HOST_MARKER_FILE: &str = "onchina-cert-host.txt";
 const PROFILE_MARKER_FILE: &str = "onchina-cert-profile.txt";
-const TLS_PROFILE_VERSION: &str = "onchina-ca-v2-ca2036-server397d";
+const TLS_PROFILE_ID: &str = "onchina-ca2036-server397d";
 const ORG_CA_COMMON_NAME: &str = "OnChina Organization Root CA";
 const SERVER_COMMON_NAME: &str = "onchina.local";
 const ORG_CA_VALID_UNTIL: &str = "2036-01-01T00:00:00Z";
@@ -154,7 +154,7 @@ fn cert_host_matches() -> bool {
 fn cert_profile_matches() -> bool {
     fs::read_to_string(profile_marker_path())
         .ok()
-        .is_some_and(|value| value.trim() == TLS_PROFILE_VERSION)
+        .is_some_and(|value| value.trim() == TLS_PROFILE_ID)
 }
 
 fn ca_material_exists() -> bool {
@@ -173,7 +173,7 @@ fn load_ca_key_pair() -> Result<KeyPair, String> {
 fn write_cert_markers() -> Result<(), String> {
     fs::write(host_marker_path(), ONCHINA_TLS_HOST)
         .map_err(|e| format!("write tls host marker failed: {e}"))?;
-    fs::write(profile_marker_path(), TLS_PROFILE_VERSION)
+    fs::write(profile_marker_path(), TLS_PROFILE_ID)
         .map_err(|e| format!("write tls profile marker failed: {e}"))?;
     Ok(())
 }
@@ -225,7 +225,7 @@ fn ensure_certificate_material(refresh_server: bool) -> Result<(), String> {
         tracing::info!(
             dir = %dir.display(),
             host = ONCHINA_TLS_HOST,
-            profile = TLS_PROFILE_VERSION,
+            profile = TLS_PROFILE_ID,
             server_valid_days = SERVER_VALID_DAYS,
             "onchina organization CA TLS cert generated"
         );

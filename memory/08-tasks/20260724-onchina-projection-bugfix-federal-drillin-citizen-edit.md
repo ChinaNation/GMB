@@ -35,7 +35,7 @@
 - **不是播种**:联邦库仍不常驻私权,进哪个市投影哪个市。
 
 ### Bug2:公民编辑入口(字段可变性按"现实是否可变"定死)
-- 端点:`POST /api/v1/admin/citizens/:cid_number/edit` → `domains/citizens/admin_entry.rs::admin_update_citizen`
+- 端点:`POST /api/admin/citizens/:cid_number/edit` → `domains/citizens/admin_entry.rs::admin_update_citizen`
   (main.rs 已注册路由,位于 revoke/prepare 之前)。
 - **字段分类订正(用户第二轮纠正)**:
   - **可变**:姓 family_name、名 given_name、居住市 city_code、居住镇 town_code、voting_eligible

@@ -131,10 +131,10 @@
 
 - 2026-07-08：用户确认按该方案设计并允许新增本任务卡和 ADR。
 - 2026-07-08：已新增 `ADR-032`，并同步更新仓库总文档、CitizenApp、CitizenChain、OnChina、Oracle Cloud 部署文档；本步骤未修改代码、未修改 `citizenchain/runtime/`、未部署 Cloudflare 或 Oracle Cloud。
-- 2026-07-08：第 2 步已落地 Cloudflare Worker `GET /v1/chain/bootstrap` 启动清单接口，新增 `citizenapp/cloudflare/src/chain/bootstrap.ts` 和 `citizenapp/cloudflare/test/chain_bootstrap.test.ts`，并登记统一协议 `P-API-CITIZENAPP-004`。该接口只提供公开启动清单，不返回 RPC URL，不代理 JSON-RPC，不接触私钥；CitizenApp 端接入留到第 3 步确认后执行。
+- 2026-07-08：第 2 步已落地 Cloudflare Worker `GET /chain/bootstrap` 启动清单接口，新增 `citizenapp/cloudflare/src/chain/bootstrap.ts` 和 `citizenapp/cloudflare/test/chain_bootstrap.test.ts`，并登记统一协议 `P-API-CITIZENAPP-004`。该接口只提供公开启动清单，不返回 RPC URL，不代理 JSON-RPC，不接触私钥；CitizenApp 端接入留到第 3 步确认后执行。
 - 2026-07-08：第 3 步已接入 CitizenApp 轻节点启动状态机，新增 `citizenapp/lib/rpc/chain_bootstrap_api.dart` 和 `citizenapp/test/rpc/chain_bootstrap_api_test.dart`，更新 `citizenapp/lib/rpc/smoldot_client.dart`。App 启动时先读取启动清单，校验 `chain_id`、`protocol_id`、`state_root`、`SS58` 与本地 chainspec 一致后才把推荐 bootnodes 注入内存版 chainspec；清单不可用、不匹配或违反安全位时继续使用本地 assets。API 清单仍不是链上真源，`signed_extrinsic_relay` 仍保持关闭。
-- 2026-07-08：第 4 步已落地已签名交易受控广播兜底，新增 `citizenapp/cloudflare/src/chain/extrinsic_relay.ts`、`citizenapp/cloudflare/test/chain_extrinsic_relay.test.ts`、`citizenapp/lib/rpc/signed_extrinsic_relay_api.dart`、`citizenapp/test/rpc/signed_extrinsic_relay_api_test.dart`，D1 结构当前已并入唯一 `citizenapp/cloudflare/migrations/0001_square_core.sql`，并更新 `citizenapp/lib/rpc/chain_rpc.dart`、`citizenapp/lib/rpc/chain_bootstrap_api.dart`、`citizenapp/cloudflare/src/chain/bootstrap.ts`、`citizenapp/cloudflare/src/routes.ts`、`citizenapp/cloudflare/src/types.ts`、`citizenapp/cloudflare/wrangler.toml`。Worker 仅在 `CHAIN_EXTRINSIC_RELAY_ENABLED=1` 且服务节点 RPC 已配置时开放 `POST /v1/chain/extrinsics/relay`，只接受完整 signed extrinsic hex，只调用 `author_submitExtrinsic`，不接触私钥、不保存原始 extrinsic body、不返回 RPC URL；App 仅在轻节点 submit-only 失败且错误像链路故障时使用该兜底，交易本身 invalid/bad proof/stale/future/payment 类错误不兜底。
-- 2026-07-10：后续 ANR/轻节点任务已把 bootstrap 契约彻底升级为 v2 并清除远端 checkpoint 分支；staging `ff19bc46-dc17-4f77-a53f-aed2739142a0` 与 production `00d836aa-9c43-4561-ba33-8730d780c1a0` 已全量发布。两端真实 HTTPS 均返回 schema v2、6 个 bootnodes、无 checkpoint/RPC URL，`/v1/chain/rpc` 为 404；生产 arm64 profile 已在 Pixel 8a 验证读取生产清单并恢复 finalized `#31` 本机缓存，无 CitizenApp ANR 或崩溃。
+- 2026-07-08：第 4 步已落地已签名交易受控广播兜底，新增 `citizenapp/cloudflare/src/chain/extrinsic_relay.ts`、`citizenapp/cloudflare/test/chain_extrinsic_relay.test.ts`、`citizenapp/lib/rpc/signed_extrinsic_relay_api.dart`、`citizenapp/test/rpc/signed_extrinsic_relay_api_test.dart`，D1 结构当前已并入唯一 `citizenapp/cloudflare/migrations/0001_square_core.sql`，并更新 `citizenapp/lib/rpc/chain_rpc.dart`、`citizenapp/lib/rpc/chain_bootstrap_api.dart`、`citizenapp/cloudflare/src/chain/bootstrap.ts`、`citizenapp/cloudflare/src/routes.ts`、`citizenapp/cloudflare/src/types.ts`、`citizenapp/cloudflare/wrangler.toml`。Worker 仅在 `CHAIN_EXTRINSIC_RELAY_ENABLED=1` 且服务节点 RPC 已配置时开放 `POST /chain/extrinsics/relay`，只接受完整 signed extrinsic hex，只调用 `author_submitExtrinsic`，不接触私钥、不保存原始 extrinsic body、不返回 RPC URL；App 仅在轻节点 submit-only 失败且错误像链路故障时使用该兜底，交易本身 invalid/bad proof/stale/future/payment 类错误不兜底。
+- 2026-07-10：后续 ANR/轻节点任务已把 bootstrap 契约收敛为当前严格结构并清除远端 checkpoint 分支；staging `ff19bc46-dc17-4f77-a53f-aed2739142a0` 与 production `00d836aa-9c43-4561-ba33-8730d780c1a0` 已全量发布。两端真实 HTTPS 均返回当前 schema、6 个 bootnodes、无 checkpoint/RPC URL，`/chain/rpc` 为 404；生产 arm64 profile 已在 Pixel 8a 验证读取生产清单并恢复 finalized `#31` 本机缓存，无 CitizenApp ANR 或崩溃。
 
 ## 8. 验收要求
 
@@ -150,11 +150,11 @@
 - 关键冲突词检查仅命中 ADR 和任务卡中的禁止项/风险项，以及产品文档中“不得恢复/不是目标路线”的约束说明。
 - 第 2 步已通过 `npm --prefix citizenapp/cloudflare run typecheck`、`npm --prefix citizenapp/cloudflare test -- chain_bootstrap.test.ts`、`npm --prefix citizenapp/cloudflare test`。
 - 第 2 步已通过 Wrangler dry-run：top-level、`--env staging`、`--env production` 均完成打包和配置解析；未部署远端。
-- 第 2 步已完成真实本地运行态 smoke；当前 bootstrap 契约已在后续 ANR/轻节点任务中升级为 v2，只治理链身份、bootnodes 和服务发现，不再包含远端 checkpoint 字段；`/v1/chain/rpc` 仍必须返回 404。
+- 第 2 步已完成真实本地运行态 smoke；当前 bootstrap 契约已在后续 ANR/轻节点任务中升级为 v2，只治理链身份、bootnodes 和服务发现，不再包含远端 checkpoint 字段；`/chain/rpc` 仍必须返回 404。
 - 第 3 步已通过 `flutter analyze lib/rpc/chain_bootstrap_api.dart lib/rpc/smoldot_client.dart test/rpc/chain_bootstrap_api_test.dart`。
 - 第 3 步已通过 `flutter test test/rpc`，覆盖启动清单解析、拒绝 API-only / RPC proxy / RPC URL 字段、HTTPS 与本地 HTTP 配置、bootnodes 注入匹配校验、既有 RPC 缓存和签名交易构造测试。
 - 第 3 步已通过 `npm --prefix citizenapp/cloudflare test -- chain_bootstrap.test.ts` 与 `git diff --check`。
-- 第 3 步已完成真实本地运行态 smoke：`wrangler dev --local --port 8787` 后，App 侧 `ChainBootstrapApi` 对真实 `GET /v1/chain/bootstrap` 响应解析成功，结果为 `chain_id=citizenchain`、`bootnodes=6`、`api_is_truth=false`、`rpc_proxy=false`、`signed_extrinsic_relay.enabled=false`、`isSafeForLightClient=true`；精确扫描未发现 `rpc_url`、`validator_rpc_url`、`archive_rpc_url`、`chain_rpc_url`、`square_chain_rpc_url`；探测 `/v1/chain/rpc` 返回 404。
+- 第 3 步已完成真实本地运行态 smoke：`wrangler dev --local --port 8787` 后，App 侧 `ChainBootstrapApi` 对真实 `GET /chain/bootstrap` 响应解析成功，结果为 `chain_id=citizenchain`、`bootnodes=6`、`api_is_truth=false`、`rpc_proxy=false`、`signed_extrinsic_relay.enabled=false`、`isSafeForLightClient=true`；精确扫描未发现 `rpc_url`、`validator_rpc_url`、`archive_rpc_url`、`chain_rpc_url`、`square_chain_rpc_url`；探测 `/chain/rpc` 返回 404。
 - 第 4 步历史 D1 结构当前已合并进唯一 `0001_square_core.sql`，本地与远端均按目标基线重建。
 - 第 4 步已通过 `npm --prefix citizenapp/cloudflare run typecheck`。
 - 第 4 步已通过 `npm --prefix citizenapp/cloudflare test -- chain_bootstrap.test.ts chain_extrinsic_relay.test.ts`，覆盖 relay 默认关闭、开启时 bootstrap 只暴露 path 不暴露 RPC URL、只调用 `author_submitExtrinsic`、重复 signed extrinsic 去重、非法 hex/私钥字段拒绝、按 IP hash 限流。
@@ -162,4 +162,4 @@
 - 第 4 步已通过 `flutter test test/rpc`，覆盖 relay API 解析、错误码透传、错误 `chain_success_source` 拒绝、启动清单固定 relay path 校验、既有 RPC 缓存和签名交易构造测试。
 - 第 4 步已通过 Wrangler dry-run：top-level、`--env staging`、`--env production` 均完成打包和配置解析；未部署远端。首次在仓库根目录误跑 dry-run 被 Wrangler 自动识别为静态项目并失败，已在 `citizenapp/cloudflare` 正确目录重跑通过。
 - 第 4 步曾以已废弃的本地 HTTP 单 Secret 完成 relay 历史 smoke；2026-07-10 起当前 Worker 不再接受该配置方式，只接受 Access 保护的 HTTPS URL 与两项服务令牌 Secret。原 smoke 仍证明 relay 路由、私钥字段拒绝、通用 RPC 404 和 App 响应解析在当时通过，但不能替代新的 Access + Tunnel 运行态验收。
-- bootstrap v2 已完成远端发布验收：staging 与 production 均为 100% 流量，真实响应只包含公开启动清单；生产手机未保留 staging base URL。正式链 finalized 仍为 `#31`，真实 GRANDPA warp 必须等待 `#33` 或更高后用干净数据环境单独验收。
+- 当前 bootstrap 已完成远端发布验收：staging 与 production 均为 100% 流量，真实响应只包含公开启动清单；生产手机未保留 staging base URL。正式链 finalized 仍为 `#31`，真实 GRANDPA warp 必须等待 `#33` 或更高后用干净数据环境单独验收。

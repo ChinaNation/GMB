@@ -2162,312 +2162,303 @@ fn main() {
         }
 
         let auth_routes = Router::new()
+            .route("/api/admin/auth/check", get(auth::login::admin_auth_check))
+            .route("/api/admin/auth/logout", post(auth::login::admin_logout))
             .route(
-                "/api/v1/admin/auth/check",
-                get(auth::login::admin_auth_check),
-            )
-            .route("/api/v1/admin/auth/logout", post(auth::login::admin_logout))
-            .route(
-                "/api/v1/admin/auth/qr/sign-request",
+                "/api/admin/auth/qr/sign-request",
                 post(auth::login::admin_auth_qr_sign_request),
             )
             .route(
-                "/api/v1/admin/auth/qr/complete",
+                "/api/admin/auth/qr/complete",
                 post(auth::login::admin_auth_qr_complete),
             )
             .route(
-                "/api/v1/admin/auth/qr/result",
+                "/api/admin/auth/qr/result",
                 get(auth::login::admin_auth_qr_result),
             )
             .route(
-                "/api/v1/admin/auth/node-binding/confirm",
+                "/api/admin/auth/node-binding/confirm",
                 post(auth::login::admin_auth_confirm_node_binding),
             );
 
         let admin_routes = Router::new()
             .route(
-                "/api/v1/admin/city-registry-admins",
+                "/api/admin/city-registry-admins",
                 get(auth::list_city_registry_admins),
             )
             .route(
-                "/api/v1/admin/actions/prepare",
+                "/api/admin/actions/prepare",
                 post(auth::actions::prepare_admin_action),
             )
             .route(
-                "/api/v1/admin/actions/commit",
+                "/api/admin/actions/commit",
                 post(auth::actions::commit_admin_action),
             )
             .route(
-                "/api/v1/admin/auth/passkey/register/begin",
+                "/api/admin/auth/passkey/register/begin",
                 post(auth::passkey::register_begin),
             )
             .route(
-                "/api/v1/admin/auth/passkey/register/finish",
+                "/api/admin/auth/passkey/register/finish",
                 post(auth::passkey::register_finish),
             )
             .route(
-                "/api/v1/admin/auth/passkey/assert/begin",
+                "/api/admin/auth/passkey/assert/begin",
                 post(auth::passkey::assert_begin),
             )
             .route(
-                "/api/v1/admin/auth/passkey/assert/finish",
+                "/api/admin/auth/passkey/assert/finish",
                 post(auth::passkey::assert_finish),
             )
             .route(
-                "/api/v1/admin/auth/passkey/status",
+                "/api/admin/auth/passkey/status",
                 get(auth::passkey::passkey_status),
             )
             .route(
-                "/api/v1/admin/federal-registry-admins",
+                "/api/admin/federal-registry-admins",
                 get(auth::list_federal_registry_admins),
             )
             // M3:联邦省组管理员进入本省某市 → 把该市链上公民+私权机构投影进联邦本地库。
             .route(
-                "/api/v1/admin/registry/drill-in-project",
+                "/api/admin/registry/drill-in-project",
                 post(domains::projection::drill_in_project_city),
             )
             .route(
-                "/api/v1/admin/own-institution-admins",
+                "/api/admin/own-institution-admins",
                 get(auth::list_own_institution_admins),
             )
+            .route("/api/admin/own-institution", get(auth::get_own_institution))
             .route(
-                "/api/v1/admin/own-institution",
-                get(auth::get_own_institution),
-            )
-            .route(
-                "/api/v1/admin/institution/governance/prepare",
+                "/api/admin/institution/governance/prepare",
                 post(institution::admins::prepare_institution_governance),
             )
             .route(
-                "/api/v1/admin/institution/admins/register/prepare",
+                "/api/admin/institution/admins/register/prepare",
                 post(institution::admins::prepare_register_institution_admins),
             )
             // 机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
-            // - GET  /api/v1/institutions/check-cid-full-name             — cid_full_name 查重
-            // - POST /api/v1/institutions/create                          — 已关闭；新原子创建业务落地前返回 501
-            // - POST /api/v1/private/<type>                              — 六类私权机构专属生成入口
-            // - POST /api/v1/institutions/:cid_number/account/create         — 发起「新增账户」内部投票提案(冷签)
-            // - GET  /api/v1/institutions/list                            — 公权/教育按 scope 过滤的机构列表
-            // - GET  /api/v1/private/<type>                              — 六类私权机构专属列表入口
-            // - GET  /api/v1/institutions/:cid_number                        — 机构详情
-            // - GET  /api/v1/institutions/:cid_number/accounts               — 账户列表(链上真源)
-            // - DELETE /api/v1/institutions/:cid_number/account/:account_name — 发起「关闭账户」内部投票提案(冷签,带岗位码 Json body)
+            // - GET  /api/institutions/check-cid-full-name             — cid_full_name 查重
+            // - POST /api/institutions/create                          — 已关闭；新原子创建业务落地前返回 501
+            // - POST /api/private/<type>                              — 六类私权机构专属生成入口
+            // - POST /api/institutions/:cid_number/account/create         — 发起「新增账户」内部投票提案(冷签)
+            // - GET  /api/institutions/list                            — 公权/教育按 scope 过滤的机构列表
+            // - GET  /api/private/<type>                              — 六类私权机构专属列表入口
+            // - GET  /api/institutions/:cid_number                        — 机构详情
+            // - GET  /api/institutions/:cid_number/accounts               — 账户列表(链上真源)
+            // - DELETE /api/institutions/:cid_number/account/:account_name — 发起「关闭账户」内部投票提案(冷签,带岗位码 Json body)
             .route(
-                "/api/v1/institutions/check-cid-full-name",
+                "/api/institutions/check-cid-full-name",
                 get(institution::subjects::admin::check_cid_full_name),
             )
             // F 详情页"所属法人"搜索(全国范围 S/G 模糊匹配)
             .route(
-                "/api/v1/institutions/search-parents",
+                "/api/institutions/search-parents",
                 get(institution::subjects::admin::search_parent_institutions),
             )
             .route(
-                "/api/v1/institutions/legal-representative/photo",
+                "/api/institutions/legal-representative/photo",
                 post(institution::subjects::admin::upload_legal_representative_photo),
             )
             .route(
-                "/api/v1/institutions/create",
+                "/api/institutions/create",
                 post(institution::subjects::registration::create_institution),
             )
             .route(
-                "/api/v1/private/sole",
+                "/api/private/sole",
                 get(domains::private::sole::list).post(domains::private::sole::create),
             )
             .route(
-                "/api/v1/private/partnership",
+                "/api/private/partnership",
                 get(domains::private::partnership::list)
                     .post(domains::private::partnership::create),
             )
             .route(
-                "/api/v1/private/company",
+                "/api/private/company",
                 get(domains::private::company::list).post(domains::private::company::create),
             )
             .route(
-                "/api/v1/private/corporation",
+                "/api/private/corporation",
                 get(domains::private::corporation::list)
                     .post(domains::private::corporation::create),
             )
             .route(
-                "/api/v1/private/welfare",
+                "/api/private/welfare",
                 get(domains::private::welfare::list).post(domains::private::welfare::create),
             )
             .route(
-                "/api/v1/private/association",
+                "/api/private/association",
                 get(domains::private::association::list)
                     .post(domains::private::association::create),
             )
             .route(
-                "/api/v1/institutions/:cid_number/account/create",
+                "/api/institutions/:cid_number/account/create",
                 post(institution::accounts::handler::create_account),
             )
             .route(
-                "/api/v1/institutions/list",
+                "/api/institutions/list",
                 get(institution::subjects::registration::list_institutions),
             )
             .route(
-                "/api/v1/institutions/:cid_number",
+                "/api/institutions/:cid_number",
                 get(institution::subjects::admin::get_institution)
                     // 详情页只更新机构资料;私权类型由创建时身份编码锁定,不可在此改。
                     .patch(institution::subjects::admin::update_institution),
             )
             .route(
-                "/api/v1/institutions/:cid_number/accounts",
+                "/api/institutions/:cid_number/accounts",
                 get(institution::accounts::handler::list_accounts),
             )
             .route(
-                "/api/v1/institutions/:cid_number/account/:account_name",
+                "/api/institutions/:cid_number/account/:account_name",
                 delete(institution::accounts::handler::delete_account),
             )
             // 机构资料库文档 CRUD
             .route(
-                "/api/v1/institutions/:cid_number/docs",
+                "/api/institutions/:cid_number/docs",
                 get(domains::docs::handler::list_documents)
                     .post(domains::docs::handler::upload_document),
             )
             .route(
-                "/api/v1/institutions/:cid_number/docs/:doc_id/download",
+                "/api/institutions/:cid_number/docs/:doc_id/download",
                 get(domains::docs::handler::download_document),
             )
             .route(
-                "/api/v1/institutions/:cid_number/docs/:doc_id",
+                "/api/institutions/:cid_number/docs/:doc_id",
                 delete(domains::docs::handler::delete_document),
             )
             .route(
-                "/api/v1/institutions/gov",
+                "/api/institutions/gov",
                 get(domains::gov::handler::list_official_institutions),
             )
             // 立法与表决：发起/代表机构表决（返回扫码上链 sign_request）+ 读法律/读提案进度。
             .route(
-                "/api/v1/legislation/proposable",
+                "/api/legislation/proposable",
                 get(domains::legislation::handler::list_proposable),
             )
             .route(
-                "/api/v1/legislation/propose",
+                "/api/legislation/propose",
                 post(domains::legislation::handler::propose_legislation),
             )
             .route(
-                "/api/v1/legislation/representative-vote",
+                "/api/legislation/representative-vote",
                 post(domains::legislation::handler::cast_representative_vote),
             )
             .route(
-                "/api/v1/legislation/laws",
+                "/api/legislation/laws",
                 get(domains::legislation::handler::list_laws),
             )
             // 本节点绑定机构层级/辖区的法律(会话派生 scope);静态段先于 :law_id 匹配。
             .route(
-                "/api/v1/legislation/laws/mine",
+                "/api/legislation/laws/mine",
                 get(domains::legislation::handler::list_my_laws),
             )
             .route(
-                "/api/v1/legislation/laws/:law_id",
+                "/api/legislation/laws/:law_id",
                 get(domains::legislation::handler::law),
             )
             .route(
-                "/api/v1/legislation/proposals/:proposal_id",
+                "/api/legislation/proposals/:proposal_id",
                 get(domains::legislation::handler::get_proposal_state),
             )
             // 公民链基金会私权工作台：finalized 平台价格查询，以及 CitizenWallet 一次签名、OnChina 回扫提交的调价提案。
             .route(
-                "/api/v1/membership/platform-prices",
+                "/api/membership/platform-prices",
                 get(domains::membership::handler::platform_prices),
             )
             .route(
-                "/api/v1/membership/platform-prices/propose",
+                "/api/membership/platform-prices/propose",
                 post(domains::membership::handler::propose_platform_price),
             )
             // 联邦注册局机构详情(只读,绕过 scope,所有联邦注册局管理员可读)
             .route(
-                "/api/v1/institutions/federal-registry",
+                "/api/institutions/federal-registry",
                 get(institution::subjects::admin::get_federal_registry),
             )
-            .route(
-                "/api/v1/admin/audit-logs",
-                get(audit::admin_list_audit_logs),
-            )
+            .route("/api/admin/audit-logs", get(audit::admin_list_audit_logs))
             // 建档占号先行(ADR-031):POST = 占号 prepare（返回 CitizenWallet 签名请求二维码），
             // 链上进块后经全业务统一 chain/submit 才落档案;列表查询走 GET。
             .route(
-                "/api/v1/admin/citizens",
+                "/api/admin/citizens",
                 get(domains::citizens::handler::admin_list_citizens)
                     .post(domains::citizens::occupy::prepare_citizen_occupy),
             )
             // 占号第二段:管理员回传用户占号签名 → 返回管理员冷签请求二维码。
             .route(
-                "/api/v1/admin/citizens/occupy/submit",
+                "/api/admin/citizens/occupy/submit",
                 post(domains::citizens::occupy::submit_citizen_occupy),
             )
             // 换绑第一段:注册局对某匿名 CID 发起换绑 → 返回新钱包签名请求。
             .route(
-                "/api/v1/admin/citizens/rebind/prepare",
+                "/api/admin/citizens/rebind/prepare",
                 post(domains::citizens::occupy::prepare_citizen_rebind),
             )
             // 换绑第二段:回传新账户换绑签名 → 返回管理员冷签请求二维码。
             .route(
-                "/api/v1/admin/citizens/rebind/submit",
+                "/api/admin/citizens/rebind/submit",
                 post(domains::citizens::occupy::submit_citizen_rebind),
             )
             // 所有在册注册局管理员均可查询任意 CID 的公开 finalized 当前绑定；
             // 该接口不读取或跨辖区暴露本地护照、证件与档案。
             .route(
-                "/api/v1/admin/citizens/:cid_number/binding",
+                "/api/admin/citizens/:cid_number/binding",
                 get(domains::citizens::chain_identity::finalized_citizen_binding),
             )
             .route(
-                "/api/v1/admin/chain/submit",
+                "/api/admin/chain/submit",
                 post(domains::citizens::occupy::submit_chain_sign),
             )
             .route(
-                "/api/v1/admin/citizens/:cid_number/edit",
+                "/api/admin/citizens/:cid_number/edit",
                 post(domains::citizens::admin_entry::admin_update_citizen),
             )
             .route(
-                "/api/v1/admin/citizens/:cid_number/onchain/revoke/prepare",
+                "/api/admin/citizens/:cid_number/onchain/revoke/prepare",
                 post(domains::citizens::occupy::prepare_citizen_revoke),
             )
             .route(
-                "/api/v1/admin/citizens/legal-representatives",
+                "/api/admin/citizens/legal-representatives",
                 get(domains::citizens::handler::admin_search_legal_representative_citizens),
             )
             .route(
-                "/api/v1/admin/citizens/:cid_number/documents",
+                "/api/admin/citizens/:cid_number/documents",
                 get(domains::citizens::handler::list_citizen_documents)
                     .post(domains::citizens::handler::upload_citizen_document),
             )
             .route(
-                "/api/v1/admin/citizens/:cid_number/documents/:doc_id/download",
+                "/api/admin/citizens/:cid_number/documents/:doc_id/download",
                 get(domains::citizens::handler::download_citizen_document),
             )
             .route(
-                "/api/v1/admin/citizens/:cid_number/documents/:doc_id",
+                "/api/admin/citizens/:cid_number/documents/:doc_id",
                 delete(domains::citizens::handler::delete_citizen_document),
             )
             .route(
-                "/api/v1/admin/citizens/:cid_number/onchain/prepare",
+                "/api/admin/citizens/:cid_number/onchain/prepare",
                 post(domains::citizens::chain_identity::prepare_citizen_onchain_signature),
             )
             .route(
-                "/api/v1/admin/citizens/:cid_number/onchain/complete",
+                "/api/admin/citizens/:cid_number/onchain/complete",
                 post(domains::citizens::chain_identity::complete_citizen_onchain_signature),
             )
-            .route("/api/v1/admin/cid/meta", get(cid::admin::admin_cid_meta))
+            .route("/api/admin/cid/meta", get(cid::admin::admin_cid_meta))
             .route(
-                "/api/v1/admin/cid/china/cities",
+                "/api/admin/cid/china/cities",
                 get(cid::china::admin::admin_china_cities),
             )
             .route(
-                "/api/v1/admin/cid/china/towns",
+                "/api/admin/cid/china/towns",
                 get(cid::china::admin::admin_china_towns),
             )
             .route(
-                "/api/v1/admin/address/names",
+                "/api/admin/address/names",
                 get(domains::address::handler::list_address_names),
             )
             .route(
-                "/api/v1/admin/address/items",
+                "/api/admin/address/items",
                 get(domains::address::handler::list_addresses),
             )
             .route(
-                "/api/v1/admin/address/chain-call",
+                "/api/admin/address/chain-call",
                 post(domains::address::handler::prepare_chain_call),
             )
             .route_layer(middleware::from_fn_with_state(
@@ -2479,25 +2470,22 @@ fn main() {
 
         let public_routes = Router::new()
             // 根路径 `/` 让给前端 SPA(经 fallback_service 的 ServeDir → index.html),
-            // 健康检查走专用 `/api/v1/health`;否则浏览器访问注册局只会看到健康 JSON。
-            .route("/api/v1/health", get(health))
+            // 健康检查走专用 `/api/health`;否则浏览器访问注册局只会看到健康 JSON。
+            .route("/api/health", get(health))
             .route(
-                "/api/v1/platform/ca-certificate",
+                "/api/platform/ca-certificate",
                 get(organization_ca_certificate),
             )
             .route(
-                "/api/v1/platform/ca-certificate/info",
+                "/api/platform/ca-certificate/info",
                 get(organization_ca_certificate_info),
             )
             .route(
-                "/api/v1/public/identity/search",
+                "/api/public/identity/search",
                 get(domains::citizens::handler::public_identity_search),
             )
             // 机构码→中文标签单源(免登录):前端替代硬编码 INSTITUTION_CODE_LABEL。
-            .route(
-                "/api/v1/public/cid/labels",
-                get(cid::admin::public_cid_labels),
-            )
+            .route("/api/public/cid/labels", get(cid::admin::public_cid_labels))
             // 立法大屏只读看板(免登录):机构由节点绑定确定,不接受请求参数(fail-closed)。
             .route(
                 "/api/public/legislation/display/board",
@@ -2512,39 +2500,39 @@ fn main() {
         let app_routes = Router::new()
             // ── 联合投票:查询本地公民人数,链端快照由 citizen-identity 负责 ──
             .route(
-                "/api/v1/app/voters/count",
+                "/api/app/voters/count",
                 get(domains::citizens::chain_joint_vote::app_voters_count),
             )
             // ── 投票资格提示:提交交易前查询本地档案资格,链端资格由 citizen-identity 负责 ──
             .route(
-                "/api/v1/app/vote/eligibility",
+                "/api/app/vote/eligibility",
                 post(domains::citizens::chain_vote::app_vote_eligibility),
             )
             // ── 钱包交易索引(CitizenApp 自有,与链交互无关) ──
             .route(
-                "/api/v1/app/accounts/:account_id/transactions",
+                "/api/app/accounts/:account_id/transactions",
                 get(indexer::api::account_transactions),
             )
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 账户列表 ──
             .route(
-                "/api/v1/app/institutions/search",
+                "/api/app/institutions/search",
                 get(institution::subjects::chain_multisig_info::app_search_institutions),
             )
             .route(
-                "/api/v1/app/institutions/:cid_number",
+                "/api/app/institutions/:cid_number",
                 get(institution::subjects::chain_multisig_info::app_get_institution),
             )
             .route(
-                "/api/v1/app/institutions/:cid_number/accounts",
+                "/api/app/institutions/:cid_number/accounts",
                 get(institution::subjects::chain_multisig_info::app_list_accounts),
             )
             // ── 公权机构目录(CitizenApp BFF,匿名只读,数据来自链上公权机构投影)──
             .route(
-                "/api/v1/app/public-institutions",
+                "/api/app/public-institutions",
                 get(citizenapp::public_institution::list_public_institutions),
             )
             .route(
-                "/api/v1/app/public-institutions/version",
+                "/api/app/public-institutions/version",
                 get(citizenapp::public_institution::public_institutions_version),
             );
 

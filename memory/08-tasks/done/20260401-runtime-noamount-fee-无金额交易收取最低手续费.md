@@ -21,7 +21,7 @@
 - RuntimeUpgrade：propose_runtime_upgrade、developer_direct_upgrade
 - ResolutionDestro：propose_destroy、vote_destroy
 - GrandpaKeyChange：propose_replace_grandpa_key、vote_replace_grandpa_key
-- FullnodeIssuance：bind_reward_wallet、rebind_reward_wallet
+- FullnodeIssuance：`bind_reward_account`、`rebind_reward_account`
 - OffchainTransaction 兜底：bind_clearing_institution、费率提案/投票、运维操作等
 
 ## 免费调用交易

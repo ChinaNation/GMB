@@ -24,14 +24,14 @@
 - SCALE 解码字段序逐字节对齐 runtime 结构
 
 输出物：
-- Worker:src/chain/constitution.ts(存储键 + SCALE 解码 Law→effective_version / LawVersion→章节树 / manifest→不可修改条号 / label→版本标签)+ 路由 GET /v1/constitution(公开、缓存)+ routes.ts 注册/assertKnownRoute
+- Worker:src/chain/constitution.ts(存储键 + SCALE 解码 Law→effective_version / LawVersion→章节树 / manifest→不可修改条号 / label→版本标签)+ 路由 GET /constitution(公开、缓存)+ routes.ts 注册/assertKnownRoute
 - 官网:Header tab + App 路由 + src/pages/Constitution.tsx + index.css 补 constitution-* 徽章/版本
 - 中文注释 + Worker vitest(解码器对 constitution.scale 章节夹具断言;Law/manifest/label 小夹具)
 - 文档更新(memory/05-modules 相关)+ 残留清理
 
 验收标准：
 - Worker tsc + vitest 全绿;官网 tsc/eslint 通过、build 通过
-- /v1/constitution 返回结构化 章>节>条>款 + 中英 + 不可修改条号 + 版本标签
+- /constitution 返回结构化 章>节>条>款 + 中英 + 不可修改条号 + 版本标签
 - 官网 tab 显示与节点同一份宪法(含刚改的第三章教委会/第四章储委会)
 - 修宪(链上换 effective_version)后官网自动反映
 - 文档更新、残留清理、Review 处理
@@ -39,7 +39,7 @@
 ## 进度
 
 - [x] Worker:storage key(storageValueKey/storageDoubleMapKey/encodeU64Le/encodeU32Le)+ SCALE 解码模块 `chain/constitution.ts`
-- [x] Worker:GET /v1/constitution 路由 + KV 短缓存 + routes 注册 + catalog 白名单 + guard 公开放行(复用现有 CORS)
+- [x] Worker:GET /constitution 路由 + KV 短缓存 + routes 注册 + catalog 白名单 + guard 公开放行(复用现有 CORS)
 - [x] Worker:vitest(真 constitution.scale 章节树夹具断言教委会/储委会;Law/manifest/label 夹具;端到端 mock 链读)——8 项;全套 143 全绿;tsc 干净
 - [x] 官网:Header tab(白皮书右/关于我们左)+ App lazy 路由 + Constitution.tsx + index.css(constitution-*)
 - [x] 官网:tsc -b + vite build 通过(Constitution 独立懒 chunk 1.73kB gz)、eslint 通过

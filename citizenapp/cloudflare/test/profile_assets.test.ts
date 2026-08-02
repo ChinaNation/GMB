@@ -27,7 +27,7 @@ function fakeEnv(): Env {
 }
 
 function prepareRequest(body: unknown): Request {
-  return new Request('https://worker/v1/square/profile/assets/prepare', {
+  return new Request('https://worker/square/profile/assets/prepare', {
     method: 'POST',
     headers: {
       authorization: 'Bearer tok',
@@ -56,7 +56,7 @@ describe('profile asset upload prepare', () => {
 
     expect(body.object_key).toBe(`profile/${cidNumber}/avatar`);
     expect(body.content_hash).toBe(sha);
-    expect(body.upload_url).toContain('/v1/square/profile/assets?');
+    expect(body.upload_url).toContain('/square/profile/assets?');
     expect(new URL(body.upload_url).searchParams.get('object_key')).toBe(
       `profile/${cidNumber}/avatar`
     );

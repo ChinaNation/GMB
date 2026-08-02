@@ -79,7 +79,7 @@ export function assertIdentityCanPublishCategory(
 
 export async function assertManifestQuota(input: ManifestQuotaInput): Promise<void> {
   const manifest = parseManifest(input.manifestText);
-  if (manifest.schema !== 'citizenapp.square.post.v1') {
+  if (manifest.schema !== 'citizenapp.square.post') {
     throw new HttpError(400, 'invalid_manifest_schema', 'manifest schema 不合法');
   }
   if (manifest.account_id !== input.upload.account_id) {

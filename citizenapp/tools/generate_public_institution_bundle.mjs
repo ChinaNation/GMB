@@ -408,7 +408,6 @@ async function main() {
     writeFileSync(
       join(OUT_DIR, 'manifest.json'),
       `${JSON.stringify({
-        schema_version: 2,
         chain_id: arg('--chain-id', 'citizenchain'),
         snapshot_block_number: snapshotBlockNumber,
         snapshot_block_hash: snapshotBlockHash,

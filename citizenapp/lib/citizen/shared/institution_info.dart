@@ -11,7 +11,7 @@ import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
-/// 提案展示号格式化(双层 ID v1):`2026000123` 风格。
+/// 提案展示号格式化（双层 ID）：`2026000123` 风格。
 ///
 /// 主键 `proposal_id` 是全局单调 u64,与展示无关。展示号由链上
 /// `ProposalDisplayId[id] = ProposalDisplayMeta { year, seq_in_year }`

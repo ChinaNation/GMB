@@ -6,7 +6,7 @@ import 'package:citizenapp/8964/services/square_api_client.dart'
     show SquareApiConfig;
 import 'topup_models.dart';
 
-/// 稳定币充值 Worker 客户端(/v1/square/topup/*)。
+/// 稳定币充值 Worker 客户端(/square/topup/*)。
 ///
 /// 充值 = 付款人自掏稳定币给某个公民链账户打公民币,收款方无需证明账户所有权(同转账),
 /// 故全程不带广场会话：充值目标由 `account_id` 直接指定，任意钱包账户（含冷钱包、
@@ -38,7 +38,7 @@ class TopupApi {
   final http.Client _http;
 
   Future<TopupConfig> fetchConfig() async {
-    final data = await _getJson('/v1/square/topup/config');
+    final data = await _getJson('/square/topup/config');
     return TopupConfig.fromJson(data);
   }
 
@@ -49,7 +49,7 @@ class TopupApi {
     required String accountId,
     required String payerAddress,
   }) async {
-    final data = await _postJson('/v1/square/topup/intent', {
+    final data = await _postJson('/square/topup/intent', {
       'account_id': accountId,
       'token': token,
       'package_id': packageId,
@@ -63,7 +63,7 @@ class TopupApi {
     required String paymentIntent,
     required String evmTxHash,
   }) async {
-    final data = await _postJson('/v1/square/topup/confirm', {
+    final data = await _postJson('/square/topup/confirm', {
       'payment_intent': paymentIntent,
       'evm_tx_hash': evmTxHash,
     });
@@ -75,7 +75,7 @@ class TopupApi {
     required String orderId,
     required String paymentIntent,
   }) async {
-    final data = await _postJson('/v1/square/topup/status', {
+    final data = await _postJson('/square/topup/status', {
       'order_id': orderId,
       'payment_intent': paymentIntent,
     });

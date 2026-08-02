@@ -86,7 +86,7 @@ fn amend_bumps_version_and_resets_pending() {
             Timestamp::now()
         ));
 
-        let mut s1 = enact_summary(Tier::National, 0, VoteType::Regular, b"law-v2");
+        let mut s1 = enact_summary(Tier::National, 0, VoteType::Regular, b"amended-law");
         s1.action = LawAction::Amend;
         s1.law_id = 0;
         s1.effective_at = 2_000;
@@ -368,7 +368,7 @@ fn amend_constitution_immutable_article_rejected() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Special,
-                title(b"constitution-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_of(vec![article(1, b"CHANGED"), article(17, b"yuan-17")]),
                 200,
@@ -438,7 +438,7 @@ fn amend_core_chapter_with_major_rejected() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Major,
-                title(b"c-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_core_general(
                     vec![
@@ -469,7 +469,7 @@ fn amend_core_chapter_with_special_passes_gate() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Special,
-                title(b"c-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_core_general(
                     vec![
@@ -500,7 +500,7 @@ fn amend_general_chapter_with_special_rejected() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Special,
-                title(b"c-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_core_general(
                     vec![
@@ -531,7 +531,7 @@ fn amend_general_chapter_with_major_passes_gate() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Major,
-                title(b"c-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_core_general(
                     vec![
@@ -562,7 +562,7 @@ fn amend_constitution_no_change_rejected() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Special,
-                title(b"c-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_core_general(
                     vec![
@@ -584,7 +584,12 @@ fn write_core_amend_without_referendum_proof_rejected() {
     // 提交层复校验:核心章改动 + 特别案,但引擎无公投结果(mock=()→None)→ 拒(ReferendumProofMissing)。
     new_test_ext().execute_with(|| {
         seed_constitution_tiered();
-        let mut summary = enact_summary(Tier::Constitution, 0, VoteType::Special, b"c-v2");
+        let mut summary = enact_summary(
+            Tier::Constitution,
+            0,
+            VoteType::Special,
+            b"amended-constitution",
+        );
         summary.action = LawAction::Amend;
         summary.law_id = 0;
         let new_chapters = chapters_core_general(
@@ -607,7 +612,12 @@ fn write_amend_without_guard_proof_rejected() {
     // 提交层:一般章修宪(重要案,免公投),但引擎无护宪终审结果(mock=()→None)→ 拒(GuardReviewProofMissing)。
     new_test_ext().execute_with(|| {
         seed_constitution_tiered();
-        let mut summary = enact_summary(Tier::Constitution, 0, VoteType::Major, b"c-v2");
+        let mut summary = enact_summary(
+            Tier::Constitution,
+            0,
+            VoteType::Major,
+            b"amended-constitution",
+        );
         summary.action = LawAction::Amend;
         summary.law_id = 0;
         let new_chapters = chapters_core_general(
@@ -647,7 +657,7 @@ fn rejects_amend_while_pending() {
                 executive_cid_number(),
                 None,
                 VoteType::Major,
-                title(b"law-v2"),
+                title(b"amended-law"),
                 None,
                 one_chapter(),
                 200,
@@ -675,8 +685,12 @@ fn write_rejects_amend_constitution_immutable_article_directly() {
     // forged/异常回调直接写入 Amend 时,仍必须执行不可修改条款复校验。
     new_test_ext().execute_with(|| {
         seed_constitution();
-        let mut summary =
-            enact_summary(Tier::Constitution, 0, VoteType::Special, b"constitution-v2");
+        let mut summary = enact_summary(
+            Tier::Constitution,
+            0,
+            VoteType::Special,
+            b"amended-constitution",
+        );
         summary.action = LawAction::Amend;
         summary.law_id = 0;
         assert_noop!(
@@ -704,7 +718,7 @@ fn write_rejects_amend_while_pending_directly() {
             Timestamp::now()
         ));
 
-        let mut amend = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"law-v2");
+        let mut amend = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"amended-law");
         amend.action = LawAction::Amend;
         amend.law_id = 0;
         assert_noop!(
@@ -744,7 +758,7 @@ fn amend_constitution_preserving_immutable_reaches_engine() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Special,
-                title(b"constitution-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_of(vec![
                     article(1, b"yuan-1"),
@@ -771,7 +785,7 @@ fn amend_constitution_with_regular_vote_type_rejected() {
                 executive_cid_number(),
                 None,
                 VoteType::Regular, // 宪法修改不允许常规案
-                title(b"constitution-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters_of(vec![article(1, b"yuan-1"), article(17, b"yuan-17")]),
                 200,
@@ -911,7 +925,7 @@ fn amend_constitution_rejects_duplicate_chapter_before_article_lookup() {
                 executive_cid_number(),
                 legislature_cid_number(),
                 VoteType::Special,
-                title(b"constitution-v2"),
+                title(b"amended-constitution"),
                 None,
                 chapters,
                 200,
@@ -925,7 +939,12 @@ fn amend_constitution_rejects_duplicate_chapter_before_article_lookup() {
 fn write_constitution_rechecks_duplicate_section_before_storage() {
     new_test_ext().execute_with(|| {
         seed_constitution_tiered();
-        let mut summary = enact_summary(Tier::Constitution, 0, VoteType::Major, b"c-v2");
+        let mut summary = enact_summary(
+            Tier::Constitution,
+            0,
+            VoteType::Major,
+            b"amended-constitution",
+        );
         summary.action = LawAction::Amend;
         summary.law_id = 0;
         let chapters = structured_chapters(vec![

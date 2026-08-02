@@ -23,7 +23,7 @@ interface RateWindowRow {
   expires_at: number;
 }
 
-/** `/api` 是唯一生产部署前缀，业务路由始终使用唯一 `/v1` 契约。 */
+/** `/api` 是唯一生产部署前缀，内部业务路由使用无版本路径。 */
 export function normalizeApiPath(pathname: string): string {
   const prefix = '/api';
   if (pathname === prefix) return '/';
@@ -78,38 +78,38 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
   // 鉴权建立/自证路由(挑战、会话):由 Turnstile + 设备子钥签名门控,不依赖广场会话。
   // 一次冷启动握手 = challenge + session 两请求;客户端已 in-flight 去重,同账户并发只跑一套。
   if (
-    path === '/v1/square/auth/challenge' ||
-    path === '/v1/square/auth/session'
+    path === '/square/auth/challenge' ||
+    path === '/square/auth/session'
   ) {
     await enforceRateLimit(env, `auth:${ipKey}`, 10, 60);
     return;
   }
   // 设备子钥注册是每钱包一次的稀有操作,独立限流桶,避免与频繁的握手互相挤占配额。
-  if (path === '/v1/square/auth/device/register') {
+  if (path === '/square/auth/device/register') {
     await enforceRateLimit(env, `authreg:${ipKey}`, 10, 60);
     return;
   }
-  // 公开只读/自证路由白名单(免会话)。/v1/security/* 在登录前渲染,必须免会话。
+  // 公开只读/自证路由白名单(免会话)。/security/* 在登录前渲染,必须免会话。
   if (
     isWebhook(path) ||
     path === '/health' ||
-    path === '/v1/chain/bootstrap' ||
-    path === '/v1/constitution' ||
-    path.startsWith('/v1/security/')
+    path === '/chain/bootstrap' ||
+    path === '/constitution' ||
+    path.startsWith('/security/')
   ) {
     // 宪法公开只读，无会话门禁；重复访问由 KV 短缓存 + 边缘缓存兜住，不做逐请求限流。
     return;
   }
   // relay 已在模块内按 IP 哈希做原子限流，交易本体也已由钱包签名；避免双重计数。
-  if (path === '/v1/chain/extrinsics/relay') return;
+  if (path === '/chain/extrinsics/relay') return;
   // 结算子接口只给本地部署控制台调用，handler 内用 TOPUP_SETTLE_TOKEN 鉴权，
   // 不套 IP 限流（避免控制台批量补发被节流）。
-  if (path.startsWith('/v1/square/topup/settlement/')) return;
+  if (path.startsWith('/square/topup/settlement/')) return;
   // 充值整片免广场会话:充值是"付款人自掏稳定币给某个公民链账户打公民币",收款方无需
   // 证明账户所有权(同转账),冷钱包本机也没有私钥可签。绑定会话既挡不住抢单(见 orders.ts
   // 时间序防护),又会把冷钱包和代充一起挡死,故整体解除。写接口各自凭 HMAC 付款意图自证,
   // 并在 handler 内按 account_id 再限流一层;这里只做 IP 维度的量控。
-  if (path.startsWith('/v1/square/topup/')) {
+  if (path.startsWith('/square/topup/')) {
     await enforceRateLimit(env, `topup:${ipKey}`, 60, 60);
     return;
   }
@@ -140,40 +140,40 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
 }
 
 function isWebhook(path: string): boolean {
-  return path === '/v1/square/uploads/stream/webhook';
+  return path === '/square/uploads/stream/webhook';
 }
 
 function requiresDeviceProof(path: string, method: string): boolean {
-  if (path.startsWith('/v1/square/auth/')) return false;
-  if (path.startsWith('/v1/square/account/delete')) return false;
+  if (path.startsWith('/square/auth/')) return false;
+  if (path.startsWith('/square/account/delete')) return false;
   // 这些回执对应的链上业务已经由账户签名并 finalized；再次要求设备签名会让同一业务
   // 产生第二次签名。handler 仍强制校验 Bearer 会话、交易哈希和 finalized 链状态。
   if (
     method === 'POST' &&
-    (path === '/v1/square/membership/confirm' ||
-      path === '/v1/square/creator/subscription/confirm' ||
-      path === '/v1/square/creator/plan')
+    (path === '/square/membership/confirm' ||
+      path === '/square/creator/subscription/confirm' ||
+      path === '/square/creator/plan')
   ) {
     return false;
   }
   // Image.network 只能稳定携带 Bearer header；资料媒体仍由 handler 强制校验钱包
   // session，但不要求它动态生成 P-256 请求签名。
-  if (path.startsWith('/v1/square/media/')) return false;
-  if (path.startsWith('/v1/chat/')) return true;
-  if (path === '/v1/chain/extrinsics/relay') return true;
-  return path.startsWith('/v1/square/') && method !== 'OPTIONS';
+  if (path.startsWith('/square/media/')) return false;
+  if (path.startsWith('/chat/')) return true;
+  if (path === '/chain/extrinsics/relay') return true;
+  return path.startsWith('/square/') && method !== 'OPTIONS';
 }
 
 function routeRate(path: string, method: string): { key: string; limit: number; seconds: number } {
-  if (path === '/v1/square/uploads/prepare') return { key: 'upload', limit: 30, seconds: 3600 };
-  if (path === '/v1/square/contacts' && method === 'GET') {
+  if (path === '/square/uploads/prepare') return { key: 'upload', limit: 30, seconds: 3600 };
+  if (path === '/square/contacts' && method === 'GET') {
     return { key: 'contacts_read', limit: 60, seconds: 60 };
   }
-  if (path.startsWith('/v1/square/contacts/')) {
+  if (path.startsWith('/square/contacts/')) {
     return { key: 'contacts_write', limit: 60, seconds: 60 };
   }
-  if (path === '/v1/chat/ws') return { key: 'chat_ws', limit: 12, seconds: 60 };
-  if (path.startsWith('/v1/chat/')) return { key: 'chat', limit: 120, seconds: 60 };
+  if (path === '/chat/ws') return { key: 'chat_ws', limit: 12, seconds: 60 };
+  if (path.startsWith('/chat/')) return { key: 'chat', limit: 120, seconds: 60 };
   if (method === 'GET') return { key: 'read', limit: 120, seconds: 60 };
   return { key: 'write', limit: 30, seconds: 60 };
 }

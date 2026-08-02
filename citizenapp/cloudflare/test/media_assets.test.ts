@@ -18,7 +18,7 @@ describe('Cloudflare media assets', () => {
       contentType: 'image/webp',
       byteSize: 1024,
       maxDurationSeconds: 60,
-      workerUploadUrl: 'https://worker.test/v1/square/uploads/media?upload_id=squ_dev&media_index=0'
+      workerUploadUrl: 'https://worker.test/square/uploads/media?upload_id=squ_dev&media_index=0'
     });
 
     expect(plan).toMatchObject({
@@ -27,7 +27,7 @@ describe('Cloudflare media assets', () => {
       upload_method: 'worker',
       asset_state: 'prepared'
     });
-    expect(plan.upload_url).toContain('/v1/square/uploads/media');
+    expect(plan.upload_url).toContain('/square/uploads/media');
   });
 
   it('uses Stream TUS for every video size', async () => {
@@ -53,7 +53,7 @@ describe('Cloudflare media assets', () => {
       contentType: 'video/mp4',
       byteSize: 40 * 1024 * 1024,
       maxDurationSeconds: 10_800,
-      workerUploadUrl: 'https://worker.test/v1/square/uploads/media'
+      workerUploadUrl: 'https://worker.test/square/uploads/media'
     });
 
     expect(plan).toMatchObject({

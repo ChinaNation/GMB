@@ -83,7 +83,7 @@
 
 ## Worker 第 2 步实施记录（2026-07-29）
 
-- 新增 `GET /v1/square/posts/self`：必须通过 Bearer session、链上当前绑定复查和 P-256
+- 新增 `GET /square/posts/self`：必须通过 Bearer session、链上当前绑定复查和 P-256
   设备请求证明；查询属主只取 `session.cid_number`，每页最多 5 条，按
   `(created_at DESC,post_id DESC)` 稳定游标分页，不接受客户端自报 CID。
 - 回灌只返回本人 `published` 内容的原始 `manifest_bytes_base64`、不可变发布字段和
@@ -217,7 +217,7 @@
 
 ## 关闭前复查修复第 3 步（2026-07-29）
 
-- 修复注销后的本地资料缓存漏删：`CitizenProfileCache` v3 的键是 `cid_number`，注销编排
+- 修复注销后的本地资料缓存漏删：`CitizenProfileCache` 的键是 `cid_number`，注销编排
   现改为 `clear(cid_number)`，不再错误传入当前授权 `account_id`。
 - API Session 与 Chat 本地数据仍按 `account_id` 清理，广场本人副本按 CID 清理，原生
   设备子钥按 `walletIndex` 清理；只修正资料缓存参数，没有扩大其它模块边界。

@@ -78,9 +78,9 @@ fn year_proposal_counter_no_longer_capped_at_one_million() {
     new_test_ext().execute_with(|| {
         // 先创建一条让 CurrentProposalYear 进入 2026 分支(否则 stored_year=0 触发重置)
         let _ = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
-        // 强制把 YearProposalCounter 设为 v0 旧 cap,看新代码会不会再拒
+        // 强制把 YearProposalCounter 设为历史上限值，确认当前代码不会再拒绝。
         YearProposalCounter::<Test>::put(1_000_000u32);
-        // 仍能成功创建(v0 在此处会 ProposalIdOverflow)
+        // 当前实现仍能成功创建；历史实现会在此处返回 ProposalIdOverflow。
         let id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
         let display = ProposalDisplayId::<Test>::get(id).unwrap();
         assert_eq!(display.seq_in_year, 1_000_000);

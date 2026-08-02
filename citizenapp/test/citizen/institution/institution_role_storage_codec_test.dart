@@ -20,8 +20,8 @@ void main() {
 
   Map<String, dynamic> readRolePermissionFixture() {
     final candidates = [
-      File('../memory/06-quality/fixtures/institution_role_permission_v1.json'),
-      File('memory/06-quality/fixtures/institution_role_permission_v1.json'),
+      File('../memory/06-quality/fixtures/institution_role_permission.json'),
+      File('memory/06-quality/fixtures/institution_role_permission.json'),
     ];
     final file = candidates.firstWhere((candidate) => candidate.existsSync());
     return jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;

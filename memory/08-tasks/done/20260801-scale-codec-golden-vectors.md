@@ -1,6 +1,6 @@
 # SCALE 编码原语跨端金标
 
-状态：open（2026-08-01 立项，由 20260801-golden-vectors-and-test-coverage 第 2 步发现）
+状态：completed（2026-08-01；跨端金标、解码失败关闭和 CI 门禁全部完成）
 
 ## 缺陷
 

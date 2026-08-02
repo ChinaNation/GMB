@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 const _account5 =
@@ -29,9 +30,11 @@ void main() {
     ResolvedIdentity? result,
     bool throwIt = false,
     void Function(int)? onResolve,
+    ChainRpc? chainRpc,
   }) {
     return IdentityAccountCache(
       resolver: _FakeResolver(result, throwIt: throwIt, onResolve: onResolve),
+      chainRpc: chainRpc,
     );
   }
 
@@ -74,6 +77,19 @@ void main() {
     expect(await c.accountId(), _account5);
   });
 
+  test('binding() 只组合公开 finalized 身份与创世，不读取钱包私钥', () async {
+    final c = cache(
+      result: _identity(_account5),
+      chainRpc: _FakeChainRpc(),
+    );
+    final binding = await c.binding();
+    expect(binding, isNotNull);
+    expect(binding!.accountId, _account5);
+    expect(binding.cidNumber, 'CID-TEST');
+    expect(binding.bindingRevision, 1);
+    expect(binding.genesisHash, '0x${'ab' * 32}');
+  });
+
   test('allowChainRead=false 且无缓存：绝不链读并返回 null', () async {
     var calls = 0;
     final c = cache(result: _identity(_account5), onResolve: (n) => calls = n);
@@ -88,6 +104,13 @@ void main() {
     final r = await c.resolve(allowChainRead: false);
     expect(r!.accountId, _account5, reason: '命中缓存不受 allowChainRead 影响');
   });
+}
+
+class _FakeChainRpc extends ChainRpc {
+  @override
+  Future<Uint8List> fetchGenesisHash() async => Uint8List.fromList(
+        List<int>.filled(32, 0xab),
+      );
 }
 
 class _FakeResolver extends IdentityAccountResolver {

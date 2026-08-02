@@ -52,6 +52,6 @@
 - 2026-07-03：后端全量返回 43 省联邦注册局管理员目录；当前实现联合读取 `AdminAccounts` 和 `InstitutionRoleAssignments`，不落本地权限缓存。
 - 2026-07-03：前端联邦注册局、市注册局和注册局工作台本机构管理员表格停止嵌入黑色管理员卡片；passkey 按钮统一显示 `密钥`；非操作列点击弹完整信息。
 - 2026-07-03：文档已同步更新 `memory/01-architecture/onchina/ONCHINA_TECHNICAL.md` 与 `memory/01-architecture/onchina/README.md`，说明注册局表格化、FRG 全量目录和链上真源边界。
-- 2026-07-03：真实运行态验收使用临时 OnChina 实例 `127.0.0.1:8976` + 临时内嵌 PostgreSQL `55433` + 本地链 RPC `127.0.0.1:9944`；`/api/v1/admin/federal-registry-admins` 返回 `215` 条、`43` 个省、每省 `5` 人，中枢省 `5` 人排在前 5 条。
-- 2026-07-03：会话校验 `/api/v1/admin/auth/check` 确认临时 FRG 管理员登录态返回 `institution_code=FRG`、`scope_province_name=中枢省`、`cid_short_name=联邦注册局`、`workspace_kind=registry`，并下发联邦/市注册局管理能力位。
+- 2026-07-03：真实运行态验收使用临时 OnChina 实例 `127.0.0.1:8976` + 临时内嵌 PostgreSQL `55433` + 本地链 RPC `127.0.0.1:9944`；`/api/admin/federal-registry-admins` 返回 `215` 条、`43` 个省、每省 `5` 人，中枢省 `5` 人排在前 5 条。
+- 2026-07-03：会话校验 `/api/admin/auth/check` 确认临时 FRG 管理员登录态返回 `institution_code=FRG`、`scope_province_name=中枢省`、`cid_short_name=联邦注册局`、`workspace_kind=registry`，并下发联邦/市注册局管理能力位。
 - 2026-07-03：前端 dist 静态托管验证通过，根页面引用新资产 `assets/index-n3xrpt25.js`，该资产 HTTP 200。

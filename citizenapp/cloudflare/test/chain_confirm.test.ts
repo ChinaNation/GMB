@@ -68,7 +68,7 @@ describe("square chain confirmation", () => {
   it("confirms completed upload and writes published post", async () => {
     const db = new FakeDb();
     const manifestText = JSON.stringify({
-      schema: "citizenapp.square.post.v1",
+      schema: "citizenapp.square.post",
       account_id: accountId,
       post_category: "normal",
       text: "普通动态",
@@ -279,7 +279,7 @@ describe("square chain confirmation", () => {
     });
     const r2 = new FakeR2({
       [manifestKey]: JSON.stringify({
-        schema: "citizenapp.square.post.v1",
+        schema: "citizenapp.square.post",
         account_id: accountId,
         post_category: "normal",
         text: "旧动态",

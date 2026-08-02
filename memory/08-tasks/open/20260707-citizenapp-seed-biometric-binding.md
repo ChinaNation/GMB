@@ -5,7 +5,7 @@
 
 ## 1. 问题定位（已实证）
 
-- seed（`wallet.secret.$id.seed_hex.v1`）与助记词（`wallet.secret.$id.mnemonic.v1`）存 `flutter_secure_storage ^9.2.2`，**全项目 5 处实例均无 options**，Android 默认 = Keystore 包 AES 密钥但**未绑定用户认证**；`local_auth` 结果只是 `WalletManager._authenticateIfSupported` 的 UI 布尔值，root/hook 绕过 UI 直接读即解密。
+- seed（`wallet.secret.$id.seed_hex`）与助记词（`wallet.secret.$id.mnemonic`）存 `flutter_secure_storage ^9.2.2`，**全项目 5 处实例均无 options**，Android 默认 = Keystore 包 AES 密钥但**未绑定用户认证**；`local_auth` 结果只是 `WalletManager._authenticateIfSupported` 的 UI 布尔值，root/hook 绕过 UI 直接读即解密。
 - `flutter_secure_storage` 不暴露用户认证绑定 → 换后端。
 - 收敛面封闭：seed/助记词读写全在 `WalletManager` 6 私有方法（wallet_manager.dart:556-699）。**另 4 处 `FlutterSecureStorage`（main.dart:156 device_lock、app_lock PIN、user.dart、attestation）存非密钥材料，不纳入绑定**。
 - 平台：iOS 最低版本 16.0；Android compileSdk 36，minSdk 需 ≥ 23。
@@ -51,7 +51,7 @@ abstract interface class SecureSeedStore {
 }
 ```
 - 后端 `BiometricSecureSeedStore`：seedVault/recoveryVault 各一组 `getStorage` 配置（§3）。
-- 存储文件名（干净命名，无 v1/v2 兼容包袱）：seedVault `wallet_seed_$id`，recoveryVault `wallet_recovery_$id`（每钱包一 keystore key，delete=删该文件；失效爆炸半径限单钱包）。
+- 存储文件名（干净命名，无版本化兼容包袱）：seedVault `wallet_seed_$id`，recoveryVault `wallet_recovery_$id`（每钱包一 keystore key，delete=删该文件；失效爆炸半径限单钱包）。
 - 错误类型：`SeedKeyInvalidated`（触发自愈）/ `AuthCancelled`（userCanceled/canceled/timeout → 中止）/ `NoDeviceCredential`（无锁屏 → fail-closed）。
 
 ## 5. 自愈流程（见状态机图）

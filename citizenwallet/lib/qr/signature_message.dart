@@ -19,5 +19,5 @@ String buildSignatureMessage({
     throw const FormatException('principal 必须是小写 0x 加 64 位十六进制');
   }
   final pp = principal.substring(2);
-  return '${QrProtocols.v1}|${kind.code}|$id|$sys|$exp|$pp';
+  return '${QrProtocols.qrV1}|${kind.code}|$id|$sys|$exp|$pp';
 }

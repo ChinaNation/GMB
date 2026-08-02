@@ -12,7 +12,7 @@
 
 ## 分阶段
 
-1. citizenweb:删死资源(vite/react.svg、hero.png、icons.svg)、qrV1.ts→qr-v1.ts、QrScannerModal→QRScannerModal、RosetteBadge→IdentityBadge、IdentityTier→IdentityLevel、VITE_CITIZENAPP_SQUARE_API_BASE_URL→VITE_SQUARE_API_BASE_URL、文案术语统一(储委会/储行/公民链/去中英硬空格)、重写模板 README。
+1. citizenweb：删死资源（vite/react.svg、hero.png、icons.svg）、删除官网独立 QR helper、QrScannerModal→QRScannerModal、RosetteBadge→IdentityBadge、IdentityTier→IdentityLevel、VITE_CITIZENAPP_SQUARE_API_BASE_URL→VITE_SQUARE_API_BASE_URL、文案术语统一（储委会/储行/公民链/去中英硬空格）、重写模板 README。
 2. scripts/docs/Docker/CI:拼音脚本改英文、.sh kebab、router/context/guardrails 路径(citizencode→onchina 等)、docs 中文资源名→英文、Dockerfile /polkadot→/citizenchain+bin、根 Cargo 空 members、CI 改名。
 3. cloudflare:CITIZEN_CHAIN_*→CHAIN_*、CITIZENAPP_MEMBERSHIP_*→MEMBERSHIP_*、包名、FEED_CACHE→SQUARE_CACHE、STRIPE_DEV_CHECKOUT_PROXY→STRIPE_DEV_PROXY、checkout.ts→subscribe.ts、stripe.ts→webhook.ts、hex/scale helper 收敛 shared 单源。
 4. smoldotdart:删重复 rust//native/、死构建脚本、ffigen 死配置、pubspec 上游元数据、废弃 FFI 同步导出与 Dart 封装、dead_code DTO/error。
@@ -26,7 +26,7 @@
 ## 执行结果(2026-07-11 部分完成)
 
 **已完成并独立验证 GREEN:**
-- citizenweb:删 4 死资源(vite/react.svg、hero.png、icons.svg)、qrV1.ts→qr-v1.ts、QrScannerModal→QRScannerModal、RosetteBadge→IdentityBadge、IdentityTier→IdentityLevel、VITE 环境变量去冗余、术语统一(储委会/储行/公民链/去中英硬空格)。`npm run build` GREEN。
+- citizenweb：删 4 个死资源（vite/react.svg、hero.png、icons.svg）、删除官网独立 QR helper、QrScannerModal→QRScannerModal、RosetteBadge→IdentityBadge、IdentityTier→IdentityLevel、VITE 环境变量去冗余、术语统一（储委会/储行/公民链/去中英硬空格）。`npm run build` GREEN。
 - cloudflare:CITIZEN_CHAIN_*→CHAIN_*、CITIZENAPP_MEMBERSHIP_*→MEMBERSHIP_*、包名→citizenapp-square-api、FEED_CACHE→SQUARE_CACHE、STRIPE_DEV_CHECKOUT_PROXY→STRIPE_DEV_PROXY、checkout.ts→subscribe.ts、stripe.ts→webhook.ts(含测试)。`tsc --noEmit` GREEN。
 - Dockerfile 重写(/polkadot→/citizenchain、bin node→citizenchain);docs/国旗.png→flag.png、项目讲解.pptx→project-overview.pptx;CI citizenchain.yml→citizenchain-ci.yml;CITIZENPASSPORT_TECHNICAL.md china.sqlite→citizenchain/onchina/src/cid/china/china.sqlite;7 个脚本改名(fuwuqi/zhujichi/gmb→英文、.sh kebab)+ 引用更新;Codex→Claude。
 - smoldotdart:删死重复 rust//native/ 目录 + 死构建脚本 + 死 ffigen 配置;修 pubspec 上游 polkadart 元数据、smoldot_light 导入示例、citizenapp/rust authors。

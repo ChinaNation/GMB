@@ -33,7 +33,7 @@ const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
 const TAG_PUBLIC_MANAGE: &[u8] = b"pub-mgmt";
 const TAG_PRIVATE_MANAGE: &[u8] = b"pri-mgmt";
 
-/// 提案展示号(双层 ID v1):`ProposalDisplayId[id]` 反查值。
+/// 提案展示号（双层 ID）：`ProposalDisplayId[id]` 反查值。
 ///
 /// 主键 `proposal_id` 是全局单调 u64;展示号通过本结构持有
 /// `(year, seq_in_year)`,渲染层把它拼成 "2026000123" 风格。
@@ -276,7 +276,7 @@ fn is_institution_manage_proposal(proposal_id: u64) -> bool {
 /// 分页查询提案列表(从 start_id 往前 count 个,按 ID 倒序)。
 /// 自动过滤多签管理提案(创建/关闭多签账户),这些在多签账户详情页单独展示。
 ///
-/// 双层 ID v1:主键 0 起单调累加,所以下界用 0(不再按年份切)。
+/// 双层 ID：主键从 0 起单调累加，所以下界用 0（不再按年份切）。
 pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResult, String> {
     let mut items = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
@@ -305,7 +305,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     },
                 };
                 let cid_full_name = resolve_cid_full_name_by_subjects(&meta.subject_cid_numbers);
-                // 双层 ID v1:展示号从 ProposalDisplayId 反查;查不到 fallback `#id`
+                // 双层 ID：展示号从 ProposalDisplayId 反查；查不到时回退为 `#id`。
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
 
                 items.push(ProposalListItem {
@@ -332,7 +332,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
         id -= 1;
     }
 
-    // 双层 ID v1:主键单调,下界 0
+    // 双层 ID：主键单调，下界为 0。
     let has_more = min_id > 0;
 
     Ok(ProposalPageResult {
@@ -494,7 +494,7 @@ pub fn fetch_institution_proposal_page(
     let mut items = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    // 双层 ID v1:走 ProposalsByCid 反向索引,O(本机构提案数),
+    // 双层 ID：走 ProposalsByCid 反向索引，复杂度为 O（本机构提案数），
     // 不再扫主键 + 客户端过滤。
     let mut ids = fetch_proposals_by_cid(cid_number)?;
     ids.sort_by(|a, b| b.cmp(a)); // 降序(主键单调,降序即按时间倒序)
@@ -1094,7 +1094,7 @@ fn decode_subject_cid_numbers(data: &[u8], offset: usize) -> Option<(Vec<String>
 
 // ──── 工具函数 ────
 
-/// 提案展示号格式化(双层 ID v1):
+/// 提案展示号格式化（双层 ID）：
 ///   主键 `proposal_id` 是单调 u64,与展示号解耦。展示号通过链上
 ///   `ProposalDisplayId[id] = ProposalDisplayMeta { year, seq_in_year }` 反查。
 ///

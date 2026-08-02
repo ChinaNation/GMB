@@ -82,6 +82,6 @@ Mobile Agent — citizenapp：
 - CitizenApp 不提供举报功能。
 - 彻底删除资料页中的举报菜单、枚举、回调、占位提示、测试断言、注释和文档描述，不保留禁用分支或兼容代码。
 - 已删除 `ProfileMenuAction.report`、`onReport`、他人主页举报菜单及调用；他人主页三点菜单现在只显示二维码。
-- Worker 同步删除 `/v1/square/reports`、`reportRoute` 和推荐信号中的 `report` 类型，统一路由限制表不再登记旧接口；统一协议文档已删除旧契约。
+- Worker 同步删除 `/square/reports`、`reportRoute` 和推荐信号中的 `report` 类型，统一路由限制表不再登记旧接口；统一协议文档已删除旧契约。
 - 已同步更新资料页技术文档与 Widget 测试；资料页 44 项测试、Worker 20 个测试文件 124 项、Flutter 静态分析和 TypeScript 类型检查全部通过，代码与测试中不存在举报功能残留。
 - staging Worker 已部署版本 `36a189ff-3f8f-42c7-8d1b-2f33ed65563a`，production Worker 已部署版本 `b102cd04-be4e-482a-a534-5c3d031f1982`。production 真实请求旧举报接口返回 `404 route_not_found`，健康检查返回 200；staging 未登录请求由 Access 返回预期 302。

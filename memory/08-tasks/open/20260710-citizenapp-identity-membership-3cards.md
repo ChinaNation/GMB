@@ -42,7 +42,7 @@
 | 已订阅 · 自动续费中（未取消） | 取消订阅 |
 | 已取消 · 但付费期未到期 | 续订会员 |
 
-- 判定数据源（worker `GET /v1/square/membership` 已返回，见 `cloudflare/src/membership/service.ts::membershipRoute`）：
+- 判定数据源（worker `GET /square/membership` 已返回，见 `cloudflare/src/membership/service.ts::membershipRoute`）：
   - `subscription_active`（bool）：是否已订阅且未过期。
   - `membership.cancel_at_period_end`（0/1）：是否已取消到期终止。
 - 状态机：

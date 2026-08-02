@@ -20,7 +20,7 @@
 ## 第 1 步「关注」——完成并验证（2026-07-21，主检出）
 **改动**（纯 App，后端/链端零改动）：
 - `citizenapp/lib/8964/pages/square_home_page.dart`：删 `_filterPosts`，改 `_composeFeed(serverPosts)`——`following` 直接
-  渲染服务端 `/v1/square/feed/following`（已 JOIN `square_follows`，动态+文章都在）；其余 5 分类行为不变（对
+  渲染服务端 `/square/feed/following`（已 JOIN `square_follows`，动态+文章都在）；其余 5 分类行为不变（对
   `merged=[本地草稿+服务端+种子]` 过滤），仅 following 排除本地/种子。
 - `citizenapp/test/8964/square_home_page_test.dart`：加 `_KindFeedSource`（按 feedKind 返回）+ 用例「渲染服务端关注帖
   (动态+文章)、本地种子不混入」。
@@ -28,7 +28,7 @@
 `dart format` 过；全仓无 `_filterPosts` 残留。取关即时性走方案 A（切 tab 重载 + 下拉刷新）。
 
 后端现状（已核实，Cloudflare 未改动）：`square_follows(owner_account,followed_account,created_at)` +
-`POST/DELETE /v1/square/follows` + `GET /v1/square/feed/following`（JOIN，不按 content_format 过滤）。
+`POST/DELETE /square/follows` + `GET /square/feed/following`（JOIN，不按 content_format 过滤）。
 已知限制（P2）：feed 端点无 keyset 游标（只 limit，还被浏览额度压缩）；取关需下拉刷新才即时。
 
 ## 第 2 步「通知」——设计已定稿并确认；分 2a/2b/2c
@@ -42,9 +42,9 @@
 - `migrations/0001_square_core.sql`：`square_follows` 建表内加 `notify_enabled INTEGER NOT NULL DEFAULT 1` 列（关注即默认开）。零用户开发期直接改建表脚本、整库重建，不走增量迁移。
 - `profiles/repository.ts`：`isNotifying`（已关注且 notify_enabled=1）+ `setFollowNotify`（UPDATE，返回是否命中关注）。
 - `profiles/service.ts`：`buildProfileResponse` 并发读 + 回 `is_notifying`；`types.ts` `UserProfileResponse` 加 `is_notifying`。
-- `feeds/follows.ts`：`setFollowNotifyRoute`（`PUT /v1/square/follows/:account/notify {enabled}`，未关注 409 not_following）。
-- `routes.ts` 加 PUT 分支；`limits/catalog.ts` 注册 `PUT /^\/v1\/square\/follows\/[^/]+\/notify$/`（否则 404）。
-- 设备证明：该 PUT 命中 `/v1/square/*` 通配→需 P-256 设备签名，客户端 `_putJson` 已带（同 follow）。
+- `feeds/follows.ts`：`setFollowNotifyRoute`（`PUT /square/follows/:account/notify {enabled}`，未关注 409 not_following）。
+- `routes.ts` 加 PUT 分支；`limits/catalog.ts` 注册 `PUT /^\/square\/follows\/[^/]+\/notify$/`（否则 404）。
+- 设备证明：该 PUT 命中 `/square/*` 通配→需 P-256 设备签名，客户端 `_putJson` 已带（同 follow）。
 **Flutter**：
 - `citizen_profile.dart`：加 `isNotifying` 字段 + fromJson/toJson/copyWith。
 - `square_api_client.dart` + `citizen_profile_api.dart`：`setNotify({session,followedAccount,enabled})` 走 `_putJson`。
@@ -55,9 +55,9 @@
 ### 2b 双游标红点 + 双徽章 + 清零（拉模型）—— 完成并验证（2026-07-21，主检出）
 **Worker**：
 - `migrations/0001_square_core.sql`：`square_follows` 表后新增 `square_notify_reads(owner_account PK, last_seen_square_at, last_seen_following_at DEFAULT 0)`（同折进核心建表脚本，非增量迁移；`db:local` 执行 0001 整库重建即得）。
-- `feeds/notify.ts`：`GET /v1/square/notify/unread → {square_unread,following_unread}`（`square_posts JOIN square_follows`，`notify_enabled=1` 且
-  `created_at > 游标`，无已读行游标视 0）；`POST /v1/square/notify/read {scope}`（upsert 只推进对应游标到 now，另一游标不动）。
-- `routes.ts` + `limits/catalog.ts` 注册两路由；均走 `/v1/square/*` 设备证明（客户端 `_getJson`/`_postJson` 已带）。
+- `feeds/notify.ts`：`GET /square/notify/unread → {square_unread,following_unread}`（`square_posts JOIN square_follows`，`notify_enabled=1` 且
+  `created_at > 游标`，无已读行游标视 0）；`POST /square/notify/read {scope}`（upsert 只推进对应游标到 now，另一游标不动）。
+- `routes.ts` + `limits/catalog.ts` 注册两路由；均走 `/square/*` 设备证明（客户端 `_getJson`/`_postJson` 已带）。
 **Flutter**：
 - `square_api_client.dart`：`fetchNotifyUnread`/`markNotifyRead`。
 - `square_home_page.dart`：45s 轮询 `_refreshNotify`（仅 `_feedSource is SquareApiClient` 生产态开启，fake 测试跳过不触网）；
@@ -128,21 +128,21 @@
 - App：Firebase 配置已内嵌；首启过 `AppPermissionGate` 授通知权限即触发设备注册预热。
 
 **关注（无需推送/队列）**
-1. 账户 A 进 B 主页点关注（乐观高亮，`POST /v1/square/follows`）。
+1. 账户 A 进 B 主页点关注（乐观高亮，`POST /square/follows`）。
 2. B 发一条动态 + 一篇文章。
-3. A 广场→「关注」子 tab：应见 B 的动态卡+文章卡（服务端 `GET /v1/square/feed/following` JOIN 结果）。
+3. A 广场→「关注」子 tab：应见 B 的动态卡+文章卡（服务端 `GET /square/feed/following` JOIN 结果）。
 4. A 取关 B → 下拉刷新 → 消失。
-- 直查：带 A session `GET /v1/square/feed/following` 返回 B 的已发布帖。
+- 直查：带 A session `GET /square/feed/following` 返回 B 的已发布帖。
 
 **通知·红点（拉模型，无需推送，最易验）**
 1. A 关注 B（默认开通知）。A 停在非广场 tab。
 2. B 发帖 → 约 45s 内（或手动切 tab）A 底部「广场」tab 出现红点数字。
 3. A 进广场 → 广场红点清（`POST notify/read scope=square`）；此时「关注」子 tab 若有新帖仍显红点。
 4. A 点「关注」子 tab → 关注红点清（scope=following）。**只进广场不进关注→广场清、关注留**。
-- 直查：带 A session `GET /v1/square/notify/unread` → `{square_unread, following_unread}`；铃铛静音 B 后该计数应不含 B 的帖。
+- 直查：带 A session `GET /square/notify/unread` → `{square_unread, following_unread}`；铃铛静音 B 后该计数应不含 B 的帖。
 
 **通知·铃铛静音**
-- A 在 B 主页点铃铛关 → `is_notifying` 转灰（`PUT /v1/square/follows/{B}/notify {enabled:false}`）；B 再发帖不进 A 红点/推送，但仍在关注流。未关注时点铃铛 → 409 提示先关注。
+- A 在 B 主页点铃铛关 → `is_notifying` 转灰（`PUT /square/follows/{B}/notify {enabled:false}`）；B 再发帖不进 A 红点/推送，但仍在关注流。未关注时点铃铛 → 409 提示先关注。
 
 **通知·系统推送（需真机 + 队列）**
 - 前置：A 真机启动过 App（预热注册设备 token）、系统通知开关开、未静音 B。

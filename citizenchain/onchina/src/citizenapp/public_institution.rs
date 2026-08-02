@@ -16,8 +16,8 @@
 //!   账户变化或重同步都会推进版本,客户端据此刷新。
 //!
 //! 路由(挂 app_routes,非 admin):
-//!   GET /api/v1/app/public-institutions?province_name=&city_name=&since_version=&after_cid=&page_size=
-//!   GET /api/v1/app/public-institutions/version?province_name=&city_name=
+//!   GET /api/app/public-institutions?province_name=&city_name=&since_version=&after_cid=&page_size=
+//!   GET /api/app/public-institutions/version?province_name=&city_name=
 
 use std::collections::HashMap;
 
@@ -152,7 +152,7 @@ pub(crate) struct PublicInstitutionListQuery {
     pub page_size: Option<usize>,
 }
 
-/// GET /api/v1/app/public-institutions —— 匿名公权机构目录(keyset 翻页 + 可选增量)。
+/// GET /api/app/public-institutions —— 匿名公权机构目录(keyset 翻页 + 可选增量)。
 pub(crate) async fn list_public_institutions(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<PublicInstitutionListQuery>,
@@ -270,7 +270,7 @@ struct PublicInstitutionVersion {
     count: i64,
 }
 
-/// GET /api/v1/app/public-institutions/version —— 某省/市目录版本(增量比对用)。
+/// GET /api/app/public-institutions/version —— 某省/市目录版本(增量比对用)。
 pub(crate) async fn public_institutions_version(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<PublicInstitutionVersionQuery>,

@@ -759,7 +759,7 @@ where
 }
 
 /// 创世写入内置公权机构和创世公职人员。
-/// 创世直铸国家/省/市公权机构(ADR-031 v3):纯枚举(primitives 单源)
+/// 创世直铸国家/省/市公权机构（ADR-031）：纯枚举（primitives 单源）。
 /// → 落地存储;账户由 CID 号确定性派生,与 296 常量互不重号。
 fn build_template_institutions<T: public_manage::Config>() {
     primitives::cid::official_derive::for_each_public_institution(|cid, full, short| {
@@ -890,7 +890,7 @@ where
         .expect("china_zf must include FSC");
     insert_fsc_genesis_governance::<T>(fsc_node.cid_number);
 
-    // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 296 + 派生 49,297。
+    // 创世直铸当前国家/省/市公权机构（ADR-031）：常量 296 + 派生 49,297。
     build_template_institutions::<T>();
 
     // 私权创世机构单独进入 private-manage/private-admins；不混入 49,593 个公权机构计数。

@@ -3,9 +3,7 @@
 
 use super::{call_data, signing as runtime_signing, types::ProposeUpgradeRequestResult};
 use crate::{
-    admins::management::activation,
-    governance::registry,
-    governance::signing::{self, VoteSignRequestResult, VoteSubmitResult},
+    governance::signing::{self, VoteSubmitResult},
     home,
 };
 use codec::Decode;
@@ -36,96 +34,6 @@ pub fn get_pow_difficulty_params() -> Result<pow_difficulty::PowDifficultyParams
         return Err("PoW 参数非规范或无效".to_string());
     }
     Ok(params)
-}
-
-fn normalize_signer_public_key(signer_public_key: &str) -> Result<String, String> {
-    crate::shared::validation::normalize_public_key(signer_public_key)
-}
-
-async fn ensure_nrc_activated_admin(
-    app: &AppHandle,
-    signer_public_key: &str,
-) -> Result<String, String> {
-    let nrc_cid_number = registry::governance_overview()
-        .national_councils
-        .first()
-        .map(|item| item.cid_number.clone())
-        .ok_or_else(|| "国家储委会机构常量缺失，无法发起开发升级".to_string())?;
-    let signer_public_key = normalize_signer_public_key(signer_public_key)?;
-    let signer_account_id = signing::signer_account_id_from_public_key(&signer_public_key)?;
-    let admins =
-        activation::get_activated_admins(app.clone(), nrc_cid_number.clone(), None).await?;
-    if admins
-        .iter()
-        .any(|admin| admin.account_id == signer_account_id)
-    {
-        Ok(nrc_cid_number)
-    } else {
-        Err("开发升级仅允许已激活国家储委会管理员发起".to_string())
-    }
-}
-
-/// 构建开发期直接升级签名请求 QR JSON（需要节点运行）。
-#[tauri::command(rename_all = "snake_case")]
-pub async fn build_developer_upgrade_request(
-    app: AppHandle,
-    signer_public_key: String,
-    wasm_path: String,
-    pow_params: pow_difficulty::PowDifficultyParams,
-) -> Result<VoteSignRequestResult, String> {
-    let status = home::current_status(&app)?;
-    if !status.running {
-        return Err("节点未运行，无法构建签名请求".to_string());
-    }
-    let actor_cid_number = ensure_nrc_activated_admin(&app, &signer_public_key).await?;
-    tauri::async_runtime::spawn_blocking(move || {
-        runtime_signing::build_developer_upgrade_sign_request(
-            &signer_public_key,
-            &actor_cid_number,
-            &wasm_path,
-            pow_params,
-        )
-    })
-    .await
-    .map_err(|e| format!("build developer upgrade request task failed: {e}"))?
-}
-
-/// 验证签名响应并提交开发期直接升级。
-#[tauri::command(rename_all = "snake_case")]
-pub async fn submit_developer_upgrade(
-    app: AppHandle,
-    request_id: String,
-    expected_signer_public_key: String,
-    expected_payload_hash: String,
-    wasm_path: String,
-    pow_params: pow_difficulty::PowDifficultyParams,
-    sign_nonce: u32,
-    sign_block_number: u64,
-    response_json: String,
-) -> Result<VoteSubmitResult, String> {
-    let status = home::current_status(&app)?;
-    if !status.running {
-        return Err("节点未运行，无法提交升级".to_string());
-    }
-    let actor_cid_number = ensure_nrc_activated_admin(&app, &expected_signer_public_key).await?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let call_data = call_data::developer_direct_upgrade_from_file(
-            &actor_cid_number,
-            &wasm_path,
-            pow_params,
-        )?;
-        signing::verify_and_submit(
-            &request_id,
-            &expected_signer_public_key,
-            &expected_payload_hash,
-            &call_data,
-            sign_nonce,
-            sign_block_number,
-            &response_json,
-        )
-    })
-    .await
-    .map_err(|e| format!("submit developer upgrade task failed: {e}"))?
 }
 
 /// 构建运行期协议升级提案签名请求 QR JSON（需要节点运行）。

@@ -34,8 +34,9 @@ enum LocalKeyPurpose {
 
 /// 本机当前激活的 CID 钱包绑定元数据。
 ///
-/// 这里只保存公开绑定事实，不保存任何数据密钥。私有数据子钥每次都由当前账户的
-/// child mini-secret 结合本结构直接派生；换绑后不会读取此前账户材料。
+/// 这里只保存公开绑定事实，不保存任何数据密钥。真实数据访问确认缺钥时由当前账户
+/// child 结合本结构派生用途钥并交给独立设备硬件钥封装；已有钥直接静默解封。正式换绑
+/// 交接可在用户确认的交易作用域内显式读取旧、新账户材料。
 class AccountDataBinding {
   const AccountDataBinding({
     required this.genesisHash,

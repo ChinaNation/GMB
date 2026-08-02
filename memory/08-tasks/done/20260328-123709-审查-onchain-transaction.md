@@ -84,7 +84,7 @@
      - `citizenchain/node/backend/src/mining/mining-dashboard/mod.rs:595`
 
 3. 全节点手续费分成继承了 PoW 作者身份信任风险
-   - `OnchainFeeRouter` 通过 `FindAuthor` + `RewardWalletByMiner` 把全节点份额打给作者绑定钱包
+   - `OnchainFeeRouter` 通过 `FindAuthor` + `RewardAccountIdByMiner` 把全节点份额打给作者绑定奖励账户
    - runtime 当前的 `PowDigestAuthor` 只是从 pre-runtime digest 解码 `AccountId`
    - 这意味着本模块的全节点手续费分成继承了 `fullnode-issuance` 同一条作者身份信任边界
    - 位置：

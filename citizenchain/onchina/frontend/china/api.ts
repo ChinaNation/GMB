@@ -31,7 +31,7 @@ export type CidMetaResult = {
 };
 
 export async function getCidMeta(auth: AdminAuth): Promise<CidMetaResult> {
-  return request<CidMetaResult>('/api/v1/admin/cid/meta', {
+  return request<CidMetaResult>('/api/admin/cid/meta', {
     method: 'GET',
     headers: adminHeaders(auth),
   });
@@ -39,7 +39,7 @@ export async function getCidMeta(auth: AdminAuth): Promise<CidMetaResult> {
 
 export async function listCidCities(auth: AdminAuth, province_name: string): Promise<CidCityItem[]> {
   const q = `?province_name=${encodeURIComponent(province_name)}`;
-  return request<CidCityItem[]>(`/api/v1/admin/cid/china/cities${q}`, {
+  return request<CidCityItem[]>(`/api/admin/cid/china/cities${q}`, {
     method: 'GET',
     headers: adminHeaders(auth),
   });
@@ -51,7 +51,7 @@ export async function listCidTowns(
   city_code: string,
 ): Promise<CidTownItem[]> {
   const params = new URLSearchParams({ province_name, city_code });
-  return request<CidTownItem[]>(`/api/v1/admin/cid/china/towns?${params.toString()}`, {
+  return request<CidTownItem[]>(`/api/admin/cid/china/towns?${params.toString()}`, {
     method: 'GET',
     headers: adminHeaders(auth),
   });

@@ -26,7 +26,7 @@
 
 1. **全量改**:citizenapp 热钱包 + citizenwallet 冷钱包一起上 HD,并**同步返工 PQC 线**(ML-DSA 每账户随 junction 重派、金标重钉、QR/FFI 连带)。
 2. **账户模型 = 单主助记词 + `//index` 多账户**:全 App 一套主助记词;「添加钱包/账户」= 加下一 index,**不再生成新助记词**;默认用户 = 最靠前热账户(沿用现规则,身份逻辑相应改)。
-3. **推翻 ADR-022 三不变量**:「sr25519 `fromSeed` 直出 / `AccountSeedV1` 不变 / sr25519 地址逐字节不变」被本卡取代。开发期零用户(memory `in-development-zero-users`)→ **无迁移、直接重派生**。
+3. **推翻 ADR-022 三不变量**:「sr25519 `fromSeed` 直出 / `account_seed` 不变 / sr25519 地址逐字节不变」被本卡取代。开发期零用户(memory `in-development-zero-users`)→ **无迁移、直接重派生**。
 
 ## 路径约定(Phase 0 钉死)
 
@@ -53,7 +53,7 @@
 - [x] **base 一致**:`fromSeed(miniSecret)` == `fromUri(bare)` → `seedFromEntropy==miniSecretFromEntropy`,账户0=bare 逐字节等于现状,//N base 不漂。**「账户0」定义 = bare(不走 //0)。**
 - [x] **seed-only 等价**:`0x<miniSecret>//N == <助记词>//N` → 冷签派生 N 只需 master mini-secret,不解密助记词。
 - [x] **创世护栏**:账户0 派生不变已证 → 任何历史 bare 地址(含 `9c3e…1068`)结构性保留;无需(也无法,缺其助记词)反推 `9c3e` 来源。
-- [x] **ADR-022 §2 修订块** + **PQC card3 取代指针**已落档(ML-DSA 改每账户 `AccountSeedV1_N`→HKDF)。
+- [x] **ADR-022 §2 修订块** + **PQC card3 取代指针**已落档(ML-DSA 改每账户 `account_seed_N`→HKDF)。
 
 ### Phase 1 —— citizenapp 热钱包
 - [ ] 派生核心:`_deriveSr25519FromSeed`→按 index junction 派生;签名 `_keyPairFromSeedHex:727`、自愈 `_selfHealSeedFromMnemonic:707`、设备子钥 `_registerDeviceSubkey:769` 全按 index 派生。

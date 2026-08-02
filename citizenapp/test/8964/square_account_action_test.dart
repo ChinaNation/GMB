@@ -26,7 +26,7 @@ void main() {
     final client = SquareApiClient(
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
-        if (request.url.path == '/v1/square/auth/challenge') {
+        if (request.url.path == '/square/auth/challenge') {
           expect(jsonDecode(request.body)['account_id'], _accountId);
           return http.Response(
             jsonEncode({
@@ -39,7 +39,7 @@ void main() {
             200,
           );
         }
-        if (request.url.path == '/v1/square/auth/session') {
+        if (request.url.path == '/square/auth/session') {
           expect(jsonDecode(request.body)['account_id'], _accountId);
           return http.Response(
             jsonEncode({
@@ -52,7 +52,7 @@ void main() {
             200,
           );
         }
-        if (request.url.path == '/v1/square/account/delete/challenge') {
+        if (request.url.path == '/square/account/delete/challenge') {
           expect(request.headers['authorization'], 'Bearer sqs_test');
           expect(jsonDecode(request.body)['account_id'], _accountId);
           return http.Response(
@@ -66,7 +66,7 @@ void main() {
             200,
           );
         }
-        if (request.url.path == '/v1/square/account/delete') {
+        if (request.url.path == '/square/account/delete') {
           expect(request.headers['authorization'], 'Bearer sqs_test');
           confirmBody = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(jsonEncode({'ok': true}), 200);
@@ -109,7 +109,7 @@ void main() {
       baseUrl: 'https://square.test',
       httpClient: MockClient(
         (request) async {
-          if (request.url.path == '/v1/square/auth/challenge') {
+          if (request.url.path == '/square/auth/challenge') {
             return http.Response(
               jsonEncode({
                 'ok': true,
@@ -121,7 +121,7 @@ void main() {
               200,
             );
           }
-          if (request.url.path == '/v1/square/auth/session') {
+          if (request.url.path == '/square/auth/session') {
             return http.Response(
               jsonEncode({
                 'ok': true,
@@ -165,7 +165,7 @@ void main() {
     final cachedClient = SquareApiClient(
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
-        if (request.url.path == '/v1/square/auth/challenge') {
+        if (request.url.path == '/square/auth/challenge') {
           return http.Response(
             jsonEncode({
               'ok': true,
@@ -199,7 +199,7 @@ void main() {
     final lateClient = SquareApiClient(
       baseUrl: 'https://square.test',
       httpClient: MockClient((request) async {
-        if (request.url.path == '/v1/square/auth/challenge') {
+        if (request.url.path == '/square/auth/challenge') {
           return http.Response(
             jsonEncode({
               'ok': true,

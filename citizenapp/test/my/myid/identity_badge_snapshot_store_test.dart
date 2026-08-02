@@ -44,7 +44,15 @@ void main() {
 
     await preferences.setString(
       key,
-      '{"schema_version":1,"cid_number":"$cidB",'
+      '{"cid_number":"$cidB",'
+      '"identity_level":"voting","updated_at_millis":1}',
+    );
+    expect(await store.read(cidA), isNull);
+    expect(preferences.containsKey(key), isFalse);
+
+    await preferences.setString(
+      key,
+      '{"unexpected":1,"cid_number":"$cidA",'
       '"identity_level":"voting","updated_at_millis":1}',
     );
     expect(await store.read(cidA), isNull);

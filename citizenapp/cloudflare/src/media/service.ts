@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { HttpError, requireSession } from '../shared/http';
 import { resourceLimit } from '../limits/catalog';
 
-const MEDIA_PREFIX = '/v1/square/media/';
+const MEDIA_PREFIX = '/square/media/';
 
 /// 钱包用户资料媒体读取通道：只把 R2 中的头像 / 背景对象按 object_key 直出。
 /// 广场主媒体已经迁移到 Cloudflare Images / Stream，manifest 也不作为公开媒体暴露。

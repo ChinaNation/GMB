@@ -39,7 +39,7 @@ fn leap_year_rules_match_gregorian_calendar() {
 
 #[test]
 fn proposal_id_counter_resets_at_real_utc_year_boundary() {
-    // 双层 ID v1:
+    // 双层 ID：
     // - 主键 NextProposalId 全局单调累加,跨年不重置
     // - 展示号 ProposalDisplayMeta.seq_in_year 跨年自动重置回 0
     // - CurrentProposalYear 跟着系统时间切换
@@ -105,7 +105,7 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
         );
 
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_cid());
-        // 双层 ID v1:主键纯单调,首个提案 = 0;展示号通过 ProposalDisplayId 反查。
+        // 双层 ID：主键纯单调，首个提案 = 0；展示号通过 ProposalDisplayId 反查。
         assert_eq!(proposal_id, 0);
         let display = votingengine::pallet::ProposalDisplayId::<Test>::get(proposal_id)
             .expect("display id present");
@@ -1885,6 +1885,7 @@ fn internal_vote_counts_same_account_id_once_per_role_ticket() {
 #[test]
 fn rebound_wallet_votes_as_canonical_and_old_wallet_loses_power() {
     new_test_ext().execute_with(|| {
+        // 本用例只验证换绑后的岗位投票授权迁移；CID 换绑本身不创建或消费投票。
         reset_internal_callback_state();
         // 岗位快照 3 席（admin(0..2)），阈值 3：中途不会提前达标终结，便于逐条断言。
         set_institution_threshold(public_cid(), 3);

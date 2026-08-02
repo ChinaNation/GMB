@@ -12,7 +12,7 @@
 - 无视频；文章 v1 走 Normal 非竞选；任何会员可发（发布已被 `requireActiveMembership` 会员闸覆盖）。
 
 ## 关键架构口径
-- R2 manifest 保持 schema `citizenapp.square.post.v1`，**只加可选字段** `content_format:'article'`、`title`；普通帖不带 → 默认 normal，旧数据零影响。manifest 被 content_hash 覆盖（上链防篡改）。
+- R2 manifest 保持 schema `citizenapp.square.post`，**只加可选字段** `content_format:'article'`、`title`；普通帖不带 → 默认 normal，旧数据零影响。manifest 被 content_hash 覆盖（上链防篡改）。
 - 首图 = `media_items[0]`，正文图 = `media_items[1..]`，都是 image，不新增媒体类型。
 - D1 `square_posts` 加列 `content_format TEXT NOT NULL DEFAULT 'normal'`、`title TEXT`；confirm 从 manifest 写入。
 - 按作者查加 `content_format` 过滤：文章 Tab=article；帖子 Tab 收紧为 `post_category=normal AND content_format='normal'`。
@@ -41,7 +41,7 @@
 - `posts/repository.ts`（feed 三查询）+ `profiles/repository.ts` `listAuthorPosts`：SELECT 加 `content_format`/`title` 列；`listAuthorPosts` 加 `contentFormat` 过滤参数。
 - `profiles/service.ts` `getUserPostsRoute`：解析 `content_format`（all/normal/article）参数传入，响应带 `content_format`。
 - 测试：`profiles.test.ts` 加 content_format 过滤例（article 只看文章、category=normal+content_format=normal 排除文章）；FakeDb 支持 content_format 过滤 + PostSeed 加列。
-- 边界：链端零改动；manifest schema 保持 v1（加可选字段）；旧数据默认 normal 无影响。
+- 边界：链端零改动；manifest 使用当前严格 schema（加可选字段）；旧数据默认 normal 无影响。
 - 验收：`npm run typecheck` 通过；`npm test` 8 文件 **31/31**（+1）；`npm run migrate:local` 0004 应用成功。
 
 ### 阶段 2（完成，前端数据 + 文章发布）

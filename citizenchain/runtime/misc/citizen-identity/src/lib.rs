@@ -10,6 +10,7 @@ extern crate alloc;
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod migrations;
 pub mod weights;
 
 use alloc::vec::Vec;
@@ -483,6 +484,15 @@ pub struct VotingEligibilityVersion<BlockNumber> {
     pub valid_until_revision: Option<u64>,
 }
 
+/// Polkadot SDK 官方 benchmark helper 模式：在 benchmark externalities 的临时
+/// keystore 中生成 sr25519 签名者并签署真实消息。helper 只能准备计时区间外的夹具，
+/// 不得改变正式验签结果。
+#[cfg(feature = "runtime-benchmarks")]
+pub trait BenchmarkHelper<AccountId, Signature> {
+    fn signer() -> (sp_core::sr25519::Public, AccountId);
+    fn sign(signer: &sp_core::sr25519::Public, message: &[u8]) -> Signature;
+}
+
 pub trait CitizenIdentityAuthority<AccountId, Signature> {
     fn can_manage_voting_identity(
         registrar: &AccountId,
@@ -698,6 +708,10 @@ pub mod pallet {
 
         type CitizenIdentityAuthority: CitizenIdentityAuthority<Self::AccountId, SignatureOf<Self>>;
 
+        /// 只负责为 FRAME benchmark 生成真实账户和签名，不参与生产鉴权。
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: BenchmarkHelper<Self::AccountId, SignatureOf<Self>>;
+
         type OnVotingIdentityRegistered: OnVotingIdentityRegistered<Self::AccountId>
             + OnVotingIdentityRegisteredWeight;
 
@@ -761,6 +775,13 @@ pub mod pallet {
     #[pallet::storage]
     pub type CidRegistry<T: Config> =
         StorageMap<_, Blake2_128Concat, CidNumberBound, CidRecord<BlockNumberFor<T>>, OptionQuery>;
+
+    /// 当前有效(Active)CID 数量:占号 +1、吊销 −1,恒等于 `CidRegistry` 里 Active 记录数。
+    ///
+    /// `CidRegistry` 保留吊销墓碑,直接数键会把墓碑一起算进去;本计数只反映当前有效号,
+    /// 且是定长单值,避免为了拿一个数字去做全表前缀扫描。
+    #[pallet::storage]
+    pub type CidCount<T> = StorageValue<_, u64, ValueQuery>;
 
     #[pallet::storage]
     pub type CountryVotingCount<T> = StorageValue<_, u64, ValueQuery>;
@@ -892,6 +913,8 @@ pub mod pallet {
                 CidByAccountId::<T>::insert(account_id, cid_number);
                 BindingRevisionByCid::<T>::insert(cid_number, 1);
             }
+            // 创世登记全部是 Active(上面逐条断言过 CID 不重复),计数直接取条数。
+            CidCount::<T>::put(self.initial_cid_bindings.len() as u64);
         }
     }
 
@@ -1394,7 +1417,8 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 注册局代 CID 换绑:当前钱包无法签名时，由注册局把永久 CID 换绑到新账户。
+        /// 注册局代 CID 换绑：由有权限注册局把永久 CID 换绑到新账户；无论当前钱包
+        /// 是否可用，本入口都不要求当前账户签名，也不引入换绑投票。
         ///
         /// 匿名 CID 由任一在册 CREG/FRG 办理；实名 CID 必须由本市 CREG 或对应省 FRG
         /// 依其投票身份居住地作用域办理。新账户对 [`CidRebindAuthorization`] 使用
@@ -1644,6 +1668,9 @@ pub mod pallet {
                     debug_assert_eq!(record.status, CidRecordStatus::Active);
                     record.status = CidRecordStatus::Revoked;
                     record.revoked_at = Some(frame_system::Pallet::<T>::block_number());
+                    // 只在真的把一条 Active 记录改成墓碑时减 1；helper 契约要求首个写入
+                    // 之后不可失败，故用 saturating_sub，不做断言也不返回错误。
+                    CidCount::<T>::mutate(|count| *count = count.saturating_sub(1));
                 }
             });
             BindingRevisionByCid::<T>::insert(cid_number, binding_revision);
@@ -1673,6 +1700,8 @@ pub mod pallet {
                             revoked_at: None,
                         },
                     );
+                    // 只有真正新登记才加 1；下面的幂等重入分支不写库，也绝不能计数。
+                    CidCount::<T>::mutate(|count| *count = count.saturating_add(1));
                     Self::deposit_event(Event::<T>::CidOccupied {
                         cid_number: cid_number.clone(),
                         registrar_cid_number: registrar_cid_number.clone(),

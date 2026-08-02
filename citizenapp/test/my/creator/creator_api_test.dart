@@ -110,7 +110,7 @@ void main() {
       tiers: const [tier],
     );
 
-    expect(paths, ['/v1/square/creator/plan']);
+    expect(paths, ['/square/creator/plan']);
     expect(deviceSignCount, 0, reason: 'finalized 后的 Cloudflare 镜像不得产生第二次签名');
   });
 

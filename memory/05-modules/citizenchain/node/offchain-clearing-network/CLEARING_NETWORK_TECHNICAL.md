@@ -4,7 +4,7 @@
 >
 > 本文记录的是旧省储行 L2 gossip 清算网络。当前生产方向已切换为
 > **注册清算行节点**，由收款方清算行接收 CitizenApp 支付意图、生成
-> L2 ACK、打包 `submit_offchain_batch_v2` 并由链上 runtime 原子 settlement。
+> L2 ACK、打包 `submit_offchain_batch` 并由链上 runtime 原子 settlement。
 > 当前入口见 `memory/04-decisions/ADR-007-clearing-bank-three-phase.md`。
 
 ## 1. 概述

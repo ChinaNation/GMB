@@ -76,4 +76,4 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
 6. **金标 + 验证**：Rust 导出 signing golden（op_tag→hash 向量）+ Dart 断言；全量编译/测试/签名 golden + 残留=0。
 
 ## 验收
-- 全仓 `GMB_*_V1` 字符串域残留=0;签名域常量仅存 primitives::sign;治理 5 个签名 golden 逐字节不变（回归证明非破坏治理侧）；7 协议新 op_tag 签名 Rust↔Dart 金标逐字节对齐;链端/node/backend/双钱包全绿。
+- 全仓历史版本化字符串域残留为 0；签名域常量仅存 primitives::sign；治理 5 个签名 golden 逐字节不变（回归证明非破坏治理侧）；7 个 op_tag 签名 Rust↔Dart 金标逐字节对齐；链端/node/backend/双钱包全绿。

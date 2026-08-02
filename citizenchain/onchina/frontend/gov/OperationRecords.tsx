@@ -150,7 +150,7 @@ export const OperationRecords: React.FC<Props> = ({ auth, cidNumber }) => {
     let cancelled = false;
     setLoading(true);
     adminRequest<AuditLogEntry[]>(
-      `/api/v1/admin/audit-logs?target_cid=${encodeURIComponent(cidNumber)}&limit=1000`,
+      `/api/admin/audit-logs?target_cid=${encodeURIComponent(cidNumber)}&limit=1000`,
       auth,
     )
       .then((next) => {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:citizenapp/wallet/core/device_data_key_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 
 void main() {
@@ -106,6 +107,81 @@ void main() {
     test('signRawHex returns 128-hex-char raw signature', () async {
       final hex = await subkey.signRawHex(2, Uint8List.fromList([9]));
       expect(hex.length, 128);
+    });
+  });
+
+  group('DeviceDataKeyVault channel', () {
+    const channel = MethodChannel('org.citizenapp/device_data_key_vault');
+    late List<MethodCall> calls;
+    late DeviceDataKeyVault vault;
+
+    setUp(() {
+      calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+        calls.add(call);
+        switch (call.method) {
+          case 'seal':
+            return 'native-sealed-blob';
+          case 'open':
+            return base64Encode(<int>[7, 8, 9]);
+          case 'delete':
+            return null;
+        }
+        return null;
+      });
+      vault = DeviceDataKeyVault(channel: channel);
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    test('seal/open 逐字节转交明文和 AAD，不触碰钱包通道', () async {
+      final plaintext = Uint8List.fromList(<int>[1, 2, 3]);
+      final aad = Uint8List.fromList(<int>[4, 5, 6]);
+
+      expect(
+        await vault.seal(walletIndex: 3, plaintext: plaintext, aad: aad),
+        'native-sealed-blob',
+      );
+      expect(
+        await vault.open(walletIndex: 3, blob: 'blob', aad: aad),
+        <int>[7, 8, 9],
+      );
+
+      final sealCall = calls.firstWhere((call) => call.method == 'seal');
+      expect(sealCall.arguments['walletIndex'], 3);
+      expect(sealCall.arguments['plaintext'], base64Encode(plaintext));
+      expect(sealCall.arguments['aad'], base64Encode(aad));
+      final openCall = calls.firstWhere((call) => call.method == 'open');
+      expect(openCall.arguments['blob'], 'blob');
+      expect(openCall.arguments['aad'], base64Encode(aad));
+    });
+
+    test('空明文、空 AAD 和负 walletIndex 在原生调用前失败关闭', () async {
+      await expectLater(
+        vault.seal(
+          walletIndex: 1,
+          plaintext: Uint8List(0),
+          aad: Uint8List.fromList(<int>[1]),
+        ),
+        throwsA(isA<DeviceDataKeyVaultException>()),
+      );
+      await expectLater(
+        vault.open(
+          walletIndex: 1,
+          blob: 'blob',
+          aad: Uint8List(0),
+        ),
+        throwsA(isA<DeviceDataKeyVaultException>()),
+      );
+      await expectLater(
+        vault.delete(-1),
+        throwsA(isA<DeviceDataKeyVaultException>()),
+      );
+      expect(calls, isEmpty);
     });
   });
 }

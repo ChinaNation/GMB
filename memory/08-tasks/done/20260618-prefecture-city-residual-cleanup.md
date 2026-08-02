@@ -36,6 +36,6 @@
 - SJ/TW/JS 删001后市码001..N重排连续(15/91/94),towns/villages.city_code 同步,0 孤儿。cities 2941→2938。
 - 重新创世后 `metadata.admin_division_version=1`;`generate_admin_division_bundle.mjs` 已重跑产出版本 1 包(旧地级市名全0、新县市各1)。
 - 一次性迁移脚本已删(变更入 change_log)。
-- 公权机构已在 `20260618-version-reset-v1` 中完成运行库 `reconcile-gov`、`check-gov --strict` 和版本 1 公开包导出;不再存在机构包待重跑状态。
+- 公权机构已在当时的版本重置提交中完成运行库 `reconcile-gov`、`check-gov --strict` 和初始公开包导出；不再存在机构包待重跑状态。
 
 状态:**已并入重新创世版本 1 基线并完成机构包重跑(2026-06-19)**

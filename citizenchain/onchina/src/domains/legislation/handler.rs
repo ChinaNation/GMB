@@ -1,4 +1,4 @@
-//! 立法与表决 HTTP handler(`/api/v1/legislation/*`)。
+//! 立法与表决 HTTP handler(`/api/legislation/*`)。
 //!
 //! 发起/表决产出扫码上链 `sign_request`；CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫响应后通过统一入口提交；
 //! 读法律/提案进度直读链。后端强制:① 登录绑定机构(只有该院管理员可达)② 本机构能否发起该
@@ -87,7 +87,7 @@ fn scope_codes(ctx: &AdminAuthContext) -> (u32, String, String) {
     }
 }
 
-/// GET /api/v1/legislation/laws?tier=&scope_code= —— 本级已生效/在册法律列表。
+/// GET /api/legislation/laws?tier=&scope_code= —— 本级已生效/在册法律列表。
 pub(crate) async fn list_laws(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -117,7 +117,7 @@ struct ProposableCandidateDto {
     vote_types: Vec<u8>,
 }
 
-/// GET /api/v1/legislation/proposable —— 本机构可发起的提案候选(category×tier×voteTypes)。
+/// GET /api/legislation/proposable —— 本机构可发起的提案候选(category×tier×voteTypes)。
 ///
 /// 发起菜单单源自后端 `category::proposable_candidates`(参议会/非立法机构返回空);
 /// 前端据此渲染可选立法动作与表决类型,不复刻分类逻辑。
@@ -145,7 +145,7 @@ pub(crate) async fn list_proposable(
     .into_response()
 }
 
-/// GET /api/v1/legislation/laws/mine —— 本节点绑定机构层级/辖区的全部法律(会话派生 scope,前端不传码)。
+/// GET /api/legislation/laws/mine —— 本节点绑定机构层级/辖区的全部法律(会话派生 scope,前端不传码)。
 ///
 /// 国家级并入宪法(tier 0)+ 国家法律(tier 1);省(2)/市(3)按本级 + 本辖区 china scope 码
 /// (与 precheck/resolve 同口径,解掉前端拿不到 scope_code 的问题)。
@@ -211,7 +211,7 @@ async fn build_law_views(laws: Vec<chain_read::OnChainLaw>) -> Vec<LawView> {
     views
 }
 
-/// GET /api/v1/legislation/laws/:law_id —— 单部法律办理端展示版本全文。
+/// GET /api/legislation/laws/:law_id —— 单部法律办理端展示版本全文。
 pub(crate) async fn law(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -258,7 +258,7 @@ pub(crate) async fn law(
     .into_response()
 }
 
-/// GET /api/v1/legislation/proposals/:proposal_id —— 提案进度只读投影。
+/// GET /api/legislation/proposals/:proposal_id —— 提案进度只读投影。
 pub(crate) async fn get_proposal_state(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -279,7 +279,7 @@ pub(crate) async fn get_proposal_state(
     }
 }
 
-/// POST /api/v1/legislation/propose —— 发起法律案，返回统一链签名准备结果。
+/// POST /api/legislation/propose —— 发起法律案，返回统一链签名准备结果。
 pub(crate) async fn propose_legislation(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -361,7 +361,7 @@ pub(crate) async fn propose_legislation(
     }
 }
 
-/// POST /api/v1/legislation/representative-vote —— 当前代表机构表决。
+/// POST /api/legislation/representative-vote —— 当前代表机构表决。
 pub(crate) async fn cast_representative_vote(
     State(state): State<AppState>,
     headers: HeaderMap,

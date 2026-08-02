@@ -79,7 +79,7 @@ class ChatCrypto {
     if (binding.cidNumber != ownerCidNumber) {
       throw StateError('聊天属主 CID 与当前钱包绑定不一致');
     }
-    final keys = await _walletManager.deriveDataKeysForBinding(
+    final keys = await _walletManager.readDataKeysForBinding(
       binding,
       const <({LocalKeyPurpose purpose, String? context})>[
         (purpose: LocalKeyPurpose.chat, context: null),
@@ -94,7 +94,7 @@ class ChatCrypto {
   /// 不读取“当前激活账户”，因此能在交易提交前同时验证此前密文可解、新密钥可用；
   /// 返回值只在交接内存中使用，不能用于签名或恢复钱包。
   Future<ChatHandoverKeys> handoverKeys(AccountDataBinding binding) async {
-    final keys = await _walletManager.deriveDataKeysForBinding(
+    final keys = await _walletManager.deriveDataKeysForBindingHandover(
       binding,
       const <({LocalKeyPurpose purpose, String? context})>[
         (purpose: LocalKeyPurpose.chat, context: null),

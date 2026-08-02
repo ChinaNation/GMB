@@ -96,7 +96,7 @@ void main() {
     final parsed = QrEnvelope.parse(raw);
     final body = parsed.body as UserContactBody;
 
-    expect(raw.contains(QrProtocol.v1), isTrue,
+    expect(raw.contains(QrProtocol.qrV1), isTrue,
         reason: 'payload should include QR_V1 protocol');
     expect(raw.contains('"k":${QrKind.userContact.code}'), isTrue,
         reason: 'payload should include numeric k=3');

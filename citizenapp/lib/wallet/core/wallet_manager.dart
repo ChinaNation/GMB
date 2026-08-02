@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:bip39/bip39.dart' as bip39;
@@ -9,6 +10,7 @@ import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/security/local_data_key.dart';
+import 'package:citizenapp/wallet/core/device_data_key_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
@@ -107,8 +109,11 @@ class WalletLocalCleanupException implements Exception {
   String toString() => '钱包已删除，但本机安全存储清理未完成：${failures.join('；')}';
 }
 
-/// 通讯录专用密钥材料。材料只从 CID 当前绑定钱包账户的 child mini-secret 派生；
-/// 业务层不能借此签名、恢复钱包或推导其他用途的子钥。
+/// 通讯录专用密钥材料。
+///
+/// 日常读取优先来自已有设备数据钥金库；实际解密发现缺钥时可鉴权一次生成；正式 CID
+/// 换绑交接才允许从旧、新绑定账户 child 派生。业务层不能借此签名、恢复钱包或
+/// 推导其他用途的子钥。
 class ContactKeyMaterial {
   const ContactKeyMaterial({
     required this.encryptionKey,
@@ -127,8 +132,8 @@ class ContactKeyMaterial {
 
 /// 注册 P-256 设备子钥的钩子：给定当前 CID 绑定三元组与一个对绑定消息做当前账户
 /// sr25519 签名的闭包（返回 `0x` hex）。由 app 启动注入实现，避免 wallet/core
-/// 反向依赖 8964 层。**触发时机 = 进入需 CID 页面时按需绑定**（见
-/// [WalletManager.bindDeviceSubkeyToCurrentBinding]），不在钱包创建 / 导入时注册。
+/// 反向依赖 8964 层。只允许由实际会话收到 Worker 的 `device_not_registered`
+/// 后调用；CID finalized、页面门禁与后台预热禁止调用。
 typedef WalletSubkeyRegistrar = Future<void> Function({
   required int walletIndex,
   required String cidNumber,
@@ -169,11 +174,25 @@ class WalletManager {
   /// child，绝不存母种子 / 助记词。
   static SecureSeedStore _store = HardwareBoundSeedVault();
 
-  /// 当前 CID 绑定公开元数据与设备登记幂等标记的安全存储；不保存任何派生数据密钥。
+  /// 当前 CID 绑定公开元数据、设备登记标记与设备硬件钥封装后的用途钥密文。
+  /// 这里只保存不可脱离本机硬件解封的 blob，绝不保存明文用途钥或账户 child。
   static VaultBlobStore _contactKeyStore = SecureStorageBlobStore();
 
   /// 每只热钱包共享一把 P-256 硬件设备子钥，物理键由 walletIndex 隔离。
   static DeviceSubkey _deviceSubkey = DeviceSubkey();
+
+  /// 每只热钱包独立的设备数据钥封装边界；日常静默使用，不读取钱包账户 child。
+  static DeviceDataKeyVault _deviceDataKeyVault = DeviceDataKeyVault();
+
+  /// 本地设备数据钥生成的进程级 single-flight。同一 CID 钱包账户只共享一次钱包
+  /// 解锁；不得与 P-256 设备登记共用状态或失败回滚。
+  static final Map<String, Future<void>> _deviceDataKeyInitializationFlights =
+      <String, Future<void>>{};
+
+  /// P-256 设备登记的进程级 single-flight。只有 Worker 明确报告未登记后才进入；
+  /// 不生成、不删除本地设备数据钥。
+  static final Map<String, Future<void>> _deviceSubkeyRegistrationFlights =
+      <String, Future<void>>{};
 
   @visibleForTesting
   static set debugSeedStore(SecureSeedStore store) => _store = store;
@@ -186,12 +205,17 @@ class WalletManager {
   static set debugDeviceSubkey(DeviceSubkey deviceSubkey) =>
       _deviceSubkey = deviceSubkey;
 
+  @visibleForTesting
+  static set debugDeviceDataKeyVault(DeviceDataKeyVault vault) =>
+      _deviceDataKeyVault = vault;
+
   /// 当前 CID 钱包绑定元数据；只保存公开字段，私有数据子钥不落盘。
   static AccountDataBindingStore get _accountDataBindingStore =>
       AccountDataBindingStore(_LocalKeyBlobStoreAdapter(_contactKeyStore));
 
-  /// 设备子钥绑定钩子（app 启动注入；为空则跳过，用于测试 / 未接后端）。由
-  /// [bindDeviceSubkeyToCurrentBinding] 在进入需 CID 页面时调用，不在钱包创建 / 导入时触发。
+  /// 设备子钥登记钩子（app 启动注入）。只由
+  /// [registerDeviceSubkeyForBinding] 在 Worker 明确报告未登记后调用；未注入时
+  /// fail-closed，禁止写入虚假的本地登记标记。
   /// 「每次动钱动权都验证」现由硬件金库读 child 时的原子生物识别实现,
   /// 不再需要操作层 local_auth 软门禁。
   static WalletSubkeyRegistrar? _subkeyRegistrar;
@@ -376,9 +400,8 @@ class WalletManager {
     );
     try {
       await _verifyWalletPersisted(profile);
-      // 设备子钥**不在此注册**：子钥只服务广场 / 聊天 / 通讯录等需 CID 的场景，而建钱包
-      // 这一刻账户必然还没有 CID（后端 device/register 要求已绑 CID）。只用钱包和交易的
-      // 用户全程不需要子钥，故改为进入需 CID 页面时由门禁按需绑定（懒绑定）。
+      // 设备子钥**不在此注册**：建钱包时账户尚无 CID。已有子钥由业务静默使用，
+      // 实际业务确认缺钥时才鉴权一次生成；页面进入本身绝不读取账户 child。
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
@@ -410,9 +433,8 @@ class WalletManager {
       );
       try {
         await _verifyWalletPersisted(profile);
-        // 与创建同理，设备子钥不在导入时注册：换设备导入的账户可能早已有 CID，也可能
-        // 从未注册过 CID，一律等进入需 CID 页面时由门禁按需绑定（幂等 upsert，绑定即把
-        // 该身份的登录迁到本设备）。
+        // 与创建同理，设备子钥不在导入时注册。换机后已有子钥直接使用；实际业务确认
+        // 本机缺钥时才鉴权一次生成，不能增加页面级授权流程。
       } catch (_) {
         await _rollbackWalletCreation(profile.walletIndex);
         rethrow;
@@ -987,6 +1009,11 @@ class WalletManager {
     if (active == null || !accountIds.contains(active.accountId)) return;
     await _attemptWalletCleanup(
       failures,
+      'CID 设备数据钥(${active.cidNumber})',
+      () => _deleteDeviceKeyMaterial(active),
+    );
+    await _attemptWalletCleanup(
+      failures,
       'CID 当前钱包绑定元数据(${active.cidNumber})',
       _accountDataBindingStore.clearActiveBinding,
     );
@@ -1005,6 +1032,16 @@ class WalletManager {
       failures,
       '设备子钥($walletIndex)',
       () => _deviceSubkey.delete(walletIndex),
+    );
+    await _attemptWalletCleanup(
+      failures,
+      '设备数据钥密文索引($walletIndex)',
+      () => _deleteIndexedDeviceKeyMaterial(walletIndex),
+    );
+    await _attemptWalletCleanup(
+      failures,
+      '设备数据钥硬件钥($walletIndex)',
+      () => _deviceDataKeyVault.delete(walletIndex),
     );
   }
 
@@ -1176,15 +1213,22 @@ class WalletManager {
     await _loadSigningKey(walletIndex);
   }
 
-  /// 读取当前 CID 的通讯录专用密钥。
+  /// 静默读取当前 CID 的通讯录云端用途钥。
   ///
-  /// 密钥只从当前绑定钱包账户 child 派生，不落盘。换绑后的新账户得到不同密钥，
-  /// 因而不能解密此前绑定版本的通讯录密文。
+  /// 已有用途钥从本机设备数据钥金库静默读取；真实通讯录数据访问确认缺钥时才鉴权
+  /// 一次生成，页面进入禁止读取钱包账户 child mini-secret。
   Future<ContactKeyMaterial> ensureContactKeyMaterialForAccountId(
     String accountId,
   ) async {
     final active = await _requireActiveAccountDataBinding(accountId);
-    return contactKeyMaterialForBinding(active);
+    final keys = await readDataKeysForBinding(
+      active,
+      const <({LocalKeyPurpose purpose, String? context})>[
+        (purpose: LocalKeyPurpose.contactsCloud, context: 'encryption'),
+        (purpose: LocalKeyPurpose.contactsCloud, context: 'index'),
+      ],
+    );
+    return ContactKeyMaterial(encryptionKey: keys[0], indexKey: keys[1]);
   }
 
   /// 为一次 CID 钱包换绑派生指定绑定版本的通讯录云端密钥。
@@ -1195,7 +1239,7 @@ class WalletManager {
   Future<ContactKeyMaterial> contactKeyMaterialForBinding(
     AccountDataBinding binding,
   ) async {
-    final keys = await deriveDataKeysForBinding(
+    final keys = await deriveDataKeysForBindingHandover(
       binding,
       const <({LocalKeyPurpose purpose, String? context})>[
         (purpose: LocalKeyPurpose.contactsCloud, context: 'encryption'),
@@ -1208,10 +1252,10 @@ class WalletManager {
     );
   }
 
-  /// 激活 finalized 当前钱包绑定的私有数据派生上下文。
+  /// 激活 finalized 当前钱包绑定的公开元数据。
   ///
-  /// 只保存公开的创世、CID、绑定版本和账户；先实际读取当前账户 child 并派生验证钥，
-  /// 确认新钱包密钥能够上岗后才推进本机激活标记。没有任何额外用户私有数据主钥或领取接口。
+  /// 本方法只验证本机存在该账户并单调保存公开字段，绝不读取钱包账户 child。相同
+  /// `account_id` 不能借 revision 变化伪装成换绑；页面进入不得初始化设备子钥。
   Future<void> activateAccountDataBinding({
     required String genesisHash,
     required String cidNumber,
@@ -1222,43 +1266,24 @@ class WalletManager {
     if (account == null) {
       throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
     }
-    final profile = await _requireHotWalletProfileByMasterId(account.masterId);
-    final childHex =
-        await _readAccountKeyOrThrow(profile.walletIndex, accountId);
-    final child = Uint8List.fromList(_hexToBytes(childHex));
     final binding = AccountDataBinding(
       genesisHash: genesisHash,
       cidNumber: cidNumber,
       bindingRevision: bindingRevision,
       accountId: accountId,
     );
-    Uint8List? verificationKey;
-    try {
-      verificationKey = await AccountDataKeyDeriver.derive(
-        accountSecret: child,
-        binding: binding,
-        purpose: LocalKeyPurpose.contactsLocal,
-      );
-      if (verificationKey.length != 32) {
-        throw const WalletAuthException('当前钱包账户数据密钥派生失败');
-      }
-      await _accountDataBindingStore.activate(binding);
-    } finally {
-      verificationKey?.fillRange(0, verificationKey.length, 0);
-      child.fillRange(0, child.length, 0);
-    }
+    await _rejectSameAccountRevisionChange(binding);
+    await _accountDataBindingStore.activate(binding);
   }
 
-  /// 由当前绑定钱包账户直接派生一个用途子钥。
-  ///
-  /// 子钥只存在于调用方内存；钱包管理器读完 child 后立即清零，不保存任何派生密钥。
-  Future<Uint8List> deriveDataKeyForCurrentBinding(
+  /// 从本机设备数据钥金库静默读取当前绑定的一把用途钥。
+  Future<Uint8List> readDataKeyForCurrentBinding(
     String accountId,
     LocalKeyPurpose purpose, {
     String? context,
   }) async {
     final active = await _requireActiveAccountDataBinding(accountId);
-    return (await deriveDataKeysForBinding(
+    return (await readDataKeysForBinding(
       active,
       <({LocalKeyPurpose purpose, String? context})>[
         (purpose: purpose, context: context),
@@ -1267,12 +1292,74 @@ class WalletManager {
         .single;
   }
 
-  /// 为同一个显式钱包绑定上下文一次性派生多把用途子钥。
+  /// 从本机设备数据钥金库静默读取同一绑定的多把用途钥。
   ///
-  /// 这是换绑交接的唯一显式派生入口：旧、新账户都必须是本机钱包中的真实账户，
+  /// 已有用途钥直接静默解封；只有实际数据访问发现缺钥或密文已经失效时，才鉴权一次
+  /// 生成本地设备数据钥并重试。该流程不创建、不登记 P-256 设备子钥；页面进入和身份
+  /// 门禁不得调用本入口预生成密钥。
+  Future<List<Uint8List>> readDataKeysForBinding(
+    AccountDataBinding binding,
+    List<({LocalKeyPurpose purpose, String? context})> requests,
+  ) async {
+    binding.validate();
+    if (requests.isEmpty) {
+      throw ArgumentError('私有数据用途列表不能为空');
+    }
+    if (!await _hasDeviceDataKeyBlobs(binding, requests)) {
+      await ensureDeviceDataKeysForBinding(binding);
+    }
+    try {
+      return await _openDeviceDataKeys(binding, requests);
+    } on DeviceDataKeyVaultException {
+      // 硬件钥被删除、失效或密文损坏时属于真实数据鉴权需求；只重建一次，不循环重试。
+      await ensureDeviceDataKeysForBinding(
+        binding,
+        rebuildAll: true,
+      );
+      return _openDeviceDataKeys(binding, requests);
+    }
+  }
+
+  Future<List<Uint8List>> _openDeviceDataKeys(
+    AccountDataBinding binding,
+    List<({LocalKeyPurpose purpose, String? context})> requests,
+  ) async {
+    final walletIndex = await walletIndexForAccountId(binding.accountId);
+    final keys = <Uint8List>[];
+    try {
+      for (final request in requests) {
+        final blob = await _contactKeyStore.read(
+          _deviceDataKeyBlobName(binding, request),
+        );
+        if (blob == null || blob.isEmpty) {
+          throw const DeviceDataKeyVaultException('设备用途钥不存在');
+        }
+        final key = await _deviceDataKeyVault.open(
+          walletIndex: walletIndex,
+          blob: blob,
+          aad: _deviceDataKeyAad(binding, walletIndex, request),
+        );
+        if (key.length != 32) {
+          key.fillRange(0, key.length, 0);
+          throw const DeviceDataKeyVaultException('设备用途钥长度无效');
+        }
+        keys.add(key);
+      }
+      return keys;
+    } catch (_) {
+      for (final key in keys) {
+        key.fillRange(0, key.length, 0);
+      }
+      rethrow;
+    }
+  }
+
+  /// 仅供 CID 正式换绑交接，在用户已经明确确认换绑后派生旧/新绑定用途钥。
+  ///
+  /// 旧、新账户都必须是本机钱包中的真实账户，
   /// [AccountDataBinding.accountId] 与读取的账户严格相等。一次读取 child 后完成全部
-  /// 派生并立即清零，避免每个数据域重复解锁钱包；返回的只是用途子钥，不是身份密钥。
-  Future<List<Uint8List>> deriveDataKeysForBinding(
+  /// 派生并立即清零。日常 Chat、附件、MLS、通讯录严禁调用本入口。
+  Future<List<Uint8List>> deriveDataKeysForBindingHandover(
     AccountDataBinding binding,
     List<({LocalKeyPurpose purpose, String? context})> requests,
   ) async {
@@ -1303,6 +1390,321 @@ class WalletManager {
     } finally {
       child.fillRange(0, child.length, 0);
     }
+  }
+
+  static const List<({LocalKeyPurpose purpose, String? context})>
+      _deviceDataKeyRequests = <({LocalKeyPurpose purpose, String? context})>[
+    (purpose: LocalKeyPurpose.chat, context: null),
+    (purpose: LocalKeyPurpose.chatIndex, context: null),
+    (purpose: LocalKeyPurpose.mls, context: null),
+    (purpose: LocalKeyPurpose.attachment, context: null),
+    (purpose: LocalKeyPurpose.contactsLocal, context: null),
+    (purpose: LocalKeyPurpose.contactsCloud, context: 'encryption'),
+    (purpose: LocalKeyPurpose.contactsCloud, context: 'index'),
+  ];
+
+  /// 实际私有数据访问确认缺少本地设备数据钥时的一次性生成入口。
+  ///
+  /// 已有全部用途钥直接返回；同一 CID 钱包账户的并发调用全局共享一个 Future，最多
+  /// 读取一次 child。该入口绝不调用设备登记后端、Turnstile 或 P-256 子钥；页面门禁
+  /// 不得调用。[rebuildAll] 只用于硬件钥失效或密文损坏后的单次全量重建。
+  Future<void> ensureDeviceDataKeysForBinding(
+    AccountDataBinding binding, {
+    bool rebuildAll = false,
+  }) {
+    binding.validate();
+    final flightKey = _deviceKeyFlightKey(binding);
+    final existing = _deviceDataKeyInitializationFlights[flightKey];
+    if (existing != null) return existing;
+    late final Future<void> created;
+    created = _ensureDeviceDataKeysForBinding(
+      binding,
+      rebuildAll: rebuildAll,
+    ).whenComplete(() {
+      if (identical(
+        _deviceDataKeyInitializationFlights[flightKey],
+        created,
+      )) {
+        _deviceDataKeyInitializationFlights.remove(flightKey);
+      }
+    });
+    _deviceDataKeyInitializationFlights[flightKey] = created;
+    return created;
+  }
+
+  Future<void> _ensureDeviceDataKeysForBinding(
+    AccountDataBinding binding, {
+    required bool rebuildAll,
+  }) async {
+    await _rejectSameAccountRevisionChange(binding);
+    final account = await getAccountByAccountId(binding.accountId);
+    if (account == null) {
+      throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
+    }
+    final wallet = await _requireHotWalletProfileByMasterId(account.masterId);
+    final walletIndex = wallet.walletIndex;
+    final requests = rebuildAll
+        ? _deviceDataKeyRequests
+        : await _missingDeviceDataKeyRequests(binding);
+    if (requests.isEmpty) return;
+
+    final childHex =
+        await _readAccountKeyOrThrow(walletIndex, binding.accountId);
+    final child = Uint8List.fromList(_hexToBytes(childHex));
+    final writtenBlobNames = <String>[];
+    final derived = <Uint8List>[];
+    try {
+      final pair = Keyring.sr25519.fromSeed(child);
+      pair.ss58Format = wallet.ss58;
+      final localAccountId =
+          _accountIdFromBytes(pair.bytes().toList(growable: false));
+      if (localAccountId != binding.accountId) {
+        throw const WalletAuthException('本地签名密钥与 CID 当前绑定账户不一致');
+      }
+
+      for (final request in requests) {
+        final key = await AccountDataKeyDeriver.derive(
+          accountSecret: child,
+          binding: binding,
+          purpose: request.purpose,
+          context: request.context,
+        );
+        derived.add(key);
+        final blobName = _deviceDataKeyBlobName(binding, request);
+        final blob = await _deviceDataKeyVault.seal(
+          walletIndex: walletIndex,
+          plaintext: key,
+          aad: _deviceDataKeyAad(binding, walletIndex, request),
+        );
+        await _contactKeyStore.write(blobName, blob);
+        writtenBlobNames.add(blobName);
+        key.fillRange(0, key.length, 0);
+      }
+
+      await _accountDataBindingStore.activate(binding);
+      await _recordDeviceKeyMaterialIndex(walletIndex, binding);
+    } catch (_) {
+      for (final name in writtenBlobNames) {
+        await _contactKeyStore.delete(name);
+      }
+      rethrow;
+    } finally {
+      for (final key in derived) {
+        key.fillRange(0, key.length, 0);
+      }
+      child.fillRange(0, child.length, 0);
+    }
+  }
+
+  /// Worker 明确返回 `device_not_registered` 后登记当前钱包的 P-256 设备子钥。
+  ///
+  /// 本地登记标记不是远端真源，因此每次收到该错误都重新登记；同一绑定的并发登记
+  /// 全局去重且最多读取一次 child。该入口不派生、不封装、不删除任何本地设备数据钥。
+  Future<void> registerDeviceSubkeyForBinding(
+    AccountDataBinding binding,
+  ) {
+    binding.validate();
+    final flightKey = _deviceKeyFlightKey(binding);
+    final existing = _deviceSubkeyRegistrationFlights[flightKey];
+    if (existing != null) return existing;
+    late final Future<void> created;
+    created = _registerDeviceSubkeyForBinding(binding).whenComplete(() {
+      if (identical(
+        _deviceSubkeyRegistrationFlights[flightKey],
+        created,
+      )) {
+        _deviceSubkeyRegistrationFlights.remove(flightKey);
+      }
+    });
+    _deviceSubkeyRegistrationFlights[flightKey] = created;
+    return created;
+  }
+
+  Future<void> _registerDeviceSubkeyForBinding(
+    AccountDataBinding binding,
+  ) async {
+    await _rejectSameAccountRevisionChange(binding);
+    final account = await getAccountByAccountId(binding.accountId);
+    if (account == null) {
+      throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
+    }
+    final wallet = await _requireHotWalletProfileByMasterId(account.masterId);
+    final markerName = _deviceSubkeyRegistrationMarkerName(
+      cidNumber: binding.cidNumber,
+      bindingRevision: binding.bindingRevision,
+      accountId: binding.accountId,
+    );
+    // Worker 已确认未登记，本地标记只能作缓存，必须先清掉而不能短路远端登记。
+    await _contactKeyStore.delete(markerName);
+    final registrar = _subkeyRegistrar;
+    if (registrar == null) {
+      throw const WalletAuthException('P-256 设备子钥登记器未配置');
+    }
+
+    final childHex =
+        await _readAccountKeyOrThrow(wallet.walletIndex, binding.accountId);
+    final child = Uint8List.fromList(_hexToBytes(childHex));
+    try {
+      final pair = Keyring.sr25519.fromSeed(child);
+      pair.ss58Format = wallet.ss58;
+      final localAccountId =
+          _accountIdFromBytes(pair.bytes().toList(growable: false));
+      if (localAccountId != binding.accountId) {
+        throw const WalletAuthException('本地签名密钥与 CID 当前绑定账户不一致');
+      }
+      await registrar(
+        walletIndex: wallet.walletIndex,
+        cidNumber: binding.cidNumber,
+        bindingRevision: binding.bindingRevision,
+        accountId: binding.accountId,
+        signBinding: (message) async {
+          final signature = pair.sign(message);
+          return '0x${_toHex(signature)}';
+        },
+      );
+      await _contactKeyStore.write(markerName, '1');
+      await _accountDataBindingStore.activate(binding);
+      await _recordDeviceKeyMaterialIndex(wallet.walletIndex, binding);
+    } catch (_) {
+      await _contactKeyStore.delete(markerName);
+      rethrow;
+    } finally {
+      child.fillRange(0, child.length, 0);
+    }
+  }
+
+  Future<bool> _hasDeviceDataKeyBlobs(
+    AccountDataBinding binding,
+    List<({LocalKeyPurpose purpose, String? context})> requests,
+  ) async {
+    for (final request in requests) {
+      final blob = await _contactKeyStore.read(
+        _deviceDataKeyBlobName(binding, request),
+      );
+      if (blob == null || blob.isEmpty) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<List<({LocalKeyPurpose purpose, String? context})>>
+      _missingDeviceDataKeyRequests(AccountDataBinding binding) async {
+    final missing = <({LocalKeyPurpose purpose, String? context})>[];
+    for (final request in _deviceDataKeyRequests) {
+      final blob = await _contactKeyStore.read(
+        _deviceDataKeyBlobName(binding, request),
+      );
+      if (blob == null || blob.isEmpty) missing.add(request);
+    }
+    return missing;
+  }
+
+  Future<void> _rejectSameAccountRevisionChange(
+    AccountDataBinding binding,
+  ) async {
+    final active = await _accountDataBindingStore.readActiveBinding();
+    if (active != null &&
+        active.genesisHash == binding.genesisHash &&
+        active.cidNumber == binding.cidNumber &&
+        active.accountId == binding.accountId &&
+        active.bindingRevision != binding.bindingRevision) {
+      throw const WalletAuthException('相同钱包账户不允许通过绑定版本变化重复换绑');
+    }
+  }
+
+  /// 同一钱包账户不是换绑目标；两类初始化各自去重，均不因 revision 变化重复读取
+  /// 同一账户 child。
+  static String _deviceKeyFlightKey(
+    AccountDataBinding binding,
+  ) =>
+      '${binding.genesisHash}|${binding.cidNumber}|${binding.accountId}';
+
+  static String _deviceDataKeyBlobName(
+    AccountDataBinding binding,
+    ({LocalKeyPurpose purpose, String? context}) request,
+  ) =>
+      'citizenapp_device_data_key_'
+      '${Uri.encodeComponent(binding.genesisHash)}_'
+      '${Uri.encodeComponent(binding.cidNumber)}_'
+      '${binding.bindingRevision}_${binding.accountId}_'
+      '${request.purpose.name}_${Uri.encodeComponent(request.context ?? '')}';
+
+  static Uint8List _deviceDataKeyAad(
+    AccountDataBinding binding,
+    int walletIndex,
+    ({LocalKeyPurpose purpose, String? context}) request,
+  ) =>
+      Uint8List.fromList(utf8.encode(
+        'wallet_index=$walletIndex|genesis_hash=${binding.genesisHash}|'
+        'cid_number=${binding.cidNumber}|binding_revision=${binding.bindingRevision}|'
+        'account_id=${binding.accountId}|purpose=${request.purpose.domain}|'
+        'context=${request.context ?? ''}',
+      ));
+
+  static String _deviceKeyMaterialIndexName(int walletIndex) =>
+      'citizenapp_device_key_material_index_$walletIndex';
+
+  Future<void> _recordDeviceKeyMaterialIndex(
+    int walletIndex,
+    AccountDataBinding binding,
+  ) async {
+    final name = _deviceKeyMaterialIndexName(walletIndex);
+    final existing = <AccountDataBinding>[];
+    final raw = await _contactKeyStore.read(name);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final value in decoded.whereType<Map<String, dynamic>>()) {
+            final parsed = AccountDataBinding.fromJson(jsonEncode(value));
+            if (parsed != null) existing.add(parsed);
+          }
+        }
+      } on FormatException {
+        // 索引损坏时由当前真绑定重建，禁止因此回退读取钱包私钥。
+      }
+    }
+    if (!existing.any(
+        (item) => _deviceKeyFlightKey(item) == _deviceKeyFlightKey(binding))) {
+      existing.add(binding);
+    }
+    await _contactKeyStore.write(
+      name,
+      jsonEncode(existing.map((item) => item.toJson()).toList()),
+    );
+  }
+
+  Future<void> _deleteIndexedDeviceKeyMaterial(int walletIndex) async {
+    final indexName = _deviceKeyMaterialIndexName(walletIndex);
+    final raw = await _contactKeyStore.read(indexName);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final value in decoded.whereType<Map<String, dynamic>>()) {
+            final binding = AccountDataBinding.fromJson(jsonEncode(value));
+            if (binding != null) await _deleteDeviceKeyMaterial(binding);
+          }
+        }
+      } on FormatException {
+        // 最后仍删除索引和硬件钥；残留密文因硬件钥删除而不可恢复。
+      }
+    }
+    await _contactKeyStore.delete(indexName);
+  }
+
+  Future<void> _deleteDeviceKeyMaterial(
+    AccountDataBinding binding,
+  ) async {
+    for (final request in _deviceDataKeyRequests) {
+      await _contactKeyStore.delete(_deviceDataKeyBlobName(binding, request));
+    }
+    await _contactKeyStore.delete(_deviceSubkeyRegistrationMarkerName(
+      cidNumber: binding.cidNumber,
+      bindingRevision: binding.bindingRevision,
+      accountId: binding.accountId,
+    ));
   }
 
   /// 读取本机已激活的当前钱包绑定公开元数据，供密文、会话与设备状态按精确版本收敛。
@@ -1430,60 +1832,8 @@ class WalletManager {
     return _readAccountKeyOrThrow(walletIndex, profile.accountId);
   }
 
-  /// 把设备子钥绑定到指定 CID 的 finalized 当前绑定版本。
-  ///
-  /// 两种时机共用本方法:
-  /// 1. **首次绑定**——用户初次进入需 CID 的页面(广场 / 聊天 / 通讯录 / 创作者 / 会员)时
-  ///    由 `IdentityRegistrationGate` 按需触发。建钱包时不绑:那时账户还没有 CID,而后端
-  ///    `device/register` 要求已绑 CID;只用钱包和交易的用户也根本不需要子钥。
-  /// 2. **换绑跟随**——CID 换绑后设备子钥须归属新绑定账户。
-  ///
-  /// **P-256 硬件子钥按当前账户所属 walletIndex 存**；只用当前身份账户的 child
-  /// 重签绑定证明（经 [signForAccountId]，弹一次生物识别），后端 `device/register`
-  /// 把该钱包设备子钥归属到当前账户。整只钱包删除时必须同步删除该 walletIndex 的
-  /// 硬件子钥。换绑 finalized 后由新账户所属钱包生成/读取子钥并接管；
-  /// 不读取或要求此前账户材料。无 registrar(未接后端 / 测试)时静默跳过。
-  Future<void> bindDeviceSubkeyToCurrentBinding({
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-  }) async {
-    final registrar = _subkeyRegistrar;
-    if (registrar == null) {
-      return;
-    }
-    // 幂等标记按 (CID, finalized 版本, 账户) 三元组落本机：登记要签名、签名要弹生物识别，
-    // 不挡住重复调用就会每次进入需 CID 页面都弹一次。标记落在这一层而不是调用方，
-    // 因为调用方 MyIdService 非单例，五处门禁各持一份，进程内去重形同虚设。
-    final markerName = _subkeyBoundMarkerName(
-      cidNumber: cidNumber,
-      bindingRevision: bindingRevision,
-      accountId: accountId,
-    );
-    if (await _contactKeyStore.read(markerName) != null) {
-      return;
-    }
-    final account = await getAccountByAccountId(accountId);
-    if (account == null) {
-      throw const WalletAuthException('CID 当前绑定账户不在本机钱包中');
-    }
-    final wallet = await _requireHotWalletProfileByMasterId(account.masterId);
-    await registrar(
-      walletIndex: wallet.walletIndex,
-      cidNumber: cidNumber,
-      bindingRevision: bindingRevision,
-      accountId: accountId,
-      signBinding: (message) async {
-        final signature = await signForAccountId(accountId, message);
-        return '0x${_toHex(signature.toList(growable: false))}';
-      },
-    );
-    // 只有登记真正成功才写标记；失败不写，下次仍会重试。
-    await _contactKeyStore.write(markerName, '1');
-  }
-
-  /// 本设备子钥已登记标记名；换绑改变版本或账户即换名，自然触发重新登记。
-  static String _subkeyBoundMarkerName({
+  /// 本设备 P-256 子钥已在当前 CID 钱包账户下登记的本机缓存标记名。
+  static String _deviceSubkeyRegistrationMarkerName({
     required String cidNumber,
     required int bindingRevision,
     required String accountId,

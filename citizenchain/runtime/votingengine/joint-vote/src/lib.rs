@@ -87,7 +87,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// pallet 自身 StorageVersion。
-    /// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载历史迁移。
+    /// 全新创世即采用终态布局，storage 版本不承载历史迁移。
     pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
     #[pallet::config]

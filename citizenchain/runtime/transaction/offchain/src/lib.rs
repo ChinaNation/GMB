@@ -41,6 +41,7 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
 use sp_io::crypto::sr25519_verify;
+use sp_runtime::AccountId32;
 
 /// 清算行节点声明信息。
 ///
@@ -81,8 +82,14 @@ pub type ClearingPeerId = BoundedVec<u8, sp_core::ConstU32<64>>;
 /// 机构岗位码上限；岗位码与机构 CID、签名账户共同构成清算业务权限。
 pub type ActorRoleCode = BoundedVec<u8, sp_core::ConstU32<64>>;
 
-/// 清算行清算 pallet 的存储版本。全新创世口径:创世即终态布局,恒为 v1。
+/// 清算行清算 pallet 的存储版本。全新创世即采用终态布局，不承载历史迁移。
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+
+/// 清算 pallet 的 L3 与批次管理员签名账户均由 sr25519 `Public` 形成官方
+/// `AccountId32`。使用完整32字节转换，禁止从泛型 SCALE 编码截断或猜测公钥。
+fn sr25519_public_from_account_id(account_id: &AccountId32) -> Sr25519Public {
+    Sr25519Public::from_raw(account_id.clone().into())
+}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -91,7 +98,9 @@ pub mod pallet {
     use crate::weights::WeightInfo;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    /// L3 支付签名固定使用 sr25519，其签名账户必须是 Polkadot SDK 官方 `AccountId32`。
+    /// 编译期类型等式禁止未来改成其它账户类型后仍把 SCALE 编码静默解释成公钥。
+    pub trait Config: frame_system::Config<AccountId = AccountId32> {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -713,7 +722,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let sig = Sr25519Signature::try_from(batch_signature.as_slice())
                 .map_err(|_| Error::<T>::InvalidBatchSignature)?;
-            let public = Self::sr25519_pubkey_from_account(submitter)?;
+            let public_key = crate::sr25519_public_from_account_id(submitter);
             let batch_bytes = batch.encode();
             let message = crate::batch_item::batch_signing_hash(
                 actor_cid_number,
@@ -723,20 +732,10 @@ pub mod pallet {
                 &batch_bytes,
             );
             ensure!(
-                sr25519_verify(&sig, &message, &public),
+                sr25519_verify(&sig, &message, &public_key),
                 Error::<T>::InvalidBatchSignature
             );
             Ok(())
-        }
-
-        fn sr25519_pubkey_from_account(account: &T::AccountId) -> Result<Sr25519Public, Error<T>> {
-            let encoded = account.encode();
-            if encoded.len() < 32 {
-                return Err(Error::<T>::InvalidBatchSignature);
-            }
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(&encoded[..32]);
-            Ok(Sr25519Public::from_raw(arr))
         }
     }
 }

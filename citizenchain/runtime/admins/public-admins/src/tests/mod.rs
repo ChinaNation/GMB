@@ -100,13 +100,16 @@ pub struct TestCitizenIdentityBinding;
 
 impl admin_primitives::CitizenIdentityBindingQuery<AccountId32> for TestCitizenIdentityBinding {
     fn matches_citizen_account(cid_number: &[u8], account: &AccountId32) -> bool {
-        cid_number == b"CN220-CTZN2-198805200-2026" && account == &self::account(9)
+        cid_number == b"CN220-CTZN2-198805200-2026"
+            && CURRENT_ACCOUNT_ID_SEED.with(|seed| account == &self::account(seed.get()))
     }
 }
 
 thread_local! {
     /// 测试相位开关;默认 Genesis(false),每个测试经 new_test_ext 复位。
     static IS_OPERATION: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    /// 指定测试公民 CID 当前链上绑定账户的 seed，用于模拟换绑前后的唯一授权账户。
+    static CURRENT_ACCOUNT_ID_SEED: core::cell::Cell<u8> = const { core::cell::Cell::new(9) };
 }
 
 /// 可切换的相位 mock:Genesis(默认)放行、Operation 强制。
@@ -121,6 +124,10 @@ fn set_operation_phase(is_operation: bool) {
     IS_OPERATION.with(|cell| cell.set(is_operation));
 }
 
+fn set_current_account_id_seed(seed: u8) {
+    CURRENT_ACCOUNT_ID_SEED.with(|cell| cell.set(seed));
+}
+
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
@@ -130,6 +137,7 @@ impl Config for Test {
 
 fn new_test_ext() -> sp_io::TestExternalities {
     set_operation_phase(false); // 每个测试默认 Genesis 期。
+    set_current_account_id_seed(9);
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");
@@ -219,6 +227,59 @@ fn operation_phase_requires_complete_public_admin_fields() {
             AdminAccountKind::PublicInstitution,
             complete,
         ));
+    });
+}
+
+#[test]
+fn operation_phase_resolves_only_current_cid_account_id_after_rebind() {
+    new_test_ext().execute_with(|| {
+        set_operation_phase(true);
+        let institution_cid_number = b"GD001-CGOV0-623456789-2026".to_vec();
+        let citizen_cid_number = b"CN220-CTZN2-198805200-2026";
+        let mut complete = admins(1);
+        complete[0].account_id = account(9);
+        complete[0].cid_number = citizen_cid_number
+            .to_vec()
+            .try_into()
+            .expect("citizen cid fits");
+        complete[0].family_name = "张".as_bytes().to_vec().try_into().expect("family fits");
+        complete[0].given_name = "三".as_bytes().to_vec().try_into().expect("given fits");
+        assert_ok!(PublicAdmins::do_set_institution_admins(
+            institution_cid_number.clone(),
+            code_bytes("CGOV"),
+            AdminAccountKind::PublicInstitution,
+            complete,
+        ));
+
+        // 换绑前，当前账户解析为名册中的规范 account_id。
+        assert_eq!(
+            PublicAdmins::resolve_admin_account(
+                code_bytes("CGOV"),
+                &institution_cid_number,
+                &account(9),
+            ),
+            Some(account(9))
+        );
+
+        // 模拟同一管理员 CID 换绑到账户 10：新账户继承权限并仍解析到规范账户 9；
+        // 旧账户不再匹配当前链上绑定，立即失权。换绑本身不需要管理员机构投票。
+        set_current_account_id_seed(10);
+        assert_eq!(
+            PublicAdmins::resolve_admin_account(
+                code_bytes("CGOV"),
+                &institution_cid_number,
+                &account(10),
+            ),
+            Some(account(9))
+        );
+        assert_eq!(
+            PublicAdmins::resolve_admin_account(
+                code_bytes("CGOV"),
+                &institution_cid_number,
+                &account(9),
+            ),
+            None
+        );
     });
 }
 

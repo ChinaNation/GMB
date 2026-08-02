@@ -14,10 +14,20 @@ class RunnerTests: XCTestCase {
       namespace: "device_subkey",
       walletIndex: 7
     )
+    let deviceData = try SecureEnclaveKeyStore.applicationTag(
+      namespace: "device_data_key",
+      walletIndex: 7
+    )
 
     XCTAssertEqual(String(data: vault, encoding: .utf8), "org.citizenapp.hw_seed_vault.strict.7")
     XCTAssertEqual(String(data: device, encoding: .utf8), "org.citizenapp.device_subkey.7")
+    XCTAssertEqual(
+      String(data: deviceData, encoding: .utf8),
+      "org.citizenapp.device_data_key.7"
+    )
     XCTAssertNotEqual(vault, device)
+    XCTAssertNotEqual(vault, deviceData)
+    XCTAssertNotEqual(device, deviceData)
   }
 
   func testSecureEnclaveTagRejectsNegativeWalletIndex() {
@@ -33,7 +43,7 @@ class RunnerTests: XCTestCase {
     let ciphertext = Data([0x00, 0x01, 0xfe, 0xff])
     let blob = HardwareBoundSeedVaultChannel.encodeBlob(ciphertext)
 
-    XCTAssertTrue(blob.hasPrefix("ios-se-v1:"))
+    XCTAssertTrue(blob.hasPrefix("ios-se:"))
     XCTAssertEqual(try HardwareBoundSeedVaultChannel.decodeBlob(blob), ciphertext)
     XCTAssertThrowsError(
       try HardwareBoundSeedVaultChannel.decodeBlob(
@@ -59,6 +69,26 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(
       SecureEnclaveKeyStore.lowerHex(Data([0x00, 0x0a, 0xfe, 0xff])),
       "000afeff"
+    )
+  }
+
+  func testDeviceDataEnvelopeRequiresExactAad() throws {
+    let aad = Data("binding-a|chat".utf8)
+    let plaintext = Data(repeating: 0x5a, count: 32)
+    let envelope = DeviceDataKeyVaultChannel.encodeEnvelope(
+      aad: aad,
+      plaintext: plaintext
+    )
+
+    XCTAssertEqual(
+      try DeviceDataKeyVaultChannel.decodeEnvelope(envelope, expectedAad: aad),
+      plaintext
+    )
+    XCTAssertThrowsError(
+      try DeviceDataKeyVaultChannel.decodeEnvelope(
+        envelope,
+        expectedAad: Data("binding-b|chat".utf8)
+      )
     )
   }
 

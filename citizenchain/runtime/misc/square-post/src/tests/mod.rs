@@ -427,29 +427,46 @@ fn subscribe_charges_immediately_and_schedules_real_calendar_due_time() {
 fn runtime_renews_at_due_time_without_external_call_and_uses_latest_price() {
     new_test_ext().execute_with(|| {
         setup_platform();
+        let key = (subscriber_cid_number(), IssuerKey::Platform);
         assert_ok!(SquarePost::subscribe(
             RuntimeOrigin::signed(subscriber_account_id()),
             IssuerKey::Platform,
             platform_plan(),
             PLATFORM_PRICE,
         ));
-        let due = RenewalIndex::<Test>::get((subscriber_cid_number(), IssuerKey::Platform))
-            .expect("scheduled");
+        let before_price_change = Subscriptions::<Test>::get(&key).expect("state exists");
+        assert_eq!(before_price_change.authorized_price_fen, PLATFORM_PRICE);
+        assert_eq!(
+            before_price_change.subscription_status,
+            SubscriptionStatus::Active
+        );
+        assert_eq!(before_price_change.suspend_reason, None);
+        let due = RenewalIndex::<Test>::get(&key).expect("scheduled");
         let next_price = PLATFORM_PRICE + 10;
+        // 单元测试直接写入投票引擎通过后才会更新的治理价格，聚焦验证续费授权边界。
         PlatformPrice::<Test>::insert(MembershipLevel::Spark, next_price);
         let before = Balances::free_balance(subscriber_account_id());
         initialize_at(due - 1);
         assert_eq!(Balances::free_balance(subscriber_account_id()), before);
+        assert_eq!(
+            Subscriptions::<Test>::get(&key)
+                .expect("state exists")
+                .authorized_price_fen,
+            PLATFORM_PRICE
+        );
         initialize_at(due);
         assert_eq!(
             Balances::free_balance(subscriber_account_id()),
             before - next_price
         );
-        let state = Subscriptions::<Test>::get((subscriber_cid_number(), IssuerKey::Platform))
-            .expect("state exists");
+        let state = Subscriptions::<Test>::get(&key).expect("state exists");
         assert_eq!(state.last_charged_at, due);
         assert_eq!(state.last_charged_price_fen, next_price);
+        assert_eq!(state.authorized_price_fen, next_price);
+        assert_eq!(state.subscription_status, SubscriptionStatus::Active);
+        assert_eq!(state.suspend_reason, None);
         assert!(state.paid_until > due);
+        assert_eq!(RenewalIndex::<Test>::get(&key), Some(state.paid_until));
     });
 }
 
@@ -806,6 +823,12 @@ fn creator_price_change_suspends_renewal_until_reconsent() {
             creator_plan(),
             50,
         ));
+        assert_eq!(
+            Subscriptions::<Test>::get(&ck)
+                .expect("state exists")
+                .authorized_price_fen,
+            50
+        );
         // 创作者升价 50 → 75。
         CreatorPlans::<Test>::insert(
             creator_cid_number(),
@@ -821,6 +844,7 @@ fn creator_price_change_suspends_renewal_until_reconsent() {
             state.suspend_reason,
             Some(crate::SuspendReason::NeedReconsent)
         );
+        assert_eq!(state.authorized_price_fen, 50);
         assert_eq!(Balances::free_balance(creator_account_id()), creator_before);
         assert!(!RenewalIndex::<Test>::contains_key(&ck));
         // 订阅者按新价再签名 → 恢复 Active 并扣新价。

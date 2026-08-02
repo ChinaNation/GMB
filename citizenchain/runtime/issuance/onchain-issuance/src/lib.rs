@@ -306,7 +306,7 @@ pub mod pallet {
         /// propose origin 校验未通过(业务 ACTION:proposer_account_id 不在 actor CID 的 admins;
         /// 监管 ACTION:proposer_account_id 不在 NRC admins)。
         ProposeOriginNotAllowed,
-        /// metadata 不可修改(ADR-011 v2 第 5.7 节铁律)。
+        /// metadata 不可修改（ADR-011 第 5.7 节铁律）。
         MetadataImmutable,
         /// 单块强制销毁队列已满。
         ScheduleFull,

@@ -119,7 +119,8 @@
 
 状态：completed（2026-08-01，用户已确认并完成验收）
 
-- finalized 新绑定驱动当前钱包派生上下文、设备子钥、Session 和 Chat 设备状态收敛。
+- finalized 新绑定只驱动公开绑定、已授权数据交接和旧上下文失效；不预生成本地数据钥、
+  不登记 P-256 子钥。两者分别由真实数据缺钥和 Worker 未登记响应触发。
 - 清理此前账户的内存用途密钥和凭证；不要求此前账户、此前设备或此前助记词参与。
 - 使用真实本地 App、Worker、D1 和 HTTP 路径验证目标行为。
 
@@ -345,6 +346,300 @@
 - WASM 继续唯一使用并冻结既有成功 run `30721127038` 的 artifact `8824990228`；本步骤
   没有修改 runtime、没有重跑 WASM、没有替换冻结 WASM，也没有执行部署。
 - 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
+
+### 第八步：创世节点部署
+
+状态：completed（2026-08-02；贵州、中枢、国家储委会三台 ARM64 创世节点均已部署并验收）
+
+#### 节点部署前置修复
+
+- 本机私有 CitizenConsole 节点部署动作已永久删除旧 AMD 产物路径，服务器只接受
+  `公民链ARM` artifact 和 `公民链ARM.deb`；目标服务器必须同时报告 Linux
+  `aarch64` 和 Debian `arm64`，deb 的 `Package` 必须是 `citizenchain`、
+  `Architecture` 必须是 `arm64`。
+- 本次重新创世固定使用已完成全量验证的 CitizenChain run `30724462739`、提交
+  `363e6023c587bdb3be6acfa87bd3dfc940fba33f`、ARM artifact digest
+  `sha256:58d9cc186c13c5125815de5328880f7b80e567530a025c3443daec347fa1835d`；
+  内部 deb SHA-256 为
+  `7cda25cfa65d0bf086fb5a41ec257871846e2c008726527d6b049014bdbd94b9`。
+- 部署不再逐台追随“最新成功 CI”。脚本同时钉住冻结创世哈希
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`
+  和 state root
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`，
+  任一 run、提交、分支、workflow、摘要或 manifest 字段不一致都失败关闭。
+- 重新创世只清空固定链状态目录 `/opt/citizenchain/data/chains/citizenchain`。
+  `node-key/secret_ed25519` 位于该目录之外；若服务器已经存在 node-key，必须先与本机
+  Keychain 登记身份逐字节一致，否则停止部署。GRANDPA 密钥在清库后从本机登记值重新安装。
+- 上线验收已补齐服务状态、`isSyncing=false`、创世哈希、state root、最终确认头、
+  Authority/Validator 角色、PeerId、30333 公网监听和 9944 仅回环监听；任一检查失败即
+  输出服务日志并停止，不触碰后续节点。
+- CitizenConsole `npm run check` 通过，全部 47 项测试通过；新增回归覆盖 ARM-only、固定
+  CI、两层摘要、deb 架构、安全清库、node-key 身份保护及运行态验收字段。现有签名应用已
+  重新构建，Apple Development 签名、Hardened Runtime 和资源完整性校验通过；包内动作
+  脚本与源码逐字一致，旧 AMD 部署名称残留为 0。
+- 贵州节点部署前在 CitizenConsole 真实录入验证密钥时发现 GRANDPA 公钥比较口径错误：
+  目录中的规范 `grandpa_public_key` 保留 `0x`，此前内部派生结果却不带 `0x`，导致同一
+  公钥字节被误报为“不属于44个登记节点”。贵州私钥派生出的裸公钥
+  `1c03da677a1ae2e9b4907dc72016ea65adc3d20711f93b8e96f2aa75468072c0`
+  与目录登记值除规范前缀外完全一致，私钥和目录均无需修改。
+- CitizenConsole 后端、前端和部署进程现已统一使用 `grandpaPublicKey`、
+  `GMB_NODE_GRANDPA_PUBLIC_KEY`；公开公钥唯一格式为 `0x` 加 64 位小写十六进制，
+  私钥唯一格式为不带前缀的 64 位小写十六进制。只有构造 Substrate GRANDPA keystore
+  文件名时剥离 `0x`，keystore 内容仍写入带 `0x` 的私钥 seed；旧缩写残留为 0。
+- 修复后 CitizenConsole `npm run check` 与全部 48 项测试通过。公开测试逐项验证 44 个
+  GRANDPA 公钥格式和唯一性、贵州实际派生结果、环境字段、keystore 文件名和私钥内容；
+  签名应用再次重建并通过完整性校验，包内 `server.mjs`、前端和部署动作与源码逐字一致。
+- 本项前置修复没有连接服务器、没有读取或输出私钥内容、没有修改 runtime、没有触发
+  GitHub CI，也没有部署 Worker 或 App。
+
+#### 贵州节点第一次部署尝试
+
+- CitizenConsole 真实界面确认 `09 · 贵州省权威节点` 的服务器 IP、node-key、验证密钥和
+  SSH 私钥四项均显示已配置、节点状态为“可部署”，控制台没有其它活动生产任务。
+- 用户确认后通过生产 Touch ID 发起唯一贵州节点动作。控制台成功读取四项 Keychain 配置，
+  锁定 CitizenChain ARM CI run `30724462739`，随后在第 3 步 SSH 预检查收到
+  `Permission denied (publickey)` 并失败关闭。
+- 失败发生在产物下载、节点停机、软件安装和链数据库清理之前；贵州服务器没有被修改，
+  中枢和国家储委会节点也没有被连接或触碰。
+- 本机只读检查确认下载目录的 `prcgzs_ed25519` 是带口令加密的 OpenSSH 私钥；现有部署动作
+  使用 `BatchMode` 且没有 SSH 私钥口令解锁通道。控制台保存的密钥未通过本次服务器鉴权；
+  在支持加密 SSH 私钥或确认服务器 `authorized_keys` 前，不得再次部署。
+
+#### 贵州节点直接创世部署
+
+- 用户明确要求本次不经 CitizenConsole 部署动作，改用下载目录中的加密 SSH 私钥直接部署；
+  口令只通过 macOS 隐藏输入框交给一次性隔离 `ssh-agent`，没有写入命令、日志、仓库或服务器。
+  SSH 私钥指纹为 `SHA256:Sxxn9si0R1Tt0YUO5YT4Pt9Hwd8bef6GRCMfBYHzb4k`，服务器
+  Ed25519 host key 指纹为 `SHA256:4gmGDrXnp/iBmBB+ueTcadaOKNkyDKHrcVby4Mwtsrw`。
+- 只读预检确认贵州服务器 `141.147.153.55` 为 Linux `aarch64` / Debian `arm64`，实际服务
+  是 `prcgzs-node.service`，运行账户是 `prcgzs`，实际 base path 是 `/opt/prcgzs/data`；
+  服务使用 `/opt/prcgzs/data/node-key/secret_ed25519`、`--validator`、P2P `30333` 和回环
+  RPC `9944`。旧创世为
+  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`，节点 PeerId 为
+  `12D3KooWC7t4V1Z2aQWS9HikBdXQgXEaTqeZ5YD78cnxtYBDn31M`。
+- 服务器直接下载并校验冻结 CitizenChain run `30724462739` 的 `公民链ARM` artifact；artifact
+  digest、内部 deb SHA-256、`Package=citizenchain`、`Version=1.0.0` 和
+  `Architecture=arm64` 全部与冻结记录一致。deb 不包含任何维护脚本或 systemd unit，未覆盖
+  现有 `prcgzs-node.service`。
+- 删除前再次校验旧创世、PeerId、service ExecStart、目标目录非符号链接、node-key 权限、
+  keystore 和 deb 摘要。仅清除固定目录 `/opt/prcgzs/data/chains/citizenchain` 的旧链状态；
+  node-key 位于清理目录之外且保持不变，现有 validator keystore 先复制到 `/run` 的 root-only
+  临时目录，清理后原样恢复并逐文件校验。服务器已有完整节点密钥和 keystore，因此本次不从
+  CitizenConsole 读取、替换或输出引导节点/验证节点私钥。
+- ARM 包安装和服务启动成功。两轮独立 RPC 验收均确认新创世为
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`，state root 为
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`，PeerId 保持不变，
+  `system_nodeRoles` 为 `Authority`，`isSyncing=false`，P2P 公网监听 `30333`，RPC 仅回环
+  监听 `9944`。二次稳定性复核时服务 restart count 为 `0`、连接 2 个 peers、best block 为
+  创世块 `0x0`；没有把“必须先出块”设为部署或其它业务的前置条件。
+- 验收成功后，服务器临时 deb 和 `/run` 密钥备份已删除；本机一次性 `ssh-agent`、askpass 和
+  临时 `known_hosts` 已删除，下载目录中的原始加密 SSH 私钥保留。部署没有修改 runtime、
+  GitHub、Worker、CitizenApp、CitizenWallet 或其它两台服务器。
+
+#### 中枢节点直接创世部署
+
+- 用户确认沿用贵州节点的直接部署流程。目录公开域名 `prczss.crcfrcn.com` 解析到
+  `129.225.151.247`；下载目录中的加密 SSH 私钥 `prczss_ed25519` 通过 macOS 隐藏输入框
+  解锁到一次性隔离 `ssh-agent`。SSH 私钥指纹为
+  `SHA256:HnagVLgpm9WqTNzcZZKEFNVTMxJ7AFRRzRyjh25u5V4`，服务器 Ed25519 host key 指纹为
+  `SHA256:Ihc62w8q4K/kTaEZ2xz6hMjg2kWO6pqclzaDCOf/an4`；口令未写入命令、日志或文件。
+- 只读预检确认服务器为 Linux `aarch64` / Debian `arm64`，实际服务为
+  `prczss-node.service`，运行账户和主组均为 `prczss`，实际 base path 为
+  `/opt/prczss/data`。服务使用 `/opt/prczss/data/node-key/secret_ed25519`、
+  `--validator`、P2P `30333` 和回环 RPC `9944`；旧创世为
+  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`，PeerId 为
+  `12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv`，与登记目录逐字一致。
+- 服务器已有权限正确的 node-key 和 validator keystore，因此本次没有从 CitizenConsole
+  读取、替换或输出引导节点/验证节点私钥。冻结 ARM artifact 直接从 GitHub run
+  `30724462739` 流式传入服务器，artifact digest、内部 deb SHA-256、包名、版本和 `arm64`
+  架构全部通过。服务器没有 `unzip`，首次解包在清链前安全退出；没有安装额外系统软件，改用
+  Python 标准库在校验 ZIP 路径安全且仅有一个 deb 后提取。deb 无维护脚本和 service 文件。
+- 删除前再次校验旧创世、PeerId、service ExecStart、精确路径、非符号链接、密钥权限和 deb
+  摘要；仅清除 `/opt/prczss/data/chains/citizenchain` 内的旧链状态。node-key 位于清理目录
+  之外且保持不变，validator keystore 先保存到 `/run` root-only 临时目录，清理后原样恢复并
+  逐文件校验。现有 `prczss-node.service` 未被安装包覆盖。
+- ARM 包安装和服务启动成功。两轮独立 RPC 验收均确认新创世为
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`，state root 为
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`，PeerId 保持不变，
+  `system_nodeRoles` 为 `Authority`，`isSyncing=false`，P2P 公网监听 `30333`，RPC 仅回环
+  监听 `9944`。二次稳定性复核时 restart count 为 `0`、连接 2 个 peers、best block 为创世块
+  `0x0`；未把出块设为部署成功或其它业务的前置条件。
+- 验收成功后，服务器临时 artifact、deb 和 `/run` 密钥备份全部删除；本机一次性
+  `ssh-agent`、askpass 和临时 `known_hosts` 已删除，下载目录原始加密 SSH 私钥保留。本次
+  没有修改 runtime、GitHub、Worker、CitizenApp、CitizenWallet、贵州节点或国家储委会节点。
+
+#### 国家储委会节点直接创世部署
+
+- 正式目录中的唯一名称为 `国家储委会权威节点`，节点编号 `node-01`、角色 `nrc`、域名
+  `nrcgch.crcfrcn.com`；服务器内部沿用运维账户、service 和目录基础名 `guo`，不把该内部名
+  扩散成新的业务名称。域名解析到 `170.9.28.43`，下载目录对应加密 SSH 私钥为
+  `nrc_ed25519`。私钥指纹为 `SHA256:5CP8yLE9WXDW5YaJZB8yk/ZwsrhjleuLdkxmGCqh2QI`，
+  服务器 Ed25519 host key 指纹为
+  `SHA256:DY51DQ0iScD6gOSRZoEvy8oO2qNpusCt4brrMiOWuJA`；口令只进入一次性隔离
+  `ssh-agent`，未写入命令、日志或文件。
+- 只读预检确认服务器为 Linux `aarch64` / Debian `arm64`，实际服务为
+  `guo-node.service`，运行账户和主组均为 `guo`，实际 base path 为 `/opt/guo/data`；
+  服务使用 `/opt/guo/data/node-key/secret_ed25519`、`--validator`、P2P `30333` 和回环
+  RPC `9944`。旧创世为
+  `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`，PeerId 为
+  `12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS`，与正式目录逐字一致。
+- 服务器已有权限正确的 node-key 和两个 validator keystore 文件，因此本次没有从
+  CitizenConsole 读取、替换或输出引导节点/验证节点私钥。磁盘 unit 比 systemd 已加载版本新，
+  但只读检查确认加载态 ExecStart、磁盘 unit、base path、node-key 路径和 `ReadWritePaths`
+  一致，unit 语法有效；启动前只执行 `daemon-reload`，没有编辑 unit。服务器自带 monitoring
+  agent unit 的可执行权限警告与公民链无关，本次未越界处理。
+- 冻结 ARM artifact 通过 GitHub 短期签名地址由服务器直接下载，artifact digest、内部 deb
+  SHA-256、包名、版本、`arm64` 架构、ZIP 路径安全和唯一 deb 均通过；deb 无维护脚本和
+  service 文件。首次短期 URL 传递因与远端脚本共用标准输入，在下载前语法失败并安全退出；
+  确认没有临时包且服务仍 active 后，改用一次性远端环境参数完成下载，没有重复写目标文件。
+- 删除前再次校验旧创世、PeerId、service、精确路径、非符号链接、密钥权限和 deb 摘要；仅
+  清除 `/opt/guo/data/chains/citizenchain` 内旧链状态。node-key 位于清理目录之外且保持不变；
+  两个 keystore 文件先保存到 `/run` root-only 临时目录，清理后原样恢复并逐文件校验。
+  keystore 目录旧权限 `755` 在恢复时收紧为 `700`，两个密钥文件保持 `600`。
+- ARM 包安装和服务启动成功。两轮独立 RPC 验收均确认新创世为
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`，state root 为
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`，PeerId 保持不变，
+  `system_nodeRoles` 为 `Authority`，`isSyncing=false`，P2P 公网监听 `30333`，RPC 仅回环
+  监听 `9944`。二次稳定性复核时 restart count 为 `0`、`NeedDaemonReload=no`、连接 3 个
+  peers、best block 为创世块 `0x0`；未把出块设为部署成功或其它业务的前置条件。
+- 验收成功后，服务器临时 artifact、deb 和 `/run` 密钥备份全部删除；本机一次性
+  `ssh-agent`、askpass 和临时 `known_hosts` 已删除，下载目录原始加密 SSH 私钥保留。本次
+  没有修改 runtime、GitHub、Worker、CitizenApp、CitizenWallet、贵州节点或中枢节点。
+
+#### 三节点矿工手续费收款账户绑定
+
+- 用户向三台服务器当前 `powr` 矿工账户转入手续费后，明确要求把三者的手续费与铸块奖励
+  收款账户统一绑定为 SS58(2027)
+  `w5CB1UoqD2PyKpnxmEgJB7TXEqHyAj3s5nDEeGkLNYJKoCdPN`；严格解码后的唯一
+  `account_id` 为
+  `0x1a16ee768af324002ea732b796b14c34a261e08ff6be89ea67ad2b7fa04bd94e`。
+- 三台服务器 host key 指纹与创世部署记录逐一一致。只读扫描当前默认链 keystore 后确认每台
+  均只有一个规范 `powr` 公钥文件，矿工 `account_id` 分别为：贵州
+  `0x8ebc3b3cdddcd990e9831e353f7ffca11eb1ffeebe2bffdfb768352dcdd52f1d`、中枢
+  `0x72407feb8aa14e3cca0503f8c812d5b127709c5b4ff1c721918710d2c16c363b`、国家储委会
+  `0xcca3e8afea58b2c0c671d4a3badfaa3579a00a17cbd323ec320e59de07dc8b4d`；三者均与目标
+  收款账户不同。
+- 每台提交前均从本机回环 RPC 核验创世哈希
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
+  `isSyncing=false`、4 个 peers、矿工余额大于零及 finalized
+  `RewardAccountIdByMiner` 尚未绑定。三台因此均调用首次绑定 `reward_bindAccount`，没有误走
+  重绑路径。
+- 贵州绑定在 finalized head
+  `0xf8d70d4efd16ed67896a0cede6d2988aff6a99cae2a67ffa146b73579a7c6e86` 验收通过，矿工 nonce
+  从 0 增至 1、余额从 2,009,800 分变为 2,009,790 分；中枢绑定在 finalized head
+  `0xb31a49bb440590cd79523881a6f08f926d33c6d10513d1ac55f650da678b017b` 验收通过，nonce
+  从 0 增至 1、余额从 10,000 分变为 9,990 分；国家储委会绑定在 finalized head
+  `0xe66a8a7675355dcedd09dd6d94ec6947bd3dc78bd75084269154c4c23de25532` 验收通过，nonce
+  从 0 增至 1、余额从 5,009,500 分变为 5,009,490 分。三台实际绑定手续费均为 10 分。
+- 三个 finalized 状态中的 `RewardAccountIdByMiner` 均逐字节等于目标 `account_id`。SSH 私钥
+  口令只经 macOS 隐藏输入框进入当次进程内存，没有写入命令、日志、仓库或服务器；本次没有
+  修改服务器配置、node-key、GRANDPA 或 `powr` 密钥，也没有修改 runtime、触发 CI 或发布软件。
+
+#### 待执行顺序
+
+- 贵州节点 `prcgzs`、中枢节点 `prczss` 和国家储委会节点 `node-01 / nrc` 均已完成创世部署。
+  CitizenApp Cloudflare Worker 和 CitizenWeb 官网均已完成生产部署和独立线上验收。
+- 用户已明确暂停 CitizenApp、CitizenWallet 和 CitizenChain 正式 Releases，本任务不擅自
+  发布这三项软件。下一步只执行已确认范围内的文档、注释、任务卡与残留清理；必须先输出
+  技术方案并再次得到用户确认。
+
+### 第九步：CitizenApp Cloudflare Worker 生产部署
+
+状态：completed（2026-08-02；生产部署与独立线上验收完成，既有云端数据完整保留）
+
+- 部署前确认本地 `citizenapp/cloudflare/` 与成功的 CitizenApp CI run `30723141631`
+  对应提交 `54110ec9034061ce7b7c6c80e3442b7c4892345e` 内容一致；当前分支为 `main`，Worker
+  源码无未提交差异。当前工作树中其它线程的任务卡和用户已有的 Android `libsmoldot.so`
+  修改不在本步骤范围，本次均未触碰。
+- 本地使用 lockfile 固定依赖完成 `npm ci`，Wrangler 版本为 `4.114.0`，依赖审计为
+  0 个漏洞；Worker 绑定类型时效检查、TypeScript 检查、33 个测试文件与 256 项测试、
+  Wrangler dry-run 和启动检查全部通过。启动检查生成的临时 CPU profile 已立即清理，
+  Worker 源码仍无差异。
+- 生产动作只通过已签名且包内源码逐字一致的 CitizenConsole 执行，并由用户完成 Touch ID
+  鉴权。控制台确认 16 项 Worker 业务 Secret 与 3 项 Cloudflare 最小权限 Token 均已配置；
+  远端 D1 部署前检查和 26 张业务表完整性检查通过。
+- 本次只执行“生产部署”，没有执行“清空并重建全部数据”，没有删除或重建 D1、KV、R2、
+  Queue 及其已有业务数据。部署同步 16 项 Worker Secret，仅记录配置项名称，不读取或输出
+  Secret 值。
+- Wrangler 上传 937.82 KiB、gzip 后 326.33 KiB，启动时间 33 ms。Durable Object、KV、
+  Queue、D1、两个 R2 bucket、Stream 和变量绑定全部加载；`www.crcfrcn.com/api/*`、两个
+  cron 任务以及队列生产者/消费者触发器部署成功。生产 Worker 版本为
+  `58567f7e-3e14-486d-9ef1-05e410665771`。
+- 部署 Token 按最小权限不具备 All Zones 权限，脚本按既定失败关闭逻辑改用 zone-based API
+  部署自定义域路由并成功，不扩大 Token 权限。Wrangler 类型生成阶段仅提示业务 Secret 名
+  `CF_API_TOKEN` 的环境变量兼容警告；实际部署封装已取消该变量并使用专用
+  `CLOUDFLARE_API_TOKEN`，没有鉴权混用或 Secret 泄漏。
+- 独立线上验收确认 `/api/health` 与 `/api/chain/bootstrap` 均返回 HTTP 200；服务标识为
+  `citizenapp-square-api`。链引导数据精确匹配创世哈希
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d` 和 state root
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`，链名、链类型、
+  protocol id、SS58 格式与代币信息正确，贵州、中枢、国家储委会三个关键 PeerId 均存在。
+- 线上安全边界验收确认轻客户端真源为 `p2p_finalized_storage`、API 不是链状态真源、签名交易
+  relay 关闭；接口明确不暴露 RPC URL、不代理 RPC、不公开验证节点 RPC、不暴露私钥材料，
+  响应中也不存在 Worker 业务 Secret 字段。部署后 `citizenapp/cloudflare/` 仍无差异；本步骤
+  没有修改 runtime、没有推送 GitHub、没有触发新的 CI，也没有发布 CitizenApp 或
+  CitizenWallet。
+
+### 第十步：CitizenWeb 官网生产部署
+
+状态：completed（2026-08-02；生产部署、全部路由与静态资产独立线上验收完成）
+
+- 部署前将直接依赖 Wrangler 从 `4.112.0` 更新到 `4.118.0` 并刷新现有 lockfile；同时由
+  lockfile 收口 DOMPurify `3.4.12`、Sharp `0.35.2`、PostCSS `8.5.25`、
+  brace-expansion `1.1.18 / 5.0.9` 和 React Router `7.18.2`。没有新增依赖、文件或目录。
+- `npm ci --ignore-scripts --no-audit --no-fund`、Wrangler 版本检查、`npm run lint` 和
+  `npm run build` 全部通过；生产依赖审计为 0 个漏洞。全量审计仅剩 React Router 的 RSC
+  服务端动作公告，而官网是纯静态 BrowserRouter 单页应用，不使用 RSC 或服务端动作。
+- 构建使用 Vite `8.1.3`，共转换 43 个模块；`dist/` 不含 source map，中国国旗字符扫描为 0。
+  本地 `index.html` SHA-256 为
+  `94740ecf76161c49d95821e8856d5d2b51bfa64e0b4c7af377a7f9a56da68616`。
+- 生产动作只通过已签名且完整性验收通过的 CitizenConsole 执行，并由用户完成 Touch ID 鉴权。
+  Wrangler 上传 4 个新文件、复用 5 个已有文件，生产部署地址为
+  `https://eb329891.citizenweb.pages.dev`；控制台完成生产部署后的真实健康检查。
+- 独立 HTTP 验收确认部署地址及自定义域 `https://www.crcfrcn.com` 的 `/`、`/about`、
+  `/technology`、`/tokenomics`、`/governance`、`/whitepaper`、`/constitution`、
+  `/ecosystem` 共 8 条路由全部返回 HTTP 200 和 HTML。部署地址的 HTML 与本地产物摘要一致。
+- 自定义域会由 Cloudflare 按请求注入 `/cdn-cgi/challenge-platform/scripts/jsd/main.js`，因此
+  HTML 摘要会随 CF Ray 参数变化；这不是仓库源码差异。自定义域实际加载的入口 JS、CSS、
+  宪法和白皮书分块、favicon、徽章及白皮书图片均与本地构建逐字节一致。
+- 真实浏览器逐页验收确认 8 条路由均正确渲染。宪法页成功从链上加载出“公民宪法 / Citizen
+  Constitution”以及章、节目录，不处于加载状态且没有失败提示。
+- 本步骤没有修改 runtime、没有推送 GitHub、没有触发 GitHub CI，没有发布 CitizenApp、
+  CitizenWallet 或 CitizenChain，也没有触碰其它线程的工作树修改。
+
+### fullnode-issuance 权重与测试收尾
+
+状态：completed（2026-08-02；用户确认并二次确认 runtime 修改后完成）
+
+- `bind_reward_account` 允许未出块矿工账户预绑定奖励接收账户，旧出块资格错误分支已删除；
+  `LastAuthoredBlockByMiner` 仅保留为奖励发放与节点守卫的审计事实。
+- benchmark、测试与辅助函数中的旧出块前置和旧注释已删除，新增「预绑定账户收到首次出块
+  奖励」测试；fullnode-issuance 当前 20 项测试全部通过。
+- 已使用仓库 Substrate benchmark 流程重新生成 `weights.rs`：绑定与重绑均为 1 次读取、
+  1 次写入，ref time 分别为 6,000,000 与 7,000,000，没有手工伪造权重。
+- runtime `spec_version` 已从 0 提升为 1；全 workspace check、全量测试和 Clippy
+  `-D warnings` 全部通过。未推送 GitHub、未触发远端 CI、未替换已冻结 WASM、未部署。
+
+### 最终全仓清理与验收
+
+状态：completed（2026-08-02；代码、注释、文档、测试与协议残留已完成本地收尾）
+
+- CitizenChain：`cargo fmt --all -- --check`、全 workspace check、全量测试与 Clippy
+  `-D warnings` 全部通过；节点 303 项测试、fullnode-issuance 20 项测试、
+  legislation-yuan 45 项测试均通过。
+- CitizenApp：静态分析通过；串行全量测试 1,092 项通过、5 项按纯 Dart 环境预期跳过、
+  零失败。聊天与通讯录密文落盘、双签换绑重加密、无旧账户签名时历史私有密文不可解密等
+  安全场景均通过。
+- CitizenWallet：静态分析通过，全量 282 项测试通过。Cloudflare Worker 类型检查通过，
+  33 个测试文件、256 项测试全部通过。
+- 真实本地 Worker/D1：全新临时 D1 的 60 条 schema 命令成功；`GET /health` 返回 200，
+  废弃版本化 health 路径返回 404；临时数据库与本地服务验收后已删除。
+- OnChina 前端 build 与 5 项测试通过；CitizenWeb lint 与 build 通过。黄金向量同步、pallet
+  注册表同步、宪法 SCALE 自检、冻结 chainspec 检查和 AI 守卫全部通过。
+- 已删除自定义版本路由、版本字段、版本缓存键、版本文件名与旧奖励账户命名残留；官方
+  Cloudflare Images、FCM 和 Android 平台版本标识不属于第一方协议，保持官方标准不变。
+- 本轮没有推送 GitHub、没有触发远端 CI、没有发布软件、没有替换冻结 WASM、没有部署。
+  此前由用户明确暂停的 CitizenApp、CitizenWallet 与 CitizenChain 正式发布仍不在本轮范围。
 
 ## 第一步预计修改目录
 

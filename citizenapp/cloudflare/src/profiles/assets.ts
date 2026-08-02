@@ -45,7 +45,7 @@ export async function prepareProfileAsset(request: Request, env: Env): Promise<R
   const sha = (body.sha256 as string).toLowerCase();
   // 固定对象键让并发上传也只能覆盖同一对象，物理上不可能留下第二个头像或背景。
   const objectKey = `${profileAssetPrefix(session.cid_number)}${kind}`;
-  const uploadUrl = apiRouteUrl(request, '/v1/square/profile/assets', {
+  const uploadUrl = apiRouteUrl(request, '/square/profile/assets', {
     object_key: objectKey,
     byte_size: String(body.byte_size),
     sha256: sha,

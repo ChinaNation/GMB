@@ -44,7 +44,7 @@ describe('chain signed extrinsic relay', () => {
     expect(response.status).toBe(202);
     expect(body).toMatchObject({
       ok: true,
-      schema: 'citizenapp.chain.extrinsic_relay.v1',
+      schema: 'citizenapp.chain.extrinsic_relay',
       relay_status: 'broadcast',
       tx_hash: txHash
     });
@@ -178,7 +178,7 @@ describe('chain signed extrinsic relay', () => {
 
 function relayRequest(body: Record<string, unknown>): Request {
   const encoded = JSON.stringify(body);
-  return new Request('https://api.onchina.org/v1/chain/extrinsics/relay', {
+  return new Request('https://api.onchina.org/chain/extrinsics/relay', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

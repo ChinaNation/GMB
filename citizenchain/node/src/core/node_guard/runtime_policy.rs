@@ -32,6 +32,9 @@ const SYSTEM_EVENTS: &[u8] = b"Events";
 /// 链下费率字段内部仍按百分之一百分点计数；10 对应制度上限 0.1%。
 const OFFCHAIN_MAX_RATE_UNITS: u32 = 10;
 const SYNTHETIC_BALANCE: u128 = 1_000_000_000_000;
+// 公民身份调用的最大 proof-size 交易费高于普通手续费探针，使用隔离 overlay 的
+// 大额合成余额，确保测试一定进入 pallet 验签分支而不是提前止于 Payment。
+const CITIZEN_SIGNATURE_PROBE_BALANCE: u128 = u128::MAX / 4;
 const BALANCES_NEW_ACCOUNT_FLAGS: u128 = 0x80000000_00000000_00000000_00000000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -624,6 +627,744 @@ fn seed_offchain_minimum_fee_probe(
     Ok((call, bank, cid_bytes))
 }
 
+fn set_overlay_value<Value: Encode>(
+    overlay: &mut OverlayedChanges<BlakeTwo256>,
+    key: Vec<u8>,
+    value: &Value,
+) {
+    overlay.set_storage(key, Some(value.encode()));
+}
+
+fn citizen_probe_cid(tag: &str) -> Result<citizen_identity::CidNumberBound, String> {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            public_key: tag,
+            p1: "1",
+            province_code: "ZS",
+            province_name: "中枢省",
+            city_code: "001",
+            city_name: "基准市",
+            year: "2027",
+            institution: "CTZN",
+        },
+    )
+    .map_err(|error| format!("构造候选 runtime 公民 CID 探针失败:{error}"))?
+    .into_bytes()
+    .try_into()
+    .map_err(|_| "候选 runtime 公民 CID 探针超长".to_string())
+}
+
+fn seed_candidate_registrar(
+    overlay: &mut OverlayedChanges<BlakeTwo256>,
+    registrar: &AccountId32,
+) -> Result<
+    (
+        citizen_identity::CidNumberBound,
+        citizen_identity::RoleCodeBound,
+    ),
+    String,
+> {
+    let province = primitives::cid::code::PROVINCE_CODE_INFOS
+        .first()
+        .ok_or("候选 runtime 缺少省级注册局配置")?
+        .province_code;
+    let institution = primitives::governance_skeleton::federal_registry_institution();
+    let actor_cid_number: public_manage::pallet::CidNumberOf<citizenchain::Runtime> = institution
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .map_err(|_| "候选 runtime 注册局 CID 超长")?;
+    let admin_cid_number: admin_primitives::AdminCidNumber =
+        actor_cid_number
+            .to_vec()
+            .try_into()
+            .map_err(|_| "候选 runtime 管理员注册局 CID 超长")?;
+    let actor_role_code: public_manage::RoleCodeOf =
+        primitives::governance_skeleton::province_commissioner_role_code(province)
+            .try_into()
+            .map_err(|_| "候选 runtime 注册局岗位码超长")?;
+    let actor_cid_bound: citizen_identity::CidNumberBound = actor_cid_number
+        .to_vec()
+        .try_into()
+        .map_err(|_| "候选 runtime 公民身份注册局 CID 超长")?;
+    let actor_role_bound: citizen_identity::RoleCodeBound = actor_role_code
+        .to_vec()
+        .try_into()
+        .map_err(|_| "候选 runtime 公民身份岗位码超长")?;
+
+    let admins: public_admins::pallet::InstitutionAdminsOf<citizenchain::Runtime> =
+        admin_primitives::InstitutionAdmins {
+            institution_code: admin_primitives::FRG,
+            admins: vec![admin_primitives::Admin {
+                account_id: registrar.clone(),
+                cid_number: Default::default(),
+                family_name: Default::default(),
+                given_name: Default::default(),
+            }]
+            .try_into()
+            .map_err(|_| "候选 runtime 注册局管理员集合超限")?,
+        };
+    set_overlay_value(
+        overlay,
+        public_admins::pallet::AdminAccounts::<citizenchain::Runtime>::hashed_key_for(
+            admin_cid_number,
+        ),
+        &admins,
+    );
+
+    let main_account = AccountId32::new(institution.main_account);
+    let account_name: public_manage::pallet::AccountNameOf<citizenchain::Runtime> =
+        primitives::account_derive::RESERVED_NAME_MAIN
+            .to_vec()
+            .try_into()
+            .map_err(|_| "候选 runtime 注册局主账户名超长")?;
+    set_overlay_value(
+        overlay,
+        public_manage::AccountRegisteredCid::<citizenchain::Runtime>::hashed_key_for(&main_account),
+        &entity_primitives::RegisteredInstitution {
+            cid_number: actor_cid_number.clone(),
+            account_name: account_name.clone(),
+        },
+    );
+    set_overlay_value(
+        overlay,
+        public_manage::InstitutionAccounts::<citizenchain::Runtime>::hashed_key_for(
+            &actor_cid_number,
+            &account_name,
+        ),
+        &entity_primitives::InstitutionAccountInfo {
+            account_id: main_account,
+            initial_balance: 0u128,
+            created_at: 0u32,
+        },
+    );
+    // 注册局业务调用只由管理员签名，交易费必须从 actor CID 的协议费用账户扣取。
+    // 探针按正式派生规则建立正反索引并充值，禁止退化为管理员账户代付。
+    let fee_account_name: public_manage::pallet::AccountNameOf<citizenchain::Runtime> =
+        primitives::account_derive::RESERVED_NAME_FEE
+            .to_vec()
+            .try_into()
+            .map_err(|_| "候选 runtime 注册局费用账户名超长")?;
+    let fee_account = AccountId32::new(
+        primitives::account_derive::AccountKind::InstitutionFee {
+            cid_number: actor_cid_number.as_slice(),
+        }
+        .derive(primitives::core_const::SS58_FORMAT),
+    );
+    set_overlay_value(
+        overlay,
+        public_manage::AccountRegisteredCid::<citizenchain::Runtime>::hashed_key_for(&fee_account),
+        &entity_primitives::RegisteredInstitution {
+            cid_number: actor_cid_number.clone(),
+            account_name: fee_account_name.clone(),
+        },
+    );
+    set_overlay_value(
+        overlay,
+        public_manage::InstitutionAccounts::<citizenchain::Runtime>::hashed_key_for(
+            &actor_cid_number,
+            &fee_account_name,
+        ),
+        &entity_primitives::InstitutionAccountInfo {
+            account_id: fee_account.clone(),
+            initial_balance: 0u128,
+            created_at: 0u32,
+        },
+    );
+    set_overlay_value(
+        overlay,
+        fullnode_issuance::storage_key::system_account(fee_account.as_ref()),
+        &MAccountInfo {
+            nonce: 0,
+            consumers: 0,
+            providers: 1,
+            sufficients: 0,
+            data: MAccountData {
+                free: CITIZEN_SIGNATURE_PROBE_BALANCE,
+                reserved: 0,
+                frozen: 0,
+                flags: BALANCES_NEW_ACCOUNT_FLAGS,
+            },
+        },
+    );
+    let institution_info: public_manage::pallet::InstitutionInfoOf<citizenchain::Runtime> =
+        entity_primitives::InstitutionInfo {
+            cid_full_name: "候选注册局探针"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .map_err(|_| "候选 runtime 注册局全称超长")?,
+            cid_short_name: "注册局探针"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .map_err(|_| "候选 runtime 注册局简称超长")?,
+            town_code: Default::default(),
+            legal_representative: None,
+            institution_code: admin_primitives::FRG,
+            created_at: 0u32,
+        };
+    set_overlay_value(
+        overlay,
+        public_manage::Institutions::<citizenchain::Runtime>::hashed_key_for(&actor_cid_number),
+        &institution_info,
+    );
+    let institution_role: public_manage::institution::role::InstitutionRoleOf<
+        citizenchain::Runtime,
+    > = entity_primitives::InstitutionRole {
+        cid_number: actor_cid_number.clone(),
+        role_code: actor_role_code.clone(),
+        role_name: "候选省专员"
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .map_err(|_| "候选 runtime 注册局岗位名称超长")?,
+        term_required: true,
+        role_status: entity_primitives::InstitutionRoleStatus::Active,
+    };
+    set_overlay_value(
+        overlay,
+        public_manage::InstitutionRoles::<citizenchain::Runtime>::hashed_key_for(
+            &actor_cid_number,
+            &actor_role_code,
+        ),
+        &institution_role,
+    );
+    let assignments: public_manage::institution::role::RoleAssignmentsOf<citizenchain::Runtime> =
+        vec![entity_primitives::InstitutionAdminAssignment {
+            cid_number: actor_cid_number.clone(),
+            account_id: registrar.clone(),
+            role_code: actor_role_code.clone(),
+            term_start: 1,
+            term_end: u32::MAX,
+            assignment_source: entity_primitives::InstitutionAssignmentSource::Genesis,
+            assignment_source_ref: Default::default(),
+            assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+        }]
+        .try_into()
+        .map_err(|_| "候选 runtime 注册局任职集合超限")?;
+    set_overlay_value(
+        overlay,
+        public_manage::InstitutionRoleAssignments::<citizenchain::Runtime>::hashed_key_for(
+            &actor_cid_number,
+            &actor_role_code,
+        ),
+        &assignments,
+    );
+    let mut permission_values = Vec::new();
+    for spec in entity_primitives::fixed_role_permission_specs(
+        admin_primitives::FRG,
+        actor_cid_number.as_slice(),
+        actor_role_code.as_slice(),
+    ) {
+        permission_values.push(entity_primitives::RoleBusinessPermission {
+            role_subject: entity_primitives::RoleSubject {
+                cid_number: actor_cid_number.clone(),
+                role_code: actor_role_code.clone(),
+            },
+            business_action_id: entity_primitives::BusinessActionId {
+                module_tag: spec
+                    .module_tag
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| "候选 runtime 注册局业务模块标签超长")?,
+                action_code: spec.action_code,
+            },
+            operation: spec.operation,
+        });
+    }
+    let permissions: public_manage::RolePermissionsOf<citizenchain::Runtime> = permission_values
+        .try_into()
+        .map_err(|_| "候选 runtime 注册局权限集合超限")?;
+    set_overlay_value(
+        overlay,
+        public_manage::InstitutionRolePermissions::<citizenchain::Runtime>::hashed_key_for(
+            &actor_cid_number,
+            &actor_role_code,
+        ),
+        &permissions,
+    );
+    Ok((actor_cid_bound, actor_role_bound))
+}
+
+fn seed_occupied_citizen_cid(
+    overlay: &mut OverlayedChanges<BlakeTwo256>,
+    actor_cid_number: &citizen_identity::CidNumberBound,
+    cid_number: &citizen_identity::CidNumberBound,
+    account_id: &AccountId32,
+    block_number: u32,
+) {
+    let record = citizen_identity::CidRecord {
+        registrar_cid_number: actor_cid_number.clone(),
+        commitment: sp_io::hashing::blake2_256(&account_id.encode()),
+        residence_province_code: Default::default(),
+        residence_city_code: Default::default(),
+        status: citizen_identity::CidRecordStatus::Active,
+        registered_at: block_number,
+        revoked_at: None,
+    };
+    set_overlay_value(
+        overlay,
+        citizen_identity::CidRegistry::<citizenchain::Runtime>::hashed_key_for(cid_number),
+        &record,
+    );
+    set_overlay_value(
+        overlay,
+        citizen_identity::AccountIdByCid::<citizenchain::Runtime>::hashed_key_for(cid_number),
+        account_id,
+    );
+    set_overlay_value(
+        overlay,
+        citizen_identity::CidByAccountId::<citizenchain::Runtime>::hashed_key_for(account_id),
+        cid_number,
+    );
+    set_overlay_value(
+        overlay,
+        citizen_identity::BindingRevisionByCid::<citizenchain::Runtime>::hashed_key_for(cid_number),
+        &1u64,
+    );
+}
+
+fn candidate_citizen_signature(
+    signer: &sr25519::Pair,
+    op_tag: u8,
+    payload: &[u8],
+) -> Result<citizen_identity::pallet::SignatureOf<citizenchain::Runtime>, String> {
+    signer
+        .sign(&primitives::sign::signing_message(op_tag, payload))
+        .0
+        .to_vec()
+        .try_into()
+        .map_err(|_| "候选 runtime sr25519 签名超过公民身份边界".to_string())
+}
+
+fn forged_citizen_signature(
+) -> Result<citizen_identity::pallet::SignatureOf<citizenchain::Runtime>, String> {
+    [0xA5u8; 64]
+        .to_vec()
+        .try_into()
+        .map_err(|_| "候选 runtime 伪造签名超过公民身份边界".to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_citizen_signature_probe<B>(
+    backend: &B,
+    overlay: &mut OverlayedChanges<BlakeTwo256>,
+    executor: &sc_executor::WasmExecutor<sp_io::SubstrateHostFunctions>,
+    runtime_code: &sp_core::traits::RuntimeCode<'_>,
+    parent_hash: sp_core::H256,
+    genesis_hash: sp_core::H256,
+    version: &sc_executor::RuntimeVersion,
+    signer: &sr25519::Pair,
+    nonce: u32,
+    call: RuntimeCall,
+    expected_error: Option<sp_runtime::DispatchError>,
+    label: &str,
+) -> Result<(), String>
+where
+    B: Backend<BlakeTwo256>,
+{
+    let extrinsic = chain_signing::build_signed_extrinsic_with_pair(
+        call,
+        genesis_hash,
+        nonce,
+        version.spec_version,
+        version.transaction_version,
+        signer,
+    );
+    let result = call_candidate(
+        backend,
+        overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        "BlockBuilder_apply_extrinsic",
+        &extrinsic.encode(),
+    )?;
+    let result: sp_runtime::ApplyExtrinsicResult =
+        decode_exact(&result, "候选公民身份 ApplyExtrinsicResult")?;
+    match (result, expected_error) {
+        (Ok(Ok(())), None) => Ok(()),
+        (Ok(Err(actual)), Some(expected)) if actual == expected => Ok(()),
+        (actual, expected) => Err(format!(
+            "候选 runtime 公民身份验签探针 {label} 结果错误:期望 {expected:?},实际 {actual:?}"
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_candidate_citizen_identity_signatures<B>(
+    backend: &B,
+    executor: &sc_executor::WasmExecutor<sp_io::SubstrateHostFunctions>,
+    runtime_code: &sp_core::traits::RuntimeCode<'_>,
+    parent_hash: sp_core::H256,
+    next_header: &citizenchain::Header,
+    post_delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>,
+    version: &sc_executor::RuntimeVersion,
+    registrar_pair: &sr25519::Pair,
+    genesis_hash: sp_core::H256,
+) -> Result<(), String>
+where
+    B: Backend<BlakeTwo256>,
+{
+    let mut overlay = OverlayedChanges::<BlakeTwo256>::default();
+    for (key, value) in post_delta {
+        overlay.set_storage(key.clone(), value.clone());
+    }
+    let registrar = AccountId32::new(registrar_pair.public().0);
+    let payer_key = fullnode_issuance::storage_key::system_account(registrar.as_ref());
+    set_overlay_value(
+        &mut overlay,
+        payer_key,
+        &MAccountInfo {
+            nonce: 0,
+            consumers: 0,
+            providers: 1,
+            sufficients: 0,
+            data: MAccountData {
+                free: CITIZEN_SIGNATURE_PROBE_BALANCE,
+                reserved: 0,
+                frozen: 0,
+                flags: BALANCES_NEW_ACCOUNT_FLAGS,
+            },
+        },
+    );
+    set_overlay_value(
+        &mut overlay,
+        pallet_timestamp::Now::<citizenchain::Runtime>::hashed_key().to_vec(),
+        &1_800_000_000_000u64,
+    );
+    set_overlay_value(
+        &mut overlay,
+        citizen_identity::PopulationReadyDate::<citizenchain::Runtime>::hashed_key().to_vec(),
+        &20270115u32,
+    );
+    overlay.set_storage(
+        citizen_identity::PopulationMaintenanceFault::<citizenchain::Runtime>::hashed_key()
+            .to_vec(),
+        None,
+    );
+    let (actor_cid_number, actor_role_code) = seed_candidate_registrar(&mut overlay, &registrar)?;
+    call_candidate(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        "Core_initialize_block",
+        &next_header.encode(),
+    )?;
+
+    let expires_at = 1_800_000_300u64;
+    let forged = forged_citizen_signature()?;
+    let mut nonce = 0u32;
+
+    // 注册局占号：授权与 CID 前置条件完全相同，只替换内层签名。
+    let occupy_pair = sr25519::Pair::from_seed(&[0x41; 32]);
+    let occupy_account_id = AccountId32::new(occupy_pair.public().0);
+    let occupy_cid_number = citizen_probe_cid("node-guard-occupy")?;
+    let occupy_payload = citizen_identity::CidOccupyAuthorization {
+        genesis_hash,
+        cid_number: occupy_cid_number.clone(),
+        account_id: occupy_account_id.clone(),
+        expected_binding_revision: 0,
+        expires_at,
+    }
+    .encode();
+    let valid_occupy_signature = candidate_citizen_signature(
+        &occupy_pair,
+        primitives::sign::OP_SIGN_CID_OCCUPY,
+        &occupy_payload,
+    )?;
+    let occupy_call = |citizen_signature| {
+        RuntimeCall::CitizenIdentity(citizen_identity::pallet::Call::occupy_cid {
+            actor_cid_number: actor_cid_number.clone(),
+            actor_role_code: actor_role_code.clone(),
+            cid_number: occupy_cid_number.clone(),
+            account_id: occupy_account_id.clone(),
+            expires_at,
+            citizen_signature,
+        })
+    };
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        occupy_call(forged.clone()),
+        Some(citizen_identity::Error::<citizenchain::Runtime>::InvalidOccupySignature.into()),
+        "occupy_cid/forged",
+    )?;
+    nonce = nonce.saturating_add(1);
+    if overlay
+        .storage(
+            &citizen_identity::AccountIdByCid::<citizenchain::Runtime>::hashed_key_for(
+                &occupy_cid_number,
+            ),
+        )
+        .flatten()
+        .is_some()
+    {
+        return Err("候选 runtime 伪造占号签名修改了 CID 绑定".to_string());
+    }
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        occupy_call(valid_occupy_signature),
+        None,
+        "occupy_cid/valid",
+    )?;
+    nonce = nonce.saturating_add(1);
+
+    // 公民投票身份登记：先种入占号绑定，伪造签名必须在正式 citizen 域被拒绝。
+    let citizen_pair = sr25519::Pair::from_seed(&[0x42; 32]);
+    let citizen_account_id = AccountId32::new(citizen_pair.public().0);
+    let citizen_cid_number = citizen_probe_cid("node-guard-citizen")?;
+    seed_occupied_citizen_cid(
+        &mut overlay,
+        &actor_cid_number,
+        &citizen_cid_number,
+        &citizen_account_id,
+        *next_header.number(),
+    );
+    let voting_payload = citizen_identity::VotingIdentityPayload {
+        cid_number: citizen_cid_number.clone(),
+        account_id: citizen_account_id,
+        passport_valid_from: 20270101,
+        passport_valid_until: 20991231,
+        citizen_status: citizen_identity::CitizenStatus::Normal,
+        residence_province_code: b"ZS".to_vec().try_into().map_err(|_| "省码超长")?,
+        residence_city_code: b"ZS01".to_vec().try_into().map_err(|_| "市码超长")?,
+        residence_town_code: b"ZS01001".to_vec().try_into().map_err(|_| "镇码超长")?,
+    };
+    let valid_citizen_signature = candidate_citizen_signature(
+        &citizen_pair,
+        primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+        &voting_payload.encode(),
+    )?;
+    let voting_call = |citizen_signature| {
+        RuntimeCall::CitizenIdentity(citizen_identity::pallet::Call::register_voting_identity {
+            actor_cid_number: actor_cid_number.clone(),
+            actor_role_code: actor_role_code.clone(),
+            payload: voting_payload.clone(),
+            citizen_signature,
+        })
+    };
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        voting_call(forged.clone()),
+        Some(citizen_identity::Error::<citizenchain::Runtime>::InvalidCitizenSignature.into()),
+        "register_voting_identity/forged",
+    )?;
+    nonce = nonce.saturating_add(1);
+    if overlay
+        .storage(&citizen_identity::VotingIdentityByCid::<
+            citizenchain::Runtime,
+        >::hashed_key_for(&citizen_cid_number))
+        .flatten()
+        .is_some()
+    {
+        return Err("候选 runtime 伪造公民签名写入了投票身份".to_string());
+    }
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        voting_call(valid_citizen_signature),
+        None,
+        "register_voting_identity/valid",
+    )?;
+    nonce = nonce.saturating_add(1);
+
+    // 注册局换绑：新账户的 admin-rebind 域签名必须真实有效。
+    let admin_current_pair = sr25519::Pair::from_seed(&[0x43; 32]);
+    let admin_current_account_id = AccountId32::new(admin_current_pair.public().0);
+    let admin_new_pair = sr25519::Pair::from_seed(&[0x44; 32]);
+    let admin_new_account_id = AccountId32::new(admin_new_pair.public().0);
+    let admin_cid_number = citizen_probe_cid("node-guard-admin-rebind")?;
+    seed_occupied_citizen_cid(
+        &mut overlay,
+        &actor_cid_number,
+        &admin_cid_number,
+        &admin_current_account_id,
+        *next_header.number(),
+    );
+    let admin_payload = citizen_identity::CidRebindAuthorization {
+        genesis_hash,
+        cid_number: admin_cid_number.clone(),
+        current_account_id: admin_current_account_id.clone(),
+        new_account_id: admin_new_account_id.clone(),
+        expected_binding_revision: 1,
+        expires_at,
+    }
+    .encode();
+    let valid_admin_signature = candidate_citizen_signature(
+        &admin_new_pair,
+        primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
+        &admin_payload,
+    )?;
+    let admin_call = |new_account_signature| {
+        RuntimeCall::CitizenIdentity(
+            citizen_identity::pallet::Call::admin_rebind_cid_account_id {
+                actor_cid_number: actor_cid_number.clone(),
+                actor_role_code: actor_role_code.clone(),
+                cid_number: admin_cid_number.clone(),
+                new_account_id: admin_new_account_id.clone(),
+                expected_binding_revision: 1,
+                expires_at,
+                new_account_signature,
+            },
+        )
+    };
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        admin_call(forged.clone()),
+        Some(citizen_identity::Error::<citizenchain::Runtime>::InvalidAdminRebindSignature.into()),
+        "admin_rebind_cid_account_id/forged",
+    )?;
+    nonce = nonce.saturating_add(1);
+    let admin_binding_key =
+        citizen_identity::AccountIdByCid::<citizenchain::Runtime>::hashed_key_for(
+            &admin_cid_number,
+        );
+    let binding: AccountId32 = decode_exact(
+        overlay
+            .storage(&admin_binding_key)
+            .flatten()
+            .ok_or("候选 runtime 丢失注册局换绑探针绑定")?,
+        "候选注册局换绑当前账户",
+    )?;
+    if binding != admin_current_account_id {
+        return Err("候选 runtime 伪造注册局换绑签名改变了当前账户".to_string());
+    }
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        admin_call(valid_admin_signature),
+        None,
+        "admin_rebind_cid_account_id/valid",
+    )?;
+    nonce = nonce.saturating_add(1);
+
+    // 自主换绑：当前绑定账户签名，交易由新账户（本探针 registrar_pair）提交。
+    let self_current_pair = sr25519::Pair::from_seed(&[0x45; 32]);
+    let self_current_account_id = AccountId32::new(self_current_pair.public().0);
+    let self_cid_number = citizen_probe_cid("node-guard-self-rebind")?;
+    seed_occupied_citizen_cid(
+        &mut overlay,
+        &actor_cid_number,
+        &self_cid_number,
+        &self_current_account_id,
+        *next_header.number(),
+    );
+    let self_payload = citizen_identity::CidRebindAuthorization {
+        genesis_hash,
+        cid_number: self_cid_number.clone(),
+        current_account_id: self_current_account_id.clone(),
+        new_account_id: registrar.clone(),
+        expected_binding_revision: 1,
+        expires_at,
+    }
+    .encode();
+    let valid_self_signature = candidate_citizen_signature(
+        &self_current_pair,
+        primitives::sign::OP_SIGN_CID_REBIND,
+        &self_payload,
+    )?;
+    let self_call = |current_account_signature| {
+        RuntimeCall::CitizenIdentity(citizen_identity::pallet::Call::self_rebind_cid_account_id {
+            cid_number: self_cid_number.clone(),
+            expected_binding_revision: 1,
+            expires_at,
+            current_account_signature,
+        })
+    };
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        self_call(forged),
+        Some(citizen_identity::Error::<citizenchain::Runtime>::InvalidRebindSignature.into()),
+        "self_rebind_cid_account_id/forged",
+    )?;
+    nonce = nonce.saturating_add(1);
+    let self_binding_key =
+        citizen_identity::AccountIdByCid::<citizenchain::Runtime>::hashed_key_for(&self_cid_number);
+    let binding: AccountId32 = decode_exact(
+        overlay
+            .storage(&self_binding_key)
+            .flatten()
+            .ok_or("候选 runtime 丢失自主换绑探针绑定")?,
+        "候选自主换绑当前账户",
+    )?;
+    if binding != self_current_account_id {
+        return Err("候选 runtime 伪造自主换绑签名改变了当前账户".to_string());
+    }
+    apply_citizen_signature_probe(
+        backend,
+        &mut overlay,
+        executor,
+        runtime_code,
+        parent_hash,
+        genesis_hash,
+        version,
+        registrar_pair,
+        nonce,
+        self_call(valid_self_signature),
+        None,
+        "self_rebind_cid_account_id/valid",
+    )?;
+    Ok(())
+}
+
 /// 在候选 WASM 生效前执行固定费用行为探针。
 ///
 /// 这不是 WASM 哈希白名单，也不要求升级 runtime 随节点发布；任意候选代码都只按
@@ -683,6 +1424,15 @@ where
         &[],
     )?;
     let version: sc_executor::RuntimeVersion = decode_exact(&version_raw, "候选 RuntimeVersion")?;
+    let benchmark_api_id =
+        <dyn frame_benchmarking::Benchmark<citizenchain::Block> as sp_api::RuntimeApiInfo>::ID;
+    if version
+        .apis
+        .iter()
+        .any(|(api_id, _)| api_id == &benchmark_api_id)
+    {
+        return Err("候选 runtime 暴露 Benchmark runtime API，禁止作为正式 :code".to_string());
+    }
 
     let next_header = citizenchain::Header::new(
         current_number.saturating_add(1),
@@ -691,6 +1441,17 @@ where
         current_hash,
         Default::default(),
     );
+    check_candidate_citizen_identity_signatures(
+        backend,
+        &executor,
+        &runtime_code,
+        parent_hash,
+        &next_header,
+        post_delta,
+        &version,
+        &payer_pair,
+        genesis_hash,
+    )?;
     call_candidate(
         backend,
         &mut overlay,

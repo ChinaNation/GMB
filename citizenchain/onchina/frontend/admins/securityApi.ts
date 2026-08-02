@@ -63,7 +63,7 @@ export async function prepareAdminAction(
   actionType: AdminActionType,
   payload: unknown,
 ): Promise<PrepareAdminActionOutput> {
-  return adminRequest<PrepareAdminActionOutput>('/api/v1/admin/actions/prepare', auth, {
+  return adminRequest<PrepareAdminActionOutput>('/api/admin/actions/prepare', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action_type: actionType, payload }),
@@ -80,7 +80,7 @@ export async function commitAdminAction<T>(
     payload_hash: string;
   },
 ): Promise<T> {
-  return adminRequest<T>('/api/v1/admin/actions/commit', auth, {
+  return adminRequest<T>('/api/admin/actions/commit', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

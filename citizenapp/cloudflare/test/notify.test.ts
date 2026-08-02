@@ -20,7 +20,7 @@ interface FollowRow {
   notify_enabled: number;
 }
 
-describe('GET /v1/square/notify/unread', () => {
+describe('GET /square/notify/unread', () => {
   it('counts new posts from notify-enabled follows since each cursor (no reads row = 0)', async () => {
     const env = fakeEnv({
       follows: [
@@ -81,7 +81,7 @@ describe('GET /v1/square/notify/unread', () => {
     expect(await readUnread(env)).toMatchObject({ square_unread: 2, following_unread: 2 });
 
     await markNotifyReadRoute(
-      request('https://w/v1/square/notify/read', {
+      request('https://w/square/notify/read', {
         method: 'POST',
         authToken: 'tok',
         body: { scope: 'square' }
@@ -97,7 +97,7 @@ describe('GET /v1/square/notify/unread', () => {
     const env = fakeEnv({});
     await expect(
       markNotifyReadRoute(
-        request('https://w/v1/square/notify/read', {
+        request('https://w/square/notify/read', {
           method: 'POST',
           authToken: 'tok',
           body: { scope: 'all' }
@@ -111,7 +111,7 @@ describe('GET /v1/square/notify/unread', () => {
     env: Env
   ): Promise<{ square_unread: number; following_unread: number }> {
     const response = await getNotifyUnreadRoute(
-      request('https://w/v1/square/notify/unread', { authToken: 'tok' }),
+      request('https://w/square/notify/unread', { authToken: 'tok' }),
       env
     );
     return (await response.json()) as {

@@ -145,8 +145,8 @@ CidByAccountId[account_id] -> cid_number
 3. 管理员管理、治理、转账、清算、挖矿奖励、节点设置、节点守卫和签名流程中的 DTO、
    事件、错误、函数、参数、局部变量与中文注释同步改名。管理员人员集合仍叫
    `admins`；机构权限仍按 `cid_number + role_code + account_id` 校验。
-4. `reward_bindWallet` / `reward_rebindWallet`、桌面命令、Tauri 参数与结果、本地
-   `reward-wallet.json` 等旧 Node 私有协议直接切换为 account-id 目标命名，不保留旧
+4. 奖励账户绑定/重绑 RPC、桌面命令、Tauri 参数与结果、本地
+   奖励账户配置等 Node 私有协议直接切换为 `account_id` 目标命名，不保留废弃
    RPC 方法、旧命令、旧 JSON 或 fallback。`node/frontend/` 的直接消费者必须在同一步
    同步，避免 Rust 桥接与桌面页面形成断裂。
 5. 签名流程统一区分 `signer_public_key` 与 `signer_account_id`：先严格验证公钥和签名，
@@ -782,7 +782,7 @@ PostgreSQL、助记词派生、签名算法或任何 Secret，也不新增文件
   `@cloudflare/workers-types` 已更新到 `5.20260723.1`，
   `compatibility_date` 已同步为 `2026-07-23`；staging/production 明确列出全部
   非密钥 topup vars，dry-run 不再依赖环境继承。Secret 未读取、未输出、未删除。
-- 本地 `.wrangler/state/v3` 旧业务状态已移至系统临时目录作可恢复隔离，再按最终
+- 本地 Wrangler 旧业务状态目录已移至系统临时目录作可恢复隔离，再按最终
   0001 重建为空库。当次本地 D1 有 25 个业务表，业务样本行 0；`square_posts`
   中旧 `owner_account` 列为 0、最终 `account_id` 列为 1，旧 Stripe 表为 0。
   实际 SQLite 写入证明 SS58 被 `CHECK` 拒绝，规范 AccountId 可写入；验收样本随后

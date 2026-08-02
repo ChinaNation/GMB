@@ -35,7 +35,7 @@ interface SelfPostCursor {
   post_id: string;
 }
 
-/** GET /v1/square/posts/self：按会话 CID 回灌本人已发布 manifest 原始字节。 */
+/** GET /square/posts/self：按会话 CID 回灌本人已发布 manifest 原始字节。 */
 export async function selfPostCopiesRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const url = new URL(request.url);

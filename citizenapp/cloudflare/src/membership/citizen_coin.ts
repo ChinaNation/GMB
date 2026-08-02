@@ -51,7 +51,7 @@ const defaultConfirmDeps: PlatformSubscriptionConfirmDeps = {
     readSubscriptionAtBlock(env, cidNumber, { kind: "platform" }, blockHash),
 };
 
-/** POST /v1/square/membership/confirm —— finalized 平台订阅镜像（严格幂等）。 */
+/** POST /square/membership/confirm —— finalized 平台订阅镜像（严格幂等）。 */
 export async function platformSubscriptionConfirmRoute(
   request: Request,
   env: Env,

@@ -32,12 +32,12 @@
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina` 通过。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina` 通过,本地 OnChina 已重启加载新二进制。
 - `npm --prefix citizenchain/onchina/frontend run build` 通过。
-- 本地真实服务 `https://127.0.0.1:8964/api/v1/health` 返回 `UP`;后台 OnChina 运行在独立 `screen` 会话 `onchina-frg-fix`。
+- 本地真实服务 `https://127.0.0.1:8964/api/health` 返回 `UP`;后台 OnChina 运行在独立 `screen` 会话 `onchina-frg-fix`。
 - 真实 PostgreSQL active binding 当时已补齐；2026-07-15 当前表结构已删除主账户身份字段，只保留 CID 和管理员钱包：
   - `candidate_id=FRG:FRG:475a`
   - `institution_code=FRG`
   - `institution_cid_number=ZS001-FRG07-249474503-2026`
   - `frg_province_code=0x475a`
   - `scope_province_name=贵州省`
-- 使用真实本地 HTTP `POST /api/v1/admin/citizens` 验收占号 prepare,请求返回 `HTTP 200` 和 `request_id=citizen-occupy-68ae64df-f608-4a2f-94cd-22affb2450de`,不再返回“当前注册局缺少机构主账户绑定”。
+- 使用真实本地 HTTP `POST /api/admin/citizens` 验收占号 prepare,请求返回 `HTTP 200` 和 `request_id=citizen-occupy-68ae64df-f608-4a2f-94cd-22affb2450de`,不再返回“当前注册局缺少机构主账户绑定”。
 - 验收残留已清理:删除上述 `chain_sign_sessions` 1 条和对应 `audit` 1 条;复查 `citizens=0`、`chain_sign_sessions=0`、该验收 CID 审计残留为 `0`。

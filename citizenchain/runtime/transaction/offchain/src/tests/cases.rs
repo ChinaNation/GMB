@@ -130,9 +130,18 @@ fn sign_intent(
     pair: &sr25519::Pair,
     intent: &crate::batch_item::PaymentIntent<AccountId32, u64>,
 ) -> [u8; 64] {
+    sign_intent_with_op_tag(pair, intent, primitives::sign::OP_SIGN_L3_PAY)
+}
+
+/// 测试专用：允许用指定操作码签署同一 `PaymentIntent` 编码，验证跨场景重放被拒。
+fn sign_intent_with_op_tag(
+    pair: &sr25519::Pair,
+    intent: &crate::batch_item::PaymentIntent<AccountId32, u64>,
+    op_tag: u8,
+) -> [u8; 64] {
     use sp_core::crypto::Pair as _;
-    let hash = intent.signing_hash();
-    let sig = pair.sign(&hash);
+    let message = primitives::sign::signing_message(op_tag, &intent.encode());
+    let sig = pair.sign(&message);
     let bytes: [u8; 64] = sig.0;
     bytes
 }
@@ -277,6 +286,162 @@ fn submit_batch_rejects_invalid_batch_signature() {
                 bad_batch_sig
             ),
             Error::<Test>::InvalidBatchSignature
+        );
+    });
+}
+
+#[test]
+fn submit_batch_rejects_wrong_l3_signer_and_tampered_intent() {
+    new_test_ext().execute_with(|| {
+        seed_fee_rate(&bank_cid(), 5);
+        let (alice, alice_pair) = new_l3_user(&[0x11; 32], 1_000_000);
+        let (_, other_pair) = new_l3_user(&[0x12; 32], 1_000_000);
+        let (bob, _) = new_l3_user(&[0x13; 32], 1_000_000);
+        let (charlie, _) = new_l3_user(&[0x14; 32], 1_000_000);
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::bind_clearing_bank(
+            RuntimeOrigin::signed(charlie.clone()),
+            bank_cid()
+        ));
+        assert_ok!(OffchainTx::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            100_000
+        ));
+        let payer_balance_before = DepositBalance::<Test>::get(bank_cid(), &alice);
+
+        let wrong_signer_intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x34),
+            payer_account_id: alice.clone(),
+            payer_bank_cid: bank_cid(),
+            recipient_account_id: bob.clone(),
+            recipient_bank_cid: bank_cid(),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let wrong_signer_item = OffchainBatchItem::<AccountId32, u64> {
+            tx_id: wrong_signer_intent.tx_id,
+            payer_account_id: wrong_signer_intent.payer_account_id.clone(),
+            payer_bank_cid: wrong_signer_intent.payer_bank_cid.clone(),
+            recipient_account_id: wrong_signer_intent.recipient_account_id.clone(),
+            recipient_bank_cid: wrong_signer_intent.recipient_bank_cid.clone(),
+            transfer_amount: wrong_signer_intent.amount,
+            fee_amount: wrong_signer_intent.fee,
+            // 64字节格式正确，但签名密钥不属于 payer_account_id，必须失败关闭。
+            payer_sig: sign_intent(&other_pair, &wrong_signer_intent),
+            payer_nonce: wrong_signer_intent.nonce,
+            expires_at: wrong_signer_intent.expires_at,
+        };
+        let wrong_signer_batch: BoundedVec<_, _> =
+            sp_std::vec![wrong_signer_item].try_into().unwrap();
+        assert_noop!(
+            OffchainTx::submit_offchain_batch(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
+                bank_role_code(),
+                bank_main(),
+                1,
+                wrong_signer_batch.clone(),
+                sign_batch(&bank_main(), 1, &wrong_signer_batch),
+            ),
+            Error::<Test>::InvalidL3Signature
+        );
+
+        let signed_intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x35),
+            payer_account_id: alice.clone(),
+            payer_bank_cid: bank_cid(),
+            recipient_account_id: bob,
+            recipient_bank_cid: bank_cid(),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let tampered_item = OffchainBatchItem::<AccountId32, u64> {
+            tx_id: signed_intent.tx_id,
+            payer_account_id: signed_intent.payer_account_id.clone(),
+            payer_bank_cid: signed_intent.payer_bank_cid.clone(),
+            // 签名完成后把收款账户改成另一有效账户，重算出的签名消息必须不匹配。
+            recipient_account_id: charlie,
+            recipient_bank_cid: signed_intent.recipient_bank_cid.clone(),
+            transfer_amount: signed_intent.amount,
+            fee_amount: signed_intent.fee,
+            payer_sig: sign_intent(&alice_pair, &signed_intent),
+            payer_nonce: signed_intent.nonce,
+            expires_at: signed_intent.expires_at,
+        };
+        let tampered_batch: BoundedVec<_, _> = sp_std::vec![tampered_item].try_into().unwrap();
+        assert_noop!(
+            OffchainTx::submit_offchain_batch(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
+                bank_role_code(),
+                bank_main(),
+                1,
+                tampered_batch.clone(),
+                sign_batch(&bank_main(), 1, &tampered_batch),
+            ),
+            Error::<Test>::InvalidL3Signature
+        );
+
+        let cross_operation_intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x36),
+            payer_account_id: alice.clone(),
+            payer_bank_cid: bank_cid(),
+            recipient_account_id: signed_intent.recipient_account_id.clone(),
+            recipient_bank_cid: bank_cid(),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let cross_operation_item = OffchainBatchItem::<AccountId32, u64> {
+            tx_id: cross_operation_intent.tx_id,
+            payer_account_id: cross_operation_intent.payer_account_id.clone(),
+            payer_bank_cid: cross_operation_intent.payer_bank_cid.clone(),
+            recipient_account_id: cross_operation_intent.recipient_account_id.clone(),
+            recipient_bank_cid: cross_operation_intent.recipient_bank_cid.clone(),
+            transfer_amount: cross_operation_intent.amount,
+            fee_amount: cross_operation_intent.fee,
+            // 相同账户和载荷改用批次操作码签名，不能重放为 L3 支付授权。
+            payer_sig: sign_intent_with_op_tag(
+                &alice_pair,
+                &cross_operation_intent,
+                primitives::sign::OP_SIGN_OFFCHAIN_BATCH,
+            ),
+            payer_nonce: cross_operation_intent.nonce,
+            expires_at: cross_operation_intent.expires_at,
+        };
+        let cross_operation_batch: BoundedVec<_, _> =
+            sp_std::vec![cross_operation_item].try_into().unwrap();
+        assert_noop!(
+            OffchainTx::submit_offchain_batch(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_cid(),
+                bank_role_code(),
+                bank_main(),
+                1,
+                cross_operation_batch.clone(),
+                sign_batch(&bank_main(), 1, &cross_operation_batch),
+            ),
+            Error::<Test>::InvalidL3Signature
+        );
+
+        // 三次失败都必须整批回滚，不消费 nonce、序号或存款余额。
+        assert_eq!(L3PaymentNonce::<Test>::get(&alice), 0);
+        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_cid()), 0);
+        assert_eq!(
+            DepositBalance::<Test>::get(bank_cid(), &alice),
+            payer_balance_before
         );
     });
 }

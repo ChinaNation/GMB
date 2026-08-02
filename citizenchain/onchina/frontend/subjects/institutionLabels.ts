@@ -1,4 +1,4 @@
-// 机构码→中文标签单一真源:后端 /api/v1/public/cid/labels 下发(primitives code.rs 的 104 码),
+// 机构码→中文标签单一真源:后端 /api/public/cid/labels 下发(primitives code.rs 的 104 码),
 // 取代原前端硬编码 INSTITUTION_CODE_LABEL。模块级缓存 + 一次拉取(免登录),多组件挂载复用同一份。
 
 import { useEffect, useState } from 'react';
@@ -16,7 +16,7 @@ let inflight: Promise<InstitutionCodeLabelMap> | null = null;
 function loadInstitutionCodeLabels(): Promise<InstitutionCodeLabelMap> {
   if (cache) return Promise.resolve(cache);
   if (!inflight) {
-    inflight = publicRequest<CidLabelsResponse>('/api/v1/public/cid/labels', { method: 'GET' })
+    inflight = publicRequest<CidLabelsResponse>('/api/public/cid/labels', { method: 'GET' })
       .then((data) => {
         const map: InstitutionCodeLabelMap = {};
         for (const item of data.institution_labels) {

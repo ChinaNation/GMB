@@ -385,7 +385,7 @@ pub async fn get_institution_proposal_page(
     .map_err(|e| format!("institution proposal page task failed: {e}"))?
 }
 
-// ──── 双层 ID 与反向索引(spec_version v1 — PR-Z) ────
+// ──── 双层 ID 与反向索引 ────
 
 /// 查询提案展示号 `ProposalDisplayId[id] = ProposalDisplayMeta { year, seq_in_year }`。
 #[tauri::command]

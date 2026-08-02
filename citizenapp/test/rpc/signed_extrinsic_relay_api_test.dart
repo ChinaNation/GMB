@@ -86,7 +86,7 @@ void main() {
 
 Map<String, dynamic> _relayResponse() => {
       'ok': true,
-      'schema': 'citizenapp.chain.extrinsic_relay.v1',
+      'schema': 'citizenapp.chain.extrinsic_relay',
       'relay_id': 'cer_test',
       'relay_status': 'broadcast',
       'deduplicated': false,

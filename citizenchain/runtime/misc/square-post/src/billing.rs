@@ -240,7 +240,9 @@ impl<T: Config> Pallet<T> {
                 return;
             }
         };
-        // 创作者改价 → 挂起待订阅者再签名；平台治理改价自动按新价续、不挂起。
+        // 平台价格只由投票引擎通过后的治理结果更新；平台订阅是持续授权，按最新治理价
+        // 自动续费。创作者价格属于个人自主决定，不继承平台治理授权，改价后必须挂起并
+        // 等订阅者按新价重新签名。两类价格不得共用同一再授权规则。
         if matches!(issuer, IssuerKey::Creator(_)) && price_fen != state.authorized_price_fen {
             Self::suspend_subscription(
                 &key,

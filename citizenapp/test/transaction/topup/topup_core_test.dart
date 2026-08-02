@@ -106,9 +106,9 @@ void main() {
           httpClient: client,
         );
 
-    test('fetchConfig 走 /v1/square/topup/config', () async {
+    test('fetchConfig 走 /square/topup/config', () async {
       final api = apiWith(MockClient((request) async {
-        expect(request.url.path, '/api/v1/square/topup/config');
+        expect(request.url.path, '/api/square/topup/config');
         return http.Response(
           jsonEncode({
             'ok': true,
@@ -127,7 +127,7 @@ void main() {
     test('createIntent 上传充值目标 account_id 且不带任何会话头', () async {
       final api = apiWith(MockClient((request) async {
         expect(request.method, 'POST');
-        expect(request.url.path, '/api/v1/square/topup/intent');
+        expect(request.url.path, '/api/square/topup/intent');
         expect(request.headers.containsKey('authorization'), isFalse);
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body['account_id'], accountId);
@@ -164,7 +164,7 @@ void main() {
     test('status 走 POST，凭付款意图查单，订单号不入 URL', () async {
       final api = apiWith(MockClient((request) async {
         expect(request.method, 'POST');
-        expect(request.url.path, '/api/v1/square/topup/status');
+        expect(request.url.path, '/api/square/topup/status');
         expect(request.headers.containsKey('authorization'), isFalse);
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body['order_id'], 'top_123');

@@ -5,7 +5,7 @@
 // 变的换、删的清、没变的不动,零旧数据残留(只读派生数据,无用户数据)。
 // 数据包结构:
 //   assets/public_institutions/manifest.json =
-//     { schema_version, genesis_hash, snapshot_block_hash, state_root,
+//     { chain_id, genesis_hash, snapshot_block_hash, state_root,
 //       public_institution_root, provinces:[{province_name,manifest_version,shard_hash}] }
 //   assets/public_institutions/<省名>.json    = { province_name, manifest_version, institutions:[...] }
 // provinces[].manifest_version = 该省机构目录版本,内容一变即变。

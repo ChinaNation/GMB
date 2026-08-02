@@ -180,8 +180,7 @@ fn validate_genesis_state_manifest(source_root: &std::path::Path) -> Result<(), 
         .map_err(|e| format!("读取创世状态包 manifest 失败({}): {e}", manifest.display()))?;
     let json: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| format!("解析创世状态包 manifest 失败({}): {e}", manifest.display()))?;
-    if json.get("package_format").and_then(|v| v.as_str()) != Some("citizenchain-genesis-state-v1")
-    {
+    if json.get("package_format").and_then(|v| v.as_str()) != Some("citizenchain-genesis-state") {
         return Err("创世状态包 manifest.package_format 无效".to_string());
     }
     if json.get("chain_id").and_then(|v| v.as_str()) != Some(DEFAULT_CHAIN_ID) {

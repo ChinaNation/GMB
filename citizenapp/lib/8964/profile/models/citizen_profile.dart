@@ -3,7 +3,7 @@ import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 /// 用户主页公开资料模型（对应 Worker `UserProfileResponse`）。
 ///
 /// 头像/背景/签名/展示名是链下 R2 资料；计数与认证是 D1/链上派生。
-/// App 侧只读展示，写入走 `PUT /v1/square/profile`。
+/// App 侧只读展示，写入走 `PUT /square/profile`。
 class CitizenProfile {
   const CitizenProfile({
     required this.accountId,

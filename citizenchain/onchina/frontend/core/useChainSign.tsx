@@ -48,7 +48,7 @@ export async function submitChainSign<TCitizen = unknown>(
   account_id: string,
   signature: string,
 ): Promise<ChainSubmitResult<TCitizen>> {
-  return request<ChainSubmitResult<TCitizen>>('/api/v1/admin/chain/submit', {
+  return request<ChainSubmitResult<TCitizen>>('/api/admin/chain/submit', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

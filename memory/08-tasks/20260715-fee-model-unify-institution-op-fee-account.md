@@ -350,7 +350,7 @@
   `CitizenChain`、`isSyncing=false`、`peers=0`，NodeGuard 未拒绝。
 - 使用全新临时内嵌 PostgreSQL 启动当前源码重新构建的 OnChina；链上投影写入
   49,593 个机构和 99,231 个机构账户，33 项创世机构抽样对账通过。
-- OnChina `/api/v1/health` 返回 `UP`；中枢省目录版本绑定候选 genesis/block#0，计数
+- OnChina `/api/health` 返回 `UP`；中枢省目录版本绑定候选 genesis/block#0，计数
   648；真实生产前端首页 HTTP 200 并显示“链上中国平台”。
 - node、OnChina、PostgreSQL 均已停止，临时端口与仓库外目录已清理；未挖矿、未提交
   交易、未读取或伪造任何用户私钥。

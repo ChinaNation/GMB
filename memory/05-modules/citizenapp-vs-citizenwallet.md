@@ -1,7 +1,7 @@
 # citizenapp vs citizenwallet 角色边界
 
 - 创建日期:2026-04-09
-- 来源:协议统一任务(`memory/08-tasks/open/20260409-qr-protocol-unify-v1.md`)审计
+- 来源:历史协议统一任务审计
 - 目的:明确两个独立 Flutter app 的职责,防止将来再出现"两份拷贝相互漂移"的字段散乱
 
 ## 定位

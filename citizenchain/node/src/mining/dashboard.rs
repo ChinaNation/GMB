@@ -19,7 +19,6 @@ const RECENT_RECORD_LIMIT: usize = 20;
 const MAX_BLOCKS_PER_REFRESH: u64 = 100;
 const DAY_MS: u64 = 86_400_000;
 const INCOME_DAY_KEEP: u64 = 400;
-const MINING_CACHE_VERSION: u32 = 2;
 const MINING_CACHE_FILENAME: &str = "mining-dashboard-cache.json";
 const CACHE_PERSIST_MIN_INTERVAL_MS: u64 = 60_000;
 use crate::shared::constants::RPC_RESPONSE_LIMIT_LARGE;
@@ -63,11 +62,10 @@ struct CachedBlockRecord {
     author: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 #[serde(deny_unknown_fields)]
 struct MiningComputationCache {
-    cache_version: u32,
     chain_genesis_hash: Option<String>,
     tracked_miner_account_id: Option<String>,
     last_processed_height: u64,
@@ -76,22 +74,6 @@ struct MiningComputationCache {
     total_reward_fen: u128,
     income_by_utc_day: HashMap<u64, u128>,
     recent_records: VecDeque<CachedBlockRecord>,
-}
-
-impl Default for MiningComputationCache {
-    fn default() -> Self {
-        Self {
-            cache_version: MINING_CACHE_VERSION,
-            chain_genesis_hash: None,
-            tracked_miner_account_id: None,
-            last_processed_height: 0,
-            last_processed_hash: None,
-            total_fee_fen: 0,
-            total_reward_fen: 0,
-            income_by_utc_day: HashMap::new(),
-            recent_records: VecDeque::new(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -168,16 +150,6 @@ fn persist_mining_cache(app: &AppHandle, cache: &MiningComputationCache) -> Resu
     })
 }
 
-fn validate_mining_cache(cache: MiningComputationCache) -> Result<MiningComputationCache, String> {
-    if cache.cache_version != MINING_CACHE_VERSION {
-        return Err(format!(
-            "mining cache version mismatch: expected={}, got={}",
-            MINING_CACHE_VERSION, cache.cache_version
-        ));
-    }
-    Ok(cache)
-}
-
 // 先更新进程内缓存，再按时间窗口/追赶进度决定是否落盘，兼顾数据连续性与写盘频率。
 fn commit_working_cache(
     app: &AppHandle,
@@ -229,7 +201,7 @@ fn maybe_load_mining_cache(app: &AppHandle) -> Result<Option<MiningComputationCa
             security::sanitize_path(&path)
         )
     })?;
-    validate_mining_cache(cache).map(Some)
+    Ok(Some(cache))
 }
 
 fn ensure_mining_cache_loaded(app: &AppHandle) {
@@ -940,15 +912,14 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_mining_cache, MiningComputationCache, MINING_CACHE_VERSION};
+    use super::MiningComputationCache;
 
     #[test]
-    fn mining_cache_accepts_only_current_schema() {
-        assert!(validate_mining_cache(MiningComputationCache::default()).is_ok());
-        let other = MiningComputationCache {
-            cache_version: MINING_CACHE_VERSION + 1,
-            ..MiningComputationCache::default()
-        };
-        assert!(validate_mining_cache(other).is_err());
+    fn mining_cache_rejects_unknown_field() {
+        let current = serde_json::to_value(MiningComputationCache::default()).unwrap();
+
+        let mut stale = current;
+        stale["unexpected_field"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<MiningComputationCache>(stale).is_err());
     }
 }

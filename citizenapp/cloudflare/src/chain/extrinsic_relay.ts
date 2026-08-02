@@ -6,9 +6,9 @@ import { nowMs } from '../shared/time';
 import { callChainRpc, isChainRpcConfigured } from './rpc';
 import { resourceLimit } from '../limits/catalog';
 
-export const CHAIN_EXTRINSIC_RELAY_PATH = '/v1/chain/extrinsics/relay';
+export const CHAIN_EXTRINSIC_RELAY_PATH = '/chain/extrinsics/relay';
 
-const RELAY_SCHEMA = 'citizenapp.chain.extrinsic_relay.v1';
+const RELAY_SCHEMA = 'citizenapp.chain.extrinsic_relay';
 const DEFAULT_MAX_PER_MINUTE = 20;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const DEDUPE_WINDOW_MS = 10 * 60_000;

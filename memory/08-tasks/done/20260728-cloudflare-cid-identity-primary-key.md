@@ -16,7 +16,7 @@
 - **登录/会话**(auth/service.ts):挑战 payload=`account_id‖challenge‖expires`;会话=account_id;设备子钥注册在 account_id 下。
 - **鉴权**(security/request_guard.ts):每写=会话(account_id)+P-256 设备子钥签名+nonce;限流 key 也是 account_id。
 - **链上解析**(chain/identity.ts:80):worker 已能 account_id→CID 解析(读链 CidByAccount + CidRegistry),但只当派生属性,没当主键。
-- **换绑**(rebind/service.ts + account/purge.ts):/v1/square/rebind/revoke = 全表 DELETE by 旧 account_id(错:删掉该 CID 资产)。
+- **换绑**(rebind/service.ts + account/purge.ts):/square/rebind/revoke = 全表 DELETE by 旧 account_id(错:删掉该 CID 资产)。
 - 路由面 ~45 endpoint(chain/chat/constitution/security/square:account/auth/contacts/creator/feed/follows/media/membership/notify/posts/profile/rebind/signals/uploads/users)。
 
 ## 修正后的正确模型(用户 2026-07-28 纠正,已核实)
@@ -127,8 +127,8 @@ Worker 全库用户数据身份主键 account_id→cid_number 彻底重构完成
 ## 前端同步 F1–F4 落地记录(2026-07-28,D1a 彻底收敛)
 用户拍板 **D1a**:社交面端到端统一按身份主键 cid_number 寻址(不做"双接受"兼容)。
 
-- **F1 worker cid 寻址收敛**:`chain/identity.ts` 抽出 `readChainIdentityByCid` 共享读并新增 `fetchChainIdentityStateByCidCached`(按 cid 读 WalletAccountByCid→当前绑定 account_id + CidRegistry active + 投票/竞选公开字段,KV 缓存键 `square_identity_cid:`);`fetchChainIdentityState`(按 account)复用它并保留双向绑定校验。`/v1/square/users/:cid[/posts|/follows]` 路由参数改 cid(`parseCidNumber`),posts 响应 `account_id`→`cid_number`,profile 响应 `account_id` 语义改为"该 cid 当前绑定账户"。`feeds/follows.ts` 关注/取关/通知入参与响应 `followed_account_id`→`followed_cid_number`(去 resolveFollowedCid)。门禁 tsc 0 + vitest 181 全绿。
-- **F2 Flutter 广场/社交**:`square_api_client` 三接口 URL 传目标 cid、`fetchFollows` 响应键 `accounts`→`entries`、关注/取关/通知按 cid;`SquareFollowEntry.accountId`→`cidNumber`;`UserProfilePage` 主键 `accountId`→`cidNumber`(feed 作者点击/关注列表/通讯录入口全传 cid);创作者订阅/DM/QR 等**链上交易入参**从 profile 响应的 `account_id` 取(链验签仍按 account);资料缓存前缀 v2→v3 且缓存键改 cid。
+- **F1 worker cid 寻址收敛**:`chain/identity.ts` 抽出 `readChainIdentityByCid` 共享读并新增 `fetchChainIdentityStateByCidCached`(按 cid 读 WalletAccountByCid→当前绑定 account_id + CidRegistry active + 投票/竞选公开字段,KV 缓存键 `square_identity_cid:`);`fetchChainIdentityState`(按 account)复用它并保留双向绑定校验。`/square/users/:cid[/posts|/follows]` 路由参数改 cid(`parseCidNumber`),posts 响应 `account_id`→`cid_number`,profile 响应 `account_id` 语义改为"该 cid 当前绑定账户"。`feeds/follows.ts` 关注/取关/通知入参与响应 `followed_account_id`→`followed_cid_number`(去 resolveFollowedCid)。门禁 tsc 0 + vitest 181 全绿。
+- **F2 Flutter 广场/社交**：`square_api_client` 三接口 URL 传目标 cid、`fetchFollows` 响应键 `accounts`→`entries`、关注/取关/通知按 cid；`SquareFollowEntry.accountId`→`cidNumber`；`UserProfilePage` 主键 `accountId`→`cidNumber`（feed 作者点击/关注列表/通讯录入口全传 cid）；创作者订阅/DM/QR 等**链上交易入参**从 profile 响应的 `account_id` 取（链验签仍按 account）；资料缓存键改为 cid 且不保留历史前缀。
 - **F3 Flutter Chat（2026-07-29 终态订正）**:传输、MLS BasicCredential、KeyPackage、群成员名册、信封、队列、媒体索引、推送唤醒和 UI 本人判断全部只用 CID 表达身份；不再保留账户成员名册、账户收件字段或账户到 CID 的聊天兼容解析。当前绑定账户只负责建立精确的 CID + binding revision + account 授权元组。
 - **F4 creator + 会话主键**:`CreatorPlan.creatorAccountId`→`creatorCidNumber`(唯一 cid 真源=worker plan 响应);**`SquareSession` 新增必填 `cidNumber`**(worker 登录响应本已下发 `cid_number`,本端 cid 不再需链读)——`nickname_publisher` 等"读本人云端资料"改用 `session.cidNumber`;通讯录页资料改按 cid 索引并解析。
 - **门禁**:worker `tsc` EXIT=0 + `vitest` 全绿;Flutter `dart analyze lib/ test/` **No issues found** + `flutter test` 全绿。

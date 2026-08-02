@@ -74,8 +74,9 @@
   fail-closed；客户端不得再提交第二份旧账户签名证明。
 - CitizenApp 已删除旧账户换绑授权 outbox、启动重试和客户端换绑后吊销调用；
   Worker 不提供对应 HTTP endpoint、路由资源登记或外部请求模型，不得恢复。
-- App 先按 finalized 当前绑定由新账户 child 直接派生并激活用途子钥上下文，再完成新
-  钱包设备子钥登记；Worker 只有确认新子钥成功落库后，才按 CID + 当前
+- App 按 finalized 当前绑定只激活公开元数据并完成已授权的数据交接，不预生成本地数据钥
+  或登记 P-256 子钥。后续真实登录收到 Worker `device_not_registered` 后才登记新钱包设备
+  子钥；Worker 只有确认新子钥成功落库后，才按 CID + 当前
   revision/account 清理旧 `chat_keypackages`、`chat_devices`、
   `square_device_subkeys`、旧登录挑战、旧会话和实时连接。该清理不接收旧账户签名，
   也不构成第二授权。
@@ -132,4 +133,4 @@ P0 真实链验收发现续费若发生在 finalize 后阶段会被 NodeGuard �
 - `cloudflare/src/account/service.ts` 注销挑战越权与堆积问题已于 2026-07-29 修复：
   challenge/confirm 都要求请求账户等于 session 当前账户并读取最新 finalized CID 双向绑定；
   `square_login_challenges` 增加必填 CID，注销按 CID 全删，过期挑战进入现有定时清理。
-- `cloudflare/src/routes.ts:211` 的 `POST /v1/square/signals` 全仓零调用方 → `square_user_signals` 表永不写入,推荐流行为信号维度实际为空。
+- `cloudflare/src/routes.ts:211` 的 `POST /square/signals` 全仓零调用方 → `square_user_signals` 表永不写入,推荐流行为信号维度实际为空。

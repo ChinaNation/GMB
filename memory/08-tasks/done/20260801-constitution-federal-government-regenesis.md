@@ -1,7 +1,6 @@
 # 公民宪法联邦政府改名 + reward-bind 去出块门槛 + 章节标题纳入修宪判定（重新创世）
 
-状态：open（2026-08-01；代码、WASM CI 与正式冻结已完成，下一步等待冻结后软件 CI，
-再按确认顺序部署）
+状态：completed（2026-08-02；代码、WASM CI、正式冻结、节点与 Worker 生产部署全部完成）
 
 ## 进度
 
@@ -16,8 +15,10 @@
 | 全 workspace build / test / clippy | ✅ 83 个测试二进制 1334 passed 0 failed；build/test/clippy 三段 exit=0；0 error 0 rustc warning |
 | GitHub WASM CI | ✅ run `30721127038`，本次显示名“创世”，head `9c2ec97b...` |
 | `bake-chainspec.sh --finalize` | ✅ CI WASM，131 秒，创世/宪法/跨端锚点全绿 |
-| 四平台 CI + 三台节点重装 | 待办 |
-| Worker 重部署 + App 发版 | 待办 |
+| 四平台 CI | ✅ run `30724462739`，ARM 包用于三台生产节点 |
+| 三台节点重新创世部署 | ✅ 贵州 → 中枢 → 国家储委会，逐台独立验收 |
+| Worker 重部署 | ✅ 版本 `58567f7e-3e14-486d-9ef1-05e410665771`，线上接口验收通过 |
+| App 正式 Release | ⏸ 用户明确暂停，归统一发布流水线任务管理，不阻塞本卡完成 |
 | 回写 `chainspec-frozen.md` 等文档 | ✅ 新锚点与冻结资产提交 `7cea3885...` 已回写 |
 
 ### 宪法文件实测变化
@@ -89,8 +90,8 @@
 ## 二、reward-bind 去掉出块门槛
 
 见 [20260731-reward-bind-drop-block-gate.md](20260731-reward-bind-drop-block-gate.md)。
-删除 `fullnode-issuance/src/lib.rs` 中 `bind_reward_account` 的
-`MinerNeverAuthoredBlock` 检查，语义改为「预绑定」。保留
+删除 `fullnode-issuance/src/lib.rs` 中 `bind_reward_account` 的旧出块资格检查，
+语义改为「预绑定」。保留
 `RewardAccountAlreadyBound` 与 `RewardAccountCannotBeMiner` 两道检查。
 原定等后续 runtime 升级，因本次重新创世顺带完成。
 
@@ -154,8 +155,18 @@
 
 ## 六、已知影响
 
-- **现有链上数据全部作废**：当前链 #9、国储会矿工账户 19,998 元挖矿收益及已绑定收款账户、
-  中枢省与贵州省各 1,000 元转账，重新创世后归零。均为测试期数据。
-- **node-key 与 GRANDPA 密钥不变**，三台 PeerId 不变，chainspec 的 5 条 bootNodes 与
-  DNS 均不需改动。
+- **旧链上测试数据已经随重新创世作废**：旧链 #9、国家储委会矿工账户测试挖矿收益及旧绑定、
+  中枢与贵州测试转账均未进入当前正式创世。
+- **node-key 与 GRANDPA 密钥不变**，三台 PeerId 不变。chainspec 仍冻结登记 5 条
+  bootNodes；当前只有 `nrcgch`、`prczss`、`prcgzs` 三台具有生产部署和 DNS 证据，
+  `prches`、`prchbs` 尚未上线且域名没有 A 记录。本卡不修改冻结引导列表。
 - cloudflared 为独立 unit，不碰链数据，节点重装不影响 Tunnel。
+
+## 最终生产验收
+
+- 三台节点均运行 ARM64 冻结产物，创世哈希、state root、Authority 角色、同步状态、PeerId、
+  P2P/RPC 监听边界全部通过两轮独立验收。
+- 三个 `powr` 矿工账户均已在当前正式链完成奖励接收账户首次绑定，证明未出块预绑定规则
+  已在冻结 runtime 生效。
+- CitizenApp Cloudflare Worker 已部署当前创世锚点且保留既有云端数据；CitizenWeb 官网也已
+  完成生产部署。CitizenApp、CitizenWallet 和 CitizenChain 正式 Releases 按用户要求暂停。

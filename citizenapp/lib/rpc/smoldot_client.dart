@@ -220,7 +220,7 @@ class SmoldotClientManager {
   }
 
   static const _dbCacheKey = 'smoldot_db_cache';
-  static const _dbCacheSchema = 'citizenapp.smoldot.database.v1';
+  static const _dbCacheSchema = 'citizenapp.smoldot.database';
 
   /// 导出数据库的最大字节数（256 KB，足够存同步进度和已知 peer）。
   static const _dbExportMaxSize = 256 * 1024;

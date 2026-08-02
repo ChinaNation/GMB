@@ -231,8 +231,8 @@ RenewalIndex<(SubscriberCidNumber, IssuerKey<CidNumber>)> -> due_at
 - 所有机构管理员都从链上中国统一入口扫码登录。登录态必须携带节点绑定的准确 `institution_cid_number`，工作台由后端根据准确 CID、机构类型和链上权限下发；前端不得根据机构码猜测工作台。
 - 注册局、私权、司法、立法、其它公权和非法人机构使用不同工作台。私权机构只查看本机构信息、链上 `admins` 和被授权模块，不复用注册局的公民、机构目录或登记页面。
 - 平台会员价格模块是实例级授权：只有当前绑定 CID 与**创世常量**平台机构 CID（公民链基金会）精确相等时才下发。OnChina 不在 PostgreSQL 保存平台价格或平台 CID 副本。
-- 调价 API 为 `GET /api/v1/membership/platform-prices` 与 `POST /api/v1/membership/platform-prices/propose`。prepare 和 submit 都重新检查节点绑定、准确平台 CID 和链上 active `admins`，任何无法确认都 fail-closed。
-- 所有 OnChina 链交易共用 `POST /api/v1/admin/chain/submit` 与同一 core 提交器。流程固定为：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫后验签、dry-run、提交并等待进块。禁止业务模块另建提交 URL、二维码协议或签名流程。
+- 调价 API 为 `GET /api/membership/platform-prices` 与 `POST /api/membership/platform-prices/propose`。prepare 和 submit 都重新检查节点绑定、准确平台 CID 和链上 active `admins`，任何无法确认都 fail-closed。
+- 所有 OnChina 链交易共用 `POST /api/admin/chain/submit` 与同一 core 提交器。流程固定为：OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫后验签、dry-run、提交并等待进块。禁止业务模块另建提交 URL、二维码协议或签名流程。
 - 平台调价动作在唯一 QR registry 中为 `propose_set_platform_price`；CitizenWallet 必须中文展示公民链基金会 CID、目标平台档位和新价格，未知或不完整载荷直接拒签。
 - `propose_set_platform_price` 只创建统一内部投票提案。资格、计票、推进和终态执行归投票引擎，OnChina 和 SquarePost 不实现第二套投票。
 

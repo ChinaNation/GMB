@@ -274,7 +274,7 @@ void main() {
       await storage.read(key: WalletSecureKeys.masterMnemonicV1(kAccount0Id)),
       isNull,
     );
-    expect(await storage.read(key: 'wallet.internal.aek.v1'), isNull);
+    expect(await storage.read(key: 'wallet.internal.aek'), isNull);
   });
 
   test('重复导入同一助记词被拒绝', () async {

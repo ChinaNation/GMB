@@ -62,10 +62,10 @@ const centeredConfirmFooter: ModalProps['footer'] = (_originNode, { OkBtn, Cance
   </div>
 );
 
-const ADMIN_LIST_CACHE_VERSION = 'cid-admin-list-v5';
+const ADMIN_LIST_CACHE_ID = 'cid-admin-list';
 
 interface CachedAdminListPayload<T> {
-  version: string;
+  cache_id: string;
   rows: T[];
 }
 
@@ -76,7 +76,7 @@ function adminListCacheKey(
 ): string {
   return [
     'cid:admin-list',
-    ADMIN_LIST_CACHE_VERSION,
+    ADMIN_LIST_CACHE_ID,
     kind,
     auth.account_id,
     auth.institution_code,
@@ -91,7 +91,7 @@ function readCachedAdminList<T>(key: string): T[] | null {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedAdminListPayload<T>;
-    if (parsed.version !== ADMIN_LIST_CACHE_VERSION || !Array.isArray(parsed.rows)) {
+    if (parsed.cache_id !== ADMIN_LIST_CACHE_ID || !Array.isArray(parsed.rows)) {
       localStorage.removeItem(key);
       return null;
     }
@@ -106,7 +106,7 @@ function writeCachedAdminList<T>(key: string, rows: T[]) {
   try {
     localStorage.setItem(
       key,
-      JSON.stringify({ version: ADMIN_LIST_CACHE_VERSION, rows } satisfies CachedAdminListPayload<T>),
+      JSON.stringify({ cache_id: ADMIN_LIST_CACHE_ID, rows } satisfies CachedAdminListPayload<T>),
     );
   } catch {
     // 注册局管理员列表缓存只是减少重复转圈,写失败不能影响业务操作。

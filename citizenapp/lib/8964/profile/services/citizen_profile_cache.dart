@@ -11,9 +11,8 @@ import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 class CitizenProfileCache {
   const CitizenProfileCache();
 
-  // v3：主页寻址由钱包账户 account_id 收敛到身份主键 cid_number，缓存 key 随之
-  // 改用 cid_number；bump 前缀作废按账户存的旧形状（见 feedback-dto-field-rename）。
-  static const String _keyPrefix = 'square.profile.cache.v3.';
+  // 主页寻址以身份主键 cid_number 为唯一缓存键；不读取按账户寻址的历史形状。
+  static const String _keyPrefix = 'square.profile.cache.';
 
   String _cacheKey(String cidNumber) => '$_keyPrefix$cidNumber';
 

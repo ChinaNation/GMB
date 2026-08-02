@@ -99,8 +99,4 @@ fn account(n: u8) -> AccountId32 {
     AccountId32::new([n; 32])
 }
 
-fn mark_miner_authored(miner: &AccountId32, block_number: u32) {
-    LastAuthoredBlockByMiner::<Test>::insert(miner, block_number);
-}
-
 mod cases;

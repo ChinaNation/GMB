@@ -4,6 +4,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
+import 'package:citizenapp/wallet/core/device_data_key_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
@@ -63,6 +64,12 @@ class _NoopDeviceSubkey extends DeviceSubkey {
   Future<void> delete(int walletIndex) async {}
 }
 
+/// 多账户测试不验证设备数据钥原生实现，只隔离 WalletManager 的删除编排。
+class _NoopDeviceDataKeyVault extends DeviceDataKeyVault {
+  @override
+  Future<void> delete(int walletIndex) async {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   useIsolatedIsar();
@@ -76,6 +83,7 @@ void main() {
     WalletManager.debugSeedStore = fakeStore;
     WalletManager.debugContactKeyStore = _MemoryBlobStore();
     WalletManager.debugDeviceSubkey = _NoopDeviceSubkey();
+    WalletManager.debugDeviceDataKeyVault = _NoopDeviceDataKeyVault();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(localAuthChannel, (call) async {
       switch (call.method) {

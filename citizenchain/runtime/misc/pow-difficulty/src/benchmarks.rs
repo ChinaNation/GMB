@@ -59,12 +59,12 @@ mod benchmarks {
         let n: frame_system::pallet_prelude::BlockNumberFor<T> = 2u32.saturated_into();
         frame_system::Pallet::<T>::set_block_number(n);
         let active = PowDifficultyParams::genesis_default();
-        let mut next = active.clone();
+        let mut next = active;
         next.params_version = active.params_version.saturating_add(1);
         next.target_block_time_ms = next.target_block_time_ms.saturating_add(1_000);
         ActiveParams::<T>::put(active);
         PendingParams::<T>::put(PendingPowDifficultyParams {
-            params: next.clone(),
+            params: next,
             activate_at: 2,
         });
         WindowStartMs::<T>::put(1_000u64);

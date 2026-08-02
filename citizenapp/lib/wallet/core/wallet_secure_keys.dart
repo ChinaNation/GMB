@@ -3,12 +3,12 @@ class WalletSecureKeys {
 
   static String sessionTokenV1(String scope) {
     final normalized = _normalizeScope(scope);
-    return 'wallet.session.$normalized.token.v1';
+    return 'wallet.session.$normalized.token';
   }
 
   static String sessionKeyV1(String scope) {
     final normalized = _normalizeScope(scope);
-    return 'wallet.session.$normalized.key.v1';
+    return 'wallet.session.$normalized.key';
   }
 
   static String _normalizeScope(String scope) {

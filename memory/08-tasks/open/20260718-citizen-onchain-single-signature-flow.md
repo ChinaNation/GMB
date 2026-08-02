@@ -73,4 +73,4 @@
 - 2026-07-18：OnChina 删除 prepare/complete 双 grant；prepare 一次消费 Passkey 并创建短期操作，complete 原子消费公民回执，最终链确认后才绑定钱包。
 - 2026-07-18：QR action 统一改为“公民签名确认”并重新生成 CitizenApp/CitizenWallet 注册表；CitizenApp 交易扫一扫及钱包详情扫一扫接入统一服务，删除孤立 `MyIdSignPage`。
 - 2026-07-18：验证通过：OnChina 135 项测试、QR registry 6 项测试、CitizenApp 9 项签名测试与定向 analyze、CitizenWallet 118 项签名/解码测试、OnChina 前端 TypeScript + Vite build、`git diff --check`。
-- 2026-07-18：本机 `https://127.0.0.1:8964/` 与 `/api/v1/health` 均真实返回 200，页面已加载新构建 `index-CvPREDqC.js`；健康状态为 `DEGRADED`。当前运行中的后端进程早于本次编译启动，完整 Passkey + 两台钱包扫码 + 链 finalized 验收仍需在用户 Touch ID 重启/部署后执行，未伪造为已通过。
+- 2026-07-18：本机 `https://127.0.0.1:8964/` 与 `/api/health` 均真实返回 200，页面已加载新构建 `index-CvPREDqC.js`；健康状态为 `DEGRADED`。当前运行中的后端进程早于本次编译启动，完整 Passkey + 两台钱包扫码 + 链 finalized 验收仍需在用户 Touch ID 重启/部署后执行，未伪造为已通过。

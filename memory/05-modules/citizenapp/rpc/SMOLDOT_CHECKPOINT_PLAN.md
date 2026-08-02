@@ -44,7 +44,7 @@ smoldot 在这种形态下必须同时拿到 `lightSyncState` checkpoint；如�
 
 该路径的历史同步成本主要随 GRANDPA authority set 变更次数和 proof 体积增长，不随普通区块总高度线性增长。warp proof 单次响应上限为 8 MiB，超过后可分段继续。安装包只固定 `#0`，不随链高更新，也不再设计发行版 `#32` 锚点。
 
-已安装用户的唯一路径是：先严格验证 `citizenapp.smoldot.database.v1` 信封，再要求原生层实际选择 database 中的 finalized `H`（高度和 hash 均相同）。peer finalized `F == H` 时直接进入在线跟随；`F > H` 时从 `H` warp 到 `F`。网络追到 `H` 不能冒充缓存恢复成功。
+已安装用户的唯一路径是：先严格验证 `citizenapp.smoldot.database` 信封，再要求原生层实际选择 database 中的 finalized `H`（高度和 hash 均相同）。peer finalized `F == H` 时直接进入在线跟随；`F > H` 时从 `H` warp 到 `F`。网络追到 `H` 不能冒充缓存恢复成功。
 
 ## 固定 checkpoint 规则
 
@@ -52,8 +52,8 @@ smoldot 在这种形态下必须同时拿到 `lightSyncState` checkpoint；如�
 2. `light_sync_state.json` 是轻客户端固定 finalized 信任锚，不改变链的 genesis；当前正式资产是 `#0`，其 header 的 Blake2-256 必须等于本链 genesis block hash，并作为本机 database 缓存的链身份校验值。本方案不要求随链高更新安装包 checkpoint。
 3. 新安装用户连接 P2P 后，只要 peer finalized 高于 `#0` 就自动 GRANDPA warp 到该 finalized；不允许普通同步与 warp 抢跑并提前改变验证锚点。
 4. 无有效本机 database 时，addChain 后第一份原生快照必须证明 `source=bundledCheckpoint / startup=#0 / startupHash=genesisHash`；任一字段不一致立即释放 chain，禁止带着未知 H 继续。
-5. 已安装用户把完整验证 finalized database 保存为 `citizenapp.smoldot.database.v1` 严格信封；只有同 genesis 且 finalized 更高的候选可以覆盖。恢复成功必须由原生快照证明 `source=localDatabase` 且启动高度/hash 等于信封。
-6. smoldot finalized database 内部链信息使用显式共识类型格式 v2，PoW 必须编码为 `consensus=pow`。旧的无 PoW 标记正文不可兼容，严格清理后从 `#0` 重建一次。
+5. 已安装用户把完整验证 finalized database 保存为 `citizenapp.smoldot.database` 严格信封；只有同 genesis 且 finalized 更高的候选可以覆盖。恢复成功必须由原生快照证明 `source=localDatabase` 且启动高度/hash 等于信封。
+6. smoldot finalized database 内部链信息使用当前显式共识类型格式，PoW 必须编码为 `consensus=pow`。旧的无 PoW 标记正文不可兼容，严格清理后从 `#0` 重建一次。
 7. Cloudflare 启动清单 v2 只允许更新经本地链身份校验的 bootnodes，协议中不得出现动态 checkpoint 或轻同步资产下载字段。
 8. 不得回退到 HTTP RPC、动态 checkpoint 或全节点数据库下载来解决链高增长问题。
 
@@ -113,7 +113,7 @@ smoldot 在这种形态下必须同时拿到 `lightSyncState` checkpoint；如�
 - `finalizedBlock` 是普通订阅视图，不能证明 warp 已经构建出完整 chain information。缓存信封和 finalized 业务读取统一使用 `currentVerifiedFinalizedBlockNumber/hash`；活动 warp 的 fragment 目标单独使用 `warpTargetFinalizedBlockNumber/hash`，两者禁止混用。
 - 原生 database 序列化在 warp 活跃时直接关闭；Dart 同时要求 `isUsable=true`，并用导出前后相同的 `currentVerifiedFinalized` 夹住正文，禁止保存 H 冒充 F。
 - Dart `_synced` 不是永久真相。每个业务入口都会重新读取原生 `isUsable`；运行期间 peer 的 F 推进并重新进入 warp 时，立即撤销 operational、停止缓存刷新并等待完整验证完成。
-- PoW database 根因：旧序列化器没有保存 PoW 共识类型，导出正文虽然有 finalized header 和 GRANDPA 信息，解码时却被误判为残缺 BABE 数据。当前内部格式 v2 显式保存 `consensus=pow`，并有同文件 round-trip 回归测试。
+- PoW database 根因：旧序列化器没有保存 PoW 共识类型，导出正文虽然有 finalized header 和 GRANDPA 信息，解码时却被误判为残缺 BABE 数据。当前内部格式显式保存 `consensus=pow`，并有同文件 round-trip 回归测试。
 - 第二次启动通过：严格信封和原生启动锚点双重校验后进入 `regular`，best/finalized 均为 `#36`，没有重复 warp。
 - 已安装用户在 operational 后每分钟低频检查一次 finalized；只有高度严格推进才复用同一稳定导出和单调信封写入路径，同高度不重复导出，避免安装后缓存永久停在旧高度。
 - 已安装用户的验收只看“本机 H 是否严格低于 peer F”，不得把设计或完成条件绑定到任何测试高度。

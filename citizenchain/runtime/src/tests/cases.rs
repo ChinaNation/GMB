@@ -388,7 +388,7 @@ fn runtime_version_and_block_types_are_sane() {
     assert_eq!(VERSION.spec_name.as_ref(), "citizenchain");
     assert_eq!(VERSION.impl_name.as_ref(), "citizenchain");
     assert_eq!(VERSION.authoring_version, 0);
-    assert_eq!(VERSION.spec_version, 0);
+    assert_eq!(VERSION.spec_version, 1);
     assert_eq!(VERSION.impl_version, 0);
     assert_eq!(VERSION.transaction_version, 0);
     assert_eq!(VERSION.system_version, 0);
@@ -1005,26 +1005,116 @@ fn runtime_call_filter_blocks_disabled_and_low_level_calls() {
             amount: 100,
         });
     assert!(!RuntimeCallFilter::contains(&disabled_issuance));
+}
 
+#[test]
+fn runtime_call_filter_blocks_every_offchain_transaction_call() {
     let clearing_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-    let disabled_offchain =
-        RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
-            actor_cid_number: clearing_bank
-                .cid_number
-                .as_bytes()
-                .to_vec()
-                .try_into()
-                .expect("clearing bank CID fits"),
-            actor_role_code: primitives::governance_skeleton::ROLE_CODE_DIRECTOR
-                .to_vec()
-                .try_into()
-                .expect("director role fits"),
-            institution_account_id: AccountId::new(clearing_bank.main_account),
-            batch_seq: 1,
-            batch: Default::default(),
-            batch_signature: Default::default(),
-        });
-    assert!(!RuntimeCallFilter::contains(&disabled_offchain));
+    let actor_cid_number: offchain::InstitutionCidNumber = clearing_bank
+        .cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .expect("clearing bank CID fits");
+    let actor_role_code: offchain::ActorRoleCode =
+        primitives::governance_skeleton::ROLE_CODE_DIRECTOR
+            .to_vec()
+            .try_into()
+            .expect("director role fits");
+    let peer_id: offchain::ClearingPeerId = b"12D3KooW12345678901234567890123456789012345678"
+        .to_vec()
+        .try_into()
+        .expect("test PeerId fits");
+    let rpc_domain: frame_support::BoundedVec<u8, sp_core::ConstU32<128>> = b"clearing.example"
+        .to_vec()
+        .try_into()
+        .expect("test RPC domain fits");
+
+    // OffchainTransaction 当前整体禁用；调用索引 30-34、40-41、50-52
+    // 必须全部经过同一 fail-closed 分支，不能只锁住批次提交入口。
+    let disabled_calls = [
+        (
+            "bind_clearing_bank",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::bind_clearing_bank {
+                bank_cid: actor_cid_number.clone(),
+            }),
+        ),
+        (
+            "deposit",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::deposit { amount: 1 }),
+        ),
+        (
+            "withdraw",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::withdraw { amount: 1 }),
+        ),
+        (
+            "switch_bank",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::switch_bank {
+                new_bank_cid: actor_cid_number.clone(),
+            }),
+        ),
+        (
+            "submit_offchain_batch",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
+                actor_cid_number: actor_cid_number.clone(),
+                actor_role_code: actor_role_code.clone(),
+                institution_account_id: AccountId::new(clearing_bank.main_account),
+                batch_seq: 1,
+                batch: Default::default(),
+                batch_signature: Default::default(),
+            }),
+        ),
+        (
+            "propose_l2_fee_rate",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::propose_l2_fee_rate {
+                actor_cid_number: actor_cid_number.clone(),
+                actor_role_code: actor_role_code.clone(),
+                institution_account_id: AccountId::new(clearing_bank.main_account),
+                new_rate_bp: 1,
+            }),
+        ),
+        (
+            "set_max_l2_fee_rate",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::set_max_l2_fee_rate {
+                new_max: 1,
+            }),
+        ),
+        (
+            "register_clearing_bank",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::register_clearing_bank {
+                actor_cid_number: actor_cid_number.clone(),
+                actor_role_code: actor_role_code.clone(),
+                peer_id,
+                rpc_domain: rpc_domain.clone(),
+                rpc_port: 9_944,
+            }),
+        ),
+        (
+            "update_clearing_bank_endpoint",
+            RuntimeCall::OffchainTransaction(
+                offchain::pallet::Call::update_clearing_bank_endpoint {
+                    actor_cid_number: actor_cid_number.clone(),
+                    actor_role_code: actor_role_code.clone(),
+                    new_domain: rpc_domain,
+                    new_port: 9_945,
+                },
+            ),
+        ),
+        (
+            "unregister_clearing_bank",
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::unregister_clearing_bank {
+                actor_cid_number,
+                actor_role_code,
+            }),
+        ),
+    ];
+
+    for (call_name, call) in disabled_calls {
+        assert!(
+            !RuntimeCallFilter::contains(&call),
+            "OffchainTransaction::{call_name} 在业务未启用时必须被 RuntimeCallFilter 拒绝"
+        );
+    }
 }
 
 #[test]
@@ -1322,6 +1412,152 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
                 .expect("runtime population data should be ready")
                 .eligible_total,
             1
+        );
+    });
+}
+
+#[test]
+fn runtime_registrar_rebind_preserves_candidate_cid_and_enforces_residence_scope() {
+    new_test_ext().execute_with(|| {
+        let (_, registrar, actor_cid_number, hu_role_code) =
+            setup_frg_citizen_identity_admin(b"HU");
+        let current_pair =
+            sr25519::Pair::from_string("//candidate-current-account", None).expect("current pair");
+        let current_account_id = AccountId::new(current_pair.public().0);
+        let new_pair =
+            sr25519::Pair::from_string("//candidate-new-account", None).expect("new pair");
+        let new_account_id = AccountId::new(new_pair.public().0);
+        let citizen_cid_number: citizen_identity::CidNumberBound =
+            real_cid_number("RUNTIME-REBIND-CANDIDATE", "CTZN", "1")
+                .try_into()
+                .expect("cid number should fit");
+        let expires_at = cid_authorization_expires_at();
+
+        assert_ok!(CitizenIdentity::occupy_cid(
+            RuntimeOrigin::signed(registrar.clone()),
+            actor_cid_number.clone(),
+            hu_role_code.clone(),
+            citizen_cid_number.clone(),
+            current_account_id.clone(),
+            expires_at,
+            sign_cid_occupy(
+                &current_pair,
+                &citizen_cid_number,
+                &current_account_id,
+                expires_at,
+            ),
+        ));
+        let voting = build_voting_identity_payload(
+            current_account_id.clone(),
+            citizen_cid_number.as_slice(),
+            b"HU",
+            b"4301",
+            b"4301001",
+        );
+        let candidate = citizen_identity::CandidateIdentityPayload {
+            voting,
+            birth_province_code: test_area_code(b"HU"),
+            birth_city_code: test_area_code(b"4301"),
+            birth_town_code: test_area_code(b"4301001"),
+            family_name: b"Runtime".to_vec().try_into().expect("family name fits"),
+            given_name: b"Rebind".to_vec().try_into().expect("given name fits"),
+            citizen_sex: citizen_identity::CitizenSex::Female,
+            birth_date: 20000101,
+        };
+        let candidate_signature = sign_citizen_identity_payload(&current_pair, &candidate);
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(registrar.clone()),
+            actor_cid_number.clone(),
+            hu_role_code.clone(),
+            candidate,
+            candidate_signature,
+        ));
+        let voting_identity_before =
+            citizen_identity::VotingIdentityByCid::<Runtime>::get(&citizen_cid_number)
+                .expect("voting identity exists");
+        let candidate_identity_before =
+            citizen_identity::CandidateIdentityByCid::<Runtime>::get(&citizen_cid_number)
+                .expect("candidate identity exists");
+        let new_account_signature = sign_cid_admin_rebind(
+            &new_pair,
+            &citizen_cid_number,
+            &current_account_id,
+            &new_account_id,
+            1,
+            expires_at,
+        );
+
+        // 同一 FRG 管理员即使另持异省岗位，也不能越过目标公民居住省辖区。
+        let (_, other_registrar, other_actor_cid_number, gd_role_code) =
+            setup_frg_citizen_identity_admin(b"GD");
+        assert_eq!(other_registrar, registrar);
+        assert_noop!(
+            CitizenIdentity::admin_rebind_cid_account_id(
+                RuntimeOrigin::signed(other_registrar),
+                other_actor_cid_number,
+                gd_role_code,
+                citizen_cid_number.clone(),
+                new_account_id.clone(),
+                1,
+                expires_at,
+                new_account_signature.clone(),
+            ),
+            citizen_identity::Error::<Runtime>::UnauthorizedRegistrar
+        );
+        assert_eq!(
+            citizen_identity::AccountIdByCid::<Runtime>::get(&citizen_cid_number),
+            Some(current_account_id.clone())
+        );
+
+        // 对应省 FRG 直接办理换绑；不创建换绑投票，也不要求当前账户签名。
+        assert_ok!(CitizenIdentity::admin_rebind_cid_account_id(
+            RuntimeOrigin::signed(registrar),
+            actor_cid_number,
+            hu_role_code,
+            citizen_cid_number.clone(),
+            new_account_id.clone(),
+            1,
+            expires_at,
+            new_account_signature,
+        ));
+        assert_eq!(
+            citizen_identity::AccountIdByCid::<Runtime>::get(&citizen_cid_number),
+            Some(new_account_id.clone())
+        );
+        assert_eq!(
+            citizen_identity::CidByAccountId::<Runtime>::get(&current_account_id),
+            None
+        );
+        assert_eq!(
+            citizen_identity::BindingRevisionByCid::<Runtime>::get(&citizen_cid_number),
+            Some(2)
+        );
+        assert_eq!(
+            citizen_identity::VotingIdentityByCid::<Runtime>::get(&citizen_cid_number),
+            Some(voting_identity_before)
+        );
+        assert_eq!(
+            citizen_identity::CandidateIdentityByCid::<Runtime>::get(&citizen_cid_number),
+            Some(candidate_identity_before)
+        );
+        let town_scope = citizen_identity::PopulationScope::Town(
+            test_area_code(b"HU"),
+            test_area_code(b"4301"),
+            test_area_code(b"4301001"),
+        );
+        assert!(
+            RuntimeCitizenIdentityReader::voting_subject(&current_account_id, &town_scope)
+                .is_none()
+        );
+        assert!(
+            RuntimeCitizenIdentityReader::candidate_subject(&current_account_id, &town_scope)
+                .is_none()
+        );
+        assert!(
+            RuntimeCitizenIdentityReader::voting_subject(&new_account_id, &town_scope).is_some()
+        );
+        assert!(
+            RuntimeCitizenIdentityReader::candidate_subject(&new_account_id, &town_scope).is_some()
         );
     });
 }

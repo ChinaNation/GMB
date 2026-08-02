@@ -543,7 +543,7 @@ class WalletManager {
     required String accountId,
     required String message,
   }) {
-    if (!message.startsWith('${QrProtocols.v1}|')) {
+    if (!message.startsWith('${QrProtocols.qrV1}|')) {
       return null;
     }
     if (!_accountIdPattern.hasMatch(accountId)) {
@@ -552,7 +552,7 @@ class WalletManager {
     final parts = message.split('|');
     final expiresAt = parts.length == 6 ? int.tryParse(parts[4]) : null;
     final valid = parts.length == 6 &&
-        parts[0] == QrProtocols.v1 &&
+        parts[0] == QrProtocols.qrV1 &&
         parts[1] == QrKind.signResponse.code.toString() &&
         QrSigner.isValidRequestId(parts[2]) &&
         parts[3] == 'onchina' &&

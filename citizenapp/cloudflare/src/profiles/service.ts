@@ -43,7 +43,7 @@ interface ProfileUpdateRequest {
   banner_content_hash?: unknown;
 }
 
-/// GET /v1/square/users/:cid —— 仅钱包用户可读，并附带当前身份的关注状态。
+/// GET /square/users/:cid —— 仅钱包用户可读，并附带当前身份的关注状态。
 /// 路由参数 = 目标用户身份主键 cid_number(D1a 收敛:社交面统一按 cid 寻址)。
 export async function getUserProfileRoute(
   request: Request,
@@ -95,7 +95,7 @@ async function buildProfileResponse(
   };
 }
 
-/// GET /v1/square/users/:cid/posts?category=&content_format=&limit=&cursor= —— 按作者身份分页。
+/// GET /square/users/:cid/posts?category=&content_format=&limit=&cursor= —— 按作者身份分页。
 export async function getUserPostsRoute(
   request: Request,
   env: Env,
@@ -136,7 +136,7 @@ export async function getUserPostsRoute(
   });
 }
 
-/// GET /v1/square/users/:cid/follows?type=following|followers —— 关注/粉丝列表分页。
+/// GET /square/users/:cid/follows?type=following|followers —— 关注/粉丝列表分页。
 export async function getUserFollowsRoute(
   request: Request,
   env: Env,
@@ -160,7 +160,7 @@ export async function getUserFollowsRoute(
   return jsonResponse({ ok: true, type, entries, next_cursor: nextCursor });
 }
 
-/// PUT /v1/square/profile —— 仅本人可写；身份主键 cid_number 从 session 派生。
+/// PUT /square/profile —— 仅本人可写；身份主键 cid_number 从 session 派生。
 export async function putProfileRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const body = await readJson<ProfileUpdateRequest>(request);
@@ -169,7 +169,7 @@ export async function putProfileRoute(request: Request, env: Env): Promise<Respo
 
   const assetPrefix = profileAssetPrefix(session.cid_number);
   const next: CitizenProfileDoc = {
-    schema: 'citizenapp.square.profile.v1',
+    schema: 'citizenapp.square.profile',
     cid_number: session.cid_number,
     display_name: normalizeText(body.display_name, existing.display_name, DISPLAY_NAME_MAX),
     bio: normalizeText(body.bio, existing.bio, BIO_MAX),

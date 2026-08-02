@@ -1,6 +1,6 @@
 //! NRC 监管动作(freeze / unfreeze / confiscate / forceTransfer / forceClose)— 框架占位。
 //!
-//! 与 ADR-011 v2 第 5.1 / 5.6 节对齐:
+//! 与 ADR-011 第 5.1 / 5.6 节对齐：
 //! - 监管动作走 **JointVote**(NRC admin 多签 + 全民兜底)
 //! - propose origin 校验:`actor_cid_number == NRC` 且
 //!   `ensure!(proposer_account_id ∈ AdminAccounts[actor_cid_number].admins)`

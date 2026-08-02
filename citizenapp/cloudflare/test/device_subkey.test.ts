@@ -229,7 +229,7 @@ function deviceEnv(
 }
 
 function registerRequest(issuedAt: number, publicKey = `0x04${'a'.repeat(128)}`): Request {
-  return new Request('https://worker.test/v1/square/auth/device/register', {
+  return new Request('https://worker.test/square/auth/device/register', {
     method: 'POST',
     body: JSON.stringify({
       account_id: DEVICE_BIND_INPUT.account_id,

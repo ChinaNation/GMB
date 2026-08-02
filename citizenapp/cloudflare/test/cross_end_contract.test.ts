@@ -85,6 +85,37 @@ describe('跨端 JSON 契约(Worker ⇔ Flutter 键名一致)', () => {
   });
 });
 
+describe('生产 API 路径契约(Worker ⇔ Flutter 无版本路由一致)', () => {
+  const squareApi = readFlutter('lib/8964/services/square_api_client.dart');
+  const creatorApi = readFlutter('lib/my/creator/creator_api.dart');
+  const chatTransport = readFlutter('lib/chat/transport/chat_cloud_transport.dart');
+  const workerRoutes = readFileSync(
+    join(import.meta.dirname, '../src/routes.ts'),
+    'utf8',
+  );
+  const routeCatalog = readFileSync(
+    join(import.meta.dirname, '../src/limits/catalog.ts'),
+    'utf8',
+  );
+
+  it('App 只使用同域 /api 部署根，业务路径不携带版本段', () => {
+    expect(squareApi).toContain("prodBaseUrl = 'https://www.crcfrcn.com/api'");
+    expect(squareApi).toContain("'/square/membership'");
+    expect(squareApi).toContain("'/square/contacts?");
+    expect(creatorApi).toContain("'/square/creator/plan'");
+    expect(chatTransport).toContain("'/chat/devices/register'");
+    expect(`${squareApi}\n${creatorApi}\n${chatTransport}`).not.toMatch(/['"]\/v\d+\//);
+  });
+
+  it('Worker 路由分发与资源白名单只登记无版本业务路径', () => {
+    expect(workerRoutes).toContain('path === "/chain/bootstrap"');
+    expect(workerRoutes).toContain('path === "/square/creator/plan"');
+    expect(routeCatalog).toContain('^\\/square\\/contacts$');
+    expect(routeCatalog).toContain('^\\/chat\\/devices\\/register$');
+    expect(`${workerRoutes}\n${routeCatalog}`).not.toMatch(/['"]\/v\d+\//);
+  });
+});
+
 describe('链上 storage 项名锁(Worker ⇔ citizenchain pallet)', () => {
   // 真实事故:citizenchain 把 WalletAccountByCid/CidByWalletAccount 改名为
   // AccountIdByCid/CidByAccountId,Flutter 跟了、Worker 没跟 —— storage key 拼错

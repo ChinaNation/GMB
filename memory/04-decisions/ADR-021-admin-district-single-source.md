@@ -138,7 +138,7 @@ citizenapp 无服务端,数据靠 assets 包随版本分发。包版本变了就
 ## 单源审查收口
 
 1. 不得恢复旧行政区数据目录或旧顶层 china/number 模块。
-2. 不得恢复 CID 行政区管理 tab 或 `/api/v1/app/admin-divisions/*`。
+2. 不得恢复 CID 行政区管理 tab 或 `/api/app/admin-divisions/*`。
 4. 任何重复洪江旧壳、`龙感湖工业园镇`、`xx管理市` 残留都必须在同一任务中清理。
 
 ## 实现坑（2026-06-23 修复）

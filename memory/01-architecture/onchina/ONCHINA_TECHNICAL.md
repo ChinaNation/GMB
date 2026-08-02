@@ -117,7 +117,7 @@ schema 初始化和链上业务投影必须分离。schema 入口只允许幂等
   不得从基金会管理员常量硬编码当前账户；链下 `creator_account_id` 只作创建来源审计，
   不得成为当前控制权或授权真源。
 - 注册局全局查询接口固定为
-  `GET /api/v1/admin/citizens/:cid_number/binding`。接口只向已登录的 FRG/CREG 管理员返回
+  `GET /api/admin/citizens/:cid_number/binding`。接口只向已登录的 FRG/CREG 管理员返回
   链上公开绑定，不读取或泄露链下护照、资料、通讯录等档案；所有注册局都从链上同一
   finalized 真源查询，不按本地办理地限制。
 - 占号、注册局换绑、身份推送和吊销只有在目标 extrinsic finalized 且

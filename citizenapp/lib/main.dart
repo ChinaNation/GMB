@@ -33,8 +33,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FirebaseMessaging.onBackgroundMessage(chatRuntimeBackgroundHandler);
 
-  // 注入 P-256 设备子钥绑定钩子（8964 层实现，避免 wallet/core 反向依赖）；实际
-  // 绑定时机是进入需 CID 页面时由门禁按需触发，不在钱包创建时。
+  // 注入 P-256 设备子钥登记钩子（8964 层实现，避免 wallet/core 反向依赖）。已有子钥
+  // 直接静默使用；只有实际业务确认缺钥时才鉴权一次生成，不在钱包创建或页面门禁触发。
   DeviceSubkeyRegistrar.turnstileTokenProvider = () async {
     final navigator = appNavigatorKey.currentState;
     if (navigator == null) return null;
@@ -381,7 +381,7 @@ class _AppShellState extends State<AppShell> {
     try {
       final accountId = await _chatRuntime.readAccountId();
       if (accountId == null || accountId.isEmpty) return;
-      await _chatRuntime.ensureReady(accountId);
+      await _chatRuntime.prewarmPushRegistrationSilently(accountId);
     } on Object catch (error) {
       // 设备/网络/native 任何失败都容忍：预热注册是尽力而为的后台任务。
       AppLog.d('push device prewarm skipped: $error');

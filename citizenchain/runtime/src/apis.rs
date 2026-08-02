@@ -252,22 +252,21 @@ impl_runtime_apis! {
 
     #[cfg(feature = "try-runtime")]
     impl frame_try_runtime::TryRuntime<Block> for Runtime {
+        #[allow(clippy::unwrap_used)]
         fn on_runtime_upgrade(checks: frame_try_runtime::UpgradeCheckSelect) -> (Weight, Weight) {
-            // NOTE: intentional unwrap: we don't want to propagate the error backwards, and want to
-            // have a backtrace here. If any of the pre/post migration checks fail, we shall stop
-            // right here and right now.
+            // TryRuntime trait 不提供 Result 返回值；迁移前后检查失败必须立即停止并保留回溯。
             let weight = Executive::try_runtime_upgrade(checks).unwrap();
             (weight, super::configs::RuntimeBlockWeights::get().max_block)
         }
 
+        #[allow(clippy::expect_used)]
         fn execute_block(
             block: <Block as BlockT>::LazyBlock,
             state_root_check: bool,
             signature_check: bool,
             select: frame_try_runtime::TryStateSelect
         ) -> Weight {
-            // NOTE: intentional unwrap: we don't want to propagate the error backwards, and want to
-            // have a backtrace here.
+            // TryRuntime trait 不提供 Result 返回值；区块校验失败必须立即停止并保留回溯。
             Executive::try_execute_block(block, state_root_check, signature_check, select).expect("execute-block failed")
         }
     }

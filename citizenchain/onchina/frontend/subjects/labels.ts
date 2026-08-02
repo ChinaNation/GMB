@@ -43,7 +43,7 @@ export const SUBJECT_PROPERTY_LABEL: Record<string, string> = {
   N: '智能人',
 };
 
-// 机构代码中文映射已删除:改由后端 /api/v1/public/cid/labels 单源下发(primitives code.rs)。
+// 机构代码中文映射已删除:改由后端 /api/public/cid/labels 单源下发(primitives code.rs)。
 // 消费方改用 `useInstitutionCodeLabels()`(见 subjects/institutionLabels.ts)。
 
 export const EDUCATION_TYPE_LABEL: Record<EducationType, string> = {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-/// 官网「公民宪法」tab：经 Cloudflare Worker 读链上唯一真源宪法（GET /v1/constitution），
+/// 官网「公民宪法」tab：经 Cloudflare Worker 读链上唯一真源宪法（GET /constitution），
 /// 用白皮书样式自渲染（左目录树 + 右正文 + 不可修改徽章 + 版本标签 + 中英双语）。
 /// 结构化 JSON 直接 JSX 渲染，不用 dangerouslySetInnerHTML。修宪后一个缓存 TTL 内自动更新。
 
@@ -176,7 +176,7 @@ export default function Constitution() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${apiBaseUrl}/v1/constitution`, { signal: controller.signal })
+    fetch(`${apiBaseUrl}/constitution`, { signal: controller.signal })
       .then(async (response) => {
         const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
         if (!response.ok) {

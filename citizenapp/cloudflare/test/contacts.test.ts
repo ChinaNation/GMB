@@ -54,11 +54,11 @@ describe('端到端加密通讯录 API', () => {
     const context = await buildContext();
 
     await expect(
-      routeRequest(new Request('https://worker.test/v1/square/contacts'), context.env)
+      routeRequest(new Request('https://worker.test/square/contacts'), context.env)
     ).rejects.toMatchObject({ code: 'missing_session' });
 
     await expect(
-      routeRequest(new Request('https://worker.test/v1/square/contacts', {
+      routeRequest(new Request('https://worker.test/square/contacts', {
         headers: { authorization: `Bearer ${context.accountA.token}` }
       }), context.env)
     ).rejects.toMatchObject({ code: 'device_time_invalid' });
@@ -72,20 +72,20 @@ describe('端到端加密通讯录 API', () => {
     const bPayload = cipherPayload('accountId-b', 400, 1, ACCOUNT_ID_B);
 
     await expect(
-      call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, {
+      call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_A}`, {
         ...aPayload,
         contact_account_id: secretContactAccount,
         contact_remark: secretContactRemark
       })
     ).rejects.toMatchObject({ code: 'invalid_contact_request' });
 
-    expect((await json(await call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, aPayload))).ok)
+    expect((await json(await call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_A}`, aPayload))).ok)
       .toBe(true);
-    expect((await json(await call(context, context.accountB, 'PUT', `/v1/square/contacts/${CONTACT_A}`, bPayload))).ok)
+    expect((await json(await call(context, context.accountB, 'PUT', `/square/contacts/${CONTACT_A}`, bPayload))).ok)
       .toBe(true);
 
-    const aPage = await json(await call(context, context.accountA, 'GET', '/v1/square/contacts'));
-    const bPage = await json(await call(context, context.accountB, 'GET', '/v1/square/contacts'));
+    const aPage = await json(await call(context, context.accountA, 'GET', '/square/contacts'));
+    const bPage = await json(await call(context, context.accountB, 'GET', '/square/contacts'));
     expect(aPage.items).toEqual([{ contact_id: CONTACT_A, ...aPayload }]);
     expect(bPage.items).toEqual([{ contact_id: CONTACT_A, ...bPayload }]);
 
@@ -103,24 +103,24 @@ describe('端到端加密通讯录 API', () => {
         context,
         context.accountA,
         'DELETE',
-        `/v1/square/contacts/${CONTACT_A}?binding_revision=1&account_id=${ACCOUNT_ID_A}`
+        `/square/contacts/${CONTACT_A}?binding_revision=1&account_id=${ACCOUNT_ID_A}`
       )
     );
     expect(deleted.deleted).toBe(true);
-    const aAfter = await json(await call(context, context.accountA, 'GET', '/v1/square/contacts'));
-    const bAfter = await json(await call(context, context.accountB, 'GET', '/v1/square/contacts'));
+    const aAfter = await json(await call(context, context.accountA, 'GET', '/square/contacts'));
+    const bAfter = await json(await call(context, context.accountB, 'GET', '/square/contacts'));
     expect(aAfter.items).toEqual([]);
     expect(bAfter.items).toHaveLength(1);
   });
 
   it('使用 updated_at + contact_id 的稳定游标分页', async () => {
     const context = await buildContext();
-    await call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, cipherPayload('a', 300));
-    await call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_B}`, cipherPayload('b', 200));
-    await call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_C}`, cipherPayload('c', 100));
+    await call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_A}`, cipherPayload('a', 300));
+    await call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_B}`, cipherPayload('b', 200));
+    await call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_C}`, cipherPayload('c', 100));
 
     const first = await json(
-      await call(context, context.accountA, 'GET', '/v1/square/contacts?limit=2')
+      await call(context, context.accountA, 'GET', '/square/contacts?limit=2')
     );
     expect((first.items as Array<{ contact_id: string }>).map((item) => item.contact_id))
       .toEqual([CONTACT_A, CONTACT_B]);
@@ -131,7 +131,7 @@ describe('端到端加密通讯录 API', () => {
         context,
         context.accountA,
         'GET',
-        `/v1/square/contacts?limit=2&cursor=${first.next_cursor as string}`
+        `/square/contacts?limit=2&cursor=${first.next_cursor as string}`
       )
     );
     expect((second.items as Array<{ contact_id: string }>).map((item) => item.contact_id))
@@ -143,13 +143,13 @@ describe('端到端加密通讯录 API', () => {
     const context = await buildContext();
     const current = cipherPayload('current', 500);
     const stale = cipherPayload('stale', 400);
-    await call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, current);
+    await call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_A}`, current);
     const response = await json(
-      await call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, stale)
+      await call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_A}`, stale)
     );
     expect(response.applied).toBe(false);
 
-    const page = await json(await call(context, context.accountA, 'GET', '/v1/square/contacts'));
+    const page = await json(await call(context, context.accountA, 'GET', '/square/contacts'));
     expect(page.items).toEqual([{ contact_id: CONTACT_A, ...current }]);
   });
 
@@ -160,7 +160,7 @@ describe('端到端加密通讯录 API', () => {
         context,
         context.accountA,
         'PUT',
-        `/v1/square/contacts/${CONTACT_A}`,
+        `/square/contacts/${CONTACT_A}`,
         cipherPayload('next', 600, 2, ACCOUNT_ID_B),
       ),
     ).rejects.toMatchObject({ code: 'contact_binding_not_allowed' });
@@ -170,13 +170,13 @@ describe('端到端加密通讯录 API', () => {
   it('拒绝非法密文元数据、超限请求体和超过通讯录独立限流的请求', async () => {
     const context = await buildContext();
     await expect(
-      call(context, context.accountA, 'PUT', `/v1/square/contacts/${CONTACT_A}`, {
+      call(context, context.accountA, 'PUT', `/square/contacts/${CONTACT_A}`, {
         ...cipherPayload('bad', 1),
         nonce: encodeBytes(new Uint8Array(11))
       })
     ).rejects.toMatchObject({ code: 'invalid_contact_nonce' });
 
-    const oversized = new Request(`https://worker.test/v1/square/contacts/${CONTACT_A}`, {
+    const oversized = new Request(`https://worker.test/square/contacts/${CONTACT_A}`, {
       method: 'PUT',
       headers: {
         authorization: `Bearer ${context.accountA.token}`,
@@ -189,14 +189,14 @@ describe('端到端加密通讯录 API', () => {
 
     // 默认拒绝:无会话访问受保护路由,先于限流被 401 拦下(不再退化成按 IP 限流)。
     await expect(
-      routeRequest(new Request('https://worker.test/v1/square/contacts'), context.env)
+      routeRequest(new Request('https://worker.test/square/contacts'), context.env)
     ).rejects.toMatchObject({ code: 'missing_session' });
 
     // 携带有效会话方能触达限流层;超过通讯录独立读限流仍抛 request_rate_exceeded。
     context.db.forcedRateCount = 61;
     await expect(
       routeRequest(
-        new Request('https://worker.test/v1/square/contacts', {
+        new Request('https://worker.test/square/contacts', {
           headers: { authorization: `Bearer ${context.accountA.token}` }
         }),
         context.env

@@ -6,10 +6,10 @@
 ## 要点(以 ADR-022 为准)
 
 - `citizenwallet` 完全离线,PQC 后仍须纯离线完成 ML-DSA-65 签名,不依赖在线服务。
-- **同源派生(model B 全 `//index` 无根,sr25519 不套 HKDF)**:每账户 `AccountSeedV1_N` = 该账户 child mini-secret(账户 N = 助记词 `//N` 硬派生,账户0=`//0`,无 bare 根);sr25519 地址锚点 = `sr25519.fromSeed(AccountSeedV1_N)` **直接派生**(不经 HKDF);ML-DSA-65/ML-KEM-768 才用 `HKDF-SHA512(AccountSeedV1_N, "GMB/account/ml-dsa-65/v1" | ".../ml-kem-768/v1")`。冷热共用 `gmb-pqc` crate(原生 C FFI)。
+- **同源派生(model B 全 `//index` 无根,sr25519 不套 HKDF)**:每账户 `account_seed_N` = 该账户 child mini-secret(账户 N = 助记词 `//N` 硬派生,账户0=`//0`,无 bare 根);sr25519 地址锚点 = `sr25519.fromSeed(account_seed_N)` **直接派生**(不经 HKDF);ML-DSA-65/ML-KEM-768 才用 `HKDF-SHA512(account_seed_N, "GMB/account/ml-dsa-65" | ".../ml-kem-768")`。冷热共用 `gmb-pqc` crate(原生 C FFI)。
 - **无感 bootstrap**:未绑定账户首次扫码,**同一确认**同时出 sr25519 bootstrap 签名(证旧地址主人)+ ML-DSA 交易签名;后续只签 ML-DSA。**无单独绑定步骤、无账户状态切换**。
 - **QR 扩展**:`sig_alg(sr25519|ml-dsa-65)` + `auth_mode(normal|pqc|bootstrap-pqc)` + `key_version` + `chunk_index/chunk_total`(ML-DSA ~3.3KB,最坏体积按 bootstrap 实测分片)。
-- **安全**:`AccountSeedV1`/私钥不出本机、不进二维码;payload 带 `genesis_hash`+`spec_version` 防跨链/跨升级重放;bootstrap 强度=sr25519,窗口须在量子破 sr25519 前关闭。
+- **安全**:`account_seed`/私钥不出本机、不进二维码;payload 带 `genesis_hash`+`spec_version` 防跨链/跨升级重放;bootstrap 强度=sr25519,窗口须在量子破 sr25519 前关闭。
 
 > 实现以本文 + ADR-022 为准,旧路线不再适用。
 

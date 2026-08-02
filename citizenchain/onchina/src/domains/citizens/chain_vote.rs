@@ -36,7 +36,7 @@ struct AppVoteEligibilityOutput {
     town_code: String,
 }
 
-/// `POST /api/v1/app/vote/eligibility`
+/// `POST /api/app/vote/eligibility`
 pub(crate) async fn app_vote_eligibility(
     State(state): State<AppState>,
     headers: HeaderMap,

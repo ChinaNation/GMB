@@ -584,6 +584,31 @@ mod tests {
     }
 
     #[test]
+    fn accept_payment_rejects_signature_from_another_operation_tag() {
+        let tmp = std::env::temp_dir().join("offchain_ledger_cross_operation_signature_test");
+        let _ = fs::remove_dir_all(&tmp);
+        let ledger = OffchainLedger::new(&tmp);
+        let pair = <sr25519::Pair as Pair>::from_seed(&[0x41u8; 32]);
+        let payer = AccountId32::new(pair.public().0);
+        let bank_cid = b"GD001-PRB0T-239565809-2026".to_vec();
+        ledger.on_deposited(&payer, 1_000);
+        let (intent, _) = signed_intent(&pair, 0x10, bank_cid.clone(), bank_cid, 1);
+        let wrong_message = primitives::sign::signing_message(
+            primitives::sign::OP_SIGN_OFFCHAIN_BATCH,
+            &intent.encode(),
+        );
+        let wrong_signature = <sr25519::Pair as Pair>::sign(&pair, &wrong_message).0;
+
+        let error = ledger
+            .accept_payment(intent, wrong_signature, Some(1), [7u8; 64], 1_717_000_000)
+            .expect_err("其它操作码签名不能重放为 L3 支付授权");
+        assert!(error.contains("L3 sr25519 签名验证失败"));
+        assert_eq!(ledger.pending_count(), 0);
+        assert_eq!(ledger.next_nonce(&payer), 1);
+        assert_eq!(ledger.available_balance(&payer), 1_000);
+    }
+
+    #[test]
     fn deposited_then_withdrawn_roundtrip() {
         let tmp = std::env::temp_dir().join("offchain_ledger_roundtrip_test");
         let _ = fs::remove_dir_all(&tmp);

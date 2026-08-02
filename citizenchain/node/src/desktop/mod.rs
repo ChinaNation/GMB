@@ -65,7 +65,7 @@ pub fn run_desktop() {
             governance::get_next_proposal_id,
             governance::get_institution_proposals,
             governance::get_institution_proposal_page,
-            // 双层 ID + 反向索引(spec_version v1)
+            // 双层 ID + 反向索引
             governance::get_proposal_display,
             governance::list_proposals_by_institution,
             governance::list_proposals_by_cid,
@@ -85,9 +85,7 @@ pub fn run_desktop() {
             crate::transaction::multisig::commands::submit_multisig_safety_fund,
             crate::transaction::multisig::commands::build_multisig_sweep_request,
             crate::transaction::multisig::commands::submit_multisig_sweep,
-            governance::runtime_upgrade::commands::build_developer_upgrade_request,
             governance::runtime_upgrade::commands::get_pow_difficulty_params,
-            governance::runtime_upgrade::commands::submit_developer_upgrade,
             governance::runtime_upgrade::commands::build_propose_upgrade_request,
             governance::runtime_upgrade::commands::submit_propose_upgrade,
             crate::core::grandpa_rotation::build_grandpa_key_change_request,

@@ -109,3 +109,60 @@
 
 改完必须 `bash start.sh build-production`（源码构建期封进 app）。
 **该命令需钥匙串授权，只能由用户在终端执行。**
+
+---
+
+# 附：44 节点四项配置的状态文案统一（同批改动）
+
+## 用户报告「服务器 IP 无法写入」——查实为反馈缺失，不是写入失败
+
+写入链路本身没有任何问题：前端 `data-original` 恒空 ⇒ 填了就必然提交；
+后端 `isIP()` 校验通过；`loadStatus()` 确实刷新 `chainNodes`（app.js:885）。
+
+看不出来的原因有三层叠加：
+
+1. `nodeStatus()` 恒返回 `serverIp: null`——状态轮询只允许读 Keychain 元数据，
+   禁止为展示而调 `secret.read`（那条路强制 Touch ID）
+2. 前端 `value="${node.serverIp || ''}"` 因此**永远渲染成空框**
+3. **IP 的 placeholder 是写死的**「请输入该节点服务器 IP」，不随配置状态变化——
+   而另外三项已配置时会变成「已安全保存；留空则不修改」
+
+于是操作后：框又空了、提示字一个没变，与没保存完全无法区分。
+唯一能看出成功的地方是 summary 的「缺少：」列表少了一项，极隐蔽。
+
+## 原生侧的硬约束（决定了方案）
+
+- `secret.exists` → `vault.exists()`，**不调 authenticate** → 免 Touch ID
+- `secret.read` → `vault.authenticate(reason:)` → **强制 Touch ID**
+
+节点状态每次 `loadStatus()` 都刷新（页面加载 / 每次保存后 / 每个任务结束后），
+若为回显真值改调 `secret.read`，等于每隔几秒弹一次指纹。
+
+用户最终选择：**四项一律不回显真值，只显示状态文案**——直接绕开该约束，无需迁移存储、
+不必在安全代理上开免认证读取的口子。
+
+## 落地
+
+| 字段 | 未配置 | 已配置 |
+| --- | --- | --- |
+| 服务器 IP | 请输入IP | 已配置IP |
+| 引导节点密钥 / 验证节点密钥 / SSH 私钥 | 请输入密钥 | 已配置密钥 |
+
+顺带把 IP 的特例逻辑全部删除，四项彻底同构：
+
+- 删 `value=` 与 `data-original=`（IP 不再回显，该机制失去意义）
+- `saveNode` 删掉 `serverIp` 特判，四项统一「填了才提交、留空不覆盖旧值」
+- 保存失败时四项一律清空（原先只清非 IP 字段）
+- `nodeStatus` 删掉 `serverIp: null` 字段（前端只看 `configured.SERVER_IP`）
+
+「点击可再次写入」与「四项可单独配置」原本就已满足：密钥框本就是空的可输入框，
+`saveNode` 只提交已填写项。
+
+## 验证
+
+`npm test` 49 passed / 0 failed。新增测试锁住四项文案、`nodeStatus` 不得调 `keychainGet`、
+四项同构无特例。**变异验证**：注入「为回显 IP 而调 keychainGet」「IP 文案回退成固定文案」
+「密钥文案回退成旧措辞」三种回归，**全部被检出**，源文件逐一恢复并逐字节比对一致。
+
+注：该测试初版有一处松散正则（`function nodeStatus\([\s\S]*?keychainGet\(` 会一路匹配到
+文件后面任何一处 `keychainGet`，测的根本不是函数体内），已改为精确截取函数体后再断言。

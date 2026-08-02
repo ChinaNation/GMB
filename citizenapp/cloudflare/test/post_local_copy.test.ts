@@ -95,14 +95,14 @@ describe('本人发布内容本地副本回灌 API', () => {
       text: '另一身份的内容',
     });
 
-    const anonymous = await callWorker(harness, null, '/v1/square/posts/self');
+    const anonymous = await callWorker(harness, null, '/square/posts/self');
     expect(anonymous.status).toBe(401);
     expect((await responseJson(anonymous)).error_code).toBe('missing_session');
 
     const firstResponse = await callWorker(
       harness,
       harness.accountA,
-      '/v1/square/posts/self?limit=2',
+      '/square/posts/self?limit=2',
     );
     expect(firstResponse.status).toBe(200);
     const first = await responseJson(firstResponse);
@@ -129,7 +129,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     const secondResponse = await callWorker(
       harness,
       harness.accountA,
-      `/v1/square/posts/self?limit=2&cursor=${first.next_cursor as string}`,
+      `/square/posts/self?limit=2&cursor=${first.next_cursor as string}`,
     );
     expect(secondResponse.status).toBe(200);
     const second = await responseJson(secondResponse);
@@ -138,7 +138,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     expect(second.next_cursor).toBeNull();
 
     const other = await responseJson(
-      await callWorker(harness, harness.accountB, '/v1/square/posts/self'),
+      await callWorker(harness, harness.accountB, '/square/posts/self'),
     );
     expect((other.items as Array<{ post_id: string }>).map((item) => item.post_id))
       .toEqual(['sqp_b_1']);
@@ -168,7 +168,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     });
 
     const first = await responseJson(
-      await callWorker(harness, harness.accountA, '/v1/square/posts/self?limit=2'),
+      await callWorker(harness, harness.accountA, '/square/posts/self?limit=2'),
     );
     expect((first.items as Array<{ post_id: string }>).map((item) => item.post_id))
       .toEqual(['sqp_same_c', 'sqp_same_b']);
@@ -176,7 +176,7 @@ describe('本人发布内容本地副本回灌 API', () => {
       await callWorker(
         harness,
         harness.accountA,
-        `/v1/square/posts/self?limit=2&cursor=${first.next_cursor as string}`,
+        `/square/posts/self?limit=2&cursor=${first.next_cursor as string}`,
       ),
     );
     expect((second.items as Array<{ post_id: string }>).map((item) => item.post_id))
@@ -185,7 +185,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     const invalidLimit = await callWorker(
       harness,
       harness.accountA,
-      '/v1/square/posts/self?limit=6',
+      '/square/posts/self?limit=6',
     );
     expect(invalidLimit.status).toBe(400);
     expect((await responseJson(invalidLimit)).error_code).toBe('invalid_limit');
@@ -193,7 +193,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     const invalidCursor = await callWorker(
       harness,
       harness.accountA,
-      '/v1/square/posts/self?cursor=not-a-valid-cursor',
+      '/square/posts/self?cursor=not-a-valid-cursor',
     );
     expect(invalidCursor.status).toBe(400);
     expect((await responseJson(invalidCursor)).error_code).toBe('invalid_cursor');
@@ -212,14 +212,14 @@ describe('本人发布内容本地副本回灌 API', () => {
     });
     await harness.env.SQUARE_MEDIA.put(
       corrupt.object_key,
-      '{"schema":"citizenapp.square.post.v1","text":"篡改"}',
+      '{"schema":"citizenapp.square.post","text":"篡改"}',
       { httpMetadata: { contentType: 'application/json' } },
     );
 
     const response = await callWorker(
       harness,
       harness.accountA,
-      '/v1/square/posts/self',
+      '/square/posts/self',
     );
     expect(response.status).toBe(409);
     const body = await responseJson(response);
@@ -242,7 +242,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     const response = await callWorker(
       harness,
       harness.accountA,
-      '/v1/square/posts/self',
+      '/square/posts/self',
     );
     expect(response.status).toBe(409);
     expect((await responseJson(response)).error_code).toBe('upload_object_keys_invalid');
@@ -261,7 +261,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     const ownerConflict = await callWorker(
       harness,
       harness.accountA,
-      '/v1/square/posts/self',
+      '/square/posts/self',
     );
     expect(ownerConflict.status).toBe(409);
     expect((await responseJson(ownerConflict)).error_code).toBe('post_owner_mismatch');
@@ -272,7 +272,7 @@ describe('本人发布内容本地副本回灌 API', () => {
     const hashConflict = await callWorker(
       harness,
       harness.accountA,
-      '/v1/square/posts/self',
+      '/square/posts/self',
     );
     expect(hashConflict.status).toBe(409);
     expect((await responseJson(hashConflict)).error_code).toBe('post_upload_hash_mismatch');
@@ -383,7 +383,7 @@ async function seedPost(
   content_hash: string;
 }> {
   const manifest: Record<string, unknown> = {
-    schema: 'citizenapp.square.post.v1',
+    schema: 'citizenapp.square.post',
     account_id: account.account_id,
     post_category: 'normal',
     text: input.text,

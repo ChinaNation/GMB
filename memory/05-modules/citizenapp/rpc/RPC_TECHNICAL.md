@@ -73,7 +73,7 @@ lib/rpc/
 ## 5. 连接与同步策略
 
 1. App 完成 `runApp()` 和首帧渲染后不自动初始化轻节点；只有主动链消费方首次调用时才进入 `SmoldotClientManager.ensureStarted()`
-2. 轻节点读取 `SharedPreferences.smoldot_db_cache` 的 `citizenapp.smoldot.database.v1` 信封；schema、内置 `#0` 推导的 genesis hash、完整验证 finalized 高度/哈希和 database 正文先通过严格校验，再要求 addChain 的第一份原生快照证明 `source=localDatabase` 且启动高度/hash 与信封完全一致
+2. 轻节点读取 `SharedPreferences.smoldot_db_cache` 的 `citizenapp.smoldot.database` 信封；schema、内置 `#0` 推导的 genesis hash、完整验证 finalized 高度/哈希和 database 正文先通过严格校验，再要求 addChain 的第一份原生快照证明 `source=localDatabase` 且启动高度/hash 与信封完全一致
 3. 旧裸 database、损坏信封、未知字段、跨 genesis 数据或 smoldot 拒绝的缓存都会被清除，并回退到安装包固定 `#0`；回退后的第一份原生快照还必须证明 `source=bundledCheckpoint / startup=#0 / startupHash=genesisHash`，不保留未知 H、旧格式兼容或双轨读取
 4. 主动链入口触发轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
 5. peer/best/finalized 进度展示只等待初始化；余额、nonce、finalized storage、extrinsic 和链事件订阅必须等待原生 `isUsable=true`。Dart 的历史 `_synced` 每次业务入口都会重新向原生确认，peer F 推进后不得继续沿用旧 ready
@@ -91,8 +91,8 @@ lib/rpc/
 - warp 先验证 GRANDPA authority set 交接与最终性 proof，再下载目标 finalized 块的 runtime 和必要 storage proof，随后切回普通同步追赶少量近头区块。成本主要随权威集变更与 proof 体积增长，不随普通区块高度线性增长。
 - GRANDPA neighbor packet 到达前，GRANDPA 链不允许普通 block request 抢先改变同步锚点；warp 活跃期间也只调度 warp 请求，避免普通同步与 warp 竞态造成 fragment 被错误拒绝。
 - 当前节点端已经为所有节点注册 GRANDPA 协议并挂载 warp proof provider；权威节点推进 finality，普通 observer 节点也能基于本地归档数据响应 proof。
-- Cloudflare bootstrap v2 只补充通过本地 chain id、protocol id、genesis state root 校验的 bootnodes；协议中不存在远端 checkpoint 或轻同步资产下载字段。
-- 2026-07-12 bootstrap v2 已重新发布到 staging（`692d472a-49ec-47e5-912d-51cf6e178545`）和 production（`418f3d65-ea13-4d40-a045-a66ba84822cc`），两端统一为 6 个已部署 bootnodes，旧节点和未部署节点不再下发。production 已真实验证 schema v2、无 checkpoint/RPC URL；staging 未登录请求返回预期 302 Access 跳转。
+- Cloudflare 当前 bootstrap 只补充通过本地 chain id、protocol id、genesis state root 校验的 bootnodes；协议中不存在远端 checkpoint 或轻同步资产下载字段。
+- 2026-07-12 当前 bootstrap 已重新发布到 staging（`692d472a-49ec-47e5-912d-51cf6e178545`）和 production（`418f3d65-ea13-4d40-a045-a66ba84822cc`），两端统一为 6 个已部署 bootnodes，旧节点和未部署节点不再下发。production 已真实验证当前 schema、无 checkpoint/RPC URL；staging 未登录请求返回预期 302 Access 跳转。
 - warp 不可用时 smoldot 仍可能退化为普通逐块同步。App 必须把它视为可观测的服务降级，保持 Flutter 输入响应并告警节点运维，禁止改走 HTTP 链真源。
 - 完整发布、节点数据保留和真实验收规则见 [checkpoint 与 GRANDPA warp 快速同步方案](./SMOLDOT_CHECKPOINT_PLAN.md)。
 
@@ -322,7 +322,7 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 ```text
 首次主动链访问时：从内置 #0 header 推导 genesis hash
         → SharedPreferences.read('smoldot_db_cache')
-        → 严格解析 citizenapp.smoldot.database.v1
+        → 严格解析 citizenapp.smoldot.database
         → addChain(chainSpec, databaseContent: envelope.database_content)
         → 原生快照必须证明 localDatabase + 信封高度/hash
         → peer finalized 更高则从本机锚点 warp，否则直接在线跟随
@@ -339,7 +339,7 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 
 ```json
 {
-  "schema": "citizenapp.smoldot.database.v1",
+  "schema": "citizenapp.smoldot.database",
   "genesis_hash": "0x...",
   "finalized_block_number": 31,
   "finalized_block_hash": "0x...",
@@ -351,7 +351,7 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 
 - database 导出、现有信封读取和 SharedPreferences 写入共用单一 Future 队列，不得并发落盘
 - `addChain(databaseContent)` 返回后的第一份原生快照必须已经选择 database chain information。网络后来追到或超过信封高度不能冒充缓存恢复；来源、高度或 hash 任一不符都立即释放该 chain、清理缓存并从 `#0` 重建
-- smoldot database 内部链信息只接受显式共识类型格式 v2；CitizenChain PoW 正文必须包含 `consensus=pow`。旧无标记正文不兼容，清理一次后由当前客户端重新导出
+- smoldot database 内部链信息只接受当前显式共识类型格式；CitizenChain PoW 正文必须包含 `consensus=pow`。旧无标记正文不兼容，清理一次后由当前客户端重新导出。
 - 导出前后 finalized 发生变化时丢弃正文并最多重试一次；不得给正文绑定无法证明的高度或哈希
 - 候选高度低于持久值时直接丢弃；同高度同 hash 不重写；同高度不同 hash 先清除无法信任的旧值，再写当前轻节点稳定导出的候选
 - dispose 先递增生命周期代际并等待缓存队尾收口，新 client 启动前旧任务不得继续写缓存

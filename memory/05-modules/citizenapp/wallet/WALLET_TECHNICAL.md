@@ -291,7 +291,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 - `account_child_key_<account_id>`：账户 child mini-secret 的硬件 KEK 加密 blob；同一热钱包
   的账户共享 `walletIndex` KEK，但各 `account_id` 独立保存密文
-- `wallet.session.<scope>.token.v1`：短期会话 token
+- `wallet.session.<scope>.token`：短期会话 token
 - PIN、设备锁和 attestation 所需最小状态
 
 禁止保存助记词、母种子、Chat/通讯录用途子钥或预留的用户数据主钥。
@@ -367,24 +367,31 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 - 助记词、母种子和账户 child 明文不写入 Isar/Postgres/日志
 - **账户 child 不出 WalletManager**：身份账户签名统一走 `signForAccountId()`，账户0资金/
   治理签名走 `signWithWallet()`；账户 child 只在硬件解密、派生或签名期间短暂存在
-- 通讯录本地与云端子钥都由 CID 当前链上绑定钱包账户的 child mini-secret 直接派生，
-  域固定为 `citizenapp.account-data/contacts-local` 与
-  `citizenapp.account-data/contacts-cloud`。业务层只能读取派生后的
+- 通讯录本地与云端子钥都由 CID 当前链上绑定钱包账户的 child mini-secret 在真实数据
+  解密确认缺钥或正式换绑作用域内派生，域固定为 `citizenapp.account-data/contacts-local` 与
+  `citizenapp.account-data/contacts-cloud`。日常业务只从设备数据钥金库静默解封
   `ContactKeyMaterial`，不能接触当前账户 child，也不能用通讯录密钥签名或恢复钱包。
 - 私有数据不另设稳定主钥、随机 CID 密钥、Worker 密钥或节点密钥。唯一派生输入是当前
   钱包账户 child mini-secret；HKDF salt 绑定 `genesis_hash + cid_number +
-  binding_revision + account_id`，info 绑定用途和可选 context。用途密钥只在内存中使用，
-  不写入 Isar、D1、R2、Worker Secret 或日志。
-- `activateAccountDataBinding` 先读取当前账户 child 并实际派生验证钥，成功后才单调写入
-  公开 `AccountDataBinding` 元数据；`deriveDataKeyForCurrentBinding` 只对该精确绑定派生。
+  binding_revision + account_id`，info 绑定用途和可选 context。用途密钥明文只在内存中
+  短期使用；缺钥初始化后只保存由独立 Android Keystore AES-GCM / iOS Secure Enclave
+  ECIES 硬件钥封装的密文 blob，不写入 Isar、D1、R2、Worker Secret 或日志。
+- `activateAccountDataBinding` 只验证本机账户存在并单调写入公开 `AccountDataBinding`
+  元数据，禁止读取 child。`readDataKeyForCurrentBinding/readDataKeysForBinding` 优先静默
+  解封已有设备用途钥；只有真实数据访问确认缺钥或硬件封装失效时才鉴权一次生成并重试。
   同一账户在新设备导入后能重新派生相同密钥；换绑后的新账户直接接管 CID 并派生新的
   用途密钥，不能直接解密换绑前当前账户加密的历史私有数据。只有同次换绑取得当前账户
   签名时，客户端才对 Chat 与通讯录执行端内重加密；无签名换绑不读取此前账户、私钥、
   助记词、设备或缓存。
-- 设备子钥登记（`bindDeviceSubkeyToCurrentBinding`）按
-  `(cid_number, binding_revision, account_id)` 三元组落本机幂等标记：登记要签名、签名要弹
-  生物识别，不挡住重复调用就会每次进入需 CID 页面都弹一次。标记落在钱包层而不是调用方——
-  `MyIdService` 非单例，五处门禁各持一份，进程内去重形同虚设。登记失败不写标记，下次重试。
+- 本地数据钥入口为 `ensureDeviceDataKeysForBinding`，只允许由真实数据访问确认缺钥或
+  硬件封装失效时调用；它只派生、封装本地用途钥，绝不登记 P-256 子钥或调用 Turnstile。
+  P-256 登记入口为 `registerDeviceSubkeyForBinding`，只允许由 Worker 明确返回
+  `device_not_registered` 后调用；它绝不生成、覆盖或删除本地用途钥。两类入口各自使用
+  独立静态 single-flight 和独立失败回滚，同一
+  `(genesis_hash, cid_number, account_id)` 的并发调用各共享一次 Future；已有对应密钥时
+  读取 child 次数为 0。CID finalized、页面门禁和后台预热不得调用。CID 换绑要求目标
+  `account_id != 当前 account_id`；相同账户不得用新 `binding_revision` 伪装换绑，并在读取
+  child、构造交易和数据交接之前拒绝。
 - 删除钱包必须清除该钱包的账户 child 和设备子钥；只有被删账户拥有本机当前激活 CID
   绑定时，才清理对应的公开绑定元数据和内存用途子钥。删除本地钱包不得删除 CID 业务数据。
 - 助记词不持久化，仅创建时一次性展示
@@ -392,7 +399,12 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
 - 本机签名在本地完成，私钥材料不出端
 - 账户 child 每次读取都由硬件金库触发强生物识别，取消、锁定、密钥失效或密文缺失均
   fail-closed；不存在预认证窗口、无认证读取或设备密码回退入口。
-- Chat 与广场后台登录只使用不可导出的 P-256 设备子钥静默签名，不读取账户 child。
+- 账户 child 只允许用于正式交易签名、明确钱包级鉴权、CID 注册/有效换绑交易签名、换绑
+  数据交接、真实数据钥缺失/失效后的本地生成，以及 Worker 明确未登记后的 P-256 登记。
+  广场、Chat、创作者、通讯录、会员/订阅的页面进入、已有钥的日常数据解密、后台推送预热
+  和普通 Session/MLS 初始化一律禁止读取。
+- Chat 与广场后台登录只使用不可导出的 P-256 设备子钥静默签名；Chat/MLS/附件/通讯录
+  数据只使用设备硬件钥静默解封的用途钥，两条日常路径都不读取账户 child。
 - 热钱包创建/导入入口先确认强生物识别可用；账户 child 读取后校验 64 位十六进制格式并
   在签名或派生完成后清零。
 - 账户 child 密文键只允许由 `HardwareBoundSeedVault` 生成；Session 键只允许由
@@ -407,8 +419,12 @@ secure storage、Keychain/Keystore、助记词、seed、私钥和生物识别保
   - `signForAccountId(accountId, payload)` — CID 当前账户 sr25519 签名
   - `signWithWallet(walletIndex, payload)` — 热钱包账户0 sr25519 签名
   - `walletIndexForAccountId(accountId)` — 定位当前账户实际所属热钱包，供设备子钥使用
-  - `ensureContactKeyMaterialForAccountId(accountId)` — 返回身份账户 child 域隔离的
-    通讯录加密钥和索引钥，必要时从硬件金库一次性派生
+  - `ensureDeviceDataKeysForBinding(binding)` — 真实数据缺钥时生成本地设备数据钥；与设备
+    登记完全隔离
+  - `registerDeviceSubkeyForBinding(binding)` — Worker 明确未登记时登记 P-256 子钥；与本地
+    数据钥完全隔离
+  - `ensureContactKeyMaterialForAccountId(accountId)` — 已有设备用途钥时静默返回通讯录
+    加密钥和索引钥；真实缺钥时鉴权一次生成，页面进入不调用
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchFinalizedBalance` / `fetchFinalizedBalances` / `fetchFinalizedTotalBalance` — 直连节点查询 finalized 链上余额
 - `ChainTxMonitor`（`lib/rpc/chain_tx_monitor.dart`）
@@ -489,10 +505,10 @@ mnemonic
 
 热钱包随全系统从 sr25519 **在位升级**到 ML-DSA-65 签名,"四不变"(不换助记词/账户/地址/余额)。以 ADR-022 为准:
 
-- **派生(model B //index,sr25519 不套 HKDF)**:每账户 `AccountSeedV1_N` = 该账户 child mini-secret(账户 N=助记词`//N`,账户0=`//0`,无 bare 根);sr25519 地址锚点 = `sr25519.fromSeed(AccountSeedV1_N)` **直接派生**(不经 HKDF);ML-DSA-65/ML-KEM-768 用 `HKDF-SHA512(AccountSeedV1_N, "GMB/account/ml-dsa-65/v1" | ".../ml-kem-768/v1")`。ML-DSA keygen/sign 走 Rust FFI(`gmb-pqc`),非 Dart。
+- **派生(model B //index,sr25519 不套 HKDF)**:每账户 `account_seed_N` = 该账户 child mini-secret(账户 N=助记词`//N`,账户0=`//0`,无 bare 根);sr25519 地址锚点 = `sr25519.fromSeed(account_seed_N)` **直接派生**(不经 HKDF);ML-DSA-65/ML-KEM-768 用 `HKDF-SHA512(account_seed_N, "GMB/account/ml-dsa-65" | ".../ml-kem-768")`。ML-DSA keygen/sign 走 Rust FFI(`gmb-pqc`),非 Dart。
 - **签名/交易**:无感 bootstrap——未绑定账户首次交易构造 `bootstrap_pqc_dispatch`(sr25519 bootstrap 签名 + ML-DSA 交易签名,一次确认);后续走 `pqc_dispatch` general-tx(`signed_extrinsic_builder.dart:103/186`,**不扩 MultiSignature**)。
 - **QR**:`sig_alg(sr25519|ml-dsa-65)` + `auth_mode(normal|pqc|bootstrap-pqc)` + `key_version` + `chunk_index/chunk_total` 分片(ML-DSA ~3.3KB,最坏体积按 bootstrap 实测)。
 - **UI**:只展示一个账户/地址/余额,不暴露多公钥/绑定状态机/换账户。
-- **安全**:`AccountSeedV1`/PQC 私钥不出本机;CID 不托管。
+- **安全**:`account_seed`/PQC 私钥不出本机;CID 不托管。
 
 > 实现以本节 + ADR-022 为准,旧路线不再适用。

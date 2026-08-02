@@ -7,7 +7,7 @@
 - 创世回填(§2.5):`domains/genesis_projection.rs`(程伟联邦播种 + 基金会绥阳回填,DO NOTHING 幂等)。
 - 投影纯逻辑 + 保正本:`domains/projection.rs::merge_citizen_record / merge_institution_record`(9 单测,含两类保正本)。
 - M1 indexer 增量:`core/chain_runtime.rs::read_chain_citizen_detail` + `indexer/event_parser.rs::collect_entity_projection_cids` + `indexer/worker.rs`(每块投影 + 作用域解析,仅城市节点)。
-- M3 联邦 drill-in:`chain_runtime` 两个 scoped 扫描 + `projection::drill_in_project_scope` + `projection::drill_in_project_city`(POST `/api/v1/admin/registry/drill-in-project`,联邦+省级访问控制)。
+- M3 联邦 drill-in:`chain_runtime` 两个 scoped 扫描 + `projection::drill_in_project_scope` + `projection::drill_in_project_city`(POST `/api/admin/registry/drill-in-project`,联邦+省级访问控制)。
 - 验证:onchina `cargo test` 138 全绿(含 9 投影);链读/事件/HTTP 为编译级验证(无活链运行时),保正本/作用域/映射核心逻辑离线单测覆盖。
 - 未做(前瞻/前端):待补档 PENDING 推链门(创世方案已绕开,不需要);M3 前端触发按钮(Step5 前端)。
 
@@ -84,7 +84,7 @@ CID 的 r5 段 = 省码(2)+ 市码(3)(number.rs:88-92)。
 ## 4.5 正本补档:公民编辑(不可变字段锁定,as-built 2026-07-24)
 
 创世/待补公民(如程伟)投影落库后正本残缺(护照有效期空 → `computed_identity_status` 判注销),
-需注册局补齐正本才能推链。为此加 `POST /api/v1/admin/citizens/:cid/edit`
+需注册局补齐正本才能推链。为此加 `POST /api/admin/citizens/:cid/edit`
 (`admin_entry::admin_update_citizen`):
 
 字段可变性按"现实是否可变"定死:

@@ -43,7 +43,7 @@ class _HandoverWalletManager extends WalletManager {
   }
 
   @override
-  Future<Uint8List> deriveDataKeyForCurrentBinding(
+  Future<Uint8List> readDataKeyForCurrentBinding(
     String accountId,
     LocalKeyPurpose purpose, {
     String? context,
@@ -51,13 +51,20 @@ class _HandoverWalletManager extends WalletManager {
       _key(accountId, purpose);
 
   @override
-  Future<List<Uint8List>> deriveDataKeysForBinding(
+  Future<List<Uint8List>> readDataKeysForBinding(
     AccountDataBinding binding,
     List<({String? context, LocalKeyPurpose purpose})> requests,
   ) async =>
       requests
           .map((request) => _key(binding.accountId, request.purpose))
           .toList(growable: false);
+
+  @override
+  Future<List<Uint8List>> deriveDataKeysForBindingHandover(
+    AccountDataBinding binding,
+    List<({String? context, LocalKeyPurpose purpose})> requests,
+  ) =>
+      readDataKeysForBinding(binding, requests);
 }
 
 /// 聊天正文静止态加密 + HMAC 分词搜索的端到端验收。

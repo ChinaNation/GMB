@@ -139,7 +139,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
     manifestHash
   });
 
-  const manifestUploadUrl = apiRouteUrl(request, '/v1/square/uploads/manifest', { upload_id: uploadId });
+  const manifestUploadUrl = apiRouteUrl(request, '/square/uploads/manifest', { upload_id: uploadId });
   const mediaResources = mediaItems.map((item, index) => mediaResource(
     membershipLevel,
     contentFormat,
@@ -178,7 +178,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
       maxDurationSeconds: item.media_kind === 'video'
         ? Math.min(plan.dynamic.max_video_seconds, (item.duration_seconds ?? 1) + 5)
         : 1,
-      workerUploadUrl: apiRouteUrl(request, '/v1/square/uploads/media', {
+      workerUploadUrl: apiRouteUrl(request, '/square/uploads/media', {
         upload_id: uploadId,
         media_index: String(index),
       }),

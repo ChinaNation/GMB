@@ -29,7 +29,7 @@ governance/
 前端对应结构：
 - `node/frontend/governance/api.ts`：治理专用 Tauri API
 - `node/frontend/admins/admin-management/`：管理员列表与管理员更换页面
-- `node/frontend/governance/runtime-upgrade/`：协议升级与开发升级页面，只提交业务提案，不实现投票流程
+- `node/frontend/governance/runtime-upgrade/`：协议升级页面，只提交业务提案，不实现投票流程；开发者直升不在 node 端，只在公民控制台
 - (B0:`node/frontend/governance/organization_manage/` 机构多签管理页面已删,机构管理下沉 onchina;node 仅保留清算行机构只读 `offchain-transaction/institution/`)
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
 - `node/frontend/shared/qr/`：QR 扫码组件与 QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内

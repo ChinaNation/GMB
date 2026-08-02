@@ -63,7 +63,7 @@ export async function unfollowRoute(request: Request, env: Env): Promise<Respons
   });
 }
 
-/// PUT /v1/square/follows/:cid/notify —— 开/关对某关注的发帖通知。
+/// PUT /square/follows/:cid/notify —— 开/关对某关注的发帖通知。
 /// 通知归属挂在关注关系上：只有已关注才能设置，未关注返回 409 让客户端提示先关注。
 export async function setFollowNotifyRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);

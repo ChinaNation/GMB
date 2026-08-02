@@ -29,8 +29,8 @@ fn onchina_health_ok() -> Result<(), String> {
         .build()
         .map_err(|e| format!("创建链上中国健康检查客户端失败:{e}"))?;
     for url in [
-        "https://127.0.0.1:8964/api/v1/health",
-        "http://127.0.0.1:8964/api/v1/health",
+        "https://127.0.0.1:8964/api/health",
+        "http://127.0.0.1:8964/api/health",
     ] {
         let Ok(resp) = client.get(url).send() else {
             continue;

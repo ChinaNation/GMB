@@ -80,7 +80,7 @@
 
 1. **Chat MLS 设备公钥 `device_public_key_hex` → 决定「不纳入」**。核查发现它是 OpenMLS 外部协议密钥（变长 2–512 hex，原生产出），在 KeyPackage、群成员、对端密钥比对（`chat_runtime.dart:1148`）与本地 MLS 状态库**文件路径**（`chat_runtime.dart:1275/1281`）中直接使用，且 MLS 边界 `mls_boundary.dart:41` 已有 `_stripHexPrefix` + `.toLowerCase()` 既有容忍归一化。强套严格 `0x` 会与 MLS 层冲突、改状态库文件路径、牵动对端互操作，风险高收益低——按 MLS 层自身编码治理，已在 ADR-041 与 §0.3 明确排除。
 2. **`ensureSession` in-flight 去重（已落地）**：`square_api_client.dart` 新增 `_inflightSessions`，同账户并发共享一次握手 Future，`finally` 清理；重试语义原样保留（抽出 `_establishSessionWithRetry`）。杜绝广场/聊天多入口冷启动各跑一套握手→打满 `auth` 桶→429 的根因。
-3. **auth 限流桶粒度拆分（已落地）**：`request_guard.ts` 把 `/v1/square/auth/device/register`（每钱包一次的稀有操作）拆到独立 `authreg:{ip}` 桶，不再与频繁的 `challenge`/`session` 握手共用 `auth:{ip}`；数值保持 10/60（未放宽安全阈值，仅修正粒度）。
+3. **auth 限流桶粒度拆分（已落地）**：`request_guard.ts` 把 `/square/auth/device/register`（每钱包一次的稀有操作）拆到独立 `authreg:{ip}` 桶，不再与频繁的 `challenge`/`session` 握手共用 `auth:{ip}`；数值保持 10/60（未放宽安全阈值，仅修正粒度）。
 4. **registrar wire 0x 单测（已补）**：`test/8964/device_subkey_registrar_test.dart` 断言注册 wire `p256_public_key == '0x'+裸公钥`、`account_id`、`binding_signature` 透传。
 
 验收（第二批）：worker `vitest run` 29 文件 175 测试全绿（限流拆分后）；客户端 registrar 新测 + `square_account_action` / `square_account_deletion_service`（ensureSession 去重后）全绿；`flutter analyze` 改动文件 No issues、`dart format` 0 改动。

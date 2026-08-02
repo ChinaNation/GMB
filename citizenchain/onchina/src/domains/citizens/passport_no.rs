@@ -10,6 +10,7 @@ use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
 
 type Blake2b256 = Blake2b<U32>;
 
+const MODULE_TAG: &[u8] = b"cid-cpms";
 const PASSPORT_NO_MAX_RETRY: u32 = 1000;
 const PASSPORT_BODY_SYMBOLS: usize = 8;
 const PASSPORT_CITY_NAMESPACE_COUNT: u64 = 512;
@@ -114,7 +115,8 @@ fn passport_city_value(city_code: &str) -> Result<u64, String> {
 
 fn province_namespace_offset(province_code: &str) -> u64 {
     let mut hasher = Blake2b256::new();
-    hasher.update(b"cid-cpms-v1|passport-city-offset|");
+    hasher.update(MODULE_TAG);
+    hasher.update(b"|passport-city-offset|");
     hasher.update(province_code.trim().to_ascii_uppercase().as_bytes());
     let digest = hasher.finalize();
     u16::from_le_bytes([digest[0], digest[1]]) as u64 % PASSPORT_CITY_NAMESPACE_COUNT
@@ -122,7 +124,8 @@ fn province_namespace_offset(province_code: &str) -> u64 {
 
 fn scramble_passport_sequence(province_code: &str, city_code: &str, seq0: u64) -> u64 {
     let mut hasher = Blake2b256::new();
-    hasher.update(b"cid-cpms-v1|passport-sequence-salt|");
+    hasher.update(MODULE_TAG);
+    hasher.update(b"|passport-sequence-salt|");
     hasher.update(province_code.trim().to_ascii_uppercase().as_bytes());
     hasher.update(b"|");
     hasher.update(city_code.trim().as_bytes());
@@ -137,7 +140,8 @@ fn scramble_passport_sequence(province_code: &str, city_code: &str, seq0: u64) -
 
 fn passport_check_char(source: &str) -> char {
     let mut hasher = Blake2b256::new();
-    hasher.update(b"cid-cpms-v1|passport-no-check|");
+    hasher.update(MODULE_TAG);
+    hasher.update(b"|passport-no-check|");
     hasher.update(source.as_bytes());
     let digest = hasher.finalize();
     CROCKFORD_ALPHABET[(digest[0] & 0x1f) as usize] as char

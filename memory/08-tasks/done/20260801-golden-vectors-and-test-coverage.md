@@ -1,6 +1,6 @@
 # 金标防漂移与测试覆盖补齐
 
-状态：open（2026-08-01 立项，分四步，每步先出方案、确认后执行）
+状态：completed（2026-08-01；四步全部完成并纳入 CI）
 
 ## 背景
 
@@ -221,13 +221,14 @@ pointycastle」，没证明「结果与链端一致」——若 pointycastle 的
 **回归**：`cargo fmt` 无差异；onchina 全量 **189 passed / 0 failed**；改动仅
 `src/auth/operation_auth.rs` 一个文件。
 
-**发现但未修（既有问题，不属本步范围）**
+**执行中发现并已在后续 CI 收尾修复的既有问题**
 
 `cargo clippy -p onchina --all-targets` 报 1 个 warning：
 `onchina/src/domains/citizens/occupy.rs:2474` 对 `Result` 用 `expect()`。
 用 `git stash` 验证 **HEAD 版本同样存在**，非本次引入。CI 用
 `cargo clippy --workspace --all-targets --locked -- -D warnings`，**该 warning 会让 CI 变红**。
-需单独处理。
+后续已把断言式解包明确限制在 `#[cfg(test)]` 测试模块并通过全 workspace
+`clippy -D warnings`；该问题不再阻断 CI。
 
 ## 执行约定
 
@@ -238,3 +239,5 @@ pointycastle」，没证明「结果与链端一致」——若 pointycastle 的
 - 任一端单方面修改金标向量值，CI 必须失败
 - 签名域四端（chain / app / wallet / worker）全部被金标锁住
 - onchina 两条安全边界有测试，且能在 CI 跑
+
+四步验收、破坏性验证与后续全量 CI 均已完成，本卡关闭。

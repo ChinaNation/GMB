@@ -107,21 +107,21 @@ export type PrepareInstitutionChainOutput = {
 };
 
 export async function listFederalRegistryAdmins(auth: AdminAuth): Promise<FederalRegistryAdminRow[]> {
-  return request<FederalRegistryAdminRow[]>('/api/v1/admin/federal-registry-admins', {
+  return request<FederalRegistryAdminRow[]>('/api/admin/federal-registry-admins', {
     method: 'GET',
     headers: adminHeaders(auth),
   });
 }
 
 export async function listOwnInstitutionAdmins(auth: AdminAuth): Promise<OwnInstitutionAdminListOutput> {
-  return request<OwnInstitutionAdminListOutput>('/api/v1/admin/own-institution-admins', {
+  return request<OwnInstitutionAdminListOutput>('/api/admin/own-institution-admins', {
     method: 'GET',
     headers: adminHeaders(auth),
   });
 }
 
 export async function getOwnInstitution(auth: AdminAuth): Promise<InstitutionDetail> {
-  return request<InstitutionDetail>('/api/v1/admin/own-institution', {
+  return request<InstitutionDetail>('/api/admin/own-institution', {
     method: 'GET',
     headers: adminHeaders(auth),
   });
@@ -131,7 +131,7 @@ export async function prepareInstitutionGovernance(
   auth: AdminAuth,
   input: PrepareInstitutionGovernanceInput,
 ): Promise<PrepareInstitutionChainOutput> {
-  return request<PrepareInstitutionChainOutput>('/api/v1/admin/institution/governance/prepare', {
+  return request<PrepareInstitutionChainOutput>('/api/admin/institution/governance/prepare', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -145,7 +145,7 @@ export async function prepareRegisterInstitutionAdmins(
   auth: AdminAuth,
   input: PrepareRegisterInstitutionAdminsInput,
 ): Promise<PrepareInstitutionChainOutput> {
-  return request<PrepareInstitutionChainOutput>('/api/v1/admin/institution/admins/register/prepare', {
+  return request<PrepareInstitutionChainOutput>('/api/admin/institution/admins/register/prepare', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

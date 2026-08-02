@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { assertAllowedOrigin, normalizeApiPath } from '../src/security/request_guard';
-import { assertRequestBodyLimit } from '../src/limits/request';
+import { assertKnownRoute, assertRequestBodyLimit } from '../src/limits/request';
 import { HttpError } from '../src/shared/http';
 import type { Env, PreparedUploadRow } from '../src/types';
 import {
@@ -48,10 +48,11 @@ describe('upload validation', () => {
     expect(first).toMatch(/^sqr_[a-f0-9]{64}$/);
   });
 
-  it('normalizes only the two same-domain API prefixes', () => {
+  it('只剥离唯一生产前缀 /api，不兼容已废弃的版本路径', () => {
+    expect(normalizeApiPath('/api/square/feed')).toBe('/square/feed');
+    expect(normalizeApiPath('/square/feed')).toBe('/square/feed');
     expect(normalizeApiPath('/api/v1/square/feed')).toBe('/v1/square/feed');
-    expect(normalizeApiPath('/api/v1/square/feed')).toBe('/v1/square/feed');
-    expect(normalizeApiPath('/v1/square/feed')).toBe('/v1/square/feed');
+    expect(() => assertKnownRoute('GET', '/v1/square/feed')).toThrowError(HttpError);
   });
 
   it('accepts the exact website origin and rejects lookalike origins', () => {
@@ -65,11 +66,11 @@ describe('upload validation', () => {
   });
 
   it('rejects oversized API JSON before parsing', () => {
-    const request = new Request('https://worker.test/api/v1/square/uploads/prepare', {
+    const request = new Request('https://worker.test/api/square/uploads/prepare', {
       method: 'POST',
       headers: { 'content-length': String(256 * 1024 + 1) }
     });
-    expect(() => assertRequestBodyLimit(request, '/v1/square/uploads/prepare')).toThrowError(HttpError);
+    expect(() => assertRequestBodyLimit(request, '/square/uploads/prepare')).toThrowError(HttpError);
   });
 
   it('到期上传清单损坏时不触碰 provider、R2 或 D1，并记录失败项', async () => {

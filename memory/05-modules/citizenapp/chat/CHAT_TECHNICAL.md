@@ -71,7 +71,12 @@ WebRTC 只使用公共 STUN 发现候选地址，不配置中继服务。NAT 环
 `contact_remark` 只属于通讯录，不进入 Chat 路由真源；该入口不得复制聊天页面、
 会话创建或传输逻辑。
 
-钱包主私钥只在创建热钱包时证明 P-256 设备子钥归属。Chat 运行态禁止读取 seed、调用用户认证签名或使用 CitizenWallet。
+进入 Chat 页面不检查或生成设备子钥。已有 P-256 子钥静默完成登录，已有正文/索引/MLS/
+附件用途钥由设备数据钥硬件静默解封。只有真实登录被 Worker 明确拒绝为
+`device_not_registered` 时才通过 `registerDeviceSubkeyForBinding` 鉴权登记 P-256 子钥；只有
+真实数据访问确认用途钥缺失/失效时才通过 `ensureDeviceDataKeysForBinding` 鉴权生成本地
+数据钥。两条流程拥有独立 single-flight 与失败回滚，任何一方失败不得删除另一方材料。
+后台推送预热不得触发任一流程。
 
 设备登记签名字段：
 
@@ -94,9 +99,12 @@ Worker 从 session 派生 CID、绑定版本和当前账户，先与同一 final
 回读验证，finalized 后提交目标密文；没有当前账户签名时，不尝试解密或删除此前正文密文，
 只把它留在此前 `binding_revision + account_id` 加密上下文中并从新绑定入口隐藏，同时清空
 不能安全续用的出站队列、入站乱序缓冲、媒体补发、路由缓存和 MLS 群镜像。两种路径都由
-finalized 新绑定驱动：先激活新账户派生上下文和新钱包设备子钥，再撤销不匹配 Session，
-完整关闭此前 Chat HTTP/WebSocket/MLS 上下文，最后建立新绑定上下文。任何用途子钥使用后
-立即清零，不设长期内存密钥缓存。
+finalized 新绑定只驱动公开绑定激活与已授权的数据交接，不预生成本地数据钥、不登记 P-256
+设备子钥；后续真实数据访问缺钥时才生成本地数据钥，Worker 明确返回
+`device_not_registered` 时才登记 P-256 子钥。随后撤销不匹配 Session，完整关闭此前 Chat
+HTTP/WebSocket/MLS 上下文，最后建立新绑定上下文。两类缺钥流程使用独立 single-flight 与
+失败回滚，任何一方失败不得删除另一方材料。任何用途子钥使用后立即清零，不设长期内存
+明文密钥缓存；持久态只允许保存绑定完整 AAD 的设备硬件封装 blob。
 
 ## 4. 消息协议
 
@@ -134,13 +142,13 @@ ratchet_tree
 
 ## 5. Cloudflare 接口
 
-- `POST /v1/chat/devices/register`：登记设备公钥和 APNs/FCM Token。
-- `POST /v1/chat/keypackages`：发布一次性 OpenMLS KeyPackage。
-- `GET /v1/chat/keypackages/{cid_number}`：列出有效 KeyPackage。
-- `POST /v1/chat/keypackages/consume`：原子读取后硬删除 KeyPackage。
-- `POST /v1/chat/envelopes`：当前请求内转发 OpenMLS 密文。
-- `POST /v1/chat/signals`：当前请求内转发 SDP、ICE 和 `peer_ready`。
-- `GET /v1/chat/ws`：按 `cid_number + binding_revision + account_id + device_id` 建立实时连接。
+- `POST /chat/devices/register`：登记设备公钥和 APNs/FCM Token。
+- `POST /chat/keypackages`：发布一次性 OpenMLS KeyPackage。
+- `GET /chat/keypackages/{cid_number}`：列出有效 KeyPackage。
+- `POST /chat/keypackages/consume`：原子读取后硬删除 KeyPackage。
+- `POST /chat/envelopes`：当前请求内转发 OpenMLS 密文。
+- `POST /chat/signals`：当前请求内转发 SDP、ICE 和 `peer_ready`。
+- `GET /chat/ws`：按 `cid_number + binding_revision + account_id + device_id` 建立实时连接。
 
 Durable Object 使用 hibernatable WebSocket，不写 Storage。接收设备不存在时返回 `queued`，不会创建消息记录。
 
@@ -291,7 +299,7 @@ Chat 与广场权限分离：
   只接受 userContact，先由 SS58 派生账户并链读双向绑定 CID 后加入通讯录，钱包标签
   不写入私人备注；`transfer`/`dispatch` 模式把 userContact 作为收款人进入转账。
   缺少 CID 的 userTransfer 收款码不得再兼作联系人码。**不新造带金额收款码**。
-- 聊天搜索页（2026-07-23，2026-07-31 当前钱包派生订正）：一个输入框分会话、联系人、聊天记录三段结果。会话按标题/最近消息搜索；联系人只在本地匹配私人备注、CID 和 finalized 当前账户快照，打开私信时始终传联系人 CID。聊天记录由 `ChatStore.searchMessages({ownerCidNumber, currentAccountId, keyword, limit})` 查询：`ownerCidNumber` 是唯一数据分区与索引归属，`currentAccountId` 用于从当前绑定账户 child 直接派生 Chat 与索引用途子钥；候选消息解密后再以 `ChatPayloadCodec.decode(...).summary` 复验真实子串，避免截断 HMAC token 假阳性。点结果统一复用 `openGroupChat` / `openDirectChat`，聊天记录命中只打开所在会话，不另造账户身份路径。
+- 聊天搜索页（2026-07-23，2026-08-02 设备数据钥订正）：一个输入框分会话、联系人、聊天记录三段结果。会话按标题/最近消息搜索；联系人只在本地匹配私人备注、CID 和 finalized 当前账户快照，打开私信时始终传联系人 CID。聊天记录由 `ChatStore.searchMessages({ownerCidNumber, currentAccountId, keyword, limit})` 查询：`ownerCidNumber` 是唯一数据分区与索引归属，`currentAccountId` 只用于校验精确绑定并从设备数据钥金库静默解封 Chat 与索引用途钥，禁止在搜索或页面进入时读取账户 child；候选消息解密后再以 `ChatPayloadCodec.decode(...).summary` 复验真实子串，避免截断 HMAC token 假阳性。点结果统一复用 `openGroupChat` / `openDirectChat`，聊天记录命中只打开所在会话，不另造账户身份路径。
 
 外部控制台待完成：
 

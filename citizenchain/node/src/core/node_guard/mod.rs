@@ -1738,8 +1738,9 @@ mod finalize_issuance_tests {
     }
 
     #[test]
-    fn current_wasm_passes_candidate_runtime_fee_behavior_probes() {
-        if skip_without_wasm_binary("current_wasm_passes_candidate_runtime_fee_behavior_probes") {
+    fn current_wasm_passes_candidate_runtime_policy_behavior_probes() {
+        if skip_without_wasm_binary("current_wasm_passes_candidate_runtime_policy_behavior_probes")
+        {
             return;
         }
         let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
@@ -1763,7 +1764,7 @@ mod finalize_issuance_tests {
             citizenchain::WASM_BINARY.expect("checked above"),
             genesis_hash,
         )
-        .expect("current WASM must satisfy node-side fee behavior probes");
+        .expect("current WASM must satisfy node-side runtime policy behavior probes");
     }
 
     #[test]

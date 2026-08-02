@@ -10,9 +10,9 @@ import 'package:citizenapp/wallet/pages/import_wallet_page.dart';
 /// 公民 App 用户的唯一账户是钱包账户，发消息、发动态、发起交易都依赖热钱包
 /// 签名。本页提供两条**二元 fail-closed** 入口：创建新热钱包，或用助记词导入
 /// 已有钱包（复用 [ImportWalletPage]）。两者都必须钱包本地落库成功才经 [onCreated]
-/// 通知 WalletGate 放行，失败即回滚并留在门禁。**设备子钥不在此注册**——子钥只服务
-/// 需 CID 的场景（广场 / 聊天 / 通讯录…），改为进入这类页面时由门禁按需绑定；建钱包
-/// 这一刻账户还没有 CID，只用钱包和交易的用户也不需要子钥。不提供冷钱包入口（冷钱包
+/// 通知 WalletGate 放行，失败即回滚并留在门禁。**设备子钥不在此注册**——建钱包时尚无
+/// CID；已有子钥由业务静默使用，实际业务确认缺钥时才鉴权一次生成，页面门禁不参与。
+/// 不提供冷钱包入口（冷钱包
 /// 不能作默认账户、过不了 WalletGate）；PopScope 禁止退出门禁。
 class CreateWalletOnboardingPage extends StatefulWidget {
   const CreateWalletOnboardingPage({
@@ -114,7 +114,8 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
 
   Future<void> _openImport() async {
     // 复用 ImportWalletPage：其内部 importWallet 为 fail-closed（钱包本地落库成功才
-    // pop(true)，失败弹窗并保留助记词）。设备子钥同样不在导入时注册，改由门禁按需绑定。
+    // pop(true)，失败弹窗并保留助记词）。设备子钥同样不在导入时注册；实际业务确认
+    // 缺钥时才鉴权一次生成，页面门禁不参与。
     // 返回 true 即钱包就绪，放行进 App。
     final imported = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const ImportWalletPage()),

@@ -343,4 +343,3 @@ citizenchain/crates/qr-protocol/src/codec.rs
 - `citizenchain/onchina/src/core/qr/*`
 - `citizenchain/node/src/governance/signing.rs`
 - `citizenchain/node/frontend/shared/qr/citizenQr.ts`
-- `citizenweb/src/lib/qr-v1.ts`

@@ -146,11 +146,22 @@ jobs:
           rm -rf target
           echo "已删除全部 target 目录，从零开始编译"
 
+      - name: 校验正式 WASM 构建特性
+        working-directory: citizenchain
+        run: |
+          if cargo tree --locked -p citizenchain -e features --no-default-features --features std \
+            | grep -F 'citizenchain feature "runtime-benchmarks"'; then
+            echo "正式 WASM 依赖图禁止启用 runtime-benchmarks" >&2
+            exit 1
+          fi
+
       - name: 编译 WASM
         working-directory: citizenchain
         env:
           WASM_BUILD_FROM_SOURCE: "1"
-        run: cargo build --locked --release -p citizenchain
+          # build.rs 只对正式候选 WASM 启用 feature 构建闸，不影响权重 benchmark runtime。
+          CITIZENCHAIN_PRODUCTION_WASM_BUILD: "1"
+        run: cargo build --locked --release -p citizenchain --no-default-features --features std
 
       - name: 校验 WASM 产物并记录摘要
         working-directory: citizenchain
@@ -183,6 +194,15 @@ jobs:
               for filename, size, digest in rows:
                   out.write(f"| `{filename}` | {size} | `0x{digest}` |\n")
           PY
+
+      - name: 校验候选 WASM 安全行为
+        working-directory: citizenchain
+        env:
+          # 对上一步刚生成、随后将上传的同一份压缩 WASM 执行 NodeGuard 行为探针。
+          WASM_FILE: ${{ github.workspace }}/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
+        run: |
+          cargo test --locked -p node \
+            current_wasm_passes_candidate_runtime_policy_behavior_probes -- --nocapture
 
       # WASM 是正式创世和后续升级的安全输入；上传失败必须使整次运行失败。
       # 历史 artifact 由 retention-days 自动过期，不得在新产物上传前删除审计证据。

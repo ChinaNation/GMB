@@ -40,7 +40,7 @@
 
 ### 优化 A：同步状态缓存（已完成）
 
-当前实现：App 通过 `databaseContent` 恢复 `SharedPreferences.smoldot_db_cache`，同步完成或超时后导出当前进度；缓存已经从裸 database 升级为 `citizenapp.smoldot.database.v1` 严格信封。
+当前实现：App 通过 `databaseContent` 恢复 `SharedPreferences.smoldot_db_cache`，同步完成或超时后导出当前进度；缓存已经从裸 database 升级为 `citizenapp.smoldot.database` 严格信封。
 
 已落地约束：
 

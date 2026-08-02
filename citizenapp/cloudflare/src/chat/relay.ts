@@ -63,7 +63,7 @@ function assertObjectKey(raw: string): string {
   return key;
 }
 
-/// POST /v1/chat/relay/init —— 薪火 + 尺寸门,返回随机对象键。
+/// POST /chat/relay/init —— 薪火 + 尺寸门,返回随机对象键。
 export async function initChatRelay(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   requireRelayBucket(env);
@@ -81,7 +81,7 @@ export async function initChatRelay(request: Request, env: Env): Promise<Respons
   return jsonResponse({ ok: true, object_key: objectKey, ttl_millis: RELAY_TTL_MS });
 }
 
-/// PUT /v1/chat/relay/:key/blob —— 薪火门 + 密文尺寸上界,流式写 R2(不进内存)。
+/// PUT /chat/relay/:key/blob —— 薪火门 + 密文尺寸上界,流式写 R2(不进内存)。
 export async function putChatRelayBlob(
   request: Request,
   env: Env,
@@ -108,7 +108,7 @@ export async function putChatRelayBlob(
   return jsonResponse({ ok: true });
 }
 
-/// GET /v1/chat/relay/:key/blob —— 会话鉴权,流式读 R2(内容为 E2E 密文)。
+/// GET /chat/relay/:key/blob —— 会话鉴权,流式读 R2(内容为 E2E 密文)。
 export async function getChatRelayBlob(
   request: Request,
   env: Env,
@@ -127,7 +127,7 @@ export async function getChatRelayBlob(
   });
 }
 
-/// POST /v1/chat/relay/:key/ack —— 拉取确认:1:1 一人 ack 即删(群依赖 TTL 兜底)。
+/// POST /chat/relay/:key/ack —— 拉取确认:1:1 一人 ack 即删(群依赖 TTL 兜底)。
 export async function ackChatRelay(
   request: Request,
   env: Env,

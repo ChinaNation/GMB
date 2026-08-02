@@ -12,7 +12,7 @@ import type { InstitutionAccount } from '../subjects/api';
 export type { InstitutionAccount, MultisigChainStatus } from '../subjects/api';
 
 // 新增机构自定义账户 = 发起本机构「新增账户」内部投票提案(runtime call 7)。
-// 返回 sign_request,交由 useChainSign 扫码/钱包签名后提交 /api/v1/admin/chain/submit。
+// 返回 sign_request,交由 useChainSign 扫码/钱包签名后提交 /api/admin/chain/submit。
 export async function createAccount(
   auth: AdminAuth,
   cidNumber: string,
@@ -20,7 +20,7 @@ export async function createAccount(
   proposerRoleCode: string,
 ): Promise<PrepareInstitutionChainOutput> {
   return adminRequest<PrepareInstitutionChainOutput>(
-    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/account/create`,
+    `/api/institutions/${encodeURIComponent(cidNumber)}/account/create`,
     auth,
     {
       method: 'POST',
@@ -35,7 +35,7 @@ export async function listAccounts(
   cidNumber: string,
 ): Promise<InstitutionAccount[]> {
   return adminRequest<InstitutionAccount[]>(
-    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/accounts`,
+    `/api/institutions/${encodeURIComponent(cidNumber)}/accounts`,
     auth,
   );
 }
@@ -49,7 +49,7 @@ export async function deleteAccount(
   proposerRoleCode: string,
 ): Promise<PrepareInstitutionChainOutput> {
   return adminRequest<PrepareInstitutionChainOutput>(
-    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/account/${encodeURIComponent(accountName)}`,
+    `/api/institutions/${encodeURIComponent(cidNumber)}/account/${encodeURIComponent(accountName)}`,
     auth,
     {
       method: 'DELETE',

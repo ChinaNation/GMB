@@ -122,9 +122,9 @@ final result: passed
 ## 对照真源
 
 - 最终确认 UI：
-  `/tmp/wallet-ui-exact-final-v2.png`
+  `/tmp/wallet-ui-exact-final.png`
 - Pixel 8a 实现截图：
-  `/tmp/wallet-final-implementation-v2.png`
+  `/tmp/wallet-final-implementation.png`
 - 全屏同图对照：
   `/tmp/wallet-final-reference-comparison.png`
 - 地址与交易记录局部同图对照：

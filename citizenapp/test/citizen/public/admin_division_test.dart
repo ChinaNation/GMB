@@ -171,7 +171,7 @@ void main() {
 
     test('首装(库空,无 stored 版本)→ 全量灌入', () async {
       final bundle = _MapBundle(bundleFiles(
-        version: 'v1',
+        version: 'before',
         provinceVers: const {'LN': 'pln1'},
         provinces: const [
           {'code': 'LN', 'name': '岭南省'},
@@ -198,7 +198,7 @@ void main() {
       expect(await store.divisionCount(), 3); // 省1+市1+镇1
       expect(await store.divisionName(AdminDivisionLevel.city, 'LN', '001'),
           '广州市');
-      expect(kv.globalVersion, 'v1');
+      expect(kv.globalVersion, 'before');
       expect(kv.provinceVersions, {'LN': 'pln1'});
     });
 
@@ -218,10 +218,10 @@ void main() {
           divisionName: '旧广州市',
         ));
       final kv = FakeDataVersionKv()
-        ..globalVersion = 'v1'
+        ..globalVersion = 'before'
         ..provinceVersions = {'LN': 'pln1'};
       final bundle = _MapBundle(bundleFiles(
-        version: 'v1',
+        version: 'before',
         provinceVers: const {'LN': 'pln2'},
         provinces: const [
           {'code': 'LN', 'name': '岭南省'},
@@ -241,12 +241,12 @@ void main() {
       expect(changed, isTrue);
       expect(await store.divisionName(AdminDivisionLevel.city, 'LN', '001'),
           '广州市');
-      expect(kv.globalVersion, 'v1');
+      expect(kv.globalVersion, 'before');
       expect(kv.provinceVersions, {'LN': 'pln2'});
     });
 
     test('没变的省:ver 相同 → 该省不 reconcile(不 upsert/不 delete)', () async {
-      // 本地已有 LN(ver=pln1)+ GZ(ver=pgz1);manifest 全局 version 变(v1→v2),
+      // 本地已有 LN(ver=pln1)+ GZ(ver=pgz1);manifest 全局 version 变(before→after),
       // 但只有 GZ 的 ver 变了(pgz1→pgz2)。期望:LN 不动,只 reconcile GZ。
       final store = FakeAdminDivisionStore()
         ..seed(const AdminDivisionDto(
@@ -270,10 +270,10 @@ void main() {
           divisionName: '南宁市',
         ));
       final kv = FakeDataVersionKv()
-        ..globalVersion = 'v1'
+        ..globalVersion = 'before'
         ..provinceVersions = {'LN': 'pln1', 'GZ': 'pgz1'};
       final bundle = _MapBundle(bundleFiles(
-        version: 'v2',
+        version: 'after',
         provinceVers: const {'LN': 'pln1', 'GZ': 'pgz2'},
         provinces: const [
           {'code': 'LN', 'name': '岭南省'},
@@ -298,7 +298,7 @@ void main() {
       // LN 没动:广州市仍在,key 未被删。
       expect(await store.divisionName(AdminDivisionLevel.city, 'LN', '001'),
           '广州市');
-      expect(kv.globalVersion, 'v2');
+      expect(kv.globalVersion, 'after');
       expect(kv.provinceVersions, {'LN': 'pln1', 'GZ': 'pgz2'});
     });
 
@@ -325,10 +325,10 @@ void main() {
           divisionName: '深圳市',
         ));
       final kv = FakeDataVersionKv()
-        ..globalVersion = 'v1'
+        ..globalVersion = 'before'
         ..provinceVersions = {'LN': 'pln1'};
       final bundle = _MapBundle(bundleFiles(
-        version: 'v2',
+        version: 'after',
         provinceVers: const {'LN': 'pln2'},
         provinces: const [
           {'code': 'LN', 'name': '岭南省'},
@@ -373,10 +373,10 @@ void main() {
           divisionName: '将被删的市',
         ));
       final kv = FakeDataVersionKv()
-        ..globalVersion = 'v1'
+        ..globalVersion = 'before'
         ..provinceVersions = {'LN': 'pln1'};
       final bundle = _MapBundle(bundleFiles(
-        version: 'v2',
+        version: 'after',
         provinceVers: const {'LN': 'pln2'},
         provinces: const [
           {'code': 'LN', 'name': '岭南省'},
@@ -408,10 +408,10 @@ void main() {
           divisionName: '广州市',
         ));
       final kv = FakeDataVersionKv()
-        ..globalVersion = 'v1'
+        ..globalVersion = 'before'
         ..provinceVersions = {'LN': 'pln1'};
       final bundle = _MapBundle(bundleFiles(
-        version: 'v2',
+        version: 'after',
         provinceVers: const {'LN': 'pln2'},
         provinces: const [
           {'code': 'LN', 'name': '岭南省'},

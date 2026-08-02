@@ -20,7 +20,7 @@ export interface SquareManifestContentBlock {
 }
 
 export interface SquarePostManifest {
-  schema: 'citizenapp.square.post.v1';
+  schema: 'citizenapp.square.post';
   account_id: string;
   post_category: 'normal' | 'campaign';
   content_format?: 'normal' | 'article';
@@ -134,7 +134,7 @@ function decodeManifest(bytes: Uint8Array): SquarePostManifest {
   if (!isRecord(value)) {
     throw new HttpError(409, 'manifest_json_invalid', 'R2 manifest 必须是 JSON 对象');
   }
-  if (value.schema !== 'citizenapp.square.post.v1') {
+  if (value.schema !== 'citizenapp.square.post') {
     throw new HttpError(409, 'invalid_manifest_schema', 'R2 manifest schema 不合法');
   }
   if (!isAccountId(value.account_id)) {
@@ -167,7 +167,7 @@ function decodeManifest(bytes: Uint8Array): SquarePostManifest {
   }
 
   const manifest: SquarePostManifest = {
-    schema: 'citizenapp.square.post.v1',
+    schema: 'citizenapp.square.post',
     account_id: value.account_id,
     post_category: value.post_category,
     text: value.text,

@@ -163,7 +163,7 @@ export async function listCitizens(
     page_size: String(pageSize),
   });
   if (cursor) params.set('cursor', cursor);
-  return request<PageResult<CitizenRow>>(`/api/v1/admin/citizens?${params.toString()}`, {
+  return request<PageResult<CitizenRow>>(`/api/admin/citizens?${params.toString()}`, {
     headers: adminHeaders(auth),
   });
 }
@@ -195,7 +195,7 @@ export async function editCitizen(
   payload: EditCitizenInput,
 ): Promise<CitizenRow> {
   return request<CitizenRow>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/edit`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/edit`,
     {
       method: 'POST',
       headers: jsonAdminHeaders(auth),
@@ -218,7 +218,7 @@ export async function searchLegalRepresentativeCitizens(
     const trimmed = typeof value === 'string' ? value.trim() : '';
     if (trimmed) params.set(key, trimmed);
   });
-  return request<string[]>(`/api/v1/admin/citizens/legal-representatives?${params.toString()}`, {
+  return request<string[]>(`/api/admin/citizens/legal-representatives?${params.toString()}`, {
     headers: adminHeaders(auth),
   });
 }
@@ -295,7 +295,7 @@ export async function prepareCitizenOccupy(
   // 链上写(occupy_cid)= passkey + 冷签:prepare 段消费一次 passkey 断言(冷签在段3 chain/submit)。
   const assertion = await assertPasskey(auth);
   const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
-  return request<PrepareCitizenOccupyResult>('/api/v1/admin/citizens', {
+  return request<PrepareCitizenOccupyResult>('/api/admin/citizens', {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
@@ -312,7 +312,7 @@ export async function submitCitizenOccupy(
   account_id: string,
   occupy_signature: string,
 ): Promise<SubmitCitizenOccupyResult> {
-  return request<SubmitCitizenOccupyResult>('/api/v1/admin/citizens/occupy/submit', {
+  return request<SubmitCitizenOccupyResult>('/api/admin/citizens/occupy/submit', {
     method: 'POST',
     headers: jsonAdminHeaders(auth),
     body: JSON.stringify({ request_id: requestId, account_id, occupy_signature }),
@@ -332,7 +332,7 @@ export async function prepareCitizenRebind(
   // 链上写(admin_rebind_cid_account_id)= passkey + 冷签:prepare 段消费一次 passkey 断言(冷签在段3)。
   const assertion = await assertPasskey(auth);
   const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
-  return request<PrepareCitizenRebindResult>('/api/v1/admin/citizens/rebind/prepare', {
+  return request<PrepareCitizenRebindResult>('/api/admin/citizens/rebind/prepare', {
     method: 'POST',
     headers,
     body: JSON.stringify({ actor_role_code: actorRoleCode, cid_number: cidNumber }),
@@ -351,7 +351,7 @@ export async function submitCitizenRebind(
   currentAccountId?: string,
   currentAccountSignature?: string,
 ): Promise<SubmitCitizenRebindResult> {
-  return request<SubmitCitizenRebindResult>('/api/v1/admin/citizens/rebind/submit', {
+  return request<SubmitCitizenRebindResult>('/api/admin/citizens/rebind/submit', {
     method: 'POST',
     headers: jsonAdminHeaders(auth),
     body: JSON.stringify({
@@ -371,7 +371,7 @@ export async function fetchFinalizedCitizenBinding(
   cidNumber: string,
 ): Promise<FinalizedCitizenBinding> {
   return request<FinalizedCitizenBinding>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/binding`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/binding`,
     { headers: adminHeaders(auth) },
   );
 }
@@ -388,7 +388,7 @@ export async function prepareCitizenRevoke(
   const assertion = await assertPasskey(auth);
   const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
   return request<PrepareCitizenRevokeResult>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/revoke/prepare`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/revoke/prepare`,
     {
       method: 'POST',
       headers,
@@ -408,7 +408,7 @@ export async function prepareCitizenOnchainSignature(
   const assertion = await assertPasskey(auth);
   const headers = { ...jsonAdminHeaders(auth), [PASSKEY_ASSERTION_HEADER]: assertion };
   return request<PrepareCitizenOnchainResult>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/prepare`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/prepare`,
     {
       method: 'POST',
       headers,
@@ -431,7 +431,7 @@ export async function completeCitizenOnchainSignature(
 ): Promise<CompleteCitizenOnchainResult> {
   const headers = jsonAdminHeaders(auth);
   return request<CompleteCitizenOnchainResult>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/complete`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/complete`,
     {
       method: 'POST',
       headers,
@@ -450,7 +450,7 @@ export async function listCitizenDocuments(
   cidNumber: string,
 ): Promise<CitizenDocument[]> {
   return adminRequest<CitizenDocument[]>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/documents`,
     auth,
   );
 }
@@ -466,7 +466,7 @@ export async function uploadCitizenDocument(
   formData.append('file', file);
   formData.append('document_type', documentType);
   return adminRequest<CitizenDocument>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/documents`,
     auth,
     {
       method: 'POST',
@@ -482,7 +482,7 @@ export async function downloadCitizenDocument(
   fileName: string,
 ): Promise<void> {
   const resp = await fetch(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents/${docId}/download`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/documents/${docId}/download`,
     { headers: adminHeaders(auth) },
   );
   if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
@@ -501,7 +501,7 @@ export async function deleteCitizenDocument(
   docId: number,
 ): Promise<void> {
   await adminRequest<string>(
-    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents/${docId}`,
+    `/api/admin/citizens/${encodeURIComponent(cidNumber)}/documents/${docId}`,
     auth,
     { method: 'DELETE' },
   );

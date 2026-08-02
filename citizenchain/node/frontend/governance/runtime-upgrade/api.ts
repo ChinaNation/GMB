@@ -56,33 +56,4 @@ export const runtimeUpgradeApi = {
       sign_block_number: signBlockNumber,
       response_json: responseJson,
     }),
-  buildDeveloperUpgradeRequest: (
-    signer_public_key: string,
-    wasmPath: string,
-    powParams: PowDifficultyParams,
-  ) => invoke<VoteSignRequestResult>('build_developer_upgrade_request', {
-    signer_public_key,
-    wasm_path: wasmPath,
-    pow_params: powParams,
-  }),
-  submitDeveloperUpgrade: (
-    requestId: string,
-    expected_signer_public_key: string,
-    expectedPayloadHash: string,
-    wasmPath: string,
-    powParams: PowDifficultyParams,
-    signNonce: number,
-    signBlockNumber: number,
-    responseJson: string,
-  ) =>
-    invoke<VoteSubmitResult>('submit_developer_upgrade', {
-      request_id: requestId,
-      expected_signer_public_key,
-      expected_payload_hash: expectedPayloadHash,
-      wasm_path: wasmPath,
-      pow_params: powParams,
-      sign_nonce: signNonce,
-      sign_block_number: signBlockNumber,
-      response_json: responseJson,
-    }),
 };

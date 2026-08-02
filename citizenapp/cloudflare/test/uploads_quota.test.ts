@@ -90,7 +90,7 @@ describe('membership upload quotas', () => {
 
   it('checks the uploaded R2 manifest against actual media assets', async () => {
     const manifestText = JSON.stringify({
-      schema: 'citizenapp.square.post.v1',
+      schema: 'citizenapp.square.post',
       account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       post_category: 'normal',
       content_format: 'article',
@@ -122,7 +122,7 @@ describe('membership upload quotas', () => {
 
   it('rejects a manifest whose media does not match the signed upload assets', async () => {
     const manifestText = JSON.stringify({
-      schema: 'citizenapp.square.post.v1',
+      schema: 'citizenapp.square.post',
       account_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
       post_category: 'normal',
       text: '正文',

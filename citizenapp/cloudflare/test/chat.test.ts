@@ -124,7 +124,7 @@ describe('device-only Chat transport', () => {
       relayPayload = payload;
     });
     const response = await submitChatEnvelope(
-      new Request('https://worker.test/v1/chat/envelopes', {
+      new Request('https://worker.test/chat/envelopes', {
         method: 'POST',
         headers: { authorization: 'Bearer test-session', 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -149,7 +149,7 @@ describe('device-only Chat transport', () => {
   it('relays WebRTC signals with the unversioned message type', async () => {
     let relayPayload: unknown;
     const response = await submitChatSignal(
-      new Request('https://worker.test/v1/chat/signals', {
+      new Request('https://worker.test/chat/signals', {
         method: 'POST',
         headers: { authorization: 'Bearer test-session', 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -181,7 +181,7 @@ describe('device-only Chat transport', () => {
 
   it('keeps delivery queued when the recipient device is unavailable', async () => {
     const response = await submitChatEnvelope(
-      new Request('https://worker.test/v1/chat/envelopes', {
+      new Request('https://worker.test/chat/envelopes', {
         method: 'POST',
         headers: { authorization: 'Bearer test-session', 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -199,7 +199,7 @@ describe('device-only Chat transport', () => {
 
   it('routes websocket connections from the verified session and device header', async () => {
     const response = await openChatWebSocket(
-      new Request('https://worker.test/v1/chat/ws', {
+      new Request('https://worker.test/chat/ws', {
         headers: {
           authorization: 'Bearer test-session',
           upgrade: 'websocket',

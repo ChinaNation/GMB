@@ -3,12 +3,12 @@ import Foundation
 
 /// `org.citizenapp/hw_seed_vault` 原生实现。
 ///
-/// 最终信封只接受 `ios-se-v1:`；iOS 此前没有原生金库，不提供旧格式、软件密钥或
+/// 最终信封只接受 `ios-se:`；iOS 此前没有原生金库，不提供旧格式、软件密钥或
 /// 设备密码回退。明文 child mini-secret 仅在本次 MethodChannel 调用内短暂存在。
 final class HardwareBoundSeedVaultChannel {
   private static let channelName = "org.citizenapp/hw_seed_vault"
   private static let strictTier = "strict"
-  private static let blobPrefix = "ios-se-v1:"
+  private static let blobPrefix = "ios-se:"
   private static let plaintextPattern = try! NSRegularExpression(
     pattern: "^[0-9a-f]{64}$"
   )

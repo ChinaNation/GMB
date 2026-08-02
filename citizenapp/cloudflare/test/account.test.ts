@@ -626,7 +626,7 @@ describe('注销入口默认拒（不再匿名对任意账户发起挑战）', (
     const body = JSON.stringify({ account_id: ACCOUNT_ID });
     await expect(
       routeRequest(
-        new Request('https://worker.test/v1/square/account/delete/challenge', {
+        new Request('https://worker.test/square/account/delete/challenge', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
@@ -651,7 +651,7 @@ describe('注销入口默认拒（不再匿名对任意账户发起挑战）', (
     });
     const env = { DB: db, SQUARE_CACHE: kv } as unknown as Env;
     const request = new Request(
-      'https://worker.test/v1/square/account/delete/challenge',
+      'https://worker.test/square/account/delete/challenge',
       {
         method: 'POST',
         headers: {

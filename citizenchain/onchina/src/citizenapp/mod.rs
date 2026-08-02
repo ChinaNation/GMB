@@ -5,6 +5,6 @@
 //! 安全红线:目录整层即匿名可读边界,**只透白名单公开字段**,严禁带
 //! creator_account_id 等管理员/PII 字段(见 public_institution::PublicInstitutionRow)。
 //!
-//! 路由挂在 main.rs 的 `app_routes`(非 admin、`/api/v1/app/` 命名空间)。
+//! 路由挂在 main.rs 的 `app_routes`(非 admin、`/api/app/` 命名空间)。
 
 pub(crate) mod public_institution;

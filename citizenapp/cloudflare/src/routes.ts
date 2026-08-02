@@ -81,163 +81,163 @@ export async function routeRequest(
     });
   }
 
-  if (request.method === "GET" && path === "/v1/chain/bootstrap") {
+  if (request.method === "GET" && path === "/chain/bootstrap") {
     return chainBootstrapRoute(request, env);
   }
-  if (request.method === "GET" && path === "/v1/constitution") {
+  if (request.method === "GET" && path === "/constitution") {
     return constitutionRoute(request, env);
   }
-  if (request.method === "GET" && path === "/v1/security/turnstile") {
+  if (request.method === "GET" && path === "/security/turnstile") {
     return turnstilePageRoute(env);
   }
-  if (request.method === "GET" && path === "/v1/security/config") {
+  if (request.method === "GET" && path === "/security/config") {
     return turnstileConfigRoute(env);
   }
-  if (request.method === "POST" && path === "/v1/chain/extrinsics/relay") {
+  if (request.method === "POST" && path === "/chain/extrinsics/relay") {
     return relaySignedExtrinsicRoute(request, env);
   }
 
-  if (request.method === "POST" && path === "/v1/square/auth/challenge") {
+  if (request.method === "POST" && path === "/square/auth/challenge") {
     return createLoginChallenge(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/auth/session") {
+  if (request.method === "POST" && path === "/square/auth/session") {
     return createSession(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/auth/device/register") {
+  if (request.method === "POST" && path === "/square/auth/device/register") {
     return registerDeviceSubkey(request, env);
   }
-  if (request.method === "GET" && path === "/v1/square/membership") {
+  if (request.method === "GET" && path === "/square/membership") {
     return membershipRoute(request, env);
   }
   // 平台会员公民币轨：订阅/取消由 App 热钱包 extrinsic 上链，此处只做上链后镜像确认。
-  if (request.method === "POST" && path === "/v1/square/membership/confirm") {
+  if (request.method === "POST" && path === "/square/membership/confirm") {
     return platformSubscriptionConfirmRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/account/delete/challenge") {
+  if (request.method === "POST" && path === "/square/account/delete/challenge") {
     return deleteAccountChallengeRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/account/delete") {
+  if (request.method === "POST" && path === "/square/account/delete") {
     return deleteAccountRoute(request, env);
   }
   // 稳定币充值购买公民币:App(config/submit/status)+ 本地部署控制台结算(settlement/*)。
   if (isTopupPath(path)) {
     return routeTopup(request, env, path);
   }
-  if (request.method === "GET" && path === "/v1/square/creator/plan") {
+  if (request.method === "GET" && path === "/square/creator/plan") {
     return creatorPlanRoute(request, env);
   }
-  if (request.method === "GET" && path === "/v1/square/creator/overview") {
+  if (request.method === "GET" && path === "/square/creator/overview") {
     return creatorOverviewRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/creator/plan") {
+  if (request.method === "POST" && path === "/square/creator/plan") {
     return creatorPlanSaveRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/creator/subscription/confirm") {
+  if (request.method === "POST" && path === "/square/creator/subscription/confirm") {
     return creatorSubscriptionConfirmRoute(request, env);
   }
-  if (request.method === "GET" && path.startsWith("/v1/square/creator/plan/")) {
-    return creatorPlanOfRoute(request, env, path.slice("/v1/square/creator/plan/".length));
+  if (request.method === "GET" && path.startsWith("/square/creator/plan/")) {
+    return creatorPlanOfRoute(request, env, path.slice("/square/creator/plan/".length));
   }
-  if (request.method === "GET" && path === "/v1/square/contacts") {
+  if (request.method === "GET" && path === "/square/contacts") {
     return listContactsRoute(request, env);
   }
-  if (request.method === "PUT" && path.startsWith("/v1/square/contacts/")) {
-    return putContactRoute(request, env, path.slice("/v1/square/contacts/".length));
+  if (request.method === "PUT" && path.startsWith("/square/contacts/")) {
+    return putContactRoute(request, env, path.slice("/square/contacts/".length));
   }
-  if (request.method === "DELETE" && path.startsWith("/v1/square/contacts/")) {
-    return deleteContactRoute(request, env, path.slice("/v1/square/contacts/".length));
+  if (request.method === "DELETE" && path.startsWith("/square/contacts/")) {
+    return deleteContactRoute(request, env, path.slice("/square/contacts/".length));
   }
-  if (request.method === "POST" && path === "/v1/square/uploads/prepare") {
+  if (request.method === "POST" && path === "/square/uploads/prepare") {
     return prepareUpload(request, env);
   }
-  if (request.method === "PUT" && path === "/v1/square/uploads/manifest") {
+  if (request.method === "PUT" && path === "/square/uploads/manifest") {
     return putManifest(request, env);
   }
-  if (request.method === "PUT" && path === "/v1/square/uploads/media") {
+  if (request.method === "PUT" && path === "/square/uploads/media") {
     return putMediaAsset(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/uploads/complete") {
+  if (request.method === "POST" && path === "/square/uploads/complete") {
     return completeUpload(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/uploads/stream/webhook") {
+  if (request.method === "POST" && path === "/square/uploads/stream/webhook") {
     return streamWebhookRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/posts/confirm") {
+  if (request.method === "POST" && path === "/square/posts/confirm") {
     return confirmPostRoute(request, env);
   }
-  if (request.method === "GET" && path === "/v1/square/posts/self") {
+  if (request.method === "GET" && path === "/square/posts/self") {
     return selfPostCopiesRoute(request, env);
   }
-  if (request.method === "DELETE" && path.startsWith("/v1/square/posts/")) {
-    return deletePostRoute(request, env, path.slice("/v1/square/posts/".length));
+  if (request.method === "DELETE" && path.startsWith("/square/posts/")) {
+    return deletePostRoute(request, env, path.slice("/square/posts/".length));
   }
-  if (request.method === "GET" && path.startsWith("/v1/square/media/")) {
+  if (request.method === "GET" && path.startsWith("/square/media/")) {
     return mediaRoute(request, env, path);
   }
-  if (request.method === "GET" && path.startsWith("/v1/square/feed/")) {
+  if (request.method === "GET" && path.startsWith("/square/feed/")) {
     return feedRoute(request, env, parseFeedKind(path));
   }
-  if (request.method === "PUT" && path === "/v1/square/profile") {
+  if (request.method === "PUT" && path === "/square/profile") {
     return putProfileRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/profile/assets/prepare") {
+  if (request.method === "POST" && path === "/square/profile/assets/prepare") {
     return prepareProfileAsset(request, env);
   }
-  if (request.method === "PUT" && path === "/v1/square/profile/assets") {
+  if (request.method === "PUT" && path === "/square/profile/assets") {
     return putProfileAsset(request, env);
   }
-  if (request.method === "GET" && path.startsWith("/v1/square/users/")) {
+  if (request.method === "GET" && path.startsWith("/square/users/")) {
     return routeUserPath(request, env, path);
   }
-  if (request.method === "POST" && path === "/v1/square/follows") {
+  if (request.method === "POST" && path === "/square/follows") {
     return followRoute(request, env);
   }
   if (
     request.method === "PUT" &&
-    path.startsWith("/v1/square/follows/") &&
+    path.startsWith("/square/follows/") &&
     path.endsWith("/notify")
   ) {
     return setFollowNotifyRoute(request, env);
   }
-  if (request.method === "DELETE" && path.startsWith("/v1/square/follows/")) {
+  if (request.method === "DELETE" && path.startsWith("/square/follows/")) {
     return unfollowRoute(request, env);
   }
-  if (request.method === "GET" && path === "/v1/square/notify/unread") {
+  if (request.method === "GET" && path === "/square/notify/unread") {
     return getNotifyUnreadRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/notify/read") {
+  if (request.method === "POST" && path === "/square/notify/read") {
     return markNotifyReadRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/signals") {
+  if (request.method === "POST" && path === "/square/signals") {
     return signalRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/chat/devices/register") {
+  if (request.method === "POST" && path === "/chat/devices/register") {
     return registerChatDevice(request, env);
   }
-  if (request.method === "POST" && path === "/v1/chat/keypackages") {
+  if (request.method === "POST" && path === "/chat/keypackages") {
     return publishChatKeyPackage(request, env);
   }
-  if (request.method === "POST" && path === "/v1/chat/keypackages/consume") {
+  if (request.method === "POST" && path === "/chat/keypackages/consume") {
     return consumeChatKeyPackage(request, env);
   }
-  if (request.method === "GET" && path.startsWith("/v1/chat/keypackages/")) {
+  if (request.method === "GET" && path.startsWith("/chat/keypackages/")) {
     return fetchChatKeyPackages(request, env);
   }
-  if (request.method === "POST" && path === "/v1/chat/envelopes") {
+  if (request.method === "POST" && path === "/chat/envelopes") {
     return submitChatEnvelope(request, env);
   }
-  if (request.method === "POST" && path === "/v1/chat/signals") {
+  if (request.method === "POST" && path === "/chat/signals") {
     return submitChatSignal(request, env);
   }
-  if (request.method === "GET" && path === "/v1/chat/ws") {
+  if (request.method === "GET" && path === "/chat/ws") {
     return openChatWebSocket(request, env);
   }
   // 大媒体(>100MB)瞬时中转:init 申请 → blob 流式 PUT/GET → ack 删。仅薪火 + 仅 >100MB。
-  if (request.method === "POST" && path === "/v1/chat/relay/init") {
+  if (request.method === "POST" && path === "/chat/relay/init") {
     return initChatRelay(request, env);
   }
-  if (path.startsWith("/v1/chat/relay/") && path.endsWith("/blob")) {
-    const relayKey = path.slice("/v1/chat/relay/".length, -"/blob".length);
+  if (path.startsWith("/chat/relay/") && path.endsWith("/blob")) {
+    const relayKey = path.slice("/chat/relay/".length, -"/blob".length);
     if (request.method === "PUT") {
       return putChatRelayBlob(request, env, relayKey);
     }
@@ -247,10 +247,10 @@ export async function routeRequest(
   }
   if (
     request.method === "POST" &&
-    path.startsWith("/v1/chat/relay/") &&
+    path.startsWith("/chat/relay/") &&
     path.endsWith("/ack")
   ) {
-    const relayKey = path.slice("/v1/chat/relay/".length, -"/ack".length);
+    const relayKey = path.slice("/chat/relay/".length, -"/ack".length);
     return ackChatRelay(request, env, relayKey);
   }
 
@@ -262,7 +262,7 @@ function routeUserPath(
   env: Env,
   path: string,
 ): Promise<Response> {
-  const rest = path.slice("/v1/square/users/".length);
+  const rest = path.slice("/square/users/".length);
   const segments = rest.split("/").filter((segment) => segment.length > 0);
   // 路由末段 = 目标用户钱包账户 account_id(handler 内部 resolve 到身份主键 cid_number)。
   const accountId = segments[0] ?? "";

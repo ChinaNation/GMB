@@ -398,7 +398,7 @@ pub async fn build_activate_admin_request(
     let now = now_secs();
     let expires_at = now + signing::DEFAULT_TTL_SECS;
     let request = signing::QrSignRequest {
-        proto: signing::PROTOCOL_VERSION.to_string(),
+        proto: signing::QR_V1.to_string(),
         kind: signing::QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
         expires_at,
@@ -455,10 +455,10 @@ pub async fn verify_activate_admin(
     let response: signing::QrSignResponse =
         serde_json::from_str(&response_json).map_err(|e| format!("解析签名响应失败: {e}"))?;
 
-    if response.proto != signing::PROTOCOL_VERSION {
+    if response.proto != signing::QR_V1 {
         return Err(format!(
             "协议版本不匹配：期望 {}，实际 {}",
-            signing::PROTOCOL_VERSION,
+            signing::QR_V1,
             response.proto
         ));
     }

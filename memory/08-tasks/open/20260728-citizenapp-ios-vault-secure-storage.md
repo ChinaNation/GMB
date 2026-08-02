@@ -71,7 +71,7 @@
   两者按用途和 `walletIndex` 使用不同 application tag，不提供软件密钥回退。
 - 新增 `HardwareBoundSeedVaultChannel.swift`：实现 `authStatus/encrypt/decrypt/deleteKey`；
   ECIES-AES-GCM 公钥加密静默，私钥解密绑定当前 Face ID/Touch ID；唯一密文版本
-  `ios-se-v1:`，拒绝旧格式。
+  `ios-se:`，拒绝旧格式。
 - 新增 `DeviceSubkeyChannel.swift`：实现 `publicKey/sign/delete`；输出 65 字节未压缩 P-256
   公钥裸 hex，签名使用 ECDSA-SHA256 DER，由既有 Dart 边界转 `r||s`。
 - `AppDelegate` 已强引用两条通道，并在隐式 Flutter engine 初始化回调中通过

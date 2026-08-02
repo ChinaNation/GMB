@@ -28,7 +28,7 @@ function createSessionId(): string {
   return `sid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-const CA_CERTIFICATE_URL = '/api/v1/platform/ca-certificate';
+const CA_CERTIFICATE_URL = '/api/platform/ca-certificate';
 
 /// 账户短址（首 6 后 6），只用于让操作员核对扫到的是哪个账户。
 function shortAccountId(account_id: string): string {

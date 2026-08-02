@@ -5,19 +5,22 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use alloc::{format, vec};
+use alloc::format;
 
 use codec::Encode;
 use frame_benchmarking::v2::*;
 use frame_support::weights::Weight;
+use frame_system::pallet_prelude::BlockNumberFor;
 use frame_system::RawOrigin;
+use sp_runtime::traits::Zero;
 
 use crate::{
     pallet::{
         AccountIdByCid, BindingRevisionByCid, CidByAccountId, CidRegistry, Config,
         PopulationMaintenanceFault, PopulationReadyDate, VotingIdentityByCid,
     },
-    AreaCodeBound, Call, CandidateIdentityPayload, CidNumberBound, CidRecord, CidRecordStatus,
+    AreaCodeBound, BenchmarkHelper, Call, CandidateIdentityPayload, CidNumberBound,
+    CidOccupyAuthorization, CidRebindAuthorization, CidRecord, CidRecordStatus,
     CitizenIdentityAuthority, CitizenSex, CitizenStatus, FamilyName, GivenName, Pallet,
     RoleCodeBound, VotingIdentityPayload, MAX_CID_AUTHORIZATION_LIFETIME_SECS,
 };
@@ -33,6 +36,8 @@ type Authority<AccountId> = (
     AreaCodeBound,
 );
 
+type BenchmarkSigner<AccountId> = (sp_core::sr25519::Public, AccountId);
+
 fn authority<T: Config>() -> Authority<T::AccountId> {
     T::CitizenIdentityAuthority::benchmark_authority()
         .expect("runtime benchmark must provide a real registrar role subject")
@@ -46,6 +51,10 @@ fn set_time<T: Config>(timestamp_millis: u64) -> u32 {
         "benchmark timestamp must resolve to a calendar date"
     );
     date
+}
+
+fn genesis_hash<T: Config>() -> T::Hash {
+    frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::zero())
 }
 
 fn citizen_cid(tag: u32) -> CidNumberBound {
@@ -67,10 +76,17 @@ fn citizen_cid(tag: u32) -> CidNumberBound {
     .expect("benchmark citizen CID must fit the runtime bound")
 }
 
-fn signature<T: Config>() -> crate::pallet::SignatureOf<T> {
-    vec![1u8; 64]
-        .try_into()
-        .expect("runtime signature bound must accept sr25519 length")
+fn signer<T: Config>() -> BenchmarkSigner<T::AccountId> {
+    T::BenchmarkHelper::signer()
+}
+
+fn signature<T: Config>(
+    signer: &sp_core::sr25519::Public,
+    op_tag: u8,
+    payload: &impl Encode,
+) -> crate::pallet::SignatureOf<T> {
+    let message = primitives::sign::signing_message(op_tag, &payload.encode());
+    T::BenchmarkHelper::sign(signer, &message)
 }
 
 fn voting_payload<T: Config>(
@@ -137,10 +153,14 @@ fn setup_registration<T: Config>(
     tag: u32,
     valid_from: u32,
     valid_until: u32,
-) -> (Authority<T::AccountId>, VotingIdentityPayload<T::AccountId>) {
+) -> (
+    Authority<T::AccountId>,
+    VotingIdentityPayload<T::AccountId>,
+    sp_core::sr25519::Public,
+) {
     let authority = authority::<T>();
     let cid_number = citizen_cid(tag);
-    let account_id = account("citizen", tag, 0);
+    let (signer, account_id) = signer::<T>();
     seed_occupied::<T>(&authority.1, &cid_number, &account_id);
     let payload = voting_payload::<T>(
         account_id,
@@ -151,19 +171,21 @@ fn setup_registration<T: Config>(
         valid_from,
         valid_until,
     );
-    (authority, payload)
+    (authority, payload, signer)
 }
 
 fn register<T: Config>(
     authority: &Authority<T::AccountId>,
     payload: VotingIdentityPayload<T::AccountId>,
+    signer: &sp_core::sr25519::Public,
 ) {
+    let signature = signature::<T>(signer, primitives::sign::OP_SIGN_CITIZEN_IDENTITY, &payload);
     Pallet::<T>::register_voting_identity(
         RawOrigin::Signed(authority.0.clone()).into(),
         authority.1.clone(),
         authority.2.clone(),
         payload,
-        signature::<T>(),
+        signature,
     )
     .expect("benchmark voting identity registration must succeed");
 }
@@ -176,8 +198,13 @@ mod benchmarks {
     fn register_voting_identity() {
         let today = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         PopulationReadyDate::<T>::put(today);
-        let (authority, payload) = setup_registration::<T>(1, today, 20991231);
+        let (authority, payload, signer) = setup_registration::<T>(1, today, 20991231);
         let cid_number = payload.cid_number.clone();
+        let signature = signature::<T>(
+            &signer,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+            &payload,
+        );
 
         #[extrinsic_call]
         _(
@@ -185,7 +212,7 @@ mod benchmarks {
             authority.1,
             authority.2,
             payload,
-            signature::<T>(),
+            signature,
         );
 
         assert!(VotingIdentityByCid::<T>::contains_key(cid_number));
@@ -195,10 +222,15 @@ mod benchmarks {
     fn upgrade_to_candidate_identity() {
         let today = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         PopulationReadyDate::<T>::put(today);
-        let (authority, voting) = setup_registration::<T>(2, today, 20991231);
-        register::<T>(&authority, voting.clone());
+        let (authority, voting, signer) = setup_registration::<T>(2, today, 20991231);
+        register::<T>(&authority, voting.clone(), &signer);
         let payload = candidate_payload::<T>(voting);
         let cid_number = payload.voting.cid_number.clone();
+        let signature = signature::<T>(
+            &signer,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+            &payload,
+        );
 
         #[extrinsic_call]
         _(
@@ -206,7 +238,7 @@ mod benchmarks {
             authority.1,
             authority.2,
             payload,
-            signature::<T>(),
+            signature,
         );
 
         assert!(crate::pallet::CandidateIdentityByCid::<T>::contains_key(
@@ -218,11 +250,16 @@ mod benchmarks {
     fn update_voting_identity() {
         let today = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         PopulationReadyDate::<T>::put(today);
-        let (authority, initial) = setup_registration::<T>(3, today, 20991231);
-        register::<T>(&authority, initial.clone());
+        let (authority, initial, signer) = setup_registration::<T>(3, today, 20991231);
+        register::<T>(&authority, initial.clone(), &signer);
         let mut payload = initial;
         payload.residence_town_code = b"ZS01002".to_vec().try_into().expect("town code fits");
         let cid_number = payload.cid_number.clone();
+        let signature = signature::<T>(
+            &signer,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+            &payload,
+        );
 
         #[extrinsic_call]
         _(
@@ -230,7 +267,7 @@ mod benchmarks {
             authority.1,
             authority.2,
             payload,
-            signature::<T>(),
+            signature,
         );
 
         assert!(VotingIdentityByCid::<T>::contains_key(cid_number));
@@ -240,21 +277,31 @@ mod benchmarks {
     fn update_candidate_identity() {
         let today = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         PopulationReadyDate::<T>::put(today);
-        let (authority, voting) = setup_registration::<T>(4, today, 20991231);
-        register::<T>(&authority, voting.clone());
+        let (authority, voting, signer) = setup_registration::<T>(4, today, 20991231);
+        register::<T>(&authority, voting.clone(), &signer);
         let initial = candidate_payload::<T>(voting);
+        let initial_signature = signature::<T>(
+            &signer,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+            &initial,
+        );
         Pallet::<T>::upgrade_to_candidate_identity(
             RawOrigin::Signed(authority.0.clone()).into(),
             authority.1.clone(),
             authority.2.clone(),
             initial.clone(),
-            signature::<T>(),
+            initial_signature,
         )
         .expect("benchmark candidate upgrade must succeed");
         let mut payload = initial;
         payload.voting.residence_town_code =
             b"ZS01002".to_vec().try_into().expect("town code fits");
         let cid_number = payload.voting.cid_number.clone();
+        let signature = signature::<T>(
+            &signer,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+            &payload,
+        );
 
         #[extrinsic_call]
         _(
@@ -262,7 +309,7 @@ mod benchmarks {
             authority.1,
             authority.2,
             payload,
-            signature::<T>(),
+            signature,
         );
 
         assert!(crate::pallet::CandidateIdentityByCid::<T>::contains_key(
@@ -274,16 +321,21 @@ mod benchmarks {
     fn revoke_identity() {
         let today = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         PopulationReadyDate::<T>::put(today);
-        let (authority, voting) = setup_registration::<T>(5, today, 20991231);
+        let (authority, voting, signer) = setup_registration::<T>(5, today, 20991231);
         let cid_number = voting.cid_number.clone();
-        register::<T>(&authority, voting.clone());
+        register::<T>(&authority, voting.clone(), &signer);
         let candidate = candidate_payload::<T>(voting);
+        let signature = signature::<T>(
+            &signer,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+            &candidate,
+        );
         Pallet::<T>::upgrade_to_candidate_identity(
             RawOrigin::Signed(authority.0.clone()).into(),
             authority.1.clone(),
             authority.2.clone(),
             candidate,
-            signature::<T>(),
+            signature,
         )
         .expect("benchmark candidate upgrade must succeed");
 
@@ -305,12 +357,23 @@ mod benchmarks {
     fn occupy_cid() {
         set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         let authority = authority::<T>();
-        let account_id: T::AccountId = whitelisted_caller();
+        let (signer, account_id) = signer::<T>();
         let cid_number = citizen_cid(6);
         let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
             .as_secs()
             .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);
-        let signature = signature::<T>();
+        let authorization = CidOccupyAuthorization {
+            genesis_hash: genesis_hash::<T>(),
+            cid_number: cid_number.clone(),
+            account_id: account_id.clone(),
+            expected_binding_revision: 0,
+            expires_at,
+        };
+        let signature = signature::<T>(
+            &signer,
+            primitives::sign::OP_SIGN_CID_OCCUPY,
+            &authorization,
+        );
 
         #[extrinsic_call]
         _(
@@ -344,18 +407,30 @@ mod benchmarks {
     fn self_rebind_cid_account_id() {
         set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         // 先自助占号建立当前绑定，再换绑到新账户。
-        let current_account_id: T::AccountId = account("rebind_current", 0, 0);
+        let (current_signer, current_account_id) = signer::<T>();
         let new_account_id: T::AccountId = whitelisted_caller();
         let cid_number = citizen_cid(8);
         Pallet::<T>::self_occupy_cid(
-            RawOrigin::Signed(current_account_id).into(),
+            RawOrigin::Signed(current_account_id.clone()).into(),
             cid_number.clone(),
         )
         .expect("self occupy sets up the binding");
         let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
             .as_secs()
             .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);
-        let signature = signature::<T>();
+        let authorization = CidRebindAuthorization {
+            genesis_hash: genesis_hash::<T>(),
+            cid_number: cid_number.clone(),
+            current_account_id,
+            new_account_id: new_account_id.clone(),
+            expected_binding_revision: 1,
+            expires_at,
+        };
+        let signature = signature::<T>(
+            &current_signer,
+            primitives::sign::OP_SIGN_CID_REBIND,
+            &authorization,
+        );
 
         #[extrinsic_call]
         _(
@@ -376,17 +451,29 @@ mod benchmarks {
         // 先自助占号建立当前绑定，再由注册局代换绑到新账户。
         let authority = authority::<T>();
         let current_account_id: T::AccountId = account("admin_rebind_current", 0, 0);
-        let new_account_id: T::AccountId = whitelisted_caller();
+        let (new_signer, new_account_id) = signer::<T>();
         let cid_number = citizen_cid(9);
         Pallet::<T>::self_occupy_cid(
-            RawOrigin::Signed(current_account_id).into(),
+            RawOrigin::Signed(current_account_id.clone()).into(),
             cid_number.clone(),
         )
         .expect("self occupy sets up the binding");
         let expires_at = <T::TimeProvider as frame_support::traits::UnixTime>::now()
             .as_secs()
             .saturating_add(MAX_CID_AUTHORIZATION_LIFETIME_SECS);
-        let signature = signature::<T>();
+        let authorization = CidRebindAuthorization {
+            genesis_hash: genesis_hash::<T>(),
+            cid_number: cid_number.clone(),
+            current_account_id,
+            new_account_id: new_account_id.clone(),
+            expected_binding_revision: 1,
+            expires_at,
+        };
+        let signature = signature::<T>(
+            &new_signer,
+            primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
+            &authorization,
+        );
 
         #[extrinsic_call]
         _(
@@ -408,9 +495,9 @@ mod benchmarks {
     fn revoke_cid() {
         let today = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
         PopulationReadyDate::<T>::put(today);
-        let (authority, voting) = setup_registration::<T>(7, today, 20991231);
+        let (authority, voting, signer) = setup_registration::<T>(7, today, 20991231);
         let cid_number = voting.cid_number.clone();
-        register::<T>(&authority, voting);
+        register::<T>(&authority, voting, &signer);
 
         #[extrinsic_call]
         _(
@@ -470,9 +557,9 @@ mod benchmarks {
     fn process_population_transition() {
         let yesterday = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS - ONE_DAY_MILLIS);
         PopulationReadyDate::<T>::put(yesterday);
-        let (authority, voting) = setup_registration::<T>(8, 20000101, yesterday);
+        let (authority, voting, signer) = setup_registration::<T>(8, 20000101, yesterday);
         let cid_number = voting.cid_number.clone();
-        register::<T>(&authority, voting);
+        register::<T>(&authority, voting, &signer);
         let today = set_time::<T>(BENCHMARK_TIMESTAMP_MILLIS);
 
         #[block]

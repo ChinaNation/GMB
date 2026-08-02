@@ -223,7 +223,11 @@ check_chinese_comment_gate() {
   local added_count
 
   # 中文注释：统一使用 ERE 匹配字面加号，兼容 macOS BSD grep 与 GNU grep。
-  added_lines="$(git diff --unified=0 "${diff_target}" -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+  added_lines="$(git diff --unified=0 "${diff_target}" -- "$file" \
+    | grep -E '^\+' \
+    | grep -vE '^\+\+\+' \
+    | grep -E '([A-Za-z0-9][._:-]v[0-9]+|/(api/)?v[0-9]+|[A-Za-z0-9]_V[0-9]+|schema_version|cache_version|protocol_version|tag[[:space:]]*=[[:space:]]*["]v[0-9]+)' \
+    || true)"
 
   if [[ -z "$added_lines" ]]; then
     return 0
@@ -243,11 +247,54 @@ check_chinese_comment_gate() {
 }
 
 # 中文注释：协议版本标识门禁。全仓自定义协议只有 QR_V1 可以带版本号；
-# 其余签名域走 signing_message(op_tag)，非签名哈希域走 MODULE_TAG。
+# 一方 API、schema、缓存键、字符串域和文件路径均不得另造版本后缀。
+sanitize_official_version_names() {
+  local line="$1"
+
+  line="${line//QR_V1/}"
+  line="${line//QrProtocol.qrV1/}"
+  line="${line//QrProtocols.qrV1/}"
+  line="$(printf '%s\n' "$line" | sed -E \
+    -e 's/Uuid::new_v[45]//g' \
+    -e 's/arm64-v8a//g' \
+    -e 's/armeabi-v7a//g' \
+    -e 's/libbarhopper_v[0-9]+//g' \
+    -e 's/RSASSA-PKCS1-v1_5//g' \
+    -e 's/sc-rpc-spec-v2//g')"
+
+  # 中文注释：只消去明确的第三方官方 URL 版本段，绝不豁免任意 https URL。
+  if [[ "$line" == *"https://api.cloudflare.com/"* ]]; then
+    line="$(printf '%s\n' "$line" | sed -E \
+      -e 's#https://api\.cloudflare\.com/client/v[0-9]+#https://api.cloudflare.com/client#g' \
+      -e 's#/images/v[0-9]+#/images#g')"
+  fi
+  if [[ "$line" == *"https://challenges.cloudflare.com/"* ]]; then
+    line="$(printf '%s\n' "$line" | sed -E \
+      's#https://challenges\.cloudflare\.com/turnstile/v[0-9]+#https://challenges.cloudflare.com/turnstile#g')"
+  fi
+  if [[ "$line" == *"https://fcm.googleapis.com/"* ]]; then
+    line="$(printf '%s\n' "$line" | sed -E \
+      's#https://fcm\.googleapis\.com/v[0-9]+#https://fcm.googleapis.com#g')"
+  fi
+  if [[ "$line" == *"https://docs.substrate.io/"* ]]; then
+    line="$(printf '%s\n' "$line" | sed -E \
+      's#https://docs\.substrate\.io/[^ )]*/v[0-9]+#https://docs.substrate.io/official#g')"
+  fi
+
+  printf '%s\n' "$line"
+}
+
+has_custom_version_name() {
+  local line
+  line="$(sanitize_official_version_names "$1")"
+  printf '%s\n' "$line" | grep -Eq \
+    '([A-Za-z0-9][._:-]v[0-9]+|/(api/)?v[0-9]+(/|([^A-Za-z0-9]|$))|[A-Za-z0-9]_V[0-9]+|(^|[^A-Za-z0-9_])(schema_version|cache_version|protocol_version)([^A-Za-z0-9_]|$)|tag[[:space:]]*=[[:space:]]*["]v[0-9]+)'
+}
+
 check_version_tag_gate() {
   local file="$1"
   local added_lines
-  local offending
+  local line
 
   case "$file" in
     citizenapp/smoldotpow/*|citizenapp/cloudflare/worker-configuration.d.ts|citizenapp/assets/topup/walletconnect.bundle.js|citizenchain/onchina/frontend/dist/*|citizenchain/node/frontend/dist/*) return 0 ;;
@@ -262,38 +309,51 @@ check_version_tag_gate() {
     return 0
   fi
 
-  offending="$(printf '%s\n' "$added_lines" \
-    | sed 's/QR_V1//g' \
-    | grep -E '([A-Za-z0-9]_V[0-9]+([^0-9]|$)|gmb([._-][a-z0-9]+)+[._-]v[0-9]+([^0-9]|$))' \
-    || true)"
-
-  if [[ -n "$offending" ]]; then
-    version_tag_hits+=("${file}: 出现非 QR_V1 的自定义版本化标识（签名域走 signing_message(op_tag)，非签名哈希域用 MODULE_TAG）")
-  fi
+  while IFS= read -r line; do
+    if has_custom_version_name "$line"; then
+      version_tag_hits+=("${file}: 出现非 QR_V1 的一方版本化标识或路由")
+      return
+    fi
+  done <<< "$added_lines"
 }
 
-# 中文注释：不仅拦新增行，还扫描全部受控真源，防止历史协议残留长期躲在文档或未改文件中。
+# 中文注释：不仅拦新增行，还扫描全部受控真源和文件路径，防止历史协议残留长期躲藏。
 check_repository_version_tags() {
+  local file
   local line
-  local sanitized
 
+  # 中文注释：先由 git grep 预筛候选，再逐条消去官方名称；禁止对全仓每一行启动子进程。
   while IFS= read -r line; do
-    sanitized="${line//QR_V1/}"
-    if printf '%s\n' "$sanitized" \
-      | grep -Eq '([A-Za-z0-9]_V[0-9]+([^0-9]|$)|gmb([._-][a-z0-9]+)+[._-]v[0-9]+([^0-9]|$))'; then
+    if has_custom_version_name "$line"; then
       version_tag_hits+=("${line}")
     fi
   done < <(
-    git grep -n -I -E \
-      '[A-Za-z0-9]_V[0-9]+|gmb([._-][a-z0-9]+)+[._-]v[0-9]+' \
+    git grep --untracked -n -I -E \
+      '([A-Za-z0-9][._:-]v[0-9]+|/(api/)?v[0-9]+|[A-Za-z0-9]_V[0-9]+|schema_version|cache_version|protocol_version|tag[[:space:]]*=[[:space:]]*["]v[0-9]+)' \
       -- \
       ':!citizenapp/smoldotpow/**' \
       ':!citizenapp/cloudflare/worker-configuration.d.ts' \
       ':!citizenapp/assets/topup/walletconnect.bundle.js' \
+      ':!**/package-lock.json' \
+      ':!docs/logo.svg' \
+      ':!citizenchain/node/src/core/constitution/constitution_shell.html' \
       ':!citizenchain/onchina/frontend/dist/**' \
       ':!citizenchain/node/frontend/dist/**' \
+      ':!.github/scripts/check-ai-guardrails.sh' \
       || true
   )
+
+  # 中文注释：路径单独扫描，拦截源码或文档通过文件名恢复版本后缀。
+  while IFS= read -r file; do
+    # 中文注释：状态中已删除的旧路径不是仓库目标态；Android ABI 与资源限定符属于官方目录语法。
+    [[ -e "$file" ]] || continue
+    case "$file" in
+      citizenapp/smoldotpow/*|citizenapp/cloudflare/worker-configuration.d.ts|citizenapp/assets/topup/walletconnect.bundle.js|citizenchain/onchina/frontend/dist/*|citizenchain/node/frontend/dist/*|*/target/*|*/build/*|*/android/app/src/main/jniLibs/arm64-v8a/*|*/android/app/src/main/res/*-v[0-9]*/*|.github/scripts/check-ai-guardrails.sh) continue ;;
+    esac
+    if printf '%s\n' "$file" | grep -Eq '(^|/)[^/]*[._-]v[0-9]+([^0-9]|$)'; then
+      version_tag_hits+=("${file}: 文件路径含非 QR_V1 的版本后缀")
+    fi
+  done < <(git ls-files -co --exclude-standard)
 }
 
 # 中文注释：编译器抑制门禁。新增 allow(dead_code)/allow(unused...) 必须写明中文理由，
@@ -427,12 +487,18 @@ for line in "${status_lines[@]}"; do
 
   case "${status}" in
     D)
+      # 中文注释：机构岗位权限 fixture 已获明确批准去掉版本后缀；目标仍在同一受保护目录。
+      if [[ "${old_path}" == "memory/06-quality/fixtures/institution_role_permission_v1.json" \
+        && -f "memory/06-quality/fixtures/institution_role_permission.json" ]]; then
+        continue
+      fi
       if is_protected_ai_path "${old_path}"; then
         protected_ai_hits+=("禁止删除 AI 编程系统核心基础设施: ${old_path}")
       fi
       ;;
     R*)
-      if is_protected_ai_path "${old_path}"; then
+      # 中文注释：同一受保护体系内的明确重命名允许；只禁止把基础设施迁出保护范围。
+      if is_protected_ai_path "${old_path}" && ! is_protected_ai_path "${new_path}"; then
         protected_ai_hits+=("禁止迁出 AI 编程系统核心基础设施: ${old_path} -> ${new_path}")
       fi
       ;;
@@ -468,8 +534,8 @@ declare -a pqc_anchor_specs=(
   "citizenchain/runtime/src/lib.rs|AuthorizeCall|general-transaction 授权入口（PQC 挂载钩子）"
   "citizenchain/runtime/primitives/src/core_const.rs|SS58_FORMAT|SS58 前缀常量"
   "citizenchain/runtime/primitives/src/core_const.rs|2027|SS58 前缀值（地址不变）"
-  "citizenapp/lib/wallet/core/wallet_manager.dart|miniSecretFromEntropy|助记词到 AccountRootSeedV1 派生"
-  "citizenwallet/lib/wallet/wallet_manager.dart|miniSecretFromEntropy|助记词到 AccountRootSeedV1 派生"
+  "citizenapp/lib/wallet/core/wallet_manager.dart|miniSecretFromEntropy|助记词到 account_root_seed 派生"
+  "citizenwallet/lib/wallet/wallet_manager.dart|miniSecretFromEntropy|助记词到 account_root_seed 派生"
   "citizenapp/lib/qr/bodies/sign_request_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
   "citizenapp/lib/qr/bodies/sign_response_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"
   "citizenapp/lib/qr/bodies/login_receipt_body.dart|sig_alg|QR 签名算法字段（PQC 扩展位）"

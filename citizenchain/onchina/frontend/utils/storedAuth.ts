@@ -4,9 +4,9 @@
 
 import type { AdminAuth } from '../auth/types';
 
-// 缓存版本号。v5 = 身份字段补镇级作用域(institution_code + admin_level + scope_town_name),
-// 版本号 bump + 形状校验自愈:旧 v4 缓存键不再读取,旧形状条目一律丢弃,避免读出空字段。
-const AUTH_STORAGE_KEY = 'onchina_admin_auth_v5';
+// 登录态只保留当前严格形状（institution_code + admin_level + scope_town_name）；
+// 解析失败的历史形状一律丢弃，避免读出空字段或形成兼容分支。
+const AUTH_STORAGE_KEY = 'onchina_admin_auth';
 
 export function readStoredAuth(): AdminAuth | null {
   try {

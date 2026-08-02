@@ -116,7 +116,7 @@
 
 ## 5. 分环境验证
 
-- Worker（各环境 HTTP）：`GET /v1/square/membership` 返回三档 `plans[]`（含 `chat_file_max_bytes`）、无 `identity`/`eligible_levels`；三档订阅 challenge 出 op_tag 0x1D；非竞选身份发竞选帖 `campaign_identity_required`。
+- Worker（各环境 HTTP）：`GET /square/membership` 返回三档 `plans[]`（含 `chat_file_max_bytes`）、无 `identity`/`eligible_levels`；三档订阅 challenge 出 op_tag 0x1D；非竞选身份发竞选帖 `campaign_identity_required`。
 - D1：`square_memberships` 无 `identity_level`/`frozen_at`/`collection_paused` 列。
 - Stripe LIVE：仅 3 活跃订阅价（薪火/民主/自由）；订阅落 webhook 写 D1。
 - 官网：三档卡渲染。

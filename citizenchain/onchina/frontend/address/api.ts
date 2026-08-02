@@ -80,7 +80,7 @@ export async function listAddressNames(
   params: { province_code: string; city_code: string; town_code: string; cursor?: number | null },
 ): Promise<AddressPage<AddressNameRow>> {
   return request<AddressPage<AddressNameRow>>(
-    `/api/v1/admin/address/names?${scopeQuery({ ...params, page_size: 100 })}`,
+    `/api/admin/address/names?${scopeQuery({ ...params, page_size: 100 })}`,
     { method: 'GET', headers: adminHeaders(auth) },
   );
 }
@@ -96,7 +96,7 @@ export async function listAddressItems(
   },
 ): Promise<AddressPage<AddressRow>> {
   return request<AddressPage<AddressRow>>(
-    `/api/v1/admin/address/items?${scopeQuery({ ...params, page_size: 100 })}`,
+    `/api/admin/address/items?${scopeQuery({ ...params, page_size: 100 })}`,
     { method: 'GET', headers: adminHeaders(auth) },
   );
 }
@@ -105,7 +105,7 @@ export async function prepareAddressChainCall(
   auth: AdminAuth,
   input: AddressChainCallInput,
 ): Promise<AddressChainCallOutput> {
-  return request<AddressChainCallOutput>('/api/v1/admin/address/chain-call', {
+  return request<AddressChainCallOutput>('/api/admin/address/chain-call', {
     method: 'POST',
     headers: { ...adminHeaders(auth), 'content-type': 'application/json' },
     body: JSON.stringify(input),

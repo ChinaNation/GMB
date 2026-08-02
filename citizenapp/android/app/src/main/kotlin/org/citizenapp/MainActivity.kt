@@ -27,6 +27,9 @@ class MainActivity : FlutterFragmentActivity() {
     // P-256 设备子钥原生桥通道（后台握手静默签名）。
     private val deviceSubkeyChannelName = "org.citizenapp/device_subkey"
     private val deviceSubkey by lazy { DeviceSubkeyBridge() }
+    // Chat/MLS/附件/通讯录用途钥的静默硬件封装通道；与钱包 KEK、设备签名钥分离。
+    private val deviceDataKeyVaultChannelName = "org.citizenapp/device_data_key_vault"
+    private val deviceDataKeyVault by lazy { DeviceDataKeyVaultBridge() }
     private val notificationPermissionRequestCode = 170517
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
@@ -157,6 +160,61 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                     }
                     else -> result.notImplemented()
+                }
+            }
+
+        // 设备数据钥封装桥。seal/open/delete 全程静默，绝不触发钱包 BiometricPrompt。
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, deviceDataKeyVaultChannelName)
+            .setMethodCallHandler { call, result ->
+                val idx = call.argument<Int>("walletIndex")
+                if (idx == null) {
+                    result.error("badArgs", "walletIndex null", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    when (call.method) {
+                        "seal" -> {
+                            val plaintext = call.argument<String>("plaintext")
+                            val aad = call.argument<String>("aad")
+                            if (plaintext == null || aad == null) {
+                                result.error("badArgs", "plaintext/aad null", null)
+                            } else {
+                                result.success(
+                                    deviceDataKeyVault.seal(
+                                        idx,
+                                        android.util.Base64.decode(plaintext, android.util.Base64.NO_WRAP),
+                                        android.util.Base64.decode(aad, android.util.Base64.NO_WRAP),
+                                    )
+                                )
+                            }
+                        }
+                        "open" -> {
+                            val blob = call.argument<String>("blob")
+                            val aad = call.argument<String>("aad")
+                            if (blob == null || aad == null) {
+                                result.error("badArgs", "blob/aad null", null)
+                            } else {
+                                val plaintext = deviceDataKeyVault.open(
+                                    idx,
+                                    blob,
+                                    android.util.Base64.decode(aad, android.util.Base64.NO_WRAP),
+                                )
+                                result.success(
+                                    android.util.Base64.encodeToString(
+                                        plaintext,
+                                        android.util.Base64.NO_WRAP,
+                                    )
+                                )
+                            }
+                        }
+                        "delete" -> {
+                            deviceDataKeyVault.delete(idx)
+                            result.success(null)
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (error: Exception) {
+                    result.error("deviceDataKeyVaultFailed", error.message, null)
                 }
             }
 

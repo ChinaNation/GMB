@@ -165,9 +165,55 @@ mod tests {
             nonce: 1,
             expires_at: 100,
         };
-        let mut changed = base.clone();
-        changed.amount = 10_001;
-        assert_ne!(base.signing_hash(), changed.signing_hash());
+        let base_hash = base.signing_hash();
+        let assert_changed =
+            |field_name: &str, mutate: fn(&mut PaymentIntent<AccountId32, u32>)| {
+                let mut changed = base.clone();
+                mutate(&mut changed);
+                assert_ne!(
+                    base_hash,
+                    changed.signing_hash(),
+                    "{field_name} 必须受签名保护"
+                );
+            };
+        assert_changed("tx_id", |intent| intent.tx_id = H256::repeat_byte(10));
+        assert_changed("payer_account_id", |intent| {
+            intent.payer_account_id = acc(2)
+        });
+        assert_changed("payer_bank_cid", |intent| {
+            intent.payer_bank_cid = cid("BANK-B")
+        });
+        assert_changed("recipient_account_id", |intent| {
+            intent.recipient_account_id = acc(4)
+        });
+        assert_changed("recipient_bank_cid", |intent| {
+            intent.recipient_bank_cid = cid("BANK-B")
+        });
+        assert_changed("amount", |intent| intent.amount = 10_001);
+        assert_changed("fee", |intent| intent.fee = 6);
+        assert_changed("nonce", |intent| intent.nonce = 2);
+        assert_changed("expires_at", |intent| intent.expires_at = 101);
+    }
+
+    #[test]
+    fn signing_hash_is_separated_from_other_operation_tags() {
+        let intent = PaymentIntent::<AccountId32, u32> {
+            tx_id: H256::repeat_byte(9),
+            payer_account_id: acc(1),
+            payer_bank_cid: cid("BANK-A"),
+            recipient_account_id: acc(3),
+            recipient_bank_cid: cid("BANK-A"),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let encoded = intent.encode();
+        assert_ne!(
+            intent.signing_hash(),
+            signing_message(OP_SIGN_OFFCHAIN_BATCH, &encoded),
+            "相同 PaymentIntent 载荷在批次操作码下必须生成不同签名消息"
+        );
     }
 
     // ─── golden vectors ────────────────────────────

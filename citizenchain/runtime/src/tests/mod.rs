@@ -96,6 +96,19 @@ fn sign_citizen_identity_payload(
         .expect("citizen identity signature fits")
 }
 
+fn sign_citizen_identity_message(
+    signer_pair: &sr25519::Pair,
+    op_tag: u8,
+    payload: &[u8],
+) -> citizen_identity::pallet::SignatureOf<Runtime> {
+    signer_pair
+        .sign(&primitives::sign::signing_message(op_tag, payload))
+        .0
+        .to_vec()
+        .try_into()
+        .expect("citizen identity signature fits")
+}
+
 /// 注册局首次占号时，新账户签署绑定创世哈希、固定 revision=0 和过期时间的唯一载荷。
 fn sign_cid_occupy(
     signer_pair: &sr25519::Pair,
@@ -117,6 +130,30 @@ fn sign_cid_occupy(
         .to_vec()
         .try_into()
         .expect("cid occupy signature fits")
+}
+
+/// 注册局换绑时，新账户签署完整绑定快照；当前账户不参与本入口签名。
+fn sign_cid_admin_rebind(
+    signer_pair: &sr25519::Pair,
+    cid_number: &citizen_identity::CidNumberBound,
+    current_account_id: &AccountId,
+    new_account_id: &AccountId,
+    expected_binding_revision: u64,
+    expires_at: u64,
+) -> citizen_identity::pallet::SignatureOf<Runtime> {
+    let payload = codec::Encode::encode(&citizen_identity::CidRebindAuthorization {
+        genesis_hash: System::block_hash(0),
+        cid_number: cid_number.clone(),
+        current_account_id: current_account_id.clone(),
+        new_account_id: new_account_id.clone(),
+        expected_binding_revision,
+        expires_at,
+    });
+    sign_citizen_identity_message(
+        signer_pair,
+        primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
+        &payload,
+    )
 }
 
 /// runtime 集成夹具按链上 Timestamp.Now 签发 300 秒首次绑定授权。
@@ -376,6 +413,108 @@ fn register_clearing_account() {
             account_name,
         },
     );
+}
+
+/// 四个公民身份签名域在普通 runtime 与 `runtime-benchmarks` 下必须保持同一验证结果。
+/// 非空且长度正确的伪造签名不能因为 feature 改变而通过。
+#[test]
+fn citizen_identity_signature_verifiers_reject_nonempty_forgery_in_every_feature() {
+    use citizen_identity::CitizenIdentityAuthority as _;
+
+    new_test_ext().execute_with(|| {
+        let signer_pair = sr25519::Pair::from_seed(&[0x31; 32]);
+        let account_id = AccountId::new(signer_pair.public().0);
+        let other_account_id = AccountId::new(sr25519::Pair::from_seed(&[0x32; 32]).public().0);
+        let payload = b"citizen-identity-verifier-regression";
+        let forged_signature: citizen_identity::pallet::SignatureOf<Runtime> =
+            [0xA5u8; 64].to_vec().try_into().expect("signature fits");
+        let short_signature: citizen_identity::pallet::SignatureOf<Runtime> =
+            [0xA5u8; 63].to_vec().try_into().expect("signature fits");
+
+        let citizen_signature = sign_citizen_identity_message(
+            &signer_pair,
+            primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+            payload,
+        );
+        let rebind_signature = sign_citizen_identity_message(
+            &signer_pair,
+            primitives::sign::OP_SIGN_CID_REBIND,
+            payload,
+        );
+        let occupy_signature = sign_citizen_identity_message(
+            &signer_pair,
+            primitives::sign::OP_SIGN_CID_OCCUPY,
+            payload,
+        );
+        let admin_rebind_signature = sign_citizen_identity_message(
+            &signer_pair,
+            primitives::sign::OP_SIGN_CID_ADMIN_REBIND,
+            payload,
+        );
+
+        assert!(RuntimeCitizenIdentityAuthority::verify_citizen_signature(
+            &account_id,
+            payload,
+            &citizen_signature,
+        ));
+        assert!(RuntimeCitizenIdentityAuthority::verify_rebind_signature(
+            &account_id,
+            payload,
+            &rebind_signature,
+        ));
+        assert!(RuntimeCitizenIdentityAuthority::verify_occupy_signature(
+            &account_id,
+            payload,
+            &occupy_signature,
+        ));
+        assert!(
+            RuntimeCitizenIdentityAuthority::verify_admin_rebind_signature(
+                &account_id,
+                payload,
+                &admin_rebind_signature,
+            )
+        );
+
+        assert!(!RuntimeCitizenIdentityAuthority::verify_citizen_signature(
+            &account_id,
+            payload,
+            &forged_signature,
+        ));
+        assert!(!RuntimeCitizenIdentityAuthority::verify_rebind_signature(
+            &account_id,
+            payload,
+            &forged_signature,
+        ));
+        assert!(!RuntimeCitizenIdentityAuthority::verify_occupy_signature(
+            &account_id,
+            payload,
+            &forged_signature,
+        ));
+        assert!(
+            !RuntimeCitizenIdentityAuthority::verify_admin_rebind_signature(
+                &account_id,
+                payload,
+                &forged_signature,
+            )
+        );
+
+        // 相同密钥、相同载荷也不能跨操作码复用；账户或长度错误同样拒绝。
+        assert!(!RuntimeCitizenIdentityAuthority::verify_rebind_signature(
+            &account_id,
+            payload,
+            &citizen_signature,
+        ));
+        assert!(!RuntimeCitizenIdentityAuthority::verify_citizen_signature(
+            &other_account_id,
+            payload,
+            &citizen_signature,
+        ));
+        assert!(!RuntimeCitizenIdentityAuthority::verify_citizen_signature(
+            &account_id,
+            payload,
+            &short_signature,
+        ));
+    });
 }
 
 mod cases;

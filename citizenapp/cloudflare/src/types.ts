@@ -256,10 +256,10 @@ export type AuthorPostCategory = 'all' | PostCategory;
 /// 按作者拉帖的内容形态过滤。'all' 不过滤；'normal' 排除文章；'article' 只看文章。
 export type AuthorContentFormat = 'all' | PostContentFormat;
 
-/// R2 公开资料包（citizenapp.square.profile.v1）。
+/// R2 公开资料包（citizenapp.square.profile）。
 /// 头像/背景/签名/展示名等公开链下资料的唯一真源。
 export interface CitizenProfileDoc {
-  schema: 'citizenapp.square.profile.v1';
+  schema: 'citizenapp.square.profile';
   /// 身份主键:资料所属 cid_number(随身份走,换绑不丢)。
   cid_number: string;
   display_name: string;
@@ -278,7 +278,7 @@ export interface UserProfileCounts {
   posts: number;
 }
 
-/// GET /v1/square/users/:account 响应载荷。
+/// GET /square/users/:account 响应载荷。
 export interface UserProfileResponse {
   account_id: string;
   display_name: string;

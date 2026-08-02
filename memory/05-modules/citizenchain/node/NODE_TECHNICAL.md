@@ -96,12 +96,14 @@
 ### 3.1 权威引导节点网络基线
 
 - 44 个权威引导节点使用同一套安装包和 P2P 端口策略，第 1 个为国储会权威节点。
-- **2026-07-31 历史部署的 3 个节点**全部运行同一 CI 产物 `citizenchain 1.0.0 arm64`
-  （CitizenChain CI run `30594736478`，head SHA `369cbc5a`，deb SHA-256
-  `4c3516f98901aaa11a6aa7d26f2224b0924b31fffde57b1241b6f36440306a60`），三台创世哈希
-  均为 `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa`，PeerId 与
-  catalog 及 chainspec bootNodes 逐字节一致，实测三台 30333 全网状互连。该部署已被
-  2026-08-01 新创世替代，必须在冻结后软件 CI 成功后逐台重装，不能继续作为当前链：
+- **当前生产部署的 3 个节点**全部运行冻结 CitizenChain CI run `30724462739`、提交
+  `363e6023c587bdb3be6acfa87bd3dfc940fba33f` 的 `citizenchain 1.0.0 arm64` 包，deb
+  SHA-256 为 `7cda25cfa65d0bf086fb5a41ec257871846e2c008726527d6b049014bdbd94b9`。
+  三台均已清除旧链状态并从冻结 chainspec 重新物化，创世哈希为
+  `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、state root 为
+  `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`；PeerId 保持与
+  catalog 和 chainspec bootNodes 一致。两轮独立 RPC 验收均确认 `Authority`、
+  `isSyncing=false`、P2P 公网监听 30333、RPC 仅回环监听 9944：
 
   | 节点 | 域名 | 规格 | 系统用户/数据目录 |
   |---|---|---|---|
@@ -109,8 +111,10 @@
   | 中枢省储会 | `prczss.crcfrcn.com` | A1 1核/5.8GB/96GB | `prczss` / `/opt/prczss/data` |
   | 贵州省储会 | `prcgzs.crcfrcn.com` | A1 1核/5.8GB/96GB | `prcgzs` / `/opt/prcgzs/data` |
 
-  河南 `prches`、河北 `prchbs` 仍在 chainspec bootNodes 中但尚未部署；连不上会被 libp2p
-  跳过，不影响网络。新节点部署命名规则：**系统用户、`/opt/<APP>` 目录与 systemd 服务名
+  河南 `prches`、河北 `prchbs` 仍登记在冻结 chainspec bootNodes 中，但截至 2026-08-01
+  没有当前生产部署证据，两个域名也没有 A 记录；连接失败会被 libp2p 跳过，不影响现有三节点
+  网络。本任务只修正文档，不改冻结 chainspec 或 Worker 引导列表。新节点部署命名规则：
+  **系统用户、`/opt/<APP>` 目录与 systemd 服务名
   一律取 catalog `domain` 的短名**（如 `prczss-node.service`），国储会的 `guo` 是历史命名。
 - 新节点部署口径：deb 安装 → 建同名系统用户与 `/opt/<APP>/data/node-key` → 写入
   **64 位 hex 文本**格式的 `secret_ed25519`（600，属主为节点用户；不是 32 字节二进制）→
@@ -138,8 +142,8 @@
   （海南占 `hn` → 湖南用 `hu`、河南用 `he`；河北占 `hb` → 湖北用 `hi`、海滨用 `ha`）。
 
   按清单省份名取私钥会拿错，PeerId 与 chainspec/catalog 对不上，现象是「节点正常运行但
-  0 peer」，极难定位。已部署的 `nrcgch`、`prczss`、`prcgzs`、`prches`、`prchbs` 五台两边
-  一致，不受影响。
+  0 peer」，极难定位。当前有部署证据的 `nrcgch`、`prczss`、`prcgzs` 三台与 catalog 一致；
+  `prches`、`prchbs` 只能确认 chainspec/catalog 登记一致，不能写成已经部署。
 
   **处置结果**：2026-07-31 已按 catalog 修复该线下清单（以 PeerId 为锚重写标注，44 把
   私钥一把未动），另修正「国储会1」→「国家储委会1」与一条域名残缺、缺 `wss` 的
@@ -160,7 +164,12 @@
 主网创世后，chainspec 与创世审计状态包都必须永久冻结。公权机构唯一真源是链上
 `genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
-- 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、当前 5 个已部署 bootnode（`nrcgch`、`prczss`、`prcgzs`、`prches`、`prchbs`）、token 属性和协议 ID；44 个权威节点是规划身份目录，不得把未部署节点写入当前联网基线。bootNodes 不进创世状态，增删只改 `chainspec_hash`，不改 `genesis_hash` 与 `state_root`。
+- 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json)，plain 形态保存 runtime WASM、genesis patch、5 个已冻结登记的 bootNodes
+  （`nrcgch`、`prczss`、`prcgzs`、`prches`、`prchbs`）、token 属性和协议 ID。当前只有前三个
+  bootNodes 具有生产部署与 DNS 证据，后两个仍是未上线登记项；该差异已经记录，不能再把
+  “登记”写成“已部署”。44 个权威节点是规划身份目录，不等于当前联网节点。bootNodes 不进
+  创世状态，增删只改 `chainspec_hash`，不改 `genesis_hash` 与 `state_root`；但冻结后是否调整
+  引导列表必须另行制定全端同步方案，本次不修改配置。
 - 创世配置：正式安装包只内置冻结 plain chainspec，不携带 RocksDB。首启必须从该
   chainspec 本地物化块 0，并在进入运行态前核验创世哈希；preview 或 release
   `genesis-state` 都不得进入四平台安装包。release 状态包只作为正式创世审计制品保留。
@@ -318,23 +327,21 @@ node、NodeGuard、OnChina 真实投影/API/页面验证，但不是冻结值；
 
 ## 7. 协议升级 node 端边界
 
-2026-05-09 起，node 端协议升级入口按“协议升级 / 开发升级”拆分，并统一收口在治理模块的 runtime-upgrade 目录。
+node 端只有“协议升级”一个 runtime 升级入口，统一收口在治理模块的 runtime-upgrade 目录。
+开发者直升（`developer_direct_upgrade`）属于开发者动作，只在公民控制台实现，node 端不提供任何入口。
 
 - 后端实现：
-  - `node/src/governance/runtime_upgrade/commands.rs`：Tauri 命令入口，保留 `build_propose_upgrade_request`、`submit_propose_upgrade`、`build_developer_upgrade_request`、`submit_developer_upgrade` 命令名。
-  - `node/src/governance/runtime_upgrade/call_data.rs`：RuntimeUpgrade pallet call_data 编码，只承载 `propose_runtime_upgrade` 与 `developer_direct_upgrade`。
+  - `node/src/governance/runtime_upgrade/commands.rs`：Tauri 命令入口，只有 `get_pow_difficulty_params`、`build_propose_upgrade_request`、`submit_propose_upgrade`。
+  - `node/src/governance/runtime_upgrade/call_data.rs`：RuntimeUpgrade pallet call_data 编码，只承载 `propose_runtime_upgrade`。
   - `node/src/governance/runtime_upgrade/signing.rs`：Runtime WASM 大 payload 的 QR 签名请求构建，通用签名校验仍复用 `node/src/governance/signing.rs`。
-  - 开发升级命令从治理概览读取国家储委会 `cid_number`，显式编码固定委员岗位并构造 `developer_direct_upgrade(actor_cid_number, actor_role_code=COMMITTEE_MEMBER, code, pow_params)`；签名公钥还必须属于该 CID 的已激活 `admins`，最终由 runtime 校验完整三项授权。
 - 前端实现：
   - `node/frontend/governance/runtime-upgrade/ProtocolUpgradeProposalPage.tsx`：国家储委会详情页“协议升级”，提交运行期协议升级提案，进入联合投票。
-  - `node/frontend/governance/runtime-upgrade/DeveloperUpgradePage.tsx`：国家储委会详情页“开发升级”，只使用当前国家储委会已激活管理员发起开发期直升。
   - `node/frontend/governance/runtime-upgrade/api.ts`：协议升级专用 Tauri API；`governance/api.ts` 不再承载协议升级创建/提交接口。
 - 入口约束：
-  - 国家储委会详情页使用“协议升级”入口。
-  - “开发升级”是独立按钮，放在“协议升级”后，不与协议升级合并。
-  - 设置页不再保留任何开发升级入口或 `settings/developer-upgrade` 代码。
+  - 国家储委会详情页只有“协议升级”一个 runtime 升级入口。
+  - node 端不得再出现开发升级/开发者升级按钮、页面、Tauri 命令或 call_data 编码。
+  - 链端 `runtime_upgrade::developer_direct_upgrade` 与 QR 登记必须保留，供公民控制台冷签使用。
 - 当前边界：
-  - 第 1 步只调整 node 前后端入口、目录收口和 node 侧开发升级管理员校验。
   - node 端协议升级业务调用显式携带国家储委会 `actor_cid_number`，并提交 `reason + code`；不获取人口快照、不透传联合签名、不保存投票状态。
 
 ## 8. 桌面端更新边界
@@ -384,7 +391,7 @@ node、NodeGuard、OnChina 真实投影/API/页面验证，但不是冻结值；
 - 固定入口：`https://onchina.local:8964`。
 - 设置页入口：`frontend/settings/OnChinaPlatformSection.tsx` 位于“全节点模式”之后，左侧显示“链上中国平台”，右侧显示 `未开启` / `启动中` / `已开启` / `启动失败` 状态标签，状态标签右侧显示固定入口，最右侧按钮按进程状态显示“启动”或“关闭”。
 - 二次确认：点击“启动”或“关闭”只打开确认弹窗；确认后调用 `start_onchina_platform` 或 `stop_onchina_platform`，不自动打开浏览器。
-- 后端命令：`src/settings/onchina_platform.rs` 提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform`，只返回本进程管理的 OnChina 子进程状态、`/api/v1/health` 真实健康结果和固定入口；只有健康接口返回 `UP` 才显示 `已开启`。进程已存在但健康检查暂未通过时只显示 `启动中`，不附带红色失败详情；启动动作最终失败或超时才显示 `启动失败` 和失败原因。
+- 后端命令：`src/settings/onchina_platform.rs` 提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform`，只返回本进程管理的 OnChina 子进程状态、`/api/health` 真实健康结果和固定入口；只有健康接口返回 `UP` 才显示 `已开启`。进程已存在但健康检查暂未通过时只显示 `启动中`，不附带红色失败详情；启动动作最终失败或超时才显示 `启动失败` 和失败原因。
 - 子进程管理：`src/onchina_proc.rs` 负责解析随包或开发期 `onchina` 二进制、注入链 RPC / 内嵌 PG / TLS / 前端资源环境变量、启动进程、清理已退出句柄和 App 退出时停掉已启动子进程。启动前会清理上一轮异常退出后遗留的旧 OnChina 孤儿进程和 8964 端口监听，避免旧服务占口或持有陈旧数据库连接池；如果 8964 被非 OnChina 进程占用则 fail-closed 并返回明确错误。
 - 默认行为：`src/desktop/mod.rs` 仍自动启动区块链节点和同步守护，但不会自动启动链上中国平台，避免只挖矿节点承担 PostgreSQL、HTTPS 管理后台和浏览器业务入口。
 - HTTPS 入口：OnChina TLS 证书目标主机为 `onchina.local`；旧 `localhost/127.0.0.1` 证书会在下次启动时按主机标记重新生成。
@@ -442,7 +449,7 @@ CitizenApp 私密聊天只保留 Cloudflare 瞬时转发、WebRTC 设备附件�
 | `src/settings/onchina_platform.rs` | 137 | 设置页链上中国平台后端，返回固定 HTTPS 入口并在用户确认后手动启动 / 停止 OnChina 子进程；启动中不显示失败详情，启动失败才返回错误状态 |
 | `src/onchina_proc.rs` | 359 | 节点桌面端 OnChina 子进程管理，负责手动启动、运行状态检查、环境变量注入、退出清理，并在启动前清理旧 OnChina 孤儿进程 / 8964 监听 |
 | `src/governance/runtime_upgrade/` | 5 files | 协议升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
-| `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
+| `frontend/governance/runtime-upgrade/` | 3 files | 协议升级 node 前端，含协议升级页面和专用 API |
 | `frontend/settings/node-mode/NodeModeSection.tsx` | 85 | 设置页全节点模式选择器，只展示归档/普通两种链数据模式，并将普通全节点置灰禁用 |
 | `frontend/settings/OnChinaPlatformSection.tsx` | 69 | 设置页链上中国平台启动行，展示状态标签、固定 HTTPS 入口、启动 / 关闭按钮和二次确认弹窗 |
 | `src/desktop/node_runner.rs` | 204 | 桌面端进程内节点启动器，含后台线程活跃标记和失败线程 join |

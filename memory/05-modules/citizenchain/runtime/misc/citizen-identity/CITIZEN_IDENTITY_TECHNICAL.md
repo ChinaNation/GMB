@@ -21,7 +21,8 @@
 
 ## 主要存储
 
-正式创世目标和当前代码统一为 `StorageVersion = 0`。正式链尚未创世，不包含开发期迁移、旧字段双读或兼容分支，后续结构调整也不得递增版本。
+正式创世目标和当前代码统一为 `StorageVersion = 0`。不包含旧字段双读或兼容分支。
+链已全网部署，新增链上存储走 runtime 升级 + 一次性迁移回填，不重新创世。
 
 - `VotingIdentityByCid`：永久公民 CID 到投票身份；身份更新只覆盖同一 CID 下的当前版本。
 - `CandidateIdentityByCid`：永久公民 CID 到参选身份；更换当前签名钱包不得搬迁资料。
@@ -29,6 +30,13 @@
 - `CidByAccountId`：当前签名钱包账户到永久公民 CID；必须与 `AccountIdByCid` 严格闭环。
 - `BindingRevisionByCid`：CID 钱包绑定的单调版本；首次绑定写 `1`，每次成功换绑精确加一，
   与创世哈希、预期旧/新账户和授权过期时间共同阻断跨链、竞态与重放。
+- `CidCount`：当前有效（`Active`）CID 数量，恒等于 `CidRegistry` 里 Active 记录数。
+  占号成功 +1、吊销 −1；`CidRegistry` 保留墓碑，所以直接数键会把已吊销号一起算进去。
+  写入点只有三处，全在本模块内：创世 `genesis_build` 按 `initial_cid_bindings` 条数初始化、
+  `do_occupy_cid` 的新登记分支 +1（幂等重入分支不写库也不计数）、`tombstone_cid_record`
+  真正把 Active 改成墓碑时 −1（helper 契约要求首个写入后不可失败，故用 `saturating_sub`）。
+  两条吊销入口（`revoke_cid`、`revoke_identity` 联动）共用同一个 helper，减一处即全覆盖。
+  区块链软件挖矿页「在线节点」卡片的「轻节点」一格直接读它，定长单值，无需前缀全表扫描。
 - `CountryVotingCount` / `ProvinceVotingCount` / `CityVotingCount` / `TownVotingCount`：按作用域维护就绪日期内状态正常且护照有效的投票人口。
 - `PopulationReadyDate`：四级人口已经完整推进至的 UTC+8 日期；`0` 只表示全新创世尚未完成首次 `on_idle` 初始化。
 - `PopulationTransitionCountByDate` / `PopulationTransitionCursorByDate` / `PopulationTransitions`：
@@ -51,8 +59,9 @@
   同时提交带创世、CID、revision=0 和过期时间的账户控制授权。
 - `occupy_cid`（call 6）：注册局代办首次绑定；匿名 CID 可由任一在册 CREG/FRG 办理，
   civic CID 按投票身份居住地限制为同市 CREG 或对应省 FRG。
-- `admin_rebind_cid_account_id`（call 7）：注册局代办换绑；不要求旧钱包签名，新账户必须
-  对带创世、CID、预期旧账户、预期 revision 和过期时间的完整授权签名。
+- `admin_rebind_cid_account_id`（call 7）：注册局代办换绑；无论当前钱包是否可用，都不
+  要求当前账户签名，也不创建换绑投票。注册局管理员按岗位权限和实名公民居住辖区鉴权，
+  新账户必须对带创世、CID、预期当前账户、预期 revision 和过期时间的完整授权签名。
 - `self_rebind_cid_account_id`（call 9）：公民 App 在线自助换绑；新账户为 extrinsic
   origin，旧账户授权同样绑定完整防重放字段。
 
@@ -65,6 +74,8 @@
 
 - `citizen_subject(account)`：返回经过 CID↔钱包双向绑定、正常身份状态和 Active CID 校验的完整 `CitizenSubject`；本接口已落地，消费端不得从裸钱包自行拼接主体。
 - `voting_subject(account, scope)` 和 `candidate_subject(account, scope)` 分别返回当前有效的完整投票/竞选公民主体；不再只返回 bool。
+- 投票、竞选身份资料和资格始终归 CID。换绑成功后，新绑定 `account_id` 立即成为上述读取
+  接口唯一有效签名账户，旧账户返回 `None`；管理员岗位票据仍按规范账户防重，不新增一票。
 - 投票资格：由当前钱包解析永久 CID，再按双向绑定、状态、护照日期和作用域解析完整公民主体。
 - 参选资格：在完整投票资格基础上校验参选身份必填字段并返回完整公民主体。
 - `candidate_age(account)`：读取参选身份 `birth_date` 并按链上当前日期（UTC+8）实时计算周岁；无参选身份、时间戳未初始化或出生日期落在未来返回 `None`（fail-closed）。任何调用方可据链上公开的出生日期计算竞选公民年龄。
@@ -109,6 +120,16 @@
 - CID 必须持续是合法 `CTZN` 家族号，登记/吊销高度不得指向未来。
 
 因此 runtime 可以继续维护正常业务校验，但不能通过 `setCode` 恢复已吊销 CID 或复用号码。
+
+节点守卫按存储前缀过滤区块 delta，`CidCount` 不落在任何已知前缀内，守卫既不会因它报错，
+也不会校验它；`CidCount` 的正确性由 runtime 执行本身保证（同一 runtime 必得同一结果）。
+
+## 迁移
+
+- `migrations::InitCidCount`：随 `CidCount` 引入的一次性回填，遍历 `CidRegistry` 只数 `Active`
+  写入 `CidCount`，墓碑不计。挂在 `runtime/src/lib.rs` 的 `Migrations` 元组里，由 Executive
+  在升级那个区块执行一次，不进常规出块路径。不回填的话 `ValueQuery` 会让计数从 0 起步，
+  升级前已占号的 CID 全部漏计。
 
 ## 验收
 

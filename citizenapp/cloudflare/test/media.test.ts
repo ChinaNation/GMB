@@ -47,7 +47,7 @@ describe('media read channel', () => {
     const env = fakeEnv({
       [key]: { body: 'IMG', contentType: 'image/webp' }
     });
-    const response = await call(env, `/v1/square/media/${key}`);
+    const response = await call(env, `/square/media/${key}`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('image/webp');
@@ -58,13 +58,13 @@ describe('media read channel', () => {
   it('404s a missing object', async () => {
     const key = 'profile/a/avatar';
     await expect(
-      call(fakeEnv({}), `/v1/square/media/${key}`)
+      call(fakeEnv({}), `/square/media/${key}`)
     ).rejects.toMatchObject({ status: 404 });
   });
 
   it('rejects keys outside the profile prefix', async () => {
     await expect(
-      call(fakeEnv({}), '/v1/square/media/secret/keys.txt')
+      call(fakeEnv({}), '/square/media/secret/keys.txt')
     ).rejects.toMatchObject({ code: 'invalid_media_key' });
   });
 });

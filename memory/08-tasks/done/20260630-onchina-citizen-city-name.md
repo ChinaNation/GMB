@@ -35,6 +35,6 @@
 - `cargo test -p onchina`，80 个测试通过。
 - `npm --prefix citizenchain/onchina/frontend run build`。
 - `git diff --check -- citizenchain/onchina memory/01-architecture/onchina memory/05-modules/citizenchain/onchina memory/07-ai/unified-naming.md memory/08-tasks/done/20260630-onchina-citizen-city-name.md`。
-- 临时 PostgreSQL + OnChina 本地服务启动成功，`GET /api/v1/health` 返回 `status=UP`。
+- 临时 PostgreSQL + OnChina 本地服务启动成功，`GET /api/health` 返回 `status=UP`。
 - 临时库 `citizens` 表确认存在 `citizen_family_name`、`citizen_given_name`、居住省市镇字段，且不存在旧姓名单字段。
 - 残留搜索确认旧姓名字段只出现在数据库启动清理逻辑中：删除旧列、校验旧列不存在。

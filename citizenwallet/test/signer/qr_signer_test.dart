@@ -70,7 +70,7 @@ void main() {
     Map<String, dynamic> validEnvelope() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       return {
-        'p': QrProtocols.v1,
+        'p': QrProtocols.qrV1,
         'k': QrKind.signRequest.code,
         'i': 'test-valid-req-id-0001',
         'e': now + 90,
@@ -245,7 +245,7 @@ void main() {
       expect(response.body.signatureHex, '0x${'aa' * 64}');
 
       final json = jsonDecode(response.toRawJson()) as Map<String, dynamic>;
-      expect(json['p'], QrProtocols.v1);
+      expect(json['p'], QrProtocols.qrV1);
       expect(json['k'], QrKind.signResponse.code);
       expect(json['b']['u'], isA<String>());
       expect(json['b']['s'], isA<String>());

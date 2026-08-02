@@ -106,7 +106,7 @@ class SquarePostStore
   const SquarePostStore();
 
   static const String publishedState = 'published';
-  static const String manifestSchema = 'citizenapp.square.post.v1';
+  static const String manifestSchema = 'citizenapp.square.post';
   static const String _syncCheckpointKeyPrefix =
       'square.local_posts.sync_checkpoint.';
 

@@ -134,7 +134,12 @@ if app:
                     errors.append("CitizenApp checkpoint 块 0 stateRoot 与 chainspec 不一致")
 
             if public_manifest:
-                if public_manifest.get("schema_version") != 2 or public_manifest.get("chain_id") != "citizenchain":
+                expected_public_manifest_fields = {
+                    "chain_id", "snapshot_block_number", "snapshot_block_hash",
+                    "genesis_hash", "state_root", "chainspec_hash",
+                    "public_institution_root", "version", "shard_hashes", "provinces",
+                }
+                if public_manifest.get("chain_id") != "citizenchain" or set(public_manifest) != expected_public_manifest_fields:
                     errors.append("公权机构缓存 manifest 身份无效")
                 if public_manifest.get("chainspec_hash") != sha256_file(app_path):
                     errors.append("公权机构缓存 chainspec_hash 与 CitizenApp chainspec 不一致")

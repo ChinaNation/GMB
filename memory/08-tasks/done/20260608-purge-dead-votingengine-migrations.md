@@ -24,7 +24,7 @@
 - internal-vote/src/benchmarks.rs 收敛为空骨架(原仅 migration benchmark),对齐 votingengine 约定
 - joint-vote/src/benchmarks.rs 同上
 - joint-vote/src/tests/ 整目录删除(仅为 migration 测试提供 mock,无自有 #[test]);移除 lib.rs `mod tests;`
-- internal-vote/src/tests/dual_id.rs 删 `migration_v1_backfills_*` 单个测试(保留其余 5 个)
+- internal-vote/src/tests/dual_id.rs 删除历史迁移回填测试（保留其余 5 个）
 
 移除模块声明:
 - internal-vote/lib.rs `pub mod migrations;`

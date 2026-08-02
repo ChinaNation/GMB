@@ -38,7 +38,7 @@ void main() {
   test('密文只提交瞬时转发接口', () async {
     final envelope = _sampleEnvelope();
     final transport = _transport((request) async {
-      expect(request.url.path, '/v1/chat/envelopes');
+      expect(request.url.path, '/chat/envelopes');
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       expect(body.keys, {
         'envelope_id',
@@ -78,7 +78,7 @@ void main() {
 
   test('设备登记只提交公钥与无内容推送 token', () async {
     final transport = _transport((request) async {
-      expect(request.url.path, '/v1/chat/devices/register');
+      expect(request.url.path, '/chat/devices/register');
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       expect(body['push_provider'], 'fcm');
       expect(body['push_token'], 'fcm-token-1234567890');
@@ -99,7 +99,7 @@ void main() {
 
   test('KeyPackage 消费响应不保留消费状态', () async {
     final transport = _transport((request) async {
-      expect(request.url.path, '/v1/chat/keypackages/consume');
+      expect(request.url.path, '/chat/keypackages/consume');
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       // 领取按目标身份主键 CID 号寻址，不带领取方账户。
       expect(body['cid_number'], _bobCidNumber);
@@ -132,7 +132,7 @@ void main() {
     );
 
     expect(sent, isTrue);
-    expect(paths, ['/v1/chat/signals']);
+    expect(paths, ['/chat/signals']);
   });
 }
 

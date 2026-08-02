@@ -4,7 +4,7 @@ use crate::governance::signing::{
     fetch_runtime_version, generate_request_id, now_secs, payload_b64, public_key_b64,
     remember_chain_sign_request_session, sha256_hash, signer_account_id_from_public_key,
     QrSignRequest, SignRequestBody, VoteSignRequestResult, DEFAULT_TTL_SECS,
-    IMMORTAL_SIGN_BLOCK_NUMBER, PROTOCOL_VERSION, QR_KIND_SIGN_REQUEST,
+    IMMORTAL_SIGN_BLOCK_NUMBER, QR_KIND_SIGN_REQUEST, QR_V1,
 };
 
 fn normalize_signer_public_key(signer_public_key: &str) -> Result<(String, Vec<u8>), String> {
@@ -40,7 +40,7 @@ fn build_hashed_payload_request(
     let now = now_secs()?;
     let expires_at = now + DEFAULT_TTL_SECS;
     let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
+        proto: QR_V1.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
         expires_at,
@@ -72,26 +72,6 @@ fn build_hashed_payload_request(
         sign_nonce: nonce,
         sign_block_number: IMMORTAL_SIGN_BLOCK_NUMBER,
     })
-}
-
-/// 构建开发期直接升级签名请求。
-pub(crate) fn build_developer_upgrade_sign_request(
-    signer_public_key: &str,
-    actor_cid_number: &str,
-    wasm_path: &str,
-    pow_params: pow_difficulty::PowDifficultyParams,
-) -> Result<VoteSignRequestResult, String> {
-    let (signer_public_key_clean, signer_public_key_bytes) =
-        normalize_signer_public_key(signer_public_key)?;
-    let (wasm_code, _wasm_size_mb) = call_data::read_wasm(wasm_path)?;
-    let call_data = call_data::developer_direct_upgrade(actor_cid_number, &wasm_code, pow_params)?;
-
-    build_hashed_payload_request(
-        "devupg",
-        &signer_public_key_clean,
-        &signer_public_key_bytes,
-        &call_data,
-    )
 }
 
 /// 构建运行期协议升级提案签名请求。

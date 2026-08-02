@@ -37,7 +37,7 @@ ADR-040 已把 `account_id` 与 sr25519 32 字节公钥的跨端文本编码固�
 - 直接落地：`citizenapp/cloudflare/src/auth/device_subkey.ts`（`assertP256PublicKeyHex` require 0x + strip；新增 `normalizeP256SignatureHex`）、`auth/service.ts`、`security/request_guard.ts`、`chat/service.ts` 边界规范化；`citizenapp/lib/8964/services/device_subkey_registrar.dart` 注册 wire 送 `0x` 公钥。
 - 验收：cloudflare `vitest run` 29 文件 175 测试全绿；CitizenApp 设备绑定 golden、device_subkey、square account action 测试全绿，golden 未变。
 - Chat MLS 设备公钥经核查后**明确排除**（见「决策 / 不纳入」），不并入 `0x`。
-- 次生健壮性收口（同批完成）：CitizenApp `SquareApiClient.ensureSession` 增加 in-flight 去重（同账户并发共享一次握手）；Worker `guardRequest` 把 `/v1/square/auth/device/register` 拆到独立 `authreg:{ip}` 限流桶，不再与挑战/会话握手挤占同一 `auth:{ip}` 配额。
+- 次生健壮性收口（同批完成）：CitizenApp `SquareApiClient.ensureSession` 增加 in-flight 去重（同账户并发共享一次握手）；Worker `guardRequest` 把 `/square/auth/device/register` 拆到独立 `authreg:{ip}` 限流桶，不再与挑战/会话握手挤占同一 `auth:{ip}` 配额。
 
 ## 备选方案
 

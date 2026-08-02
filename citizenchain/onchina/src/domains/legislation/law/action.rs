@@ -2,7 +2,7 @@
 //!
 //! 本模块只负责把已经完成权限与辖区前置校验的 `ChainCall` 转为统一链签名会话：
 //! OnChina 展示请求二维码，CitizenWallet 只签名一次并显示响应二维码，OnChina 回扫后
-//! 统一通过 `/api/v1/admin/chain/submit` 验签、dry-run、提交并等待进块。
+//! 统一通过 `/api/admin/chain/submit` 验签、dry-run、提交并等待进块。
 
 use super::model::ProposeLawInput;
 use super::service::{build_propose_law_call, build_representative_vote_call};

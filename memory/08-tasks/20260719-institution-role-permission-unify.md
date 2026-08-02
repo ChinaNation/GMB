@@ -100,7 +100,7 @@
 - runtime 共享类型已落在 `entity-primitives`，`VotePlan`、`VotingEngineKind` 与构造期主体组合校验已落在共享 `votingengine` crate；未写入现有提案 storage，未改变 pallet/call/storage index。
 - `RolePermissionOperation`、`AuthorizationSubject`、`VotingEngineKind` 的 discriminant 和所有结构字段序均由 Rust 单测锁定。
 - Node 使用共享 Rust 类型读取统一金标；OnChina、CitizenApp、CitizenWallet 对同一金标严格解码。CitizenApp 与 CitizenWallet 拒绝非法主体组合和尾随字段。
-- 唯一跨端金标为受保护测试资产 `memory/06-quality/fixtures/institution_role_permission_v1.json`，不建立端侧私有协议副本。
+- 唯一跨端金标为受保护测试资产 `memory/06-quality/fixtures/institution_role_permission.json`，不建立端侧私有协议副本。
 - 验收通过：`entity-primitives` 6 项、`votingengine` 4 项、Node fixture 1 项、OnChina fixture 1 项；两个共享 crate 的 `no_std` 检查通过；CitizenApp 6 项、CitizenWallet 97 项目标测试全部通过，目标 Dart 文件 analyze 无问题。
 - 本步骤目标 crate 在仅屏蔽既存 lint（`too_many_arguments`、`unnecessary_lazy_evaluations`、`manual_is_multiple_of`、`type_complexity`）后通过 `clippy -D warnings`；不屏蔽时还会被既存 `primitives` 数字分组等 45 项和上述既存 lint 拦截，本步骤未越界修改这些旧文件。
 - `citizenchain/Cargo.lock` 仅为 `votingengine` 增加已确认的 `entity-primitives` 依赖；Square Post 的既有未提交依赖改动保持不动。
@@ -297,5 +297,5 @@
 - 全端回归通过：primitives 75 项、genesis 11 项、runtime 46 项、五个投票引擎 crate 158 项、QR registry 6 项、Node 285 项、OnChina 134 项、CitizenApp 747 项（5 项条件跳过）、CitizenWallet 181 项，全部零失败。OnChina 清除了无引用的测试人口常量，复验不再产生该 warning。
 - 编译与静态检查通过：目标 runtime `no_std`、`runtime-benchmarks`、`try-runtime`，OnChina 普通二进制，OnChina/Node 前端生产构建，CitizenWeb 生产构建和 ESLint，CitizenApp/CitizenWallet `flutter analyze`，目标 `cargo fmt --check` 与 `git diff --check`。本步没有 dispatch、存储读写或权重变化，无需重算权重。
 - 当前源码以 `WASM_BUILD_FROM_SOURCE=1` 重建 release Node，并以 `citizenchain-fresh --tmp --rpc-port 19944` 启动全新隔离链；RPC 返回 `peers=0`、`isSyncing=false`、runtime `specVersion=2`。block#0/genesis hash 为 `0xb22750e32291c0741119bb640de71e17127dc83095d7c83b09704c7f84d27b73`，state root 为 `0x9a5599dd9716a1e891bb6270cf6a33835aa82085a9cfc562f993a653e7745f27`。
-- 使用当前源码显式构建的 OnChina 普通二进制、仓库外临时 PostgreSQL 和上述 fresh 链完成真实服务验收：链投影精确为 49,593 个公权机构和 99,231 个协议账户；启动抽样精确覆盖 32 个派生公权机构、1 个公权常量机构和公民链技术发展基金会，共 `sampled=34`；真实首页与 `/api/v1/health` 均返回 HTTP 200。首次误用旧普通二进制得到的 `sampled=33` 未计入验收，已重建后二次通过。
+- 使用当前源码显式构建的 OnChina 普通二进制、仓库外临时 PostgreSQL 和上述 fresh 链完成真实服务验收：链投影精确为 49,593 个公权机构和 99,231 个协议账户；启动抽样精确覆盖 32 个派生公权机构、1 个公权常量机构和公民链技术发展基金会，共 `sampled=34`；真实首页与 `/api/health` 均返回 HTTP 200。首次误用旧普通二进制得到的 `sampled=33` 未计入验收，已重建后二次通过。
 - 两次验收节点、OnChina、内嵌 PostgreSQL 均已正常停止；`/tmp/gmb-onchina-step8.4gbZ4d` 与 `/tmp/gmb-onchina-step8-final.ts9KC0` 临时数据已删除。未修改正式 chainspec，未部署，未提交或推送 Git。

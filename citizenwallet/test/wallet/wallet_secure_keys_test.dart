@@ -10,9 +10,9 @@ void main() {
   group('WalletSecureKeys', () {
     test('masterSeedHexV1 / masterMnemonicV1 键格式', () {
       expect(WalletSecureKeys.masterSeedHexV1(masterA),
-          'wallet.master.$masterA.seed_hex.v1');
+          'wallet.master.$masterA.seed_hex');
       expect(WalletSecureKeys.masterMnemonicV1(masterA),
-          'wallet.master.$masterA.mnemonic.v1');
+          'wallet.master.$masterA.mnemonic');
     });
 
     test('不同 masterId 生成不同键', () {
@@ -32,7 +32,8 @@ void main() {
     });
 
     test('拒绝非规范 masterId', () {
-      expect(() => WalletSecureKeys.masterSeedHexV1('nope'), throwsArgumentError);
+      expect(
+          () => WalletSecureKeys.masterSeedHexV1('nope'), throwsArgumentError);
       expect(
           () => WalletSecureKeys.masterSeedHexV1('0xABC'), throwsArgumentError);
       expect(

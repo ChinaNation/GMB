@@ -27,7 +27,7 @@ struct AppVotersCountOutput {
     account_id: String,
 }
 
-/// `GET /api/v1/app/voters/count?account_id=0x...`
+/// `GET /api/app/voters/count?account_id=0x...`
 pub(crate) async fn app_voters_count(
     State(state): State<AppState>,
     headers: HeaderMap,

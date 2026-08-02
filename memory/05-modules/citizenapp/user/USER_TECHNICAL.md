@@ -57,7 +57,7 @@
 
 设计说明：
 
-- 用户修改公开昵称只走 `PUT /v1/square/profile`，成功后写
+- 用户修改公开昵称只走 `PUT /square/profile`，成功后写
   `CitizenProfileCache`；不得调用 `WalletManager.renameWallet`。
 - 钱包改名只更新 Isar `WalletProfileEntity.walletName`；不得创建资料会话、请求
   Cloudflare 或触发广场身份刷新。
@@ -107,7 +107,7 @@
 
 ### 4.1 用户资料
 
-存储：`SharedPreferences`，键 `user.profile.state.v2`
+存储：`SharedPreferences`，键 `user.profile.state`
 
 内容：JSON 对象，只保存 `avatar_path`、`background_path`。账户、SS58 和昵称不在
 `UserProfileState` 重复持久化；公开昵称从 `CitizenProfileCache` / 资料接口读取，
@@ -128,13 +128,18 @@
 Cloudflare D1 `square_contacts` 只保存端侧 AES-256-GCM 密文、HMAC `contact_id`、
 nonce、MAC 和更新时间；Worker 不接收联系人 CID、账户、SS58 或私人备注明文。
 `contact_id` 固定为索引钥对目标 CID 的 HMAC-SHA256。AES-GCM 载荷包含属主 CID、
-联系人四字段与时间戳，AAD 包含属主 CID；通讯录加密和索引密钥由 CID 当前链上绑定
-钱包账户的 child mini-secret 直接派生，用途域为
+联系人四字段与时间戳，AAD 包含属主 CID；通讯录加密和索引密钥在真实数据访问确认缺钥时
+鉴权一次，由 CID 当前链上绑定钱包账户 child 派生并交给设备数据钥硬件封装；已有钥时日常
+通讯录只静默解封，用途域为
 `citizenapp.account-data/contacts-cloud`。换绑 finalized 前，目标密文只在客户端本地
 暂存；finalized 后由新账户当前会话上传、回读验证，再删除此前云端版本。新账户不能直接
 解密换绑前当前账户加密的历史私有数据，只有同次换绑取得当前账户签名时才执行该交接；
 Worker 不持有任何用户私有数据密钥，也不接受未生效账户预写。本地与云端用途子钥按操作
-临时派生并在 `finally` 清零，不在服务对象、Isar、Secure Storage 或 Worker 中长期缓存。
+静默解封并在 `finally` 清零，不在服务对象、Isar 或 Worker 中长期缓存；Secure Storage
+只允许保存不可脱离本机硬件解封的用途钥密文 blob，不得保存明文用途钥或账户 child。
+本地数据钥缺失时只调用 `WalletManager.ensureDeviceDataKeysForBinding`；该流程与广场/Chat
+登录所需的 P-256 `registerDeviceSubkeyForBinding` 完全独立。设备登记或 Worker 失败不得
+删除通讯录用途钥密文，通讯录数据钥生成也不得触发设备登记、Turnstile 或远端 API。
 
 废弃的账户分区缓存、待办、同步态和密钥名只清理不读取；废弃联系人 JSON 与废弃格式
 密文不迁移、不兼容。创世前 D1 只按当前单一 schema 重建，生产执行必须另行人工审核。

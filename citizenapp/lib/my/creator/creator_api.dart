@@ -54,9 +54,9 @@ class CreatorApiException implements Exception {
 /// 生产实现：直连 Cloudflare Worker，复用会话与设备级请求认证。
 ///
 /// 依赖 BFF 端点（另立 Cloudflare 卡实现）：
-///   GET  /v1/square/creator/plan
-///   GET  /v1/square/creator/overview
-///   POST /v1/square/creator/plan             （校验 finalized 链状态后覆盖展示镜像）
+///   GET  /square/creator/plan
+///   GET  /square/creator/overview
+///   POST /square/creator/plan             （校验 finalized 链状态后覆盖展示镜像）
 class CreatorApiHttp implements CreatorApi {
   CreatorApiHttp({String? baseUrl, http.Client? httpClient})
       : baseUrl = SquareApiConfig.normalizeBaseUrl(
@@ -69,7 +69,7 @@ class CreatorApiHttp implements CreatorApi {
 
   @override
   Future<CreatorPlan?> fetchMyPlan(SquareSession session) async {
-    final data = await _getJson('/v1/square/creator/plan', session);
+    final data = await _getJson('/square/creator/plan', session);
     final plan = data['plan'];
     if (plan is! Map<String, dynamic>) return null;
     return CreatorPlan.fromJson(plan);
@@ -77,7 +77,7 @@ class CreatorApiHttp implements CreatorApi {
 
   @override
   Future<CreatorOverview> fetchOverview(SquareSession session) async {
-    final data = await _getJson('/v1/square/creator/overview', session);
+    final data = await _getJson('/square/creator/overview', session);
     final overview = data['overview'];
     if (overview is! Map<String, dynamic>) return CreatorOverview.zero;
     return CreatorOverview.fromJson(overview);
@@ -93,7 +93,7 @@ class CreatorApiHttp implements CreatorApi {
   }) async {
     final tiersJson = tiers.map((tier) => tier.toJson()).toList();
     final saved = await _postFinalizedMirrorJson(
-      '/v1/square/creator/plan',
+      '/square/creator/plan',
       {
         'tx_hash': txHash,
         'block_hash': blockHashHex,
@@ -113,7 +113,7 @@ class CreatorApiHttp implements CreatorApi {
   Future<CreatorPlan?> fetchPlanOf(
       SquareSession session, String creatorCidNumber) async {
     final data = await _getJson(
-      '/v1/square/creator/plan/${Uri.encodeComponent(creatorCidNumber)}',
+      '/square/creator/plan/${Uri.encodeComponent(creatorCidNumber)}',
       session,
     );
     final plan = data['plan'];
@@ -133,7 +133,7 @@ class CreatorApiHttp implements CreatorApi {
     String? billingPeriod,
   }) async {
     await _postFinalizedMirrorJson(
-      '/v1/square/creator/subscription/confirm',
+      '/square/creator/subscription/confirm',
       {
         'tx_hash': txHash,
         'block_hash': blockHashHex,

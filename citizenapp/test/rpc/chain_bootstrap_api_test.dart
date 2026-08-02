@@ -40,7 +40,7 @@ void main() {
     final api = ChainBootstrapApi(
       baseUrl: 'http://127.0.0.1:8787',
       httpClient: MockClient((request) async {
-        expect(request.url.path, '/v1/chain/bootstrap');
+        expect(request.url.path, '/chain/bootstrap');
         return http.Response(
           jsonEncode(_manifest()),
           200,
@@ -91,10 +91,11 @@ void main() {
     );
   });
 
-  test('ChainBootstrapApi 拒绝 v1 和任何远端 checkpoint 字段', () {
-    final v1 = _manifest()..['schema'] = 'citizenapp.chain.bootstrap.v1';
+  test('ChainBootstrapApi 拒绝非法 schema 和任何远端 checkpoint 字段', () {
+    final invalidManifest = _manifest()
+      ..['schema'] = 'citizenapp.chain.bootstrap.invalid';
     expect(
-      () => ChainBootstrapManifest.fromJson(v1),
+      () => ChainBootstrapManifest.fromJson(invalidManifest),
       throwsA(isA<ChainBootstrapApiException>()),
     );
 
@@ -114,20 +115,20 @@ void main() {
     final enabled = _manifest();
     (enabled['services'] as Map<String, dynamic>)['signed_extrinsic_relay'] = {
       'enabled': true,
-      'path': '/v1/chain/extrinsics/relay',
+      'path': '/chain/extrinsics/relay',
     };
 
     final parsed = ChainBootstrapManifest.fromJson(enabled);
     expect(parsed.services.signedExtrinsicRelayEnabled, isTrue);
     expect(
       parsed.services.signedExtrinsicRelayPath,
-      '/v1/chain/extrinsics/relay',
+      '/chain/extrinsics/relay',
     );
 
     final badPath = _manifest();
     (badPath['services'] as Map<String, dynamic>)['signed_extrinsic_relay'] = {
       'enabled': true,
-      'path': '/v1/chain/rpc',
+      'path': '/chain/rpc',
     };
 
     expect(
@@ -178,7 +179,7 @@ void main() {
 
 Map<String, dynamic> _manifest() => {
       'ok': true,
-      'schema': 'citizenapp.chain.bootstrap.v2',
+      'schema': 'citizenapp.chain.bootstrap',
       'generated_at': 1800000000000,
       'cache_ttl_seconds': 300,
       'chain': {
@@ -209,9 +210,9 @@ Map<String, dynamic> _manifest() => {
         'min_peer_count_hint': 1,
       },
       'services': {
-        'square_base_url': 'https://api.onchina.org/v1/square',
-        'chat_base_url': 'https://api.onchina.org/v1/chat',
-        'media_base_url': 'https://api.onchina.org/v1/square/media',
+        'square_base_url': 'https://api.onchina.org/square',
+        'chat_base_url': 'https://api.onchina.org/chat',
+        'media_base_url': 'https://api.onchina.org/square/media',
         'signed_extrinsic_relay': {
           'enabled': false,
           'path': null,

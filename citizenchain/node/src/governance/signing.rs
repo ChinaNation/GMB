@@ -17,7 +17,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-pub(crate) const PROTOCOL_VERSION: &str = "QR_V1";
+pub(crate) const QR_V1: &str = "QR_V1";
 pub(crate) const DEFAULT_TTL_SECS: u64 = 90;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 /// 提交后给本地交易池更新 next-index 的短暂观察延迟，与 PoW 出块时间无关。
@@ -320,7 +320,7 @@ pub fn build_vote_sign_request(
     let now = now_secs()?;
     let expires_at = now + DEFAULT_TTL_SECS;
     let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
+        proto: QR_V1.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
         expires_at,
@@ -410,7 +410,7 @@ pub fn build_joint_vote_sign_request(
     let now = now_secs()?;
     let expires_at = now + DEFAULT_TTL_SECS;
     let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
+        proto: QR_V1.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
         expires_at,
@@ -495,9 +495,9 @@ pub fn verify_and_submit(
         serde_json::from_str(response_json).map_err(|e| format!("解析签名响应失败: {e}"))?;
 
     // 验证协议版本
-    if response.proto != PROTOCOL_VERSION {
+    if response.proto != QR_V1 {
         return Err(format!(
-            "协议版本不匹配：期望 {PROTOCOL_VERSION}，实际 {}",
+            "协议版本不匹配：期望 {QR_V1}，实际 {}",
             response.proto
         ));
     }
@@ -881,7 +881,7 @@ pub fn build_sign_request_from_call_data(
     let now = now_secs()?;
     let expires_at = now + DEFAULT_TTL_SECS;
     let request = QrSignRequest {
-        proto: PROTOCOL_VERSION.to_string(),
+        proto: QR_V1.to_string(),
         kind: QR_KIND_SIGN_REQUEST,
         id: request_id.clone(),
         expires_at,

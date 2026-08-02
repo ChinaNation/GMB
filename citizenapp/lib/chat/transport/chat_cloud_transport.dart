@@ -48,7 +48,7 @@ class ChatCloudTransport implements ChatTransport {
     required int expiresAtMillis,
     required String nonce,
   }) async {
-    await _postJson('/v1/chat/devices/register', {
+    await _postJson('/chat/devices/register', {
       'device_id': localDeviceId,
       'device_public_key_hex': devicePublicKey,
       'push_provider': pushProvider,
@@ -64,7 +64,7 @@ class ChatCloudTransport implements ChatTransport {
     MlsKeyPackage keyPackage, {
     required String cidNumber,
   }) async {
-    await _postJson('/v1/chat/keypackages', {
+    await _postJson('/chat/keypackages', {
       'cid_number': cidNumber,
       'device_id': keyPackage.deviceId,
       'device_public_key_hex': keyPackage.devicePublicKey,
@@ -82,7 +82,7 @@ class ChatCloudTransport implements ChatTransport {
     int limit = 1,
   }) async {
     final json = await _getJson(
-      '/v1/chat/keypackages/${Uri.encodeComponent(targetCidNumber)}',
+      '/chat/keypackages/${Uri.encodeComponent(targetCidNumber)}',
       queryParameters: {'limit': limit.toString()},
     );
     final items = json['key_packages'];
@@ -100,7 +100,7 @@ class ChatCloudTransport implements ChatTransport {
     required String targetCidNumber,
     required String keyPackageId,
   }) async {
-    final json = await _postJson('/v1/chat/keypackages/consume', {
+    final json = await _postJson('/chat/keypackages/consume', {
       'cid_number': targetCidNumber,
       'key_package_id': keyPackageId,
     });
@@ -116,7 +116,7 @@ class ChatCloudTransport implements ChatTransport {
     String? recipientDeviceId,
     required Map<String, dynamic> signal,
   }) async {
-    final json = await _postJson('/v1/chat/signals', {
+    final json = await _postJson('/chat/signals', {
       'sender_device_id': localDeviceId,
       'recipient_cid_number': recipientCidNumber,
       'recipient_device_id': recipientDeviceId ?? '',
@@ -129,7 +129,7 @@ class ChatCloudTransport implements ChatTransport {
     required Future<void> Function(Map<String, dynamic> message) onMessage,
     Future<void> Function()? onDisconnected,
   }) async {
-    final uri = _wsUri('/v1/chat/ws');
+    final uri = _wsUri('/chat/ws');
     WebSocket socket;
     try {
       socket = await WebSocket.connect(uri.toString(),
@@ -192,7 +192,7 @@ class ChatCloudTransport implements ChatTransport {
     }
     try {
       // 收件人 CID 同时是信封、MLS 名册和 Worker 投递的唯一身份键。
-      final json = await _postJson('/v1/chat/envelopes', {
+      final json = await _postJson('/chat/envelopes', {
         'envelope_id': envelope.envelopeId,
         'sender_device_id': envelope.senderDeviceId,
         'recipient_cid_number': recipientCidNumber,
@@ -226,7 +226,7 @@ class ChatCloudTransport implements ChatTransport {
     required int byteSize,
     int recipientCount = 1,
   }) {
-    return _postJson('/v1/chat/relay/init', {
+    return _postJson('/chat/relay/init', {
       'byte_size': byteSize,
       'recipient_count': recipientCount,
     });
@@ -235,14 +235,14 @@ class ChatCloudTransport implements ChatTransport {
   /// 收件人已拉取确认:1:1 一人 ack 即删;否则等 TTL 兜底删。
   Future<void> relayAck(String objectKey) async {
     await _postJson(
-      '/v1/chat/relay/${Uri.encodeComponent(objectKey)}/ack',
+      '/chat/relay/${Uri.encodeComponent(objectKey)}/ack',
       const {},
     );
   }
 
   /// blob 代理端点绝对地址(Worker 转发到 R2,会话 bearer 鉴权)。
   Uri relayBlobUri(String objectKey) =>
-      _uri('/v1/chat/relay/${Uri.encodeComponent(objectKey)}/blob');
+      _uri('/chat/relay/${Uri.encodeComponent(objectKey)}/blob');
 
   /// 供大媒体流式 PUT/GET 使用的会话 bearer(blob 只用 bearer 鉴权,内容为 E2E 密文)。
   String? get sessionBearer => sessionToken;

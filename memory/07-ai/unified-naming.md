@@ -193,6 +193,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 机构账户 | `InstitutionAccounts` | storage | 机构账户 storage |
 | 个人多签 | `PersonalAccounts` | storage | 个人多签 storage |
 | 治理主体 | `Subjects` | storage | 管理员主体 storage |
+| 有效 CID 计数 | `CidCount` | `citizen-identity` storage | 当前 `Active` CID 数量，占号 +1、吊销 −1，墓碑不计；区块链软件挖矿页「轻节点」一格的唯一数据源 |
 | 账户级内部投票管理员模型 | `account-admin-internal-vote` | ADR / 文档 | ADR-015 记录的账户级管理员、动态阈值和内部投票治理模型 |
 | 机构账户主体 | `InstitutionAccount` | AdminAccountKind / 类型 | 注册机构账户级内部投票主体，已使用 `AdminAccountKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
 | 机构工作台 | `workspace` / `InstitutionWorkspace` | `citizenchain/onchina/src/workspace/` / `citizenchain/onchina/frontend/workspace/` | OnChina 当前登录机构的工作台框架，注册局、司法院、立法机构和通用机构都通过该框架挂载 UI |

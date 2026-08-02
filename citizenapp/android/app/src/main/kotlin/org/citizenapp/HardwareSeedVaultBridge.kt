@@ -54,7 +54,7 @@ class HardwareSeedVaultBridge(private val activity: FragmentActivity) {
 
         const val TIER_STRICT = "strict"
         private fun aliasFor(tier: String, walletIndex: Int) =
-            "gmb_${tier}_kek_v1_$walletIndex"
+            "gmb_${tier}_kek_$walletIndex"
     }
 
     // 主摘要 SHA-256、MGF1 掩码摘要必须 SHA-1（AndroidKeyStore OAEP 变换内部恒用 SHA-1）。

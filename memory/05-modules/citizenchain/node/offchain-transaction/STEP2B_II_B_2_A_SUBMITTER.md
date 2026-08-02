@@ -67,9 +67,9 @@ pub type TxPool =
 ### 2.4 β-2-a 的降级提交
 
 `PoolBatchSubmitter::submit` 本步:
-1. ✅ decode batch_bytes → Vec<OffchainBatchItemV2>
+1. ✅ decode batch_bytes → Vec<OffchainBatchItem>
 2. ✅ 打包 BoundedVec<..., MaxBatchSize> 和 BatchSignatureOf<Runtime>
-3. ✅ 组 `RuntimeCall::OffchainTransaction(submit_offchain_batch_v2 {..})`
+3. ✅ 组 `RuntimeCall::OffchainTransaction(submit_offchain_batch {..})`
 4. ✅ 从 signing_key 读 sr25519 pair
 5. ✅ 按签名账户读取真实 nonce
 6. ✅ 调 `chain-signing` 构造签名 extrinsic
@@ -88,7 +88,7 @@ packer 收到 `Ok(placeholder_hash)` 后:
 
 | 测试 | 覆盖 |
 |---|---|
-| `batch_bytes_decodes_to_items` | `Vec<OffchainBatchItemV2>` SCALE roundtrip |
+| `batch_bytes_decodes_to_items` | `Vec<OffchainBatchItem>` SCALE roundtrip |
 | `encode_bounded_sig_respects_limit` | 64 字节签名打包到 `BoundedVec<u8, MaxBatchSignatureLength>` 不超限 |
 | `encode_bounded_batch_respects_limit` | 2 条 item 打包到 `BoundedVec<_, MaxBatchSize>` 不超限,字段 roundtrip |
 | `decode_batch_items_rejects_invalid_bytes` | 非法字节返回 Err |

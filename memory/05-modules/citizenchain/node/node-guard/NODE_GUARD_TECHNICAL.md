@@ -241,6 +241,21 @@ PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取�
   节点继续运行当前已导入的合法 runtime、P2P 和 RPC；
 - PoW 难度检查已从 NodeGuard 删除，PoW runtime 与节点挖矿逻辑未删除、未修改。
 
+## 8.7 当前策略：候选 WASM 的 benchmark 与公民身份验签
+
+- `:code` 变化时，NodeGuard 先读取候选 `RuntimeVersion.apis`；存在 Polkadot SDK 官方
+  FRAME Benchmark runtime API 即返回 `KnownBad`，禁止 benchmark runtime 上链。
+- 节点在独立 overlay 中按正式 SS58/CID/机构账户派生规则建立 FRG 管理员、岗位权限和
+  费用账户夹具。管理员账户只负责签名，机构调用仍从 actor CID 的费用账户扣费，不改变
+  既有费用安全模型。
+- 探针分别执行 `occupy_cid`、`register_voting_identity`、
+  `admin_rebind_cid_account_id`、`self_rebind_cid_account_id`。每一类先提交 64 字节非空
+  伪造内层签名，必须返回对应 `Invalid*Signature` 且目标状态不变；随后在完全相同的业务
+  前置下提交正确 sr25519 签名，必须成功。
+- WASM CI 从空 `target` 编译正式候选产物，并在上传前通过 `WASM_FILE` 把同一份
+  `citizenchain.compact.compressed.wasm` 交给该行为测试。测试通过只证明该次候选产物，
+  不允许拿其它本地构建或 benchmark WBUILD 缓存替代。
+
 ## 9. 第 3 步验收基线
 
 - `fullnode-issuance` runtime 测试：19 个通过；
@@ -289,7 +304,7 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
 | 策略 | runtime storage / 类型 | node 固定标准 |
 |---|---|---|
 | 固定治理骨架 | 89 个公权保护身份使用 `PublicAdmins/PublicManage`，私权创世公民链基金会使用 `PrivateAdmins/PrivateManage`；对应管理员、岗位、岗位权限、任职表均使用规范 key | 机构码/CID/协议主账户/管理员总数；强制 LR 与创世固定岗位的代码/名称/固定权限/所属 CID/精确席位；固定岗位任职不变量。额外普通动态岗位允许存在。基金会额外校验一名管理员兼任三个岗位以及法定代表人账户与 `LR` 任职一致。主账户只校验协议账户完整性，不作授权 key |
-| 全节点发行 | `RewardWalletByMiner`、`LastAuthoredBlockByMiner`、`RewardedBlockCount:u32`、`TotalFullnodeIssued:u128`、`LastRewardAudit:(u32,AccountId,AccountId,u128)` | 高度 `1..=9_999_999` 每块固定 `999_900` 分；作者、钱包、累计、审计、账户完整字段和 `Balances::TotalIssuance` 差额精确 |
+| 全节点发行 | `RewardAccountIdByMiner`、`LastAuthoredBlockByMiner`、`RewardedBlockCount:u32`、`TotalFullnodeIssued:u128`、`LastRewardAudit:(u32,AccountId,AccountId,u128)` | 高度 `1..=9_999_999` 每块固定 `999_900` 分；作者、奖励账户、累计、审计、账户完整字段和 `Balances::TotalIssuance` 差额精确 |
 | 公民发行 | `RewardedCount:u64`、CID/账户永久墓碑、`PendingRewardCount:u32`、`PendingRewards<Twox64Concat,u32,(AccountId,CidNumber)>`、两张临时墓碑 | 队列 `0..count-1` 连续；finalize 后临时状态清空；前 `14_436_417` 人 `999_900` 分，其后 `99_900` 分；CID 与账户任一重复即拒绝 |
 | GenesisPallet | `Phase`、`DeveloperUpgradeEnabled`、`CitizensDeclaration`、`CountryDeclaration`、`CitizenMax`，`StorageVersion=0` | 三个创世事实逐字冻结；只允许含 `:code` 的 `(Genesis,true) → (Operation,false)` 原子单向转换；旧 `TargetBlockTimeMs` 与未知 key 拒绝 |
 | 省储行固定发行 | pallet `StorageVersion=0`、`LastSettledYear:u32`、`TotalProvincialBankInterestIssued:u128`、`LastProvincialBankInterestAudit:(u32,u32,u128)`；43 个 `System::Account[stake_account]` | block#0 本金逐户等于 `stake_amount` 且永久不变；87,600 块/年，100→1 BP 连续 100 年；利息只发 `main_account`，审计、账户与总发行精确闭环；未知 pallet key 拒绝 |

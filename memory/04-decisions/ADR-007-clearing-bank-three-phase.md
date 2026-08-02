@@ -29,7 +29,7 @@
 
 **A. 清算方向反转：收款方主导清算**
 
-- `submit_offchain_batch_v2` 校验改为 `item.recipient_bank == institution_main`（原为 `payer_bank`）
+- `submit_offchain_batch` 校验改为 `item.recipient_bank == institution_main`（原为 `payer_bank`）
 - batch 提交者 = 收款方清算行的某个 admin（不再是付款方）
 - fee 流向统一：永远归 `fee_account_of(recipient_bank)`（同行 / 跨行统一规则，简化 settlement.rs 分支逻辑）
 - 链上验签流程不变：A 的 sr25519 签名 PaymentIntent 是核心授权，pallet 凭授权 mutate Currency，谁提交 batch 不影响安全
@@ -37,7 +37,7 @@
 **B. gas 由 fee_account 直接支付**
 
 - 新增 runtime 自定义 `OnChargeTransaction` 实现（`ChargeBatchFromInstitution`）
-- 仅针对 `submit_offchain_batch_v2` 这个 call 特殊处理：从 `fee_account_of(institution_main)` 直接扣 gas
+- 仅针对 `submit_offchain_batch` 这个 call 特殊处理：从 `fee_account_of(institution_main)` 直接扣 gas
 - 其他 call 走默认 CurrencyAdapter（从 origin 个人账户扣）
 - 管理员个人钱包余额完全不动；清算行 fee 收入直接覆盖 gas 成本（fee 量级 vs gas 量级 ≈ 1000:1，盈余充足）
 
@@ -97,7 +97,7 @@
   - 列表行新增"解密"按钮 + 状态指示绿点
   - 解密 = citizenwallet 扫码签 challenge → 节点验签 → 解密本地加密存储的私钥到内存
   - 内存中密钥永久驻留至节点重启，无时间限制
-  - 解密后 packer 攒批可直接用内存中密钥签 `submit_offchain_batch_v2`
+  - 解密后 packer 攒批可直接用内存中密钥签 `submit_offchain_batch`
 - 提案按钮：转账 / 手续费划转启用；费率设置按业务模块进度开放。机构岗位任职变更不在清算行页面直接编辑。
 - 新增"节点信息"长卡片：peer_id / rpc_domain:rpc_port / 注册管理员 + 端点更新/注销入口
 - 提交 register_clearing_bank 前**强制桌面节点连通性自测**
@@ -133,12 +133,12 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 - 充值：用户钱包 → 清算行主账户（Currency 真转），同时 `DepositBalance[bank][user] += amount`
 - 用户支付（核心修订）：
   - **citizenapp 把签名 PaymentIntent 发给收款方清算行的 wss 端口**（不再发给付款方）
-  - 收款方清算行（Y）的 packer 攒批 → Y 的某个已解密管理员密钥自动签 `submit_offchain_batch_v2`
+  - 收款方清算行（Y）的 packer 攒批 → Y 的某个已解密管理员密钥自动签 `submit_offchain_batch`
   - 链上验 A 签名 → 扣 X 主账户（A 的存款方） → 本金到 Y 主账户 + fee 到 Y 费用账户
 - 同行支付：A、B 都在 X，X 自己作为收款方清算行清算；DepositBalance 内部轧差；fee 进 X 自己费用账户
 - 跨行支付：A 在 X、B 在 Y，**Y 主导**链上原子 2 次 Currency::transfer（X主→Y主 本金 + X主→Y费用 fee）+ DepositBalance 双向同步
 - 用户单笔签名：sr25519 签 `signing_message(OP_SIGN_L3_PAY, SCALE(intent))`
-- 链上 `submit_offchain_batch_v2` 整批原子（with_transaction），失败全回滚
+- 链上 `submit_offchain_batch` 整批原子（with_transaction），失败全回滚
 - 2026-04-28 补齐：批次入口必须同时满足清算行管理员 batch 签名有效、
   `batch_seq == LastClearingBatchSeq[recipient_bank] + 1`、付款/收款双方
   `UserBank` 与 item 声明一致；成功 settlement 后才推进 `LastClearingBatchSeq`

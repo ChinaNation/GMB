@@ -13,8 +13,8 @@
 2. citizenapp `signingBytesForHex` 缺 `citizen_identity`(0x10)分支——
    "统一签名域"提交(617348d8d)只补了 0x1A;且该函数手工拼 GMB 前缀,
    违反 `signing.dart` 单源纪律。
-3. citizenapp `MyIdSignPage`(电子护照→扫码签名)是残桩:载荷门卡在已废弃的
-   `citizen-identity-v1` 管道文本格式(全仓唯一残留),且直签裸 payload 不走
+3. citizenapp `MyIdSignPage`（电子护照→扫码签名）是残桩：载荷门卡在已废弃的
+   管道文本格式（全仓唯一残留），且直签裸 payload 不走
    0x10 域;公民用 CitizenApp 持有投票钱包时该页是唯一签名入口,现流程走不通。
 4. citizenwallet 离线签名确认页 `_fieldLabel` 翻译表漏登记 6 个公民身份
    reviewFields key(registrar_account / wallet_account / citizen_age_years /
@@ -26,7 +26,7 @@
   `signing.dart::signingMessage` 单源,删除本地 GMB 前缀副本。
 - 重写 `MyIdSignPage`:解码链上 `VotingIdentityPayload` SCALE 载荷(两色识别,
   解不开拒签),向公民展示中文字段确认后,按 0x10 域签名;删除
-  `citizen-identity-v1` 残桩。
+  历史管道文本残桩。
 - citizenwallet 确认页字段翻译表补 6 个公民身份条目,并抽到独立可测文件。
 - 补跨端回归测试:citizenapp 0x10 域测试、载荷解码测试、citizenwallet 标签测试。
 - 完成后更新 `qr-action-registry.md`、完善中文注释、清理残留、回写本卡。
@@ -55,7 +55,7 @@
 - citizenapp `signingBytesForHex(action=2)` 输出与
   `signingMessage(kOpSignCitizenIdentity, payload)` 逐字节相等,测试断言。
 - `MyIdSignPage` 能解码 `VotingIdentityPayload`、展示中文字段、签 0x10 域;
-  `citizen-identity-v1` 全仓 0 引用。
+  历史管道文本格式全仓 0 引用。
 - citizenwallet 确认页公民身份 7 个 reviewFields key 全部显示中文标签,
   测试断言无"未知字段"。
 - `flutter analyze` 两端无新告警,相关测试全绿。
@@ -71,7 +71,7 @@
     `VotingIdentityConsentPayload` 独立解码 SCALE 载荷(严格校验:年龄≥16、
     日期合法、状态 0/1、恰好消费完字节),输出中文确认条目;文件头登记
     链端/钱包端/本文件三处同步纪律。
-  - 重写 `myid_sign_page.dart`:删除 `citizen-identity-v1` 管道文本残桩与
+  - 重写 `myid_sign_page.dart`:删除历史管道文本残桩与
     裸 payload 直签;新流程 = 扫码 → 独立解码展示中文字段(两色识别,
     解不开拒签)→ 公民确认 → 0x10 域签名 → 展示回执二维码;补签名前
     过期复查。
@@ -81,7 +81,7 @@
   - 测试:citizenapp 18 绿(qr_signer 0x10 域断言与 signingMessage 逐字节
     相等 + 载荷解码 9 用例),citizenwallet 25 绿(新增 field_labels 7 用例;
     既有 0x10/0x1A 域金标用例保持)。`dart analyze` 两端改动文件无告警。
-  - 残留检查:`citizen-identity-v1` 全仓 0 引用;citizenapp 手拼 GMB 前缀
+  - 残留检查：历史管道文本格式全仓 0 引用；citizenapp 手拼 GMB 前缀
     仅剩 `signing.dart` 单源一处。
   - 文档:`qr-action-registry.md` a=2 行登记 CitizenApp 签名方与解码器路径;
     新增 `memory/01-architecture/citizenchain/CITIZEN_IDENTITY_FLOW.md`

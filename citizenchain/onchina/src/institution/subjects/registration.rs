@@ -92,7 +92,7 @@ async fn list_institutions_inner(
                 return api_error(
                     StatusCode::BAD_REQUEST,
                     1001,
-                    "私权机构必须使用 /api/v1/private/<type> 查询",
+                    "私权机构必须使用 /api/private/<type> 查询",
                 );
             }
             InstitutionListFilter::Private

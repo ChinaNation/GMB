@@ -33,7 +33,7 @@ export async function checkCidFullName(
   if (subject_property) params.set('subject_property', subject_property);
   if (cityName) params.set('city_name', cityName);
   return adminRequest<{ exists: boolean }>(
-    `/api/v1/institutions/check-cid-full-name?${params.toString()}`,
+    `/api/institutions/check-cid-full-name?${params.toString()}`,
     auth,
   );
 }
@@ -44,7 +44,7 @@ export async function createInstitution(
   input: CreateInstitutionInput,
 ): Promise<CreateInstitutionOutput> {
   const payload = buildInstitutionCreatePayload(input);
-  return adminRequest<CreateInstitutionOutput>('/api/v1/institutions/create', auth, {
+  return adminRequest<CreateInstitutionOutput>('/api/institutions/create', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
@@ -58,7 +58,7 @@ export async function uploadLegalRepresentativePhoto(
   const form = new FormData();
   form.append('file', file);
   return adminRequest<LegalRepresentativePhoto>(
-    '/api/v1/institutions/legal-representative/photo',
+    '/api/institutions/legal-representative/photo',
     auth,
     {
       method: 'POST',
@@ -80,7 +80,7 @@ export async function searchParentInstitutions(
   params.set('city_name', opts.city_name);
   if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
   return adminRequest<ParentInstitutionRow[]>(
-    `/api/v1/institutions/search-parents?${params.toString()}`,
+    `/api/institutions/search-parents?${params.toString()}`,
     auth,
   );
 }
@@ -98,7 +98,7 @@ export async function listEducationInstitutions(
   if (query?.cursor) params.set('cursor', query.cursor);
   if (query?.page_size) params.set('page_size', String(query.page_size));
   return adminRequest<PageResult<InstitutionListRow>>(
-    `/api/v1/institutions/list?${params.toString()}`,
+    `/api/institutions/list?${params.toString()}`,
     auth,
   );
 }

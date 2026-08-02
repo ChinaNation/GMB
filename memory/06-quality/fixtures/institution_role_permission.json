@@ -1,5 +1,4 @@
 {
-  "schema_version": 1,
   "description": "ADR-039 机构岗位权限与 VotePlan SCALE 金标",
   "discriminants": {
     "role_permission_operation": {

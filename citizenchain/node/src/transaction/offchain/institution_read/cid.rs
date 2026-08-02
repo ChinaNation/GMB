@@ -1,4 +1,4 @@
-//! 转发 OnChina `/api/v1/app/clearing-banks/eligible-search`,把"资格白名单内但可能未激活"
+//! 转发 OnChina `/api/app/clearing-banks/eligible-search`,把"资格白名单内但可能未激活"
 //! 候选列表给前端"添加清算行"页用,并拉机构注册凭证供清算行流程展示。
 //!
 //! 默认使用链上中国平台统一入口 `https://onchina.local:8964`。
@@ -97,7 +97,7 @@ pub fn search_eligible_clearing_banks(
     let limit = limit.clamp(1, 50);
     let q_trim = q.trim();
     let base_url = cid_config::onchina_base_url();
-    let url = format!("{}/api/v1/app/clearing-banks/eligible-search", base_url);
+    let url = format!("{}/api/app/clearing-banks/eligible-search", base_url);
 
     let client = onchina_client(base_url.as_str())
         .connect_timeout(ONCHINA_REQUEST_TIMEOUT)

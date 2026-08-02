@@ -25,7 +25,7 @@
 ## 核心边界
 
 - 头像/背景/签名/展示名等公开资料是**链下数据**，只进 R2，链上零改动。
-- 现有本地私有头像/背景（SharedPreferences `user.profile.state.v2`）改造后**真源切 R2**，本地仅离线缓存，不留私有分支（遵守零残留）。
+- 现有本地私有头像/背景（SharedPreferences `user.profile.state`）改造后**真源切 R2**，本地仅离线缓存，不留私有分支（遵守零残留）。
 - 认证勾号以**链上已确认发布携带的 `cid_number`** 为准（confirm 时由链上事件写入 `square_posts.cid_number`），不信任 App/Worker 自报。
 - 「照片 / 视频」是**从帖子 `media_items` 派生的视图**，不建新表、不重复存储。
 - 「文章」是长图文，属新内容类型；是否新增链上分类还是仅 R2 manifest 标记，留到阶段 7 单独决策，前期链上零改动。
@@ -40,12 +40,12 @@ D1   (Worker)          square_posts / square_follows / 计数聚合
 本地 (SharedPrefs/Isar) 仅离线缓存 + 草稿，不再是公开资料真源
 ```
 
-## R2 公开资料包契约（citizenapp.square.profile.v1）
+## R2 公开资料包契约（citizenapp.square.profile）
 
 ```text
 object key: profile/{sanitizeOwnerAccount(owner_account)}/profile.json
 {
-  schema: "citizenapp.square.profile.v1",
+  schema: "citizenapp.square.profile",
   owner_account,
   display_name,          # 展示名，独立字段（不再等于钱包名）
   bio,                   # 个性签名
@@ -61,11 +61,11 @@ object key: profile/{sanitizeOwnerAccount(owner_account)}/profile.json
 
 | 接口 | 用途 | 阶段 |
 |---|---|---|
-| `GET /v1/square/users/:account` | profile + 计数 + 认证 + is_following | 1 |
-| `GET /v1/square/users/:account/posts?category=&limit=&cursor=` | 按作者分页（category ∈ all/normal/campaign） | 1 |
-| `PUT /v1/square/profile` | 本人存 display_name/bio/头像背景 key | 1 |
+| `GET /square/users/:account` | profile + 计数 + 认证 + is_following | 1 |
+| `GET /square/users/:account/posts?category=&limit=&cursor=` | 按作者分页（category ∈ all/normal/campaign） | 1 |
+| `PUT /square/profile` | 本人存 display_name/bio/头像背景 key | 1 |
 | 头像/背景对象上传 | 当前统一为 prepare 后经同域 Worker 有界校验并写 R2 | 6 |
-| 关注/取关 | 已有 `POST/DELETE /v1/square/follows` | 复用 |
+| 关注/取关 | 已有 `POST/DELETE /square/follows` | 复用 |
 
 ## 前端目标目录
 
@@ -91,7 +91,7 @@ lib/8964/profile/
 - 固化决策、数据分层、R2 契约、接口增量、目录、阶段计划。不改代码。
 
 ### 阶段 1：Worker 公开资料层（后端）
-- 新增 `GET /v1/square/users/:account`、`GET /v1/square/users/:account/posts`、`PUT /v1/square/profile`。
+- 新增 `GET /square/users/:account`、`GET /square/users/:account/posts`、`PUT /square/profile`。
 - R2 profile 读写 + D1 计数（following/followers/posts）+ is_following + 认证派生。
 - 加 `square_posts(owner_account,...)`、`square_follows(followed_account)` 索引 migration。
 - 验收：`npm run typecheck` + `npm test` 全绿；不碰 runtime、不写 secret。
@@ -120,9 +120,9 @@ lib/8964/profile/
 - 已创建本任务卡并登记 `memory/08-tasks/index.md`。固化 6 项决策、数据分层、R2 契约、接口增量、目录、7 阶段计划。
 
 ### 阶段 1（完成，后端 Worker 公开资料层）
-- 新增 `citizenapp/cloudflare/src/profiles/repository.ts`：R2 profile 读写（schema `citizenapp.square.profile.v1`）、D1 三项计数（following/followers/posts）、认证派生 `readLatestCidNumber`（取最近已发布帖子链上 `cid_number`）、`isFollowing`、`listAuthorPosts`（category all/normal/campaign + keyset 游标，复用 `buildFeedPostItem` 派生媒体）。
+- 新增 `citizenapp/cloudflare/src/profiles/repository.ts`：R2 profile 读写（schema `citizenapp.square.profile`）、D1 三项计数（following/followers/posts）、认证派生 `readLatestCidNumber`（取最近已发布帖子链上 `cid_number`）、`isFollowing`、`listAuthorPosts`（category all/normal/campaign + keyset 游标，复用 `buildFeedPostItem` 派生媒体）。
 - 新增 `citizenapp/cloudflare/src/profiles/service.ts`：`getUserProfileRoute`（公开可读 + `maybeSession` 附带 is_following）、`getUserPostsRoute`、`putProfileRoute`（仅本人；owner 从 session 派生；display_name≤40 / bio≤160 超限拒绝；头像/背景 key 必须落本人 `profile/{owner}/` 前缀，防越权写他人对象）。
-- 修改 `src/routes.ts`：接 `GET /v1/square/users/:account`、`GET /v1/square/users/:account/posts`、`PUT /v1/square/profile`。
+- 修改 `src/routes.ts`：接 `GET /square/users/:account`、`GET /square/users/:account/posts`、`PUT /square/profile`。
 - 修改 `src/types.ts`：新增 `CitizenProfileDoc` / `UserProfileCounts` / `UserProfileResponse` / `AuthorPostCategory`。
 - 修改 `src/storage/r2_keys.ts`：新增 `profileObjectKey` / `profileAssetPrefix`。
 - 修改 `src/shared/http.ts`：新增可复用 `maybeSession`。
@@ -130,7 +130,7 @@ lib/8964/profile/
 - 新增 `test/profiles.test.ts`：8 例（R2 往返、缺失/非法 schema 回 null、计数+认证+is_following、未登录公开可读、PUT 持久化、越权 asset key 拒绝、超长拒绝、按作者 category+cursor 分页）。
 - 边界：未改 `citizenchain/runtime`；未写任何 secret；认证以链上确认 `cid_number` 为真源，不信任自报。
 - 验收：`npm run typecheck` 通过；`npm test` 6 文件 23 例全绿（新增 8 例）；`npm run migrate:local` 0003 应用成功（3 commands）。
-- 追加：把 `PUT /v1/square/profile` 返回体统一为与 GET 相同的完整 `UserProfileResponse`（抽 `buildProfileResponse` 共用），客户端单一解析；本人视角 is_following=false。
+- 追加：把 `PUT /square/profile` 返回体统一为与 GET 相同的完整 `UserProfileResponse`（抽 `buildProfileResponse` 共用），客户端单一解析；本人视角 is_following=false。
 
 ### 阶段 2（完成，前端数据层）
 - 新增 `citizenapp/lib/8964/profile/models/citizen_profile.dart`：`CitizenProfile`（镜像 `UserProfileResponse`）+ `fromJson/toJson/copyWith` + `resolvedDisplayName`。2026-07-29 终态订正：公开昵称优先，缺失时按 CID 稳定选择本地默认昵称；当前绑定账户不参与身份默认值，且禁止把完整、截断 AccountId 或 SS58 当作公开名称。
@@ -171,7 +171,7 @@ lib/8964/profile/
 
 ### 阶段 5b（完成，follow / session / is_following）—— 口径 A（关注复用登录 session，不逐次签名）
 - 事实澄清（防误解）：关注/取关**不逐次签名**；写接口带的是**登录 session token**（[`followRoute`](cloudflare/src/feeds/follows.ts) 用 `requireSession` 校验 Bearer）。session 由默认**热钱包**对登录挑战串**静默签一次**（`signWithWalletNoAuth`，无弹窗/无扫码）换取并缓存复用。冷钱包不可能是默认用户（[`getDefaultWallet`](citizenapp/lib/wallet/core/wallet_manager.dart:213) 只返回 isHotWallet），故不存在"冷钱包点关注弹窗"。session 存在的意义=防伪造他人关注（写入完整性），非内容加密。
-- 后端：新增 `GET /v1/square/users/:account/follows?type=following|followers&limit=&cursor=`（`listFollows` keyset 分页）+ 接线 routes；`POST/DELETE /follows` 复用。Worker 单测 +1（following/followers 排序）。
+- 后端：新增 `GET /square/users/:account/follows?type=following|followers&limit=&cursor=`（`listFollows` keyset 分页）+ 接线 routes；`POST/DELETE /follows` 复用。Worker 单测 +1（following/followers 排序）。
 - 前端：`SquareApiClient` 加 `followUser`/`unfollowUser`/`fetchFollows` + `_deleteJson`；`CitizenProfileApi` 透出；`CitizenProfile` 加 `SquareFollowEntry`。
 - 新增 `services/square_session_provider.dart`：全 App 单例，默认热钱包静默登录换 session（`SquareApiClient` 内部按 owner 缓存）。
 - 新增 `follows_list_page.dart`：关注/关注者分页列表，行短地址点击进主页。
@@ -188,7 +188,7 @@ lib/8964/profile/
 - 验收：`dart format` 通过；`flutter analyze lib/8964/profile test/8964/profile` 干净；`flutter test test/8964/profile` 28/28；`flutter test test/8964` 40/40（+3，无回归）。
 
 ### 阶段 6b-1（完成，媒体读取通道 + 头像/背景渲染）
-- 后端：新增 `src/media/service.ts` `mediaRoute` → `GET /v1/square/media/<object_key>` 直出 R2 对象（content-type + 长缓存 + CORS），只允许 `square/`/`profile/` 前缀、拒 `..`；接线 routes。这条通道同时解锁广场 feed 图片显示（后续可切）。
+- 后端：新增 `src/media/service.ts` `mediaRoute` → `GET /square/media/<object_key>` 直出 R2 对象（content-type + 长缓存 + CORS），只允许 `square/`/`profile/` 前缀、拒 `..`；接线 routes。这条通道同时解锁广场 feed 图片显示（后续可切）。
 - 前端：`SquareApiClient.mediaUrl(objectKey)`（object_key→公开 URL，逐段 encode）；`CitizenProfileApi.mediaUrl` 透出。
 - 渲染：`ProfileHeaderCard` 加 `avatarUrl` → 圆角方形 `Image.network`（失败/空回落 `_AvatarPlaceholder`）；`CollapsibleHeader` 改为渐变作底 + 背景图 `Stack` 叠加（图空/失败透出渐变）；页面按 `avatar/bannerObjectKey` 经 `_api.mediaUrl` 计算 URL 下传。
 - 测试：Worker `media.test.ts`（直出/404/非法前缀 3 例）；`mediaUrl` 编码断言；头像图渲染 smoke（有 key 不抛异常）。

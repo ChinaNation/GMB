@@ -11,13 +11,13 @@ class WalletSecureKeys {
   /// 钱包(master) mini-secret 种子（AES-256-GCM 密文）存储键。
   static String masterSeedHexV1(String masterId) {
     _requireMasterId(masterId);
-    return 'wallet.master.$masterId.seed_hex.v1';
+    return 'wallet.master.$masterId.seed_hex';
   }
 
   /// 钱包(master) 助记词（AES-256-GCM 密文）存储键。
   static String masterMnemonicV1(String masterId) {
     _requireMasterId(masterId);
-    return 'wallet.master.$masterId.mnemonic.v1';
+    return 'wallet.master.$masterId.mnemonic';
   }
 
   static void _requireMasterId(String masterId) {

@@ -20,7 +20,7 @@ export type CityRegistryAdminRow = {
 };
 
 export async function listCityRegistryAdmins(auth: AdminAuth): Promise<CityRegistryAdminRow[]> {
-  const data = await request<{ total: number; rows: CityRegistryAdminRow[] }>('/api/v1/admin/city-registry-admins', {
+  const data = await request<{ total: number; rows: CityRegistryAdminRow[] }>('/api/admin/city-registry-admins', {
     method: 'GET',
     headers: adminHeaders(auth),
   });

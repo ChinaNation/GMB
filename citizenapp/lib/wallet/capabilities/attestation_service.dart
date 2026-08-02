@@ -31,10 +31,9 @@ class AttestationState {
 class AttestationService {
   static const String _kScope = 'attest';
   static const String _kMetaExpiresAtMillis =
-      'wallet.session.attest.expires_at_millis.v1';
-  static const String _kMetaPolicy = 'wallet.session.attest.policy.v1';
-  static const String _kMetaLastPayload =
-      'wallet.session.attest.last_payload.v1';
+      'wallet.session.attest.expires_at_millis';
+  static const String _kMetaPolicy = 'wallet.session.attest.policy';
+  static const String _kMetaLastPayload = 'wallet.session.attest.last_payload';
 
   static const _kTokenTtlMillis = 15 * 60 * 1000; // 15 min short-lived token
   static const _kRenewThresholdMillis = 2 * 60 * 1000; // renew before expire

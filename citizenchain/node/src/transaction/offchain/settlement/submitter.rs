@@ -197,9 +197,9 @@ where
         .map(|it| {
             Ok(OffchainBatchItem {
                 tx_id: it.tx_id,
-                payer_account_id: it.payer_account_id.into(),
+                payer_account_id: it.payer_account_id,
                 payer_bank_cid: it.payer_bank_cid,
-                recipient_account_id: it.recipient_account_id.into(),
+                recipient_account_id: it.recipient_account_id,
                 recipient_bank_cid: it.recipient_bank_cid,
                 transfer_amount: it.transfer_amount,
                 fee_amount: it.fee_amount,

@@ -20,7 +20,7 @@ class DeviceSubkeyException implements Exception {
 /// 签名，本类转成后端 Workers Web Crypto ES256 需要的**裸 r||s 64B**。
 ///
 /// 用途：替代原先「静默读 sr25519 seed 签广场 session 挑战」的频繁路径；子钥归属
-/// 由 sr25519 主钥一次性绑定证明 + 后端注册保证（`/v1/square/auth/device/register`）。
+/// 由 sr25519 主钥一次性绑定证明 + 后端注册保证（`/square/auth/device/register`）。
 class DeviceSubkey {
   DeviceSubkey({MethodChannel? channel})
       : _channel = channel ?? const MethodChannel(_channelName);

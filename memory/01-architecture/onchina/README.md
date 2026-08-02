@@ -70,7 +70,7 @@ OnChina 以 PostgreSQL 结构化表作为唯一持久化真源。进程内缓存
 - 投票凭证只签发投票引擎已经定义的凭证，不实现投票流程。
 
 注册局管理员另有全局链上绑定查询
-`GET /api/v1/admin/citizens/:cid_number/binding`。它要求当前 `institution_code` 为
+`GET /api/admin/citizens/:cid_number/binding`。它要求当前 `institution_code` 为
 FRG/CREG，只返回同一 finalized 区块中的 CID 状态、当前账户、绑定版本、投票/竞选标志和
 区块锚点，不读取本地公民档案。两个注册局节点查询同一 CID 必须得到相同结果。
 

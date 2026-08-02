@@ -34,10 +34,10 @@ widgets/creator_overview_card.dart · creator_tier_card.dart · creator_gate_vie
 
 ## 依赖：BFF 契约（Cloudflare 卡实现）
 ```
-GET  /v1/square/creator/plan            → {plan|null}
-GET  /v1/square/creator/overview        → {overview:{subscriber_count,month_income_fen,tier_count}}  # month_income_fen=本月真实扣款到账合计(分),非摊算/预计
-POST /v1/square/creator/plan/challenge  {owner_account,tiers[]} → {signing_payload_hex,challenge_id}
-POST /v1/square/creator/plan            {owner_account,challenge_id,signature,tiers[]} → {plan}
+GET  /square/creator/plan            → {plan|null}
+GET  /square/creator/overview        → {overview:{subscriber_count,month_income_fen,tier_count}}  # month_income_fen=本月真实扣款到账合计(分),非摊算/预计
+POST /square/creator/plan/challenge  {owner_account,tiers[]} → {signing_payload_hex,challenge_id}
+POST /square/creator/plan            {owner_account,challenge_id,signature,tiers[]} → {plan}
 ```
 - `set_creator_plan` 挂进现有 `account/action_challenge` 框架（`buildActionScalePayload` 加该动作，context 绑 tiers 的 blake2 哈希防替换；验签后覆盖写 D1）。
 - `tiers[]` 元素 = `{tier_id,name,prices_fen:{monthly?,quarterly?,yearly?}}`（分）。

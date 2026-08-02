@@ -103,6 +103,6 @@
   - ✅ 无历史旧名（`wuminapp/wumin/WUMIN_/SFID/duoqian/ElectionCampaign/OrgType/admin-management/
     *_transaction` 等零命中）。
   - ✅ 反引号标识符 `ProposalOwner/MODULE_TAG/powr/citizenchain` 均真实存在。
-  - ⚠→已修：603 行（中/英各一次）`submit_offchain_batch_v2` → `submit_offchain_batch`
-    （真实 extrinsic 无 `_v2`，见 `offchain/src/lib.rs:475`）。属独立的过期版本后缀，非改名批次。
+  - ⚠→已修：603 行（中/英各一次）`submit_offchain_batch` → `submit_offchain_batch`
+    （真实 extrinsic 无版本后缀，见 `offchain/src/lib.rs:475`）。属独立的过期命名，非改名批次。
   - 复查：白皮书 src 已无 `_v[0-9]` 悬空后缀，snake_case 标识符全部对得上代码。

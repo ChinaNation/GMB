@@ -1,5 +1,5 @@
 -- CitizenApp Cloudflare 唯一创世 schema 基线。
--- SCHEMA VERSION: v1.0.0
+-- CitizenApp Cloudflare D1 唯一完整基线。
 -- 本目录只允许 citizenapp.sql；创世冻结前直接重建，不保留增量版本日志或兼容迁移。
 
 -- 登录与注销挑战都绑定唯一身份主键 CID；account_id 仅记录本次必须签名的当前账户。

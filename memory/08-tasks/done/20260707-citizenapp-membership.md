@@ -229,9 +229,9 @@
 - `citizenapp/cloudflare/src/membership/plans.ts`：四档会员 `freedom` / `democracy` / `voting` / `candidate` 的价格、身份要求、动态额度和文章额度收口为单一配置。
 - 新增 `citizenapp/cloudflare/src/chain/identity.ts`：Worker 通过 `state_getStorage` 读取 `CitizenIdentity::VotingIdentityByAccount` 与 `CandidateIdentityByAccount`；投票身份需状态 normal 且护照有效期覆盖当前日期，竞选身份必须在有效投票身份基础上存在 Candidate storage。
 - 更新 `citizenapp/cloudflare/src/chain/rpc.ts`：抽出通用 `fetchChainStorage`，既服务链上发布事件确认，也服务会员身份资格读取。
-- 更新 `citizenapp/cloudflare/src/membership/service.ts`：`GET /v1/square/membership` 返回四档计划、链上身份状态、可订阅等级、订阅是否有效和最终权益是否 active；`requireActiveMembership` 改为支付状态与链上身份资格同时满足才放行。
+- 更新 `citizenapp/cloudflare/src/membership/service.ts`：`GET /square/membership` 返回四档计划、链上身份状态、可订阅等级、订阅是否有效和最终权益是否 active；`requireActiveMembership` 改为支付状态与链上身份资格同时满足才放行。
 - `citizenapp/cloudflare/src/membership/webhook.ts`：实现 Stripe webhook 签名校验、subscription created/updated/deleted 处理、checkout session 观察但不直接授权；所有档位按链上身份精确匹配，不满足则记录 `identity_required`，不授予权益。
-- `citizenapp/cloudflare/src/routes.ts`：Stripe webhook 唯一路径为 `POST /v1/square/membership/webhook`。
+- `citizenapp/cloudflare/src/routes.ts`：Stripe webhook 唯一路径为 `POST /square/membership/webhook`。
 - 更新 `citizenapp/cloudflare/src/types.ts` 和 `wrangler.toml`：登记 Stripe webhook secret、price id、会员订阅字段；secret 不写仓库。
 - 新增 `citizenapp/cloudflare/test/membership.test.ts`：覆盖会员查询 Candidate 权益、Candidate 身份不足、Stripe webhook 写入 voting、visitor 不读链、身份不足记录 `identity_required` 和签名失败。
 - 更新 `memory/07-ai/unified-protocols.md` 与 `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`：同步 API、D1 字段、环境变量和会员架构边界。
@@ -278,7 +278,7 @@
 
 - `citizenapp/cloudflare/src/membership/subscribe.ts`：官网先下发钱包签名挑战，验签并精确核验链上身份后创建 Stripe subscription Checkout Session；请求绑定 `owner_account` 与四档 `membership_level`。
 - `citizenapp/cloudflare/test/membership_subscribe.test.ts`：覆盖四档订阅挑战、candidate 身份通过/不足、session owner mismatch、Stripe 错误透传。
-- `citizenapp/cloudflare/src/routes.ts`、`src/types.ts`、`wrangler.toml`：订阅接口统一为 `POST /v1/square/membership/subscribe/challenge` 与 `POST /v1/square/membership/subscribe`；配置使用 `STRIPE_API_KEY`、`STRIPE_DEV_PROXY`、`CHECKOUT_SUCCESS_URL`、`CHECKOUT_CANCEL_URL`，secret 只放部署环境。
+- `citizenapp/cloudflare/src/routes.ts`、`src/types.ts`、`wrangler.toml`：订阅接口统一为 `POST /square/membership/subscribe/challenge` 与 `POST /square/membership/subscribe`；配置使用 `STRIPE_API_KEY`、`STRIPE_DEV_PROXY`、`CHECKOUT_SUCCESS_URL`、`CHECKOUT_CANCEL_URL`，secret 只放部署环境。
 - `citizenweb/src/pages/Membership.tsx`：官网 `/membership` 展示四档美元价格和权益，钱包扫码签名后调用 Worker 完成订阅 / 取消 / 续订；官网不保存会员状态，不接触 Stripe secret。
 - `citizenapp/lib/8964/services/square_api_client.dart`：`fetchMembership` 解析 `plans[]`、链上身份、订阅状态、未生效原因，供 App 会员页展示。
 - `citizenapp/lib/my/user/user.dart` 与 `lib/my/membership/membership_page.dart`：在「我的」Tab 钱包和通讯录之间提供“会员”入口，展示当前状态、三档身份与四档权益，按状态显示订阅 / 取消 / 续订按钮并打开官网。
@@ -290,7 +290,7 @@
   - `npm --prefix /Users/rhett/GMB/citizenweb run build` 通过。
   - `flutter analyze citizenapp/lib/8964/services/square_api_client.dart citizenapp/lib/my/user/user.dart` 通过。
   - `flutter test --concurrency=1 test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart` 通过：6 个测试。
-  - 真实本地 Worker HTTP 验收通过：`wrangler dev --local --port 8787 --var STRIPE_DEV_PROXY:1 ...` 启动后，官网订阅挑战经钱包签名确认，`POST /v1/square/membership/subscribe` 返回 `checkout_session_id=cs_dev_visitor` 与官网成功回跳 URL。
+  - 真实本地 Worker HTTP 验收通过：`wrangler dev --local --port 8787 --var STRIPE_DEV_PROXY:1 ...` 启动后，官网订阅挑战经钱包签名确认，`POST /square/membership/subscribe` 返回 `checkout_session_id=cs_dev_visitor` 与官网成功回跳 URL。
   - `git diff -- citizenchain/runtime` 为空，未修改 runtime。
 - 清理：未写入 Stripe / Cloudflare secret；官网不持久化支付状态；App 不内嵌支付，仅按会员状态打开官网。
 
@@ -321,7 +321,7 @@
 
 - `citizenapp/cloudflare/src/media/cloudflare_assets.ts` 保留 Images / Stream provider asset 删除封装；本地测试使用依赖替身，不保留生产代码分支。
 - 更新 `citizenapp/cloudflare/src/posts/confirm.ts`：新增 `deletePostRoute` / `deletePostCloudflareData`；仅作者本人可删除，删除顺序为 provider asset、R2 manifest、D1 媒体索引、上传任务和帖子行；链上发布索引保持不变。
-- 更新 `citizenapp/cloudflare/src/routes.ts`：新增 `DELETE /v1/square/posts/{post_id}`。
+- 更新 `citizenapp/cloudflare/src/routes.ts`：新增 `DELETE /square/posts/{post_id}`。
 - 更新 `citizenapp/lib/8964/services/square_api_client.dart`：新增 `SquarePostDeletionService` 与 `deletePost`，App 调 Worker 删除接口。
 - 更新 `citizenapp/lib/8964/services/square_publish_service.dart`：发布服务新增 `replacePostId`；修改内容按新发布走完整“余额校验、链上扣费入块、媒体上传、Worker 确认 feed”，新帖确认成功后再删除旧帖 Cloudflare 数据；旧帖删除失败只返回警告，不把已成功的新帖误存为失败草稿。
 - 更新 `citizenapp/lib/8964/pages/square_compose_page.dart`、`square_article_compose_page.dart`：支持修改入口预填正文、标题和分类，并把旧 `post_id` 传入发布服务；远端旧媒体不回填为本地草稿，修改时需要重新选择媒体。
@@ -375,7 +375,7 @@
 - 本地真实 Worker HTTP 验收通过：`GET /health` 返回 200，会员和聊天未登录接口均返回 401；带 `STRIPE_HOOK_SECRET` 签名的 `democracy` subscription webhook 返回 200，D1 写入 `membership_level=democracy`、`subscription_status=active`、`stripe_price_id=price_democracy`、`identity_level=visitor`，随后测试记录已删除。
 - staging 和 production 后续均已按目标基线彻底重建；Chat 只保留设备、一次性 KeyPackage 和防重放摘要，不存在聊天内容表或附件中继表。
 - staging 与 production 的链、R2、Cloudflare 媒体、Stripe Secret 已统一为短名；远端旧 Secret 已删除。production 已配置 `STREAM_HOOK_SECRET`，密钥只存在 Cloudflare Secret，不落盘、不进仓库。
-- Cloudflare Images/Stream Starter 套餐已启用；staging/production `IMAGES_URL`、`STREAM_URL` 已指向真实交付域名。Stream 账户唯一 webhook 已指向 production `/v1/square/uploads/stream/webhook`。
+- Cloudflare Images/Stream Starter 套餐已启用；staging/production `IMAGES_URL`、`STREAM_URL` 已指向真实交付域名。Stream 账户唯一 webhook 已指向 production `/square/uploads/stream/webhook`。
 - staging 发布版本 `b0d3e5c3-20ec-4b90-823c-863fdd8a6730`；production 最终发布版本 `58572220-5154-4fda-8520-3d2b5cf1df5c`。两环境 health/bootstrap 返回 200，会员和聊天未登录返回 401，开发上传入口返回 404；production Stripe/Stream 未签名回调返回 400。
 - production 真实媒体签发验收通过：临时钱包登录和 freedom 会员记录经 Worker 取得 R2 manifest、Images、Stream 三类上传授权，公共交付 URL 与账户配置一致；真实 Stream 签名 webhook 返回 200。验收后删除临时 provider asset、D1 会员/上传/媒体/挑战记录和 KV 会话，Cloudflare Stream/Images 资产均为 0。
 - production 已启用退订满 90 天视频冷归档，远端绑定定时扫描返回 200；staging 和本地保持关闭。代码、配置、注释、文档和运行态均已收口，未修改 `citizenchain/runtime/`，未推送 GitHub。

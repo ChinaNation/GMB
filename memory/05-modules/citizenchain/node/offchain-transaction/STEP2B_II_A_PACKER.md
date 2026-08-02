@@ -14,13 +14,13 @@ Step 2b-ii 被拆成 α / β 两个子步,本次交付 **α · 业务逻辑 + �
 - `settlement/packer.rs` 完整业务逻辑(组 batch → 签名 → 提交 → 失败回滚)
 - 两个依赖注入 trait:`BatchSigner` / `BatchSubmitter`
 - 两个 noop 占位:`NoopBatchSigner` / `NoopBatchSubmitter`
-- `NodeBatchItem` 结构(节点镜像 runtime `OffchainBatchItemV2`)
+- `NodeBatchItem` 结构(节点镜像 runtime `OffchainBatchItem`)
 - `mod.rs` 启动器 `start_clearing_bank_components` 增补 signer/submitter 参数 + `start_clearing_bank_components_with_noop` 便捷版
 - 4 个 tokio + 2 个同步单测,覆盖正/负路径与字节编码不变性
 
 **明确不做**(Step 2b-ii-β 接):
 - `KeystoreBatchSigner`(用 `offchain::keystore::SigningKey` 签)
-- `PoolBatchSubmitter`(拼 `RuntimeCall::OffchainTransaction(submit_offchain_batch_v2 {...})` 外包 `UncheckedExtrinsic` + 调 `TransactionPool`)
+- `PoolBatchSubmitter`(拼 `RuntimeCall::OffchainTransaction(submit_offchain_batch {...})` 外包 `UncheckedExtrinsic` + 调 `TransactionPool`)
 - `service.rs` CLI flag `--clearing-bank` + 启动逻辑
 - `rpc.rs` 合并 `OffchainClearingRpcServer::into_rpc` 到节点 JSON-RPC
 
@@ -45,7 +45,7 @@ pub struct NodeBatchItem {
 }
 ```
 
-字段**逐字段对齐** runtime `offchain_transaction::batch_item::OffchainBatchItemV2`,SCALE 编码字节完全一致。单测 `node_batch_item_encodes_deterministically` 断言编码长度 268 字节 + round-trip 成功。
+字段**逐字段对齐** runtime `offchain_transaction::batch_item::OffchainBatchItem`,SCALE 编码字节完全一致。单测 `node_batch_item_encodes_deterministically` 断言编码长度 268 字节 + round-trip 成功。
 
 ### 2.2 依赖注入 trait
 
@@ -77,7 +77,7 @@ pub fn batch_signing_message(
 
 = `signing_message(OP_SIGN_OFFCHAIN_BATCH, SCALE(institution, batch_seq, batch_bytes))`
 
-2026-04-28 补齐:链上 `submit_offchain_batch_v2` 已严格校验 `batch_signature`,
+2026-04-28 补齐:链上 `submit_offchain_batch` 已严格校验 `batch_signature`,
 并把成功批次写入 `LastClearingBatchSeq[bank]`。本函数必须继续与 runtime
 `batch_item::batch_signing_hash` 逐字节一致。
 
@@ -170,8 +170,8 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 2. **`PoolBatchSubmitter`**
    - 持有 `Arc<FullClient>` + `Arc<TransactionPool>`
    - `submit` 内:
-     - 用 `batch_bytes` decode 回 `Vec<OffchainBatchItemV2>`(或直接透传 SCALE,让 RuntimeCall 构造复用)
-     - 构造 `RuntimeCall::OffchainTransaction(submit_offchain_batch_v2 {...})`
+     - 用 `batch_bytes` decode 回 `Vec<OffchainBatchItem>`(或直接透传 SCALE,让 RuntimeCall 构造复用)
+     - 构造 `RuntimeCall::OffchainTransaction(submit_offchain_batch {...})`
      - 外包 `UncheckedExtrinsic`(需要签名,或 unsigned extrinsic 走特殊路径)
      - 调 `pool.submit_one(...)` 拿 `TransactionHash`
    - 放在 `offchain/settlement/submitter.rs`

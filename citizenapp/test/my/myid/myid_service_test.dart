@@ -55,81 +55,6 @@ void main() {
     );
   }
 
-  group('子钥懒绑定 ensureDeviceSubkeyBound', () {
-    setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
-
-    test('未注册 CID 时拒绝绑定:后端不收未绑 CID 账户的子钥', () async {
-      final wallet = _FakeWalletManager(const _AliceWallet());
-      final service = MyIdService(
-        walletManager: wallet,
-        identityResolver:
-            _FakeIdentityResolver(_unregisteredIdentity(_validAccountId)),
-        chainRpc: _FakeChainRpc(),
-        divisionStore: _FakeDivisionStore(),
-        badgeSnapshotStore: _FakeBadgeStore(),
-      );
-      await expectLater(
-        service.ensureDeviceSubkeyBound(),
-        throwsA(isA<WalletAuthException>()),
-      );
-      expect(wallet.subkeyRebindCalls, 0);
-    });
-
-    test('进入需 CID 页面时按 finalized 真值激活钱包派生密钥与子钥登记', () async {
-      final wallet = _FakeWalletManager(const _AliceWallet());
-      final service = MyIdService(
-        walletManager: wallet,
-        identityResolver:
-            _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
-        chainRpc: _FakeChainRpc(),
-        divisionStore: _FakeDivisionStore(),
-        badgeSnapshotStore: _FakeBadgeStore(),
-      );
-      await service.ensureDeviceSubkeyBound();
-      expect(wallet.subkeyRebindCalls, 1);
-      expect(wallet.dataBindings.single.accountId, _validAccountId);
-      // 顺序不可颠倒：当前钱包派生验证先完成，再登记子钥。
-      expect(wallet.subkeyRebindTargets, [_validAccountId]);
-      // 重复进入不弹第二次生物识别的幂等性由钱包层的本机标记保证，
-      // 在 wallet_manager_test 覆盖真实实现，此处不用假件替它模拟。
-    });
-
-    test('当前钱包派生密钥激活不调用任何服务端密钥接口', () async {
-      final wallet = _FakeWalletManager(const _AliceWallet());
-      final service = MyIdService(
-        walletManager: wallet,
-        identityResolver:
-            _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
-        chainRpc: _FakeChainRpc(),
-        divisionStore: _FakeDivisionStore(),
-        badgeSnapshotStore: _FakeBadgeStore(),
-      );
-      await service.ensureDeviceSubkeyBound();
-      expect(wallet.dataBindings.single.accountId, _validAccountId);
-      expect(wallet.subkeyRebindTargets, [_validAccountId]);
-      expect(wallet.events, ['activate', 'subkey']);
-    });
-
-    test('绑定失败不推进标记,下次仍会重试', () async {
-      final wallet =
-          _FakeWalletManager(const _AliceWallet(), failFirstSubkeyRebind: true);
-      final service = MyIdService(
-        walletManager: wallet,
-        identityResolver:
-            _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
-        chainRpc: _FakeChainRpc(),
-        divisionStore: _FakeDivisionStore(),
-        badgeSnapshotStore: _FakeBadgeStore(),
-      );
-      await expectLater(
-          service.ensureDeviceSubkeyBound(), throwsA(isA<Object>()));
-
-      await service.ensureDeviceSubkeyBound();
-      expect(wallet.subkeyRebindCalls, 2);
-      expect(wallet.subkeyRebindTargets, [_validAccountId]);
-    });
-  });
-
   group('注册前余额闸 fetchRegistrationAffordability', () {
     test('门槛取自链上常量,余额旁路缓存读取', () async {
       final rpc = _FakeChainRpc()
@@ -371,13 +296,13 @@ void main() {
     expect(fakeRpc.reboundNew, newAccount.accountId);
     // runtime 调用参数仍包含当前绑定账户，证明自主换绑授权没有被接管阶段替代。
     expect(fakeRpc.reboundOld, _validAccountId);
-    // 密钥派生激活和子钥登记只出现 finalized 新账户及新版本，没有此前账户输入。
+    // finalized 只激活公开绑定，不生成数据钥，也不登记 P-256 设备子钥。
     expect(fakeWallet.dataBindings.single.accountId, newAccount.accountId);
     expect(fakeWallet.dataBindings.single.bindingRevision, 2);
-    expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
+    expect(fakeWallet.deviceSubkeyRegistrationCalls, 0);
   });
 
-  test('新账户设备登记中断：不留半截绑定，下次进入需 CID 页面按 finalized 版本补齐', () async {
+  test('换绑 finalized 不登记 P-256 子钥，后续仅由 Worker 缺钥响应触发', () async {
     final newAccount = Account(
       masterId: _validAccountId,
       accountIndex: 5,
@@ -385,11 +310,8 @@ void main() {
       ss58Address: 'new-ss58',
       accountName: '账户5',
     );
-    final fakeWallet = _FakeWalletManager(
-      const _AliceWallet(),
-      accounts: [newAccount],
-      failFirstSubkeyRebind: true,
-    );
+    final fakeWallet =
+        _FakeWalletManager(const _AliceWallet(), accounts: [newAccount]);
     final resolver = _MutableResolver(_validAccountId);
     final service = MyIdService(
       walletManager: fakeWallet,
@@ -404,22 +326,12 @@ void main() {
       dataHandover: _FakeDataHandover(),
     );
 
-    // 换绑链上成功,但设备子钥重绑首次失败 → 本地重建中断上抛。
-    await expectLater(
-      service.rebindCidTo(
-        cidNumber: 'GD-CTZN1-8F3A2B',
-        newAccountId: newAccount.accountId,
-      ),
-      throwsA(isA<StateError>()),
+    await service.rebindCidTo(
+      cidNumber: 'GD-CTZN1-8F3A2B',
+      newAccountId: newAccount.accountId,
     );
-    // 登记失败即不登记任何账户，不伪造完成态。
-    expect(fakeWallet.subkeyRebindTargets, isEmpty);
-
-    // 下次进入需 CID 页面时按链上 finalized 真值补齐，无需此前账户或此前设备参与。
-    resolver.setAccountId(newAccount.accountId, bindingRevision: 2);
-    await service.ensureDeviceSubkeyBound();
-    expect(fakeWallet.subkeyRebindTargets, [newAccount.accountId]);
-    expect(fakeWallet.dataBindings.last.bindingRevision, 2);
+    expect(fakeWallet.dataBindings.single.accountId, newAccount.accountId);
+    expect(fakeWallet.deviceSubkeyRegistrationCalls, 0);
   });
 
   test('换绑 extrinsic finalized 但目标状态未确认时绝不迁移本地数据', () async {
@@ -454,7 +366,7 @@ void main() {
       throwsA(isA<StateError>()),
     );
 
-    expect(fakeWallet.subkeyRebindTargets, isEmpty);
+    expect(fakeWallet.deviceSubkeyRegistrationCalls, 0);
     expect(fakeWallet.dataBindings, isEmpty);
     expect(handover.stageCalls, 1);
     expect(handover.discardCalls, 1);
@@ -468,14 +380,18 @@ void main() {
       ss58Address: _validAddress,
       accountName: '账户0',
     );
+    final wallet = _FakeWalletManager(const _AliceWallet(), accounts: [self]);
+    final identityRpc = _FakeIdentityRpc();
+    final handover = _FakeDataHandover();
     final service = MyIdService(
-      walletManager: _FakeWalletManager(const _AliceWallet(), accounts: [self]),
+      walletManager: wallet,
       chainRpc: _FakeChainRpc(),
       divisionStore: _FakeDivisionStore(),
       badgeSnapshotStore: _FakeBadgeStore(),
-      identityRpc: _FakeIdentityRpc(),
+      identityRpc: identityRpc,
       identityResolver:
           _FakeIdentityResolver(_registeredIdentity(_validAccountId)),
+      dataHandover: handover,
     );
 
     await expectLater(
@@ -485,6 +401,9 @@ void main() {
       ),
       throwsA(isA<WalletAuthException>()),
     );
+    expect(wallet.signCalls, 0, reason: '相同 account_id 必须在读取私钥前拒绝');
+    expect(identityRpc.fetchRebindContextCalls, 0);
+    expect(handover.stageCalls, 0);
   });
 
   test('listRebindTargets 排除当前身份账户', () async {
@@ -663,20 +582,17 @@ class _FakeWalletManager extends WalletManager {
   _FakeWalletManager(
     this._wallet, {
     this.accounts = const <Account>[],
-    this.failFirstSubkeyRebind = false,
   });
   final WalletProfile? _wallet;
   final List<Account> accounts;
 
-  /// true 时设备子钥登记首次抛错、之后成功，用于验证完整标记不会提前推进。
-  final bool failFirstSubkeyRebind;
-  int subkeyRebindCalls = 0;
-  final List<String> subkeyRebindTargets = <String>[];
+  int deviceSubkeyRegistrationCalls = 0;
 
   /// 当前钱包派生上下文激活记录。
   final List<({String cidNumber, int bindingRevision, String accountId})>
       dataBindings = [];
   final List<String> events = <String>[];
+  int signCalls = 0;
   AccountDataBinding? activeDataBinding;
 
   @override
@@ -695,8 +611,10 @@ class _FakeWalletManager extends WalletManager {
   Future<Uint8List> signForAccountId(
     String accountId,
     Uint8List payload,
-  ) async =>
-      Uint8List(64);
+  ) async {
+    signCalls++;
+    return Uint8List(64);
+  }
 
   @override
   Future<void> activateAccountDataBinding({
@@ -738,17 +656,10 @@ class _FakeWalletManager extends WalletManager {
   Future<void> clearPendingAccountDataHandover() async {}
 
   @override
-  Future<void> bindDeviceSubkeyToCurrentBinding({
-    required String cidNumber,
-    required int bindingRevision,
-    required String accountId,
-  }) async {
-    subkeyRebindCalls++;
-    if (failFirstSubkeyRebind && subkeyRebindCalls == 1) {
-      throw StateError('设备子钥重绑首次失败(模拟网络抖动)');
-    }
-    events.add('subkey');
-    subkeyRebindTargets.add(accountId);
+  Future<void> registerDeviceSubkeyForBinding(
+    AccountDataBinding binding,
+  ) async {
+    deviceSubkeyRegistrationCalls++;
   }
 }
 
@@ -809,14 +720,6 @@ ResolvedIdentity _registeredIdentity(
       ),
     );
 
-/// 未注册身份(有热钱包、无 CID):懒绑定必须在这种态下拒绝绑定子钥。
-ResolvedIdentity _unregisteredIdentity(String accountId) => ResolvedIdentity(
-      accountId: accountId,
-      ss58Address: _validAddress,
-      accountIndex: 0,
-      snapshot: null,
-    );
-
 /// 记录占号 / 换绑调用参数的假 RPC(不上链),验证 service 编排把账户与 CID 传对。
 class _FakeIdentityRpc extends CitizenIdentityRpc {
   _FakeIdentityRpc({this.rebindError, this.onRebound});
@@ -828,6 +731,7 @@ class _FakeIdentityRpc extends CitizenIdentityRpc {
   String? reboundCid;
   String? reboundOld;
   String? reboundNew;
+  int fetchRebindContextCalls = 0;
 
   @override
   Future<({String txHash, int usedNonce, String blockHashHex})> selfOccupyCid({
@@ -862,13 +766,15 @@ class _FakeIdentityRpc extends CitizenIdentityRpc {
   @override
   Future<SelfRebindAuthorizationContext> fetchSelfRebindAuthorizationContext(
     String cidNumber,
-  ) async =>
-      SelfRebindAuthorizationContext(
-        genesisHash: Uint8List.fromList(List<int>.filled(32, 0x42)),
-        currentAccountId: _validAccountId,
-        expectedBindingRevision: BigInt.one,
-        expiresAt: BigInt.from(1900000000),
-      );
+  ) async {
+    fetchRebindContextCalls++;
+    return SelfRebindAuthorizationContext(
+      genesisHash: Uint8List.fromList(List<int>.filled(32, 0x42)),
+      currentAccountId: _validAccountId,
+      expectedBindingRevision: BigInt.one,
+      expiresAt: BigInt.from(1900000000),
+    );
+  }
 }
 
 class _FakeDataHandover extends CidAccountDataHandover {

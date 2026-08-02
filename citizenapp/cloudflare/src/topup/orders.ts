@@ -103,7 +103,7 @@ export function statusLabel(status: TopupOrderStatus): string {
   return status === 'pending' ? '待支付' : status === 'paid' ? '已支付' : '异常';
 }
 
-/// GET /v1/square/topup/config — 公开报价。付款前的最终报价以后续签名意图为准。
+/// GET /square/topup/config — 公开报价。付款前的最终报价以后续签名意图为准。
 export async function topupConfigRoute(_request: Request, env: Env): Promise<Response> {
   const rails = topupRails(env);
   if (rails.length === 0) {
@@ -125,7 +125,7 @@ export async function topupConfigRoute(_request: Request, env: Env): Promise<Res
   });
 }
 
-/// POST /v1/square/topup/intent — 钱包连接后、付款前创建短期付款意图。
+/// POST /square/topup/intent — 钱包连接后、付款前创建短期付款意图。
 ///
 /// 充值 = 付款人自掏稳定币给某个公民链账户打公民币,收款方无需证明账户所有权(同转账),
 /// 故本接口不做账户鉴权:`account_id` 即充值目标,由客户端指定,任意钱包账户(含冷钱包、
@@ -173,7 +173,7 @@ export async function topupIntentRoute(
   });
 }
 
-/// POST /v1/square/topup/confirm — 付款后提交交易哈希。
+/// POST /square/topup/confirm — 付款后提交交易哈希。
 ///
 /// 凭据是 Worker 用 `TOPUP_INTENT_SECRET` 签发的 HMAC 意图(不可伪造,内部钉死付款人、
 /// 收款地址、金额、充值目标和签发时间),不是公开的 tx hash,也不需要账户会话。
@@ -277,7 +277,7 @@ export async function topupConfirmRoute(request: Request, env: Env): Promise<Res
   });
 }
 
-/// POST /v1/square/topup/status — 只允许持有该笔付款意图的一方查询。
+/// POST /square/topup/status — 只允许持有该笔付款意图的一方查询。
 ///
 /// 用 POST 而非 GET:凭据是 HMAC 付款意图,不能出现在 URL 里。归属判据取
 /// `order.intent_id === intent.intent_id`(比只比账户更严,且天然覆盖账户归属)。

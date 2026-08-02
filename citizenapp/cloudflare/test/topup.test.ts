@@ -32,7 +32,7 @@ describe('topup 稳定币充值后端', () => {
 
   it('config 仅返回已配置公开报价', async () => {
     const response = await topupConfigRoute(
-      new Request('https://x.test/v1/square/topup/config'),
+      new Request('https://x.test/square/topup/config'),
       makeEnv(new FakeDb()),
     );
     const body = await response.json<{ rails: { token: string; chain_id: number }[]; packages: unknown[] }>();
@@ -157,7 +157,7 @@ describe('topup 稳定币充值后端', () => {
       const txHash = `0x${(i + 1).toString(16).padStart(64, '0')}`;
       const intent = await createIntent(env, accountId);
       const response = await topupConfirmRoute(
-        post('https://x.test/v1/square/topup/confirm', {
+        post('https://x.test/square/topup/confirm', {
           payment_intent: intent,
           evm_tx_hash: txHash,
         }),
@@ -171,7 +171,7 @@ describe('topup 稳定币充值后端', () => {
     const overflowIntent = await createIntent(env, overflowAccountId);
     await expect(
       topupConfirmRoute(
-        post('https://x.test/v1/square/topup/confirm', {
+        post('https://x.test/square/topup/confirm', {
           payment_intent: overflowIntent,
           evm_tx_hash: overflowTxHash,
         }),
@@ -182,25 +182,25 @@ describe('topup 稳定币充值后端', () => {
 
   it('claim 原子抢占且不自动过期，第二个结算流程不能重复抢占', async () => {
     const { env, orderId } = await preparedOrder();
-    const response = await topupClaimRoute(settlePost(`https://x.test/v1/square/topup/settlement/${orderId}/claim`, {}), env, orderId);
+    const response = await topupClaimRoute(settlePost(`https://x.test/square/topup/settlement/${orderId}/claim`, {}), env, orderId);
     const claim = await response.json<{ claim_id: string }>();
     expect(claim.claim_id).toMatch(/^tpc_[0-9a-f]{32}$/);
     await expect(
-      topupClaimRoute(settlePost(`https://x.test/v1/square/topup/settlement/${orderId}/claim`, {}), env, orderId),
+      topupClaimRoute(settlePost(`https://x.test/square/topup/settlement/${orderId}/claim`, {}), env, orderId),
     ).rejects.toMatchObject({ code: 'topup_order_already_claimed' });
   });
 
   it('settled 必须同时通过 EVM 与 finalized CitizenChain 完整交易证明', async () => {
     const { env, db, orderId } = await preparedOrder();
     const claim = await (
-      await topupClaimRoute(settlePost(`https://x.test/v1/square/topup/settlement/${orderId}/claim`, {}), env, orderId)
+      await topupClaimRoute(settlePost(`https://x.test/square/topup/settlement/${orderId}/claim`, {}), env, orderId)
     ).json<{ claim_id: string }>();
     const signedExtrinsicHex = makeDisbursementExtrinsic(orderId);
     const gmbTxHash = `0x${Buffer.from(blake2AsU8a(hexBytes(signedExtrinsicHex), 256)).toString('hex')}`;
     vi.stubGlobal('fetch', rpcFetch({ signedExtrinsicHex }));
 
     const response = await topupSettledRoute(
-      settlePost(`https://x.test/v1/square/topup/settlement/${orderId}/settled`, {
+      settlePost(`https://x.test/square/topup/settlement/${orderId}/settled`, {
         claim_id: claim.claim_id,
         gmb_tx_hash: gmbTxHash,
         gmb_block_hash: BLOCK_HASH,
@@ -223,7 +223,7 @@ describe('topup 稳定币充值后端', () => {
     const { env, orderId } = await preparedOrder();
     await expect(
       topupExceptionRoute(
-        settlePost(`https://x.test/v1/square/topup/settlement/${orderId}/exception`, { reason: 'bad' }),
+        settlePost(`https://x.test/square/topup/settlement/${orderId}/exception`, { reason: 'bad' }),
         env,
         orderId,
       ),
@@ -232,8 +232,8 @@ describe('topup 稳定币充值后端', () => {
 
   it('pending 队列只暴露是否已 claim，不泄露 claim_id', async () => {
     const { env, orderId } = await preparedOrder();
-    await topupClaimRoute(settlePost(`https://x.test/v1/square/topup/settlement/${orderId}/claim`, {}), env, orderId);
-    const response = await topupPendingRoute(settleGet('https://x.test/v1/square/topup/settlement/pending'), env);
+    await topupClaimRoute(settlePost(`https://x.test/square/topup/settlement/${orderId}/claim`, {}), env, orderId);
+    const response = await topupPendingRoute(settleGet('https://x.test/square/topup/settlement/pending'), env);
     const body = await response.json<{ orders: Record<string, unknown>[] }>();
     expect(body.orders[0].settlement_claimed).toBe(true);
     expect(body.orders[0]).not.toHaveProperty('settlement_claim_id');
@@ -262,7 +262,7 @@ async function createIntent(
     },
   };
   const response = await topupIntentRoute(
-    post('https://x.test/v1/square/topup/intent', {
+    post('https://x.test/square/topup/intent', {
       account_id: accountId,
       token: 'USDC',
       package_id: 'pkg_15',
@@ -276,7 +276,7 @@ async function createIntent(
 
 function confirm(env: Env, paymentIntent: string): Promise<Response> {
   return topupConfirmRoute(
-    post('https://x.test/v1/square/topup/confirm', {
+    post('https://x.test/square/topup/confirm', {
       payment_intent: paymentIntent,
       evm_tx_hash: TX_HASH,
     }),
@@ -286,7 +286,7 @@ function confirm(env: Env, paymentIntent: string): Promise<Response> {
 
 function status(env: Env, orderId: string, paymentIntent: string): Promise<Response> {
   return topupStatusRoute(
-    post('https://x.test/v1/square/topup/status', {
+    post('https://x.test/square/topup/status', {
       order_id: orderId,
       payment_intent: paymentIntent,
     }),

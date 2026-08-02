@@ -137,7 +137,7 @@ function putRequest(
     mac: string;
   }
 ): Request {
-  return new Request(`https://worker.test/v1/square/contacts/${contactId}`, {
+  return new Request(`https://worker.test/square/contacts/${contactId}`, {
     method: 'PUT',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ ...encrypted, updated_at: 1_000 })
@@ -151,14 +151,14 @@ function deleteRequest(
   accountId: string
 ): Request {
   return new Request(
-    `https://worker.test/v1/square/contacts/${contactId}` +
+    `https://worker.test/square/contacts/${contactId}` +
       `?binding_revision=${bindingRevision}&account_id=${accountId}`,
     { method: 'DELETE', headers: { authorization: `Bearer ${token}` } }
   );
 }
 
 function listRequest(token: string): Request {
-  return new Request('https://worker.test/v1/square/contacts', {
+  return new Request('https://worker.test/square/contacts', {
     headers: { authorization: `Bearer ${token}` }
   });
 }

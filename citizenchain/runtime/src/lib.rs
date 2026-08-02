@@ -84,7 +84,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // square-post。
     // square-post 订阅采用 runtime 真实公历时间戳协议：只执行扣款、最小状态和时间戳比较；
     // 平台三档价由创世播种，平台机构 CID 为创世固定常量，开发期零用户不设迁移。
-    spec_version: 0,
+    spec_version: 1,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 0,
@@ -228,8 +228,8 @@ pub type SignedPayload = generic::SignedPayload<RuntimeCall, TxExtension>;
 
 /// Runtime upgrade migrations 集合。
 ///
-/// 开发期零用户、重新创世模型：各 pallet 均不设迁移；本元组承载 runtime 级迁移，当前为空。
-pub type Migrations = ();
+/// 元组按执行顺序排列，每项只在其引入的那次升级跑一次。
+pub type Migrations = (citizen_identity::migrations::InitCidCount<Runtime>,);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<

@@ -32,7 +32,7 @@ void main() {
     final client = SquareApiClient(
       baseUrl: 'https://example.com',
       httpClient: MockClient((request) async {
-        if (request.url.path == '/v1/square/profile/assets/prepare') {
+        if (request.url.path == '/square/profile/assets/prepare') {
           prepareBody = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
@@ -40,7 +40,7 @@ void main() {
               'object_key': 'profile/acct/avatar',
               'content_hash': sha,
               'upload_url':
-                  'https://example.com/v1/square/profile/assets?object_key=profile%2Facct%2Favatar&byte_size=5&sha256=$sha',
+                  'https://example.com/square/profile/assets?object_key=profile%2Facct%2Favatar&byte_size=5&sha256=$sha',
             }),
             200,
             headers: {'content-type': 'application/json'},
@@ -83,7 +83,7 @@ void main() {
               'object_key': 'profile/a/avatar',
               'content_hash': 'x',
               'upload_url':
-                  'https://example.com/v1/square/profile/assets?object_key=profile%2Fa%2Favatar&byte_size=1&sha256=x',
+                  'https://example.com/square/profile/assets?object_key=profile%2Fa%2Favatar&byte_size=1&sha256=x',
             }),
             200,
             headers: {'content-type': 'application/json'},

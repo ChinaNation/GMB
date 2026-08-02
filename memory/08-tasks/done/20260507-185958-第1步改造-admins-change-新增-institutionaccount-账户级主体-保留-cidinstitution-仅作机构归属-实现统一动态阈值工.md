@@ -42,7 +42,7 @@
 ## 实施记录
 
 - 任务卡已创建
-- 2026-05-08：已完成 `core_const::AdminAccountKind::InstitutionAccount = 0x05`、`account_id_from_institution_account`、`admins-change::dynamic_threshold / derived_threshold`、`propose_admin_set_change`、`AdminSetChangeAction<AdminsOf<T>>`、`MODULE_TAG = b"adm-set-v1"`。
+- 2026-05-08：已完成 `core_const::AdminAccountKind::InstitutionAccount = 0x05`、`account_id_from_institution_account`、`admins-change::dynamic_threshold / derived_threshold`、`propose_admin_set_change`、`AdminSetChangeAction<AdminsOf<T>>`；当时的版本化 MODULE_TAG 后续已删除。
 - 2026-05-08：已在 runtime 配置 `MaxPersonalAccountAdmins = 64`、`MaxAdminsPerInstitution = 1989`。
 - 2026-05-08：已更新 ADR-010、ADR-015、admins-change 技术文档、MODULE_TAG 注册表、统一协议、统一命名和相关治理/转账文档。
 - 2026-05-08：验证通过：

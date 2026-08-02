@@ -39,7 +39,7 @@
 - 节点程序启动后 OnChina 默认不启动。
 - 设置页显示 `链上中国平台`、`未开启 / 启动中 / 已开启` 状态标签、`https://onchina.local:8964` 和 `启动 / 关闭` 按钮。
 - 点击启动或关闭弹出二次确认。
-- 确认后 OnChina 子进程启动或停止；只有 `/api/v1/health` 返回 `UP` 后状态标签才显示 `已开启`，进程存在但健康检查未通过时显示 `启动中`。
+- 确认后 OnChina 子进程启动或停止；只有 `/api/health` 返回 `UP` 后状态标签才显示 `已开启`，进程存在但健康检查未通过时显示 `启动中`。
 - 点击启动时先清理上一轮异常退出后遗留的旧 OnChina 孤儿进程和 8964 监听；如果端口被非 OnChina 进程占用，必须明确显示 `启动失败`，不得误杀其它进程。
 - `启动中` 不显示红色失败详情；只有启动动作最终失败、子进程退出或健康检查超时后，才显示 `启动失败` 和具体原因。
 - 退出节点程序后 OnChina 子进程被清理。
@@ -55,7 +55,7 @@
 - 已补齐节点解绑 / 换机构安全闭环：`NODE_BINDING_UNBIND` 复用现有管理员安全动作 prepare/commit，要求本机会话管理员 + 冷钱包 active admin 签名确认；commit 后停用 active binding 并清退管理员会话。
 - 已修正前端管理员安全动作鉴权档映射：从旧两档字符串改为后端真实三档 `SESSION / PASSKEY / PASSKEY_COLD_SIGN`，避免冷签动作被前端旧字符串误拒。
 - 已将 OnChina TLS 目标收敛为机构私有 CA 模式：本节点生成 `onchina-org-root-ca.crt/.key`，服务证书固定覆盖 `onchina.local`，并用 `onchina-cert-host.txt` 标记触发旧证书再生成。
-- 已新增未登录可访问的机构 CA 下载接口 `/api/v1/platform/ca-certificate` 与信息接口 `/api/v1/platform/ca-certificate/info`，员工可在 OnChina 登录页直接下载 CA 公钥证书，CA 私钥不通过 HTTP 暴露。
+- 已新增未登录可访问的机构 CA 下载接口 `/api/platform/ca-certificate` 与信息接口 `/api/platform/ca-certificate/info`，员工可在 OnChina 登录页直接下载 CA 公钥证书，CA 私钥不通过 HTTP 暴露。
 - 已在 OnChina 登录页增加机构 CA 证书安装提示；未受信任 HTTPS 环境下，摄像头扫码和 passkey 均提示先安装机构 CA，不再误报为单纯摄像头权限问题。
 - 已将机构 CA 证书安装提示同步扩展到登录后的后台顶部，避免自动恢复登录态或已登录用户看不到下载证书入口。
 - 已修复 macOS 证书兼容性：旧 rcgen 超长期默认有效期证书会因缺少新策略标记自动重建；CA 有效期固定到 2036-01-01，服务证书每次启动重签且有效期 397 天以内。
@@ -84,15 +84,15 @@
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：FRG/CREG 控制台能力映射修复后通过。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p onchina platform::capability -- --nocapture`：通过，2 个能力映射单测通过，锁定 FRG 为 CREG 超集、CREG 可只读联邦注册局 tab 且无注册局维护写权。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：macOS 证书有效期修复后通过。
-- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8979`、独立 `/tmp/onchina-cert-policy-*` TLS/PG 目录启动新构建的 `target/debug/onchina serve`；生成的 CA 为 `2026-01-01` 到 `2036-01-01`，服务证书为启动日前一天到 397 天后，策略标记为 `onchina-ca-v2-ca2036-server397d`。
-- macOS 证书兼容验收：`/api/v1/platform/ca-certificate/info` 返回的 SHA-256 与下载 CA 证书 DER 指纹一致；`openssl verify -CAfile onchina-org-root-ca.crt onchina-server.crt` 返回 `OK`；验收后已停止临时服务并清理 `/tmp/onchina-cert-policy-*`。
-- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8976`、`ONCHINA_ENABLE_TLS=1`、独立 `/tmp/onchina-ca-verify-*` TLS/PG 目录启动新构建的 `target/debug/onchina serve`，`curl -k https://127.0.0.1:8976/api/v1/health` 返回 `status=UP`。
-- 机构 CA 接口运行态验收：`/api/v1/platform/ca-certificate/info` 返回 `filename=onchina-org-root-ca.crt` 和证书 DER SHA-256；`/api/v1/platform/ca-certificate` 返回 `content-type=application/x-x509-ca-cert`、`content-disposition=attachment; filename="onchina-org-root-ca.crt"`；下载证书 DER SHA-256 与服务端信息一致。
+- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8979`、独立 `/tmp/onchina-cert-policy-*` TLS/PG 目录启动新构建的 `target/debug/onchina serve`；生成的 CA 为 `2026-01-01` 到 `2036-01-01`，服务证书为启动日前一天到 397 天后，策略标记为 `onchina-ca2036-server397d`。
+- macOS 证书兼容验收：`/api/platform/ca-certificate/info` 返回的 SHA-256 与下载 CA 证书 DER 指纹一致；`openssl verify -CAfile onchina-org-root-ca.crt onchina-server.crt` 返回 `OK`；验收后已停止临时服务并清理 `/tmp/onchina-cert-policy-*`。
+- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8976`、`ONCHINA_ENABLE_TLS=1`、独立 `/tmp/onchina-ca-verify-*` TLS/PG 目录启动新构建的 `target/debug/onchina serve`，`curl -k https://127.0.0.1:8976/api/health` 返回 `status=UP`。
+- 机构 CA 接口运行态验收：`/api/platform/ca-certificate/info` 返回 `filename=onchina-org-root-ca.crt` 和证书 DER SHA-256；`/api/platform/ca-certificate` 返回 `content-type=application/x-x509-ca-cert`、`content-disposition=attachment; filename="onchina-org-root-ca.crt"`；下载证书 DER SHA-256 与服务端信息一致。
 - TLS 证书链验收：`openssl verify -CAfile onchina-org-root-ca.crt onchina-server.crt` 返回 `OK`，服务证书 SAN 为 `DNS:onchina.local`；验收后已停止临时服务并删除 `/tmp/onchina-ca-verify-*`、下载证书和 header 临时文件。
 - 残留扫描：旧 TLS 文件名、旧单证书表述、旧摄像头/取消混合提示均为 0 命中；`citizenchain/runtime/` 无本次 diff。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：命名清理后通过，已生成新 debug 二进制用于运行态验收。
 - `node --check citizenapp/tools/generate_admin_division_bundle.mjs && node --check citizenapp/tools/generate_public_institution_bundle.mjs`：通过。
-- 临时端口运行态验收：以新 `ONCHINA_*` / `ONCHAIN_*` 环境变量启动 `citizenchain/target/debug/onchina serve`，内嵌 PG 初始化成功，`curl -k https://127.0.0.1:8974/api/v1/health` 返回 `status=UP`；验收后已停止服务并删除 `/tmp/onchina-codex-env-clean-*`。
+- 临时端口运行态验收：以新 `ONCHINA_*` / `ONCHAIN_*` 环境变量启动 `citizenchain/target/debug/onchina serve`，内嵌 PG 初始化成功，`curl -k https://127.0.0.1:8974/api/health` 返回 `status=UP`；验收后已停止服务并删除 `/tmp/onchina-codex-env-clean-*`。
 - 目标残留扫描：旧链 WS 环境变量、旧平台环境变量、旧登录/鉴权/绑定/API 错误码、旧节点身份误配置提示均为 0 命中；`citizenchain/runtime/` 无本次 diff。
 - 权限残留扫描：旧 FRG/CREG 控制台降权描述在当前代码和记忆文档中为 0 命中。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p node`：通过。
@@ -102,6 +102,6 @@
 - `git diff --check`：通过。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina -p node`：通过，已生成本次代码对应的真实 debug 二进制。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：新增 `NODE_BINDING_UNBIND` 后重新构建通过。
-- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8974`、`ONCHINA_ENABLE_TLS=1` 启动本次新构建的 `target/debug/onchina serve`，`curl -k https://127.0.0.1:8974/api/v1/health` 返回 `status=UP`；验收后已停止临时进程并清理 `/tmp/onchina-codex-*` 临时 TLS/日志。
+- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8974`、`ONCHINA_ENABLE_TLS=1` 启动本次新构建的 `target/debug/onchina serve`，`curl -k https://127.0.0.1:8974/api/health` 返回 `status=UP`；验收后已停止临时进程并清理 `/tmp/onchina-codex-*` 临时 TLS/日志。
 - 旧入口扫描：`rg "http://onchina\\.local:8964|http://127\\.0\\.0\\.1:8964"` 已确认代码和记忆文档中不再保留旧正式入口文案。
 - 未执行完整 Tauri 桌面真实运行态验收：该命令会在当前机器启动真实区块链节点与挖矿进程，本次先以构建、Rust check 和静态入口扫描收口；后续如需真机验收，应在可接受启动本机节点的窗口中执行。

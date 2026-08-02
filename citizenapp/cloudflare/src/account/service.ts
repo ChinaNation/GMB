@@ -44,7 +44,7 @@ function parseConfirm(body: ActionConfirmRequest): {
   return { accountId, challengeId: body.challenge_id, signature: body.signature };
 }
 
-/// POST /v1/square/account/delete/challenge —— 下发注销签名挑战。
+/// POST /square/account/delete/challenge —— 下发注销签名挑战。
 export async function deleteAccountChallengeRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const body = await readJson<ChallengeRequest>(request);
@@ -69,7 +69,7 @@ export async function deleteAccountChallengeRoute(request: Request, env: Env): P
   });
 }
 
-/// POST /v1/square/account/delete —— 当前绑定账户签名授权后，按会话 CID 硬删除该身份数据。
+/// POST /square/account/delete —— 当前绑定账户签名授权后，按会话 CID 硬删除该身份数据。
 export async function deleteAccountRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const body = await readJson<ActionConfirmRequest>(request);

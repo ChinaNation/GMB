@@ -9,6 +9,7 @@ import UserNotifications
   // 原生通道由 AppDelegate 强引用，确保 Flutter engine 生命周期内处理器始终有效。
   private var hardwareBoundSeedVaultChannel: HardwareBoundSeedVaultChannel?
   private var deviceSubkeyChannel: DeviceSubkeyChannel?
+  private var deviceDataKeyVaultChannel: DeviceDataKeyVaultChannel?
   private var securityChannel: FlutterMethodChannel?
   private var permissionsChannel: FlutterMethodChannel?
 
@@ -48,6 +49,7 @@ import UserNotifications
       binaryMessenger: binaryMessenger
     )
     deviceSubkeyChannel = DeviceSubkeyChannel(binaryMessenger: binaryMessenger)
+    deviceDataKeyVaultChannel = DeviceDataKeyVaultChannel(binaryMessenger: binaryMessenger)
 
     let securityChannel = FlutterMethodChannel(
       name: "org.citizenapp/security",

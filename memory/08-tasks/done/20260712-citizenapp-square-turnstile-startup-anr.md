@@ -8,7 +8,7 @@
 - ANR 判定（logcat `ActivityManager`）：`Input dispatching timed out ... Waited 5002ms for FocusEvent`。
 - 主线程栈（`/data/anr` dropbox）：`"main" tid=1 state=R utm=1038`（≈10.4s 纯用户态 CPU）。
 - ANR dump 里**无 `1.ui` 线程** → 平台线程与 UI 线程合并的构建，任何主 isolate Dart 重活或平台视图开销都直接堵输入派发。
-- ANR 窗口内 logcat 主导活动 = `SquareTurnstilePage` 的 `webview_flutter` 平台视图 + Cloudflare Turnstile 反爬 JS（`crcfrcn.com/api/v1/security/turnstile`）。
+- ANR 窗口内 logcat 主导活动 = `SquareTurnstilePage` 的 `webview_flutter` 平台视图 + Cloudflare Turnstile 反爬 JS（`crcfrcn.com/api/security/turnstile`）。
 - 非上次修的 smoldot 轻节点问题（那些是子线程，全 async）。
 
 ## 回归根因

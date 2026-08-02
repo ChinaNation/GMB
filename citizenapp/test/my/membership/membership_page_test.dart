@@ -207,7 +207,7 @@ void main() {
     final api = SquareApiClient(
       baseUrl: 'https://membership.test',
       httpClient: MockClient((request) async {
-        expect(request.url.path, '/v1/square/membership/confirm');
+        expect(request.url.path, '/square/membership/confirm');
         expect(request.headers['authorization'], 'Bearer tok');
         expect(request.headers, isNot(contains('x-device-signature')));
         return http.Response('{}', 200);

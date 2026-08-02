@@ -14,6 +14,7 @@
 		6A1C27010000000000000001 /* SecureEnclaveKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1C27010000000000000011 /* SecureEnclaveKeyStore.swift */; };
 		6A1C27010000000000000002 /* HardwareBoundSeedVaultChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1C27010000000000000012 /* HardwareBoundSeedVaultChannel.swift */; };
 		6A1C27010000000000000003 /* DeviceSubkeyChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1C27010000000000000013 /* DeviceSubkeyChannel.swift */; };
+		6A1C27010000000000000004 /* DeviceDataKeyVaultChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1C27010000000000000014 /* DeviceDataKeyVaultChannel.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -57,6 +58,7 @@
 		6A1C27010000000000000011 /* SecureEnclaveKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveKeyStore.swift; sourceTree = "<group>"; };
 		6A1C27010000000000000012 /* HardwareBoundSeedVaultChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareBoundSeedVaultChannel.swift; sourceTree = "<group>"; };
 		6A1C27010000000000000013 /* DeviceSubkeyChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSubkeyChannel.swift; sourceTree = "<group>"; };
+		6A1C27010000000000000014 /* DeviceDataKeyVaultChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDataKeyVaultChannel.swift; sourceTree = "<group>"; };
 		74858FAC1ED2DC5600515810 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -173,6 +175,7 @@
 				6A1C27010000000000000011 /* SecureEnclaveKeyStore.swift */,
 				6A1C27010000000000000012 /* HardwareBoundSeedVaultChannel.swift */,
 				6A1C27010000000000000013 /* DeviceSubkeyChannel.swift */,
+				6A1C27010000000000000014 /* DeviceDataKeyVaultChannel.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -413,6 +416,7 @@
 				6A1C27010000000000000001 /* SecureEnclaveKeyStore.swift in Sources */,
 				6A1C27010000000000000002 /* HardwareBoundSeedVaultChannel.swift in Sources */,
 				6A1C27010000000000000003 /* DeviceSubkeyChannel.swift in Sources */,
+				6A1C27010000000000000004 /* DeviceDataKeyVaultChannel.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);

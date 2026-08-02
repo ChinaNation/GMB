@@ -3,6 +3,16 @@ fn main() {
     // 强制环境切换时重新运行 build.rs，确保 WASM 来源明确。
     println!("cargo:rerun-if-env-changed=WASM_FILE");
     println!("cargo:rerun-if-env-changed=WASM_BUILD_FROM_SOURCE");
+    println!("cargo:rerun-if-env-changed=CITIZENCHAIN_PRODUCTION_WASM_BUILD");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_RUNTIME_BENCHMARKS");
+
+    // 正式候选 WASM 与 benchmark runtime 必须是两条不可交叉的构建路径。
+    // 权重生成也需要源码 WASM，因此只由正式流水线显式开启本闸门。
+    if std::env::var_os("CITIZENCHAIN_PRODUCTION_WASM_BUILD").is_some()
+        && std::env::var_os("CARGO_FEATURE_RUNTIME_BENCHMARKS").is_some()
+    {
+        panic!("正式 WASM 源码构建禁止启用 runtime-benchmarks");
+    }
 
     if let Ok(wasm_file) = std::env::var("WASM_FILE") {
         // ── 使用 CI 预编译的 WASM（本地启动脚本、全新创世、升级工具）──

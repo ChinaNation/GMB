@@ -111,9 +111,9 @@
 
 **证据链**：
 
-- secure storage 中 `wallet_seed_env_v1_1` 与 `wallet_recovery_env_v1_1` **都还在**（index=2 两者皆无，符合冷钱包无种子；index=3 两者皆在）。
+- 当时 secure storage 中历史种子密文键与恢复密文键**都还在**（index=2 两者皆无，符合冷钱包无种子；index=3 两者皆在）；这些旧键名已清理，不构成当前协议。
 - `deleteWallet` 对热钱包会连 seed 与助记词一起删 → 两者俱在即可断定「旅行者」**不是走 App 删除路径消失的**，其 Isar 行是异常丢失。
-- 另有残留 `wallet_contacts_key_v1_w5GPoqEs…`（旧代码用 SS58 作通讯录密钥名），非钱包3 的地址，推测为旅行者 —— **恢复后地址实测正是 `w5GPoqEsUkBtqzPMakf2njBAmgbsG8YPYzyJfeWFYLcZnoBoc`，推测得证**。
+- 另有历史通讯录密钥名残留（旧代码用 SS58 作通讯录密钥名），非钱包3 的地址，推测为旅行者；恢复后地址实测一致。旧键名已清理，不作为当前兼容入口。
 
 **结论订正**：先前依据「只看到 2 行仍并存」判断「唯一索引在空值上折叠没有发生」，该结论**证伪** —— 当时并不知道原本有 3 行。`accountId` / `ss58Address` 两个 `@Index(unique: true, replace: true)` 在改名迁移后全变空值，**行在迁移中丢失是首要嫌疑**（未验证 Isar 确切行为，不下定论）。这说明未收尾的「钱包字段统一」重构危险性高于先前评估：它不只让钱包读不出，**还可能吃掉整行**。
 

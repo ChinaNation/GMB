@@ -1,19 +1,11 @@
 # 全节点奖励账户绑定去掉「必须先出块」门槛
 
-状态：open（2026-07-31，用户已定方向：下次 runtime 升级时改，不重新创世）
+状态：completed（2026-08-02；业务修复、benchmark、权重、测试、注释与残留清理全部完成）
 
 ## 缺陷
 
-`fullnode-issuance` 的 `bind_reward_account`（call_index 0）要求矿工账户必须已经出过块，
-否则拒绝：
-
-```rust
-// runtime/issuance/fullnode-issuance/src/lib.rs:165
-ensure!(
-    LastAuthoredBlockByMiner::<T>::contains_key(&miner_account_id),
-    Error::<T>::MinerNeverAuthoredBlock
-);
-```
+`fullnode-issuance` 的 `bind_reward_account`（call index 0）曾要求矿工账户必须已经出过块，
+否则拒绝。该门槛把奖励账户配置错误地依赖于概率性的首次出块。
 
 而 `LastAuthoredBlockByMiner` 全仓只有一处写入 —— `on_finalize` 里真实出块时
 （`lib.rs:260` `insert(&author, block_number)`），没有第二个入口。
@@ -54,38 +46,40 @@ PoW 概率事件。于是「要绑定就得先出块，出不了块就永远绑�
 
 ## 方案（用户选定：去掉出块限制）
 
-删除 `bind_reward_account` 中的 `MinerNeverAuthoredBlock` 检查，语义改为「预绑定」：
+删除 `bind_reward_account` 中的旧出块资格检查，语义改为「预绑定」：
 任何账户可提前登记奖励接收账户，该登记只在其真实出块时生效。
 
 保留的检查不变：
 - `RewardAccountAlreadyBound`（一个矿工账户只能绑一次，改绑走 call 1）
 - `RewardAccountCannotBeMiner`（收款账户不得等于矿工账户）
 
-`Error::MinerNeverAuthoredBlock` 变体在 call 0 不再触发；若无其它引用应一并删除，遵守
-「无残桩」死规则。`LastAuthoredBlockByMiner` 存储本身保留 —— 它仍是奖励发放与审计的
-事实来源，只是不再充当绑定门票。
+对应旧错误变体已删除，遵守「无残桩」死规则。`LastAuthoredBlockByMiner` 存储本身保留 ——
+它仍是奖励发放与审计的事实来源，只是不再充当绑定门票。
 
-## 为什么不需要重新创世
+## 实施结果
 
-该 `ensure!` 位于 call 的执行逻辑内，不改 storage 布局、不改创世状态、不改
-`genesis_hash`/`state_root`。通过正式链 `system.setCode` 升级即可生效，不构成硬分叉。
-这也是本卡定位为「下次 runtime 升级顺带改」而非阻塞项的原因。
+该业务修复最终随 2026-08-01 正式重新创世进入冻结 runtime：`bind_reward_account` 已无
+旧出块资格分支，未出块账户可以预绑定奖励接收账户；Storage、call index、Event 和权限模型
+未改变。2026-08-02 完成其余 runtime 收尾并把 `spec_version` 从 0 提升为 1。
 
 ## 验收
 
-1. 单测：新增「未出块账户可成功绑定」用例；原
-   `tests/cases.rs:47` 断言 `MinerNeverAuthoredBlock` 的用例须同步改写或删除。
-2. 单测：已绑定账户重复绑定仍报 `RewardAccountAlreadyBound`；收款账户等于矿工账户仍报
-   `RewardAccountCannotBeMiner`。
-3. `cargo check` 全 workspace 通过，`Error` 枚举无未使用变体残留。
-4. 升级后在正式链实测：中枢省 `prczss`、贵州省 `prcgzs` 在未出块状态下成功绑定
-   `w5CB1UoqD2PyKpnxmEgJB7TXEqHyAj3s5nDEeGkLNYJKoCdPN`，读回 `RewardAccountIdByMiner`
-   逐字节核对。
+1. [x] 单测覆盖「未出块账户可成功绑定」，`Error` 枚举已删除旧错误变体。
+2. [x] 重复绑定和绑定矿工自身账户的安全检查保持不变。
+3. [x] 补充「预绑定账户收到首次出块奖励」测试，pallet 当前 20 项测试全部通过。
+4. [x] 贵州 `prcgzs`、中枢 `prczss`、国家储委会 `nrcgch` 三个生产节点的 `powr`
+   账户均已完成首次绑定；finalized `RewardAccountIdByMiner` 全部逐字节等于目标
+   `account_id=0x1a16ee768af324002ea732b796b14c34a261e08ff6be89ea67ad2b7fa04bd94e`。
+5. [x] 使用 Substrate Benchmark CLI 53.0.0、`steps=50`、`repeat=20` 重新生成权重；
+   绑定与重绑均为 1 次读取、1 次写入，生成 ref time 分别为 6,000,000 与 7,000,000。
+6. [x] `cargo check --workspace --all-targets --locked`、全 workspace 测试和
+   `cargo clippy --workspace --all-targets --locked -- -D warnings` 全部通过。
 
-## 遗留
+## 结论
 
 - 首块手续费销毁问题不在本卡范围。去掉门槛后节点可在部署时预绑定，首块分成即可正常入账，
   该问题自然消解；但**已经发生的销毁不追溯补发**。
 - 本缺陷是 2026-07-30 创世前审计的漏网项。当时审查重点是「创世后无法通过 runtime 升级
   解决的阻塞性 bug」，该项因可升级修复未被列入，但它是实打实影响节点运维的功能缺陷，
   审计口径应当覆盖到。
+- benchmark、生成权重、测试辅助函数、旧注释和旧命名残留已全部清理，本卡无待办项。

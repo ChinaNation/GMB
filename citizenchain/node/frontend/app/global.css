@@ -2813,23 +2813,6 @@ select option:checked {
   margin: 4px 0 0;
 }
 
-.dev-upgrade-file-name {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.dev-upgrade-submit {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  align-self: flex-start;
-}
-
 .upgrade-done-note {
   font-size: 13px;
   color: var(--text-muted);

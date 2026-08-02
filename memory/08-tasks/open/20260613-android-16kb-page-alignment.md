@@ -15,14 +15,14 @@
 | .so | 来源插件 | 修法 | 难度 |
 |---|---|---|---|
 | `libsmoldot.so` | **smoldot-dart**(本地包,自有) | 用 NDK r27+ 重编 + 链接加 `-Wl,-z,max-page-size=16384` | 中(自己可控) |
-| `libisar.so` | **isar 3.1.0**(isar_flutter_libs) | isar 3 上游已停更、预编译未对齐→换 isar 社区分支/v4 对齐版,或自编对齐 .so | **高(DB 迁移风险)** |
+| `libisar.so` | **isar 3.1.0**(isar_flutter_libs) | isar 3 上游已停更、预编译未对齐→换已支持 16KB 对齐的 isar 社区分支,或自编对齐 .so | **高(DB 迁移风险)** |
 | `libbarhopper_v3.so` / `libimage_processing_util_jni.so` / `libsurface_util_jni.so` | **mobile_scanner 7.1.4**(MLKit + CameraX) | 升 mobile_scanner 到对齐版(Google 新版 MLKit/CameraX 已对齐) | 低 |
 | `libdatastore_shared_counter.so` | androidx datastore(传递) | 升相关 androidx/插件版本 | 低 |
 | `libflutter.so` / `libVkLayer_khronos_validation.so` | Flutter 引擎(后者 debug Vulkan 校验层) | 3.41 引擎大概率已对齐;校验层仅 debug,release 不含 | 低/确认即可 |
 
 ## 完工清单
 - [ ] smoldot-dart:NDK r27+ 重编 `libsmoldot.so`,链接器加 `max-page-size=16384`,验证 `objdump -p libsmoldot.so` 的 LOAD 段 `align 2**14`。
-- [ ] isar:评估迁移到 16KB 对齐的 isar 版本(社区分支/v4),或临时自编对齐 `libisar.so`;**评估 Isar schema/数据迁移影响**(全 app DB 依赖,风险最高,先出方案再动)。
+- [ ] isar:评估迁移到 16KB 对齐的 isar 社区分支,或临时自编对齐 `libisar.so`;**评估 Isar schema/数据迁移影响**(全 app DB 依赖,风险最高,先出方案再动)。
 - [ ] mobile_scanner / datastore:升到对齐版本,`flutter pub upgrade` 验证扫码功能不回归。
 - [ ] 确认 Flutter 3.41 `libflutter.so` 已对齐;release 包不含 VkLayer 校验层。
 - [ ] 全量原生库 16KB 对齐校验脚本(遍历 `*.so` 查 `p_align>=0x4000`)。

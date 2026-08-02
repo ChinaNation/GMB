@@ -123,7 +123,7 @@ class CidAccountDataHandover {
     await commit(source: pending.source, target: target);
   }
 
-  /// 新绑定已经由新账户用途密钥验证后，按 finalized 真值准备端内私有数据状态。
+  /// 只按 finalized 公开真值准备端内私有数据状态，不读取钱包账户 child。
   ///
   /// 精确命中交接目标时保留暂存，等待 [completeFinalizedBinding] 提交；确认交易未生效
   /// 或链上版本已经越过目标时清掉旁路暂存。没有可提交交接且绑定确实变化时，只隔离
@@ -281,9 +281,6 @@ class MyIdService {
   final CitizenIdentityRpc _identityRpc;
   final CidAccountDataHandover _dataHandover;
 
-  /// 子钥懒绑定的并发去重:五处门禁可能同时挂载,只允许一次真正执行。
-  Future<void>? _subkeyBindInflight;
-
   final ChainRpc _chainRpc;
 
   final DateTime Function() _nowProvider;
@@ -434,7 +431,9 @@ class MyIdService {
       cidNumber: cid,
       accountId: resolvedBindAccountId,
     );
-    await _ensureBindingReady(finalized);
+    // CID 注册是正式交易；finalized 后这里只推进公开绑定与数据交接。设备数据钥和
+    // P-256 子钥分别由真实数据缺钥、Worker 明确未登记触发，禁止在此额外鉴权。
+    await _finishResolvedBinding(finalized);
     return cid;
   }
 
@@ -535,55 +534,32 @@ class MyIdService {
     );
   }
 
-  /// 确保当前 finalized 钱包绑定和本设备 P-256 子钥在本机就位。
-  ///
-  /// **懒执行**：两者只服务广场 / 聊天 / 通讯录 / 创作者 / 会员这些需 CID 的场景，
-  /// 故不在建钱包时做（那时账户还没有 CID），而由 `IdentityRegistrationGate` 在用户
-  /// 初次进入上述页面时调用本方法。只用钱包和交易的用户永远不会走到这里。
-  ///
-  /// 私有数据密钥只由当前绑定钱包账户直接派生；本方法不向 Worker 领取任何密钥。
-  /// 有当前账户签名的换绑先在端内重加密再由新账户接管；无当前账户签名时不继承此前密文。
-  ///
-  /// 并发去重:五处门禁可能同时挂载,用 [_subkeyBindInflight] 保证同一时刻只跑一次,
-  /// 其余调用等同一个 Future。失败向上抛,由门禁按 fail-closed 拦住功能页并给重试。
-  Future<void> ensureDeviceSubkeyBound() {
-    final inflight = _subkeyBindInflight;
-    if (inflight != null) return inflight;
-    final future = _doEnsureDeviceSubkeyBound()
-        .whenComplete(() => _subkeyBindInflight = null);
-    _subkeyBindInflight = future;
-    return future;
-  }
-
-  Future<void> _doEnsureDeviceSubkeyBound() async {
-    final resolved = await _identityResolver.resolve();
-    if (resolved == null || !resolved.isRegistered) {
-      // 无热钱包或尚未占到 CID:后端不收未绑 CID 账户的子钥,此处不做无谓尝试。
-      throw const WalletAuthException('当前无已注册身份,无法绑定设备');
-    }
-    await _ensureBindingReady(resolved);
-  }
-
-  /// 全步幂等：当前钱包派生上下文已激活、子钥已登记时都不重复执行。
-  /// 正确顺序是读取 finalized 当前绑定 → 新账户派生验证钥并激活 → 登记新设备子钥。
-  Future<void> _ensureBindingReady(ResolvedIdentity resolved) async {
+  Future<AccountDataBinding> _bindingForResolvedIdentity(
+    ResolvedIdentity resolved,
+  ) async {
     final snapshot = resolved.snapshot;
     if (snapshot == null) {
-      throw const WalletAuthException('当前无已注册身份，无法完成设备绑定');
+      throw const WalletAuthException('当前无已注册身份，无法解析设备子钥绑定');
     }
     final genesisHash = await _chainRpc.fetchGenesisHash();
     if (genesisHash.length != 32) {
       throw const WalletAuthException('创世哈希无效，禁止派生当前钱包私有数据密钥');
     }
-    await _finishFinalizedBinding(AccountDataBinding(
+    return AccountDataBinding(
       genesisHash: '0x${_bytesToHex(genesisHash)}',
       cidNumber: snapshot.cidNumber,
       bindingRevision: snapshot.bindingRevision,
       accountId: resolved.accountId,
-    ));
+    );
   }
 
-  /// 新账户用途密钥先验证上岗，再隔离/提交私有数据，随后登记设备并收敛凭证。
+  /// 只供 CID 注册 finalized 调用；页面门禁与 finalized 均不得初始化任何设备密钥。
+  Future<void> _finishResolvedBinding(ResolvedIdentity resolved) async {
+    await _finishFinalizedBinding(await _bindingForResolvedIdentity(resolved));
+  }
+
+  /// finalized 只推进公开绑定与数据交接，不生成本地数据钥，也不登记 P-256 设备子钥。
+  /// 前者仅在真实数据访问缺钥时生成，后者仅在 Worker 明确报告未登记时登记。
   Future<void> _finishFinalizedBinding(AccountDataBinding current) async {
     final previous = await _walletManager.readActiveAccountDataBinding();
     await _walletManager.activateAccountDataBinding(
@@ -596,14 +572,20 @@ class MyIdService {
       current: current,
       previous: previous,
     );
-    await _walletManager.bindDeviceSubkeyToCurrentBinding(
-      cidNumber: current.cidNumber,
-      bindingRevision: current.bindingRevision,
-      accountId: current.accountId,
-    );
     await _dataHandover.completeFinalizedBinding(current);
-    WalletManager.notifyIdentityBindingChanged();
+    if (previous == null || !_sameBinding(previous, current)) {
+      WalletManager.notifyIdentityBindingChanged();
+    }
   }
+
+  static bool _sameBinding(
+    AccountDataBinding left,
+    AccountDataBinding right,
+  ) =>
+      left.genesisHash == right.genesisHash &&
+      left.cidNumber == right.cidNumber &&
+      left.bindingRevision == right.bindingRevision &&
+      left.accountId == right.accountId;
 
   static String _bytesToHex(List<int> bytes) {
     const alphabet = '0123456789abcdef';

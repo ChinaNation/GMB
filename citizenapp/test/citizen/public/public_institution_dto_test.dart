@@ -66,10 +66,10 @@ void main() {
         'institution_code': 'LF',
         'account_count': 2,
       });
-      final e = dto.toEntity(catalogVersion: 'v9', updatedAtMillis: 123);
+      final e = dto.toEntity(catalogVersion: 'catalog', updatedAtMillis: 123);
       expect(e.cidNumber, 'Y');
       expect(e.cidFullName, 'Y'); // 无名回退 cidNumber
-      expect(e.catalogVersion, 'v9');
+      expect(e.catalogVersion, 'catalog');
       expect(e.updatedAtMillis, 123);
     });
   });

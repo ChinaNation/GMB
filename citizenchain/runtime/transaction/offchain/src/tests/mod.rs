@@ -13,9 +13,9 @@
 //! - `submit_batch_rejects_non_admin`        非管理员提交批次应失败
 //! - `submit_batch_same_bank_end_to_end`     单笔同行支付完整结算 + PaymentSettled 事件
 //!
-//! Mock 约束(与 `settlement.rs::pubkey_from_accountid` 对齐):`AccountId` 的
-//! 32 字节 = sr25519 公钥;因此 fixture 里用 `Pair::from_seed()` 派生 L3 与
-//! 清算行管理员账户,清算行主账户 / 费用账户用固定字节数组。
+//! Mock 与生产 runtime 均由 pallet `Config` 在编译期限定为官方 `AccountId32`；L3
+//! 签名账户由 sr25519 `Public` 转换得到，settlement 使用完整32字节验签，不从泛型
+//! SCALE 编码截断或猜测公钥。
 
 #![cfg(test)]
 

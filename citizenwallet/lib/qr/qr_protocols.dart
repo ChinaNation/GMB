@@ -11,7 +11,7 @@ class QrProtocols {
   QrProtocols._();
 
   /// 唯一协议版本字符串。压缩为 5 字符以降低二维码密度。
-  static const String v1 = 'QR_V1';
+  static const String qrV1 = 'QR_V1';
 }
 
 /// 统一扫码流向枚举。线上只序列化为数字 `k`。

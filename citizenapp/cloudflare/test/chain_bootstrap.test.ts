@@ -13,7 +13,7 @@ const testStateRoot = `0x${'22'.repeat(32)}`;
 describe('chain bootstrap manifest', () => {
   it('returns a light-node bootstrap manifest without exposing RPC', () => {
     const response = buildChainBootstrapResponse(
-      new Request('https://api.onchina.org/v1/chain/bootstrap'),
+      new Request('https://api.onchina.org/api/chain/bootstrap'),
       env({
         CHAIN_BOOTNODES: `${bootnodeA}\n${bootnodeB}\n${bootnodeA}`,
         BOOT_TTL_SECONDS: '120',
@@ -23,7 +23,7 @@ describe('chain bootstrap manifest', () => {
       })
     );
 
-    expect(response.schema).toBe('citizenapp.chain.bootstrap.v2');
+    expect(response.schema).toBe('citizenapp.chain.bootstrap');
     expect(response.chain.ss58_format).toBe(2027);
     expect(response.light_client.mode).toBe('smoldot');
     expect(response.light_client.api_is_truth).toBe(false);
@@ -34,8 +34,9 @@ describe('chain bootstrap manifest', () => {
       bundled_assets_required: ['assets/chainspec.json', 'assets/light_sync_state.json']
     });
     expect(response.p2p.bootnodes).toEqual([bootnodeA, bootnodeB]);
-    expect(response.services.square_base_url).toBe('https://api.onchina.org/v1/square');
-    expect(response.services.chat_base_url).toBe('https://api.onchina.org/v1/chat');
+    expect(response.services.square_base_url).toBe('https://api.onchina.org/api/square');
+    expect(response.services.chat_base_url).toBe('https://api.onchina.org/api/chat');
+    expect(response.services.media_base_url).toBe('https://api.onchina.org/api/square/media');
     expect(response.services.signed_extrinsic_relay.enabled).toBe(false);
     expect(response.services.signed_extrinsic_relay.path).toBeNull();
     expect(response.security.rpc_proxy).toBe(false);
@@ -48,7 +49,7 @@ describe('chain bootstrap manifest', () => {
 
   it('exposes only the signed extrinsic relay path when the relay is enabled', () => {
     const response = buildChainBootstrapResponse(
-      new Request('https://api.onchina.org/v1/chain/bootstrap'),
+      new Request('https://api.onchina.org/api/chain/bootstrap'),
       env({
         RELAY_ENABLED: '1',
         CHAIN_URL: 'https://rpc.internal.example',
@@ -59,14 +60,14 @@ describe('chain bootstrap manifest', () => {
 
     expect(response.services.signed_extrinsic_relay).toEqual({
       enabled: true,
-      path: '/v1/chain/extrinsics/relay'
+      path: '/chain/extrinsics/relay'
     });
     expect(JSON.stringify(response)).not.toContain('rpc.internal.example');
   });
 
   it('keeps the relay disabled when the Access service token is incomplete', () => {
     const response = buildChainBootstrapResponse(
-      new Request('https://api.onchina.org/v1/chain/bootstrap'),
+      new Request('https://api.onchina.org/api/chain/bootstrap'),
       env({
         RELAY_ENABLED: '1',
         CHAIN_URL: 'https://rpc.internal.example',
@@ -82,7 +83,7 @@ describe('chain bootstrap manifest', () => {
 
   it('falls back to bundled chainspec bootNodes when Worker config is empty', () => {
     const response = buildChainBootstrapResponse(
-      new Request('https://worker.test/v1/chain/bootstrap'),
+      new Request('https://worker.test/chain/bootstrap'),
       env()
     );
 
@@ -91,11 +92,12 @@ describe('chain bootstrap manifest', () => {
     expect(Object.keys(response.light_client).sort()).toEqual(
       ['api_is_truth', 'bundled_assets_required', 'mode', 'truth_source'].sort()
     );
+    expect(response.services.square_base_url).toBe('https://worker.test/square');
   });
 
-  it('routes GET /v1/chain/bootstrap with cache headers', async () => {
+  it('routes production GET /api/chain/bootstrap with cache headers', async () => {
     const response = await routeRequest(
-      new Request('https://api.onchina.org/v1/chain/bootstrap'),
+      new Request('https://api.onchina.org/api/chain/bootstrap'),
       env({ BOOT_TTL_SECONDS: '90' })
     );
 
@@ -104,12 +106,12 @@ describe('chain bootstrap manifest', () => {
     const body = (await response.json()) as { schema: string; ok: boolean };
     expect(body).toMatchObject({
       ok: true,
-      schema: 'citizenapp.chain.bootstrap.v2'
+      schema: 'citizenapp.chain.bootstrap'
     });
   });
 
   it('fails closed when the public chain identity is missing or invalid', () => {
-    const request = new Request('https://worker.test/v1/chain/bootstrap');
+    const request = new Request('https://worker.test/chain/bootstrap');
     expect(() => buildChainBootstrapResponse(
       request,
       env({ CHAIN_GENESIS_HASH: '' }),

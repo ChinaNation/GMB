@@ -116,7 +116,7 @@ every 30s (spawned task)
                                          Local, opaque)        → TransactionPool
                                                                 ↓
                                                           RuntimeCall::OffchainTransaction(
-                                                            submit_offchain_batch_v2 {..})
+                                                            submit_offchain_batch {..})
                                                                 ↓
                                                           ✅ settlement::execute_clearing_bank_batch
                                                           ✅ 每笔 sr25519_verify

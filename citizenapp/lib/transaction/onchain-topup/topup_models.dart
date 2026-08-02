@@ -1,4 +1,4 @@
-// 稳定币充值购买公民币 · 数据模型(与 Worker /v1/square/topup/* 对齐)。
+// 稳定币充值购买公民币 · 数据模型(与 Worker /square/topup/* 对齐)。
 
 /// 一条「币 + 链」入金轨(由 Worker config 下发,App 不写死合约)。
 class TopupRail {

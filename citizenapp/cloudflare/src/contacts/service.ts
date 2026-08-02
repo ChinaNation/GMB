@@ -34,7 +34,7 @@ interface ContactCursor {
   contactId: string;
 }
 
-/// GET /v1/square/contacts —— 属主 cid_number 只从 Session 派生，按更新时间和不透明 ID 稳定分页。
+/// GET /square/contacts —— 属主 cid_number 只从 Session 派生，按更新时间和不透明 ID 稳定分页。
 export async function listContactsRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const url = new URL(request.url);
@@ -74,7 +74,7 @@ export async function listContactsRoute(request: Request, env: Env): Promise<Res
   });
 }
 
-/// PUT /v1/square/contacts/:contact_id —— 幂等写入端侧生成的密文，较早更新不得覆盖较新更新。
+/// PUT /square/contacts/:contact_id —— 幂等写入端侧生成的密文，较早更新不得覆盖较新更新。
 export async function putContactRoute(
   request: Request,
   env: Env,
@@ -142,7 +142,7 @@ export async function putContactRoute(
   });
 }
 
-/// DELETE /v1/square/contacts/:contact_id —— 只能删除当前 Session 所属身份(cid)的记录。
+/// DELETE /square/contacts/:contact_id —— 只能删除当前 Session 所属身份(cid)的记录。
 export async function deleteContactRoute(
   request: Request,
   env: Env,

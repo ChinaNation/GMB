@@ -25,7 +25,7 @@ CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行
 |---|---|
 | **卡1 链端统一校验**(done/20260702-cid-occupy-card1) | ✅ citizen-identity 修 `starts_with(b"CTZN")` CRITICAL(真实号 `GD000-CTZN1-…` 曾被全拒);public/private-manage register/create 四入口接 `parse_cid_number_parts_bytes` + 家族断言(`is_person_code`=CTZN / `is_public_legal_code` / `is_private_legal_code`‖`is_unincorporated_code`)+ create 号码↔`institution_code` 参数一致;新增 `Error::InvalidCidNumber`;全仓夹具换真号 + 3 个家族拒绝用例;受影响 crate 测试全绿 |
 | 码表 104 定稿 | ✅ 四级完整即制度设计:镇无立法/教委、省无省教委/省公安厅;2026-07-04 按宪法补齐 12 个国家级公权机构码后为 A 国家 38/B 省 17/C 市 17/D 镇 14/E 私权 7/F 教育 6/G 个人 3/UNIN/PMUL |
-| 命名规则定稿并程序验证 | ✅ 单源 = 确定性模板 gov-deterministic-v8:**cid_short_name = 行政区显示名 + cid_short_name_suffix,cid_full_name = 行政区显示名 + cid_full_name_suffix**;296 常量逆向验证零例外;模板覆盖 C 17/T 14/省部门 11,国家 NSN/NRP 已归入 `china_lf.rs` 常量 |
+| 命名规则定稿并程序验证 | ✅ 单源 = 确定性模板 gov-deterministic:**cid_short_name = 行政区显示名 + cid_short_name_suffix,cid_full_name = 行政区显示名 + cid_full_name_suffix**;296 常量逆向验证零例外;模板覆盖 C 17/T 14/省部门 11,国家 NSN/NRP 已归入 `china_lf.rs` 常量 |
 | 嵌入式库清理 | ✅ 删旧公权 245,629(+账户 491,258+gov 目录);87 储备机构(NRC/PRC/PRB)对齐常量库(号/全称/简称/码/五类账户);旧码零残留 |
 | 行政区真源 | china.sqlite:43 省 / 2,872 市 / 39,087 镇 |
 
@@ -213,7 +213,7 @@ runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime �
 
 - 2026-07-04:**部署口径更新**——正式节点不再要求每台机器首启全量 GenesisBuilder 物化;`bake-chainspec.sh` 生成冻结 plain spec、CitizenApp `stateRootHash` 轻形态和 `genesis-state/` 链数据库包;节点安装包内置该包,首启复制本地 DB 后等待 RPC ready;OnChina 启动前必须等 `chain_getBlockHash(0)` 成功。
 
-- 2026-07-02:v1 定稿(批量交易方案);同日完成嵌入式库旧机构清理。
+- 2026-07-02:初版定稿(批量交易方案);同日完成嵌入式库旧机构清理。
 - 2026-07-03:Q1-Q5 已决;卡1 完成归档;命名规则统一并验证;v2 曾定为扩大创世范围。
 - 2026-07-03:**卡2 链端完成**(§3.1 CidRegistry+occupy/batch/revoke、§3.2 机构 Closed 墓碑+register 缺口封堵、§3.3 费类 Free)——citizen-identity 21/21、entity 34+34、citizen-issuance 12+5、runtime 30/30 全绿;全 runtime benchmarks 编译过(顺修 4 处既有断链)。
 - 2026-07-03:**卡2 完工(onchina 侧 D6/D7/D8 完成,归档 done/)**——`core/chain_submit.rs`(组装+dry-run+提交+等进块+区块回查,QR 只签不提交)、`domains/citizens/occupy.rs`(两阶段占号 prepare/submit,nonce 碰撞重试+承诺哈希幂等续用+吊销墓碑,`chain_sign_sessions` 会话表)、D8 提交路径同步回写 onchain_* + `cid_registry_lookup` 链上预查、chain_identity complete 切 D7 会话、前端 useChainSign+两阶段 api+建档/吊销 UI;onchina 134 测试全绿、前端 tsc+build 过、node 不受影响。

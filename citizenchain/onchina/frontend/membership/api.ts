@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 export function getPlatformPrices(auth: AdminAuth): Promise<PlatformPrices> {
-  return adminRequest<PlatformPrices>('/api/v1/membership/platform-prices', auth);
+  return adminRequest<PlatformPrices>('/api/membership/platform-prices', auth);
 }
 
 export function proposePlatformPrice(
@@ -19,7 +19,7 @@ export function proposePlatformPrice(
   newPriceFen: string,
 ): Promise<ProposePlatformPriceResult> {
   return adminRequest<ProposePlatformPriceResult>(
-    '/api/v1/membership/platform-prices/propose',
+    '/api/membership/platform-prices/propose',
     auth,
     {
       method: 'POST',

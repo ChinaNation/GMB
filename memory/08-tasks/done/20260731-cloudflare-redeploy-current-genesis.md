@@ -1,17 +1,17 @@
 # CitizenApp Cloudflare 按当前创世重新部署
 
-状态：**等待 2026-08-01 新创世部署**；仓库锚点已冻结，必须先完成冻结后软件 CI 和节点重装
+状态：completed（2026-08-02；当前创世 Worker 已生产部署并完成独立线上验收）
 
 ## 当前部署目标（2026-08-01）
 
 - `genesis_hash` = `0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`
 - `state_root` = `0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`
 - `wrangler.toml` 与 `worker-configuration.d.ts` 已由同一次正式 bake/Wrangler 生成并通过
-  类型检查和 256 项 Worker 测试；生产 Worker 尚未部署该新锚点。
+  类型检查和 256 项 Worker 测试；生产 Worker 已部署该新锚点。
 
 ## 历史部署结果（2026-07-31 只读实测，已被本次创世替代）
 
-用户已在 CitizenConsole 执行生产部署。`GET https://www.crcfrcn.com/api/v1/chain/bootstrap`
+用户已在 CitizenConsole 执行生产部署。`GET https://www.crcfrcn.com/api/chain/bootstrap`
 返回 HTTP 200，链身份与仓库冻结值逐字节一致：
 
 - `genesis_hash` = `0x278e68bced2dabf9690701188272da22d216fdaa2c617e7dcbe100df3e8bcbfa` ✅
@@ -28,7 +28,7 @@ connector 没跟着装回。Tunnel `242190b5-…` 两端无 connector，边缘�
 
 线上 Worker 曾停留在上一次创世的部署，与仓库冻结的当前创世不是同一条链。
 
-只读实测（`GET https://www.crcfrcn.com/api/v1/chain/bootstrap`，2026-07-31）：
+只读实测（`GET https://www.crcfrcn.com/api/chain/bootstrap`，2026-07-31）：
 
 | 来源 | genesis_hash | state_root |
 | --- | --- | --- |
@@ -41,8 +41,8 @@ connector 没跟着装回。Tunnel `242190b5-…` 两端无 connector，边缘�
 
 ## 影响
 
-1. 设备子钥绑定失败 → 聊天/广场落 `IdentityRegistrationGate` 的 `bindFailed`
-   「设备绑定未完成」。链路：`ensureDeviceSubkeyBound` → Worker 设备登记
+1. 当时的页面设备绑定流程失败 → 聊天/广场落入已删除的设备绑定失败状态。链路为页面
+   自动触发 Worker 设备登记
    → `requireCurrentFinalizedBinding` 读链拿不到当前 CID 绑定 →
    401 `cid_binding_changed`（或 CHAIN_URL 未配时 503 `chain_rpc_not_configured`）。
 2. `smoldot_client.dart` 的 `_bootstrapMatchesLocalSpec` 因 state_root 不匹配，
@@ -102,27 +102,34 @@ RPC。若 secret 只填到域名，装完 tunnel 后症状会从 502 变成打�
 （`maxretry=10`/`bantime=600`）、`guo-node.service` 已加 systemd 加固。cloudflared 为独立
 unit，与上述互不影响。
 
-## 待执行（只能由用户操作）
+## 生产执行结果
 
-CitizenConsole → 「☁️ CitizenApp Cloudflare」→ 「生产部署」。
-
-部署走 `citizenconsole/actions/cloudflare.sh production`，凭证 `CF_DEPLOY_TOKEN` /
-`CF_DATA_TOKEN` 由控制台原生安全代理在 Touch ID 后注入子进程。Claude 无法执行：
-本机 `wrangler whoami` 未认证，且部署令牌属凭证，不得由 Claude 处理。
+用户已在 CitizenConsole 完成 Touch ID 鉴权并执行「☁️ CitizenApp Cloudflare → 生产部署」。
+部署凭证只由控制台原生安全代理注入子进程，没有写入仓库、命令或日志。
 
 ## 关键前置
 
 脚本步骤 6 会把 Keychain 里 16 个 Secret 原样推到 Worker，其中 `CHAIN_URL` /
 `CHAIN_ID` / `CHAIN_SECRET` 决定 Worker 读哪条链。**若 Keychain 里的 `CHAIN_URL`
-指向的 RPC 网关仍连旧创世链，部署后 vars 正确但链读依旧错，「设备绑定未完成」不会消失。**
+指向的 RPC 网关仍连旧创世链，部署后 vars 正确但链读依旧错误。**
 部署前必须确认该网关后面的节点跑的是 `0x15755822…58671d` 这条链。
 
 ## 部署后复验
 
-1. `GET /api/v1/chain/bootstrap` 的 `genesis_hash` / `state_root` 应等于
+1. `GET /api/chain/bootstrap` 的 `genesis_hash` / `state_root` 应等于
    `0x15755822…58671d` / `0x363d9c48…5bbe80`。
-2. App 进聊天/广场，应通过设备子钥绑定（首次弹一次生物识别）而非「设备绑定未完成」。
+2. App 进聊天/广场时页面不检查设备密钥；已有 P-256 子钥静默登录，只有 Worker 明确返回
+   `device_not_registered` 后才鉴权登记。
 3. App 日志不再出现「链启动清单与本地 chainspec 不一致，跳过远端 bootnodes」。
+
+实际验收结果：
+
+- 生产 Worker 版本为 `58567f7e-3e14-486d-9ef1-05e410665771`。
+- `/api/health` 与 `/api/chain/bootstrap` 均返回 HTTP 200；链引导数据精确匹配本卡的
+  `genesis_hash` 和 `state_root`。
+- 轻客户端真源为 `p2p_finalized_storage`，签名交易 relay 保持关闭；响应不暴露 RPC URL、
+  验证节点 RPC、私钥材料或 Worker Secret。
+- 本次只做生产部署，没有执行 `reset-formal-data`，既有 D1、KV、R2 和 Queue 数据完整保留。
 
 ## 主要风险
 

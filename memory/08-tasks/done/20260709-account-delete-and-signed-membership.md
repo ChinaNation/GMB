@@ -32,7 +32,7 @@
 竞选公民姓名/性别/出生地/钱包/CID、投票公民钱包/CID/居住地——本就必须链上公开不可篡改（参选公职要求），是设计目的，非隐患。链上一律不改、不涉删除。
 
 ## 建议模块 / 改动面
-- Worker：新增签名验证的 membership challenge/sign 接口 + Stripe 取消 + 账户级 purge 接口（DELETE /v1/square/users/{account} 或 POST account/delete，验签授权）。复用 auth 现有挑战+验签。
+- Worker：新增签名验证的 membership challenge/sign 接口 + Stripe 取消 + 账户级 purge 接口（DELETE /square/users/{account} 或 POST account/delete，验签授权）。复用 auth 现有挑战+验签。
 - 官网：Membership.tsx 加切换 + 取消卡 + 扫码签名 QR 往返（复用 QrScannerModal）。
 - CitizenApp：user_profile_page ⋮ 加注销入口(isSelf) + 确认弹窗 + 钱包签名 + 调 purge；membership 扫码签名 handler（订阅/取消）。
 
@@ -64,7 +64,7 @@
 - **3A Worker ✅（typecheck净 + 93例绿）**：`SignedAction+='subscribe_membership'`（payload 绑 level，`buildActionScalePayload` 加可选 context 字段）；`subscribe.ts` 只保留 `subscribeChallengeRoute`+`subscribeConfirmRoute`（验签+level一致才建 Stripe checkout）；challenge 响应加 `owner_pubkey_hex`（`shared/ids.ownerPubkeyHex`=decodeAddress）；删死码 `assertSessionOwner`；routes 使用 `/membership/subscribe{,/challenge}`；`membership_subscribe.test.ts` 覆盖签名流。
 - **3B 核心 ✅（golden 绿）**：`QrActions.squareAccountAction=9` + `sign.rs QR_ACTION_SQUARE_ACCOUNT=9`（单源，off-chain）；`qr_signer.signingBytesForHex` 加 `squareAccountAction→signingMessage(0x1D)`；`qr_signer_test` 加 0x1D 金标。
 - **3B-UI ✅（analyze 净 + 18例绿）**：交易 tab「扫码支付→扫一扫」（[transaction_tab_page](../../citizenapp/lib/transaction/transaction_tab_page.dart)）+ 新 [scan_dispatch_flow.dart](../../citizenapp/lib/qr/scan_dispatch_flow.dart)（QrRouter 分类：支付→`proceedOffchainPayment`／signRequest→签名响应方／未来）；[qr_scan_page](../../citizenapp/lib/qr/pages/qr_scan_page.dart) 加 `QrScanMode.dispatch`；签名响应方 [square_action_sign_service.dart](../../citizenapp/lib/signer/square_action_sign_service.dart)（`parseRequest`→按 `u` 解析 owner 钱包/拒非本机/拒冷钱包→两色解码→`signWithWallet` 生物识别→`buildResponse`；**复用 CitizenApp 现成 qr_signer，未移植 CitizenWallet**）；两色解码器 [square_action_payload.dart](../../citizenapp/lib/signer/square_action_payload.dart)（逐字节对齐 Worker，未知动作/截断→null 禁盲签）；signResponse 二维码页 [qr_sign_response_page.dart](../../citizenapp/lib/qr/pages/qr_sign_response_page.dart)；`QrActions.squareAccountAction=9`+`sign.rs QR_ACTION_SQUARE_ACCOUNT=9`+`signingBytesForHex→0x1D`+金标；删死码 `openOffchainScanPaymentFlow`（扫一扫替代）；QR action 单源 `qr-action-registry.md` 已登记 9。**签名钱包=QR u 对应钱包(owner)，≠付款钱包**。
-- **3C ✅（tsc -b + eslint + vite build 全绿）**：[Membership.tsx](../../citizenweb/src/pages/Membership.tsx) 订阅/取消分段切换 + 取消卡；加 `qrcode.react` 生成 signRequest 二维码（`QRCodeSVG`，SVG 内联、CSP 安全）；[QrScannerModal](../../citizenweb/src/components/QrScannerModal.tsx) 加 title/hint 复用于扫回 signResponse；新 [qrV1.ts](../../citizenweb/src/lib/qrV1.ts)（`base64url↔bytes`/`hex` + `QR_V1` build/parse，逐字节对齐 app 信封）；订阅 `/membership/subscribe{,/challenge}`→checkout_url 转 Stripe、取消 `/membership/cancel{,/challenge}`→提示成功；**未签一律不动 Stripe**（先出挑战→扫码签→confirm 才走 Stripe）。官网无测试框架，验证=tsc/lint/build。
+- **3C ✅（tsc -b + eslint + vite build 全绿）**：[Membership.tsx](../../citizenweb/src/pages/Membership.tsx) 订阅/取消分段切换 + 取消卡；加 `qrcode.react` 生成 signRequest 二维码（`QRCodeSVG`，SVG 内联、CSP 安全）；[QrScannerModal](../../citizenweb/src/components/QrScannerModal.tsx) 加 title/hint 复用于扫回 signResponse；当时官网曾有独立 QR helper，现已删除，不再作为协议真源；订阅 `/membership/subscribe{,/challenge}`→checkout_url 转 Stripe、取消 `/membership/cancel{,/challenge}`→提示成功；**未签一律不动 Stripe**（先出挑战→扫码签→confirm 才走 Stripe）。官网无测试框架，验证=tsc/lint/build。
 - **端到端闭环打通**：官网(桌面)出 signRequest QR → CitizenApp 交易 tab「扫一扫」按 u 定位 owner 钱包、两色核对、主钥签 0x1D → 出 signResponse QR → 官网扫回取 64B 签名 → Worker consumeActionSignature 验签 → Stripe。三仓签名逐字节对齐（金标锁 chain↔worker↔app；官网信封对齐 app）。
 
 ### 阶段 3 定稿（含核查结论 + 扫一扫决策）
@@ -86,11 +86,11 @@
 
 ### 待办：签名协议归位（用户提出，阻塞前必须定）
 - 广场 BFF 曾使用独立 raw-string 签名家族；该路线随后已删除，登录、设备绑定和账户动作全部统一到 `signing_message(op_tag)`。
-- 但 `lib/signer/signing.dart` 的单源纪律写死「禁止写 `GMB_*_V1` 字符串域，一律走 `signingMessage(op_tag)=blake2_256(GMB‖op_tag‖scale)`」(canonical=citizenchain primitives::sign)。官网无私钥→需 App 扫码签名回传，走的是 `CITIZEN_QR_V1` 冷签信封；冷签路径签的是 signing_message/op_tag，raw 字符串未必能搭现成 QR 通道。
+- 但 `lib/signer/signing.dart` 的单源纪律写死“禁止历史版本化字符串域，一律走 `signingMessage(op_tag)=blake2_256(GMB‖op_tag‖scale)`”（canonical=citizenchain primitives::sign）。官网无私钥→需 App 扫码签名回传，走统一 `QR_V1` 冷签信封；冷签路径签的是 signing_message/op_tag，raw 字符串未必能搭现成 QR 通道。
 - **workflow 综合（signing-landscape-map，四面已核实）**：全仓签名统一为 `signing_message(op_tag)=blake2_256(GMB‖op_tag‖SCALE)`，`QR_V1` 只作为冷签传输信封，不是第二套被签内容。
 - **关键先例**：op_tag 表里**已有一个"Worker 验签、永不上链"的 op_tag = Chat 钱包绑定 0x1A**（cloudflare/src/chat/binding.ts 里就是 `blake2_256(GMB‖0x1A‖SCALE)`，进了 golden vectors）。→ "广场后端动作用统一 op_tag"有现成范式，非语义污染。
-- **官网硬约束**：citizenweb 现为 address-only（Membership.tsx 只 POST 明文，jsqr 解码+base58 正则取地址，无签名库）。官网无私钥→必须 App 扫码签；App QR 冷签只认 op_tag（0x10/0x1A）与链交易，**不该签 raw 字符串**（signing.dart:15-16 禁手拼 GMB_*_V1）。→ 只有 op_tag 路线能让官网扫码往返成立。
-- **用户已拍板 B + 加码：统一全部走 op_tag，删除所有 GMB_*_V1 字符串域，规则钉死**（见 [[feedback_unified_signing_optag_only]]）。
+- **官网硬约束**：citizenweb 现为 address-only（Membership.tsx 只 POST 明文，jsqr 解码+base58 正则取地址，无签名库）。官网无私钥→必须 App 扫码签；App QR 冷签只认 op_tag（0x10/0x1A）与链交易，**不该签 raw 字符串**（signing.dart:15-16 禁手拼历史字符串域）。→ 只有 op_tag 路线能让官网扫码往返成立。
+- **用户已拍板 B + 加码：统一全部走 op_tag，删除所有历史版本化字符串域，规则钉死**（见 [[feedback_unified_signing_optag_only]]）。
 
 ### 签名统一 op_tag 方案（✅ 已完成 2026-07-09）
 三条 BFF 字符串域全删，各配一个 HASH 域 op_tag（紧挨 Chat 绑定 0x1A，走 `signing_message=blake2_256(GMB‖op_tag‖SCALE)`）：
@@ -128,7 +128,7 @@ payload 编码照 0x1A：SCALE_string(文本) ++ u64_le(时间戳)。挑战/绑�
 
 ### Stripe 真退订（此前只有 webhook，无主动退订）
 - `cloudflare/src/membership/stripe_api.ts`（新）
-  - `cancelStripeSubscriptionNow` = `DELETE /v1/subscriptions/{id}`（注销用，当场终止）。
+  - `cancelStripeSubscriptionNow` = `DELETE /subscriptions/{id}`（注销用，当场终止）。
   - `cancelStripeSubscriptionAtPeriodEnd` = `POST cancel_at_period_end=true`（官网取消用，当期用完再终止）。
   - `STRIPE_DEV_PROXY==='1'` dev 短路；缺 `STRIPE_SECRET_KEY` 抛 503；非 2xx 抛 502。
 
@@ -141,7 +141,7 @@ payload 编码照 0x1A：SCALE_string(文本) ++ u64_le(时间戳)。挑战/绑�
 
 ### 路由 / 服务
 - `cloudflare/src/account/service.ts`（新）4 handler：delete challenge/confirm、cancel challenge/confirm。
-- `cloudflare/src/routes.ts`（改）注册：`POST /v1/square/membership/cancel/challenge`、`/membership/cancel`、`/account/delete/challenge`、`/account/delete`。
+- `cloudflare/src/routes.ts`（改）注册：`POST /square/membership/cancel/challenge`、`/membership/cancel`、`/account/delete/challenge`、`/account/delete`。
 
 ### 删帖改硬删（原则 6）
 - `cloudflare/src/posts/confirm.ts`（改）`deletePostCloudflareData`：`UPDATE post_state='deleted'` → `DELETE FROM square_posts`；并加 `DELETE FROM square_uploads`（清悬挂上传行）。链上仅存 content_hash 不受影响。

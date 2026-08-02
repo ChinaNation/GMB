@@ -151,8 +151,8 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
 - **2026-07-17 · 步骤 1 完成（Cloudflare 订单后端 + 台账 + EVM 验证 + 队列 + 结算回写）**
   - 本段记录的是当日旧实现，接口和匿名认领口径已由 2026-07-25 安全闭环彻底替换，不构成兼容契约。
   - 新增 `citizenapp/cloudflare/src/topup/{config,evm_verify,orders,settlement,routes}.ts` + `migrations/0005_topup.sql`。
-  - 改 `src/routes.ts`（挂 `/v1/square/topup/*`）、`src/types.ts`（Env 补 topup 配置/令牌）、`src/limits/catalog.ts`（路由白名单）、`src/security/request_guard.ts`（topup 免广场会话、结算免限流）、`wrangler.toml`（沙箱 vars + 令牌走 secret 说明）。
-  - 接口：`GET /v1/square/topup/config`、`POST /v1/square/topup/submit`、`GET /v1/square/topup/status`；结算（`TOPUP_SETTLE_TOKEN` 鉴权）：`GET /v1/square/topup/settlement/pending`、`POST /v1/square/topup/settlement/:id/settled`、`POST /v1/square/topup/settlement/:id/exception`。
+  - 改 `src/routes.ts`（挂 `/square/topup/*`）、`src/types.ts`（Env 补 topup 配置/令牌）、`src/limits/catalog.ts`（路由白名单）、`src/security/request_guard.ts`（topup 免广场会话、结算免限流）、`wrangler.toml`（沙箱 vars + 令牌走 secret 说明）。
+  - 接口：`GET /square/topup/config`、`POST /square/topup/submit`、`GET /square/topup/status`；结算（`TOPUP_SETTLE_TOKEN` 鉴权）：`GET /square/topup/settlement/pending`、`POST /square/topup/settlement/:id/settled`、`POST /square/topup/settlement/:id/exception`。
   - 三态台账 `topup_orders`（pending/paid/exception），幂等键 `UNIQUE(chain_id, evm_tx_hash)`；EVM 到账验证校验合约/收款地址/金额/finalized 确认；结算回写前 Worker 独立复核 EVM（四方对账的 Cloudflare 角）。
   - 验收：`tsc --noEmit` 通过；`vitest` 全量 **178/178** 通过（新增 topup **10/10**）；`0005_topup.sql` 经 sqlite3 建表建索引校验通过。真机 + testnet 端到端并入步骤 5。
   - 残留：本步纯新增，无旧入口替换（三按钮重排在步骤 4），无残留。
@@ -284,8 +284,8 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
     - `evm_verify.ts`：`EvmVerifyOutcome.confirmed` 增 `block_time_ms`，新增 `fetchBlockTimeMs`（`eth_getBlockByNumber` 取 timestamp 换算毫秒）；取不到返回 null → 整笔按 `pending`，绝不放行。
     - `orders.ts`：删 `requireSession` 导入与三处调用；`IntentBody` 增 `account_id` 并经 `parseAccountId` 校验；新增 `StatusBody`；confirm 删三处 `session.account_id` 比对，账户单源取 `intent.account_id`；新增抢单闸 `intent.issued_at >= outcome.block_time_ms → 409 topup_intent_superseded`；`topupStatusRoute` 改 `(request, env)` 收 POST body，归属判据 `order.intent_id === intent.intent_id`；新增 `enforceTopupWriteLimit`（`topup_write:account_id:{id}` 10/60s）用于 intent 与 confirm。
     - `routes.ts`：status 分派由 `GET /status/:id` 改 `POST /status`；头注释同步。
-    - `request_guard.ts`：`/v1/square/topup/` 整前缀移出默认拒（IP 限流 60/60s）；删已不可达的 `requiresDeviceProof` topup 分支；重写过期注释。
-    - `limits/catalog.ts`：`GET /topup/status/[^/]+` → `POST /v1/square/topup/status`。
+    - `request_guard.ts`：`/square/topup/` 整前缀移出默认拒（IP 限流 60/60s）；删已不可达的 `requiresDeviceProof` topup 分支；重写过期注释。
+    - `limits/catalog.ts`：`GET /topup/status/[^/]+` → `POST /square/topup/status`。
     - `topup_api.dart`：删 `SquareSession`/`SquareSessionProvider` 依赖与 `_sessionTokenFor` 及 `topup_session_unavailable`/`topup_account_mismatch` 两条文案；`createIntent` 上传 `account_id`；`confirm`/`status` 去掉 accountId 参数与 Bearer；`status` 改 POST 带 `payment_intent`；`_getJson`/`_postJson` 去掉 sessionToken 形参。
     - `topup_result_page.dart` + `onchain_topup_page.dart`：删已无用的 `accountId` 字段与传参，`status` 改传 `paymentIntent`。
   - **单测**：Worker `npm run typecheck` 干净、`vitest run` **198/198 全绿**（topup 12/12，新增冷钱包无 CID 充值、抢单拒绝、区块时间缺失不放行、凭意图查单四类用例；删掉假 session mock 与那行为过类型补的 `cid_number`）。Flutter `dart analyze` 零问题、`dart format` 无变更、`flutter test test/transaction/topup/` **13/13**、`test/wallet/` **145/145** 回归绿。
@@ -297,7 +297,7 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
     5. `POST /status` 凭意图 → 404 `topup_order_not_found`（非 401）；
     6. 旧 `GET /status/:id` → 404 `route_not_found`，路由已下线；
     7. `settlement/pending` 无令牌 401 / 有令牌 200，结算鉴权未被波及；
-    8. 社交路由 `GET /v1/square/membership` 仍 401 `missing_session`，默认拒未被破坏；
+    8. 社交路由 `GET /square/membership` 仍 401 `missing_session`，默认拒未被破坏；
     9. 同一 `account_id` 连打 12 次 intent → 前 10 次 200、第 11/12 次 429；换一个 account_id 立即 200，限流按账户隔离生效。
   - **残留清理**：全仓 grep `topup_session_unavailable` / `topup_account_mismatch` / `topup_intent_account_mismatch` / `sessionResolver` / `sessionProvider` / `topup/status/` 均零命中；`topup_core_test.dart` 已删无用的 `SquareSession` 导入。
   - **文档同步**：`memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md` §4.5.1 已按新契约重写（免会话免 CID、目标账户由请求指定、抢单时间序防护、status 改 POST）。

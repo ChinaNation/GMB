@@ -3,8 +3,10 @@ use crate::{
     settings::bootnodes_address,
     shared::{constants, rpc},
 };
+use codec::Decode;
 use serde::Serialize;
 use serde_json::Value;
+use sp_core::hashing::twox_128;
 use std::{
     collections::{HashMap, HashSet},
     time::Duration,
@@ -85,6 +87,41 @@ fn ensure_expected_rpc_node() -> Result<(), String> {
     Ok(())
 }
 
+/// 链上 `CitizenIdentity::CidCount` 的完整存储键。
+///
+/// pallet 名与 storage 名一旦改动，这里必须同步；单测钉住本函数的字节口径。
+fn cid_count_storage_key() -> Vec<u8> {
+    [
+        twox_128(b"CitizenIdentity").as_slice(),
+        twox_128(b"CidCount").as_slice(),
+    ]
+    .concat()
+}
+
+/// 读取链上当前有效 CID 数（挖矿页「轻节点」一格的唯一数据源）。
+///
+/// 定长单值，一次 `state_getStorage` 读完，不做前缀扫描。
+/// 键不存在返回 `Ok(None)`：这是「runtime 升级尚未落链」的真实状态，
+/// 不能与「链上确实为 0」混为一谈，更不能压成 0 静默上屏。
+fn read_cid_count() -> Result<Option<u64>, String> {
+    let key = cid_count_storage_key();
+    let value = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(format!("0x{}", hex::encode(key)))]),
+    )?;
+    let Some(raw_hex) = value.as_str() else {
+        return Ok(None);
+    };
+    let raw = hex::decode(raw_hex.trim_start_matches("0x"))
+        .map_err(|e| format!("CidCount 十六进制解码失败: {e}"))?;
+    let mut input = raw.as_slice();
+    let count = u64::decode(&mut input).map_err(|_| "CidCount SCALE 解码失败".to_string())?;
+    if !input.is_empty() {
+        return Err("CidCount 非规范编码：存在多余字节".to_string());
+    }
+    Ok(Some(count))
+}
+
 fn extract_light_role(roles_value: &Value) -> bool {
     if let Some(s) = roles_value.as_str() {
         return s.to_ascii_lowercase().contains("light");
@@ -141,11 +178,10 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
 
     // 全网节点按角色分成两个互斥集合，都以 peerId 去重。
     //
-    // 三个对外数字全部由这两个集合直接得出：full = full 集合大小、light = light 集合大小、
-    // online = 两者之和。曾经的写法是 light 汇总全网、online 只取本机直连，再用
-    // `online - light` 反推 full —— 减数与被减数根本不是同一个集合，本机没直连到的轻节点
-    // 每多一个就少算一个全节点，减到负数还被 saturating_sub 压成 0。同源之后守恒由集合本身
-    // 保证，不再需要减法，也不再需要靠猜测本机角色来凑等式。
+    // full 集合大小就是对外的全节点数；light 集合只用于把轻节点 peer 排除在全节点之外，
+    // 不再直接对外显示（轻节点数改由链上 `CidCount` 提供）。两个集合必须保持互斥：
+    // 曾经的写法是用 `online - light` 反推 full，减数与被减数不是同一个集合，本机没直连到的
+    // 轻节点每多一个就少算一个全节点，减到负数还被 saturating_sub 压成 0。
     let mut network_full_ids: HashSet<String> = HashSet::new();
     let mut network_light_ids: HashSet<String> = HashSet::new();
     // 治理节点计数只认引导节点，按本机与全网汇总到的全部 peerId 匹配。
@@ -184,8 +220,9 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     }
 
     // 遍历所有引导节点远程查询 system_peers，按 peerId 去重汇总全网 full/light 节点。
-    // 使用多线程并行查询，总超时 5 秒，避免阻塞 UI；块的返回值是未响应的引导节点数。
-    let unreachable_bootnodes: u64 = {
+    // 使用多线程并行查询，总超时 5 秒，避免阻塞 UI。
+    // 探测不到的引导节点，其视野内的节点不会进入本次汇总。
+    {
         const REMOTE_RPC_TIMEOUT: Duration = Duration::from_secs(3);
         const REMOTE_RPC_PORT: u16 = 9944;
         let bootnode_domains: Vec<String> = bootnodes
@@ -195,27 +232,20 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
             .collect();
 
         // 一次遍历同时收 full 与 light：响应里本就带 roles，不必为 full 再发一轮 RPC。
-        // 探测失败必须回传，否则该引导节点视野内的节点静默消失、数字偏低且无从察觉。
         struct BootnodeProbe {
             full: HashSet<String>,
             light: HashSet<String>,
-            reachable: bool,
         }
 
-        let probed_bootnodes = bootnode_domains.len() as u64;
         let (tx, rx) = std::sync::mpsc::channel::<BootnodeProbe>();
-        let active_threads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
         for domain in bootnode_domains {
             let tx = tx.clone();
-            let active = active_threads.clone();
-            active.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             std::thread::spawn(move || {
                 let url = format!("http://{}:{}/", domain, REMOTE_RPC_PORT);
                 let mut probe = BootnodeProbe {
                     full: HashSet::new(),
                     light: HashSet::new(),
-                    reachable: false,
                 };
                 if let Ok(peers) = rpc::rpc_post_url(
                     &url,
@@ -224,7 +254,6 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
                     REMOTE_RPC_TIMEOUT,
                     RPC_RESPONSE_LIMIT_LARGE,
                 ) {
-                    probe.reachable = true;
                     if let Some(arr) = peers.as_array() {
                         for p in arr {
                             let Some(pid) = p
@@ -243,20 +272,15 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
                     }
                 }
                 let _ = tx.send(probe);
-                active.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             });
         }
         drop(tx); // 关闭发送端，让 rx 在所有线程结束后自然终止
 
         // 最多等 5 秒收集所有线程的结果
-        let mut answered_bootnodes: u64 = 0;
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while let Ok(probe) =
             rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
         {
-            if probe.reachable {
-                answered_bootnodes = answered_bootnodes.saturating_add(1);
-            }
             for pid in probe.full {
                 let _ = network_full_ids.insert(pid);
             }
@@ -264,9 +288,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
                 let _ = network_light_ids.insert(pid);
             }
         }
-        // 超时被丢弃的线程同样计为不可达：它们的节点视野没有进入汇总。
-        probed_bootnodes.saturating_sub(answered_bootnodes)
-    };
+    }
 
     // 本机自身：拿到 PeerId 与角色后并入对应集合。本机可能已被某个引导节点看到并
     // 汇总进来，HashSet 去重保证不会重复计数。
@@ -314,25 +336,27 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     if invalid_peer_count > 0 {
         warnings.push(format!("忽略了 {} 条无效 peerId 记录", invalid_peer_count));
     }
-    if unreachable_bootnodes > 0 {
-        // 不可达的引导节点，其视野内的节点不会进入汇总，三个数都会偏低。
-        // 不说出来，用户无从判断数字为何变小。
-        warnings.push(format!(
-            "{} 个引导节点未响应，节点数可能偏低",
-            unreachable_bootnodes
-        ));
-    }
 
-    // 三个对外数字同源于上面两个互斥集合，天然守恒，无减法、无兜底猜测。
+    // 全节点取实测 peer 集合；轻节点取链上已注册的有效 CID 数。
+    //
+    // `network_light_ids` 不再对外显示，但必须继续维护：它的职责变成把带 light 角色的 peer
+    // 从全节点集合里剔除。删掉它，CitizenApp 的 smoldot 会被当成全节点计进 full_nodes。
     let full_nodes = network_full_ids.len() as u64;
-    let light_nodes = network_light_ids.len() as u64;
+    let light_nodes = if rpc_ready {
+        match read_cid_count() {
+            Ok(Some(count)) => count,
+            Ok(None) | Err(_) => 0,
+        }
+    } else {
+        0
+    };
     let online_nodes = full_nodes.saturating_add(light_nodes);
 
     let mut nrc_nodes = 0u64;
     let mut prc_nodes = 0u64;
     let mut prb_nodes = 0u64;
     let mut uncategorized_bootnodes = 0u64;
-    // 治理节点是引导节点里已在线的那部分；遍历两个集合的并集，与三个数字同源。
+    // 治理节点是引导节点里已在线的那部分；遍历两个实测集合的并集，与全节点数同源。
     for pid in network_full_ids.iter().chain(network_light_ids.iter()) {
         if let Some(role) = bootnode_role_map.get(pid) {
             match role.as_str() {
@@ -371,6 +395,30 @@ mod tests {
 
     // 合法 PeerId 示例：以 "12D3KooW" 开头 + 至少 46 字符 + 纯 ASCII 字母数字
     const VALID_PEER_ID: &str = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN";
+
+    /// 存储键必须与链端 `CitizenIdentity::CidCount` 逐字节一致。
+    ///
+    /// pallet 或 storage 改名后，`state_getStorage` 只会安静地返回 null，
+    /// 挖矿页轻节点一格随之常年显示 0 —— 没有任何报错。本测试是唯一的早期告警。
+    #[test]
+    fn cid_count_storage_key_matches_chain_pallet_and_storage_name() {
+        let key = cid_count_storage_key();
+        assert_eq!(key.len(), 32);
+        assert_eq!(&key[..16], twox_128(b"CitizenIdentity").as_slice());
+        assert_eq!(&key[16..], twox_128(b"CidCount").as_slice());
+    }
+
+    /// 链端 `CidCount` 是 `u64`；节点按 8 字节 SCALE 解码，多一字节即判非规范。
+    #[test]
+    fn cid_count_decodes_exactly_eight_scale_bytes() {
+        use codec::Encode;
+
+        let encoded = 4_294_967_296u64.encode();
+        assert_eq!(encoded.len(), 8);
+        let mut input = encoded.as_slice();
+        assert_eq!(u64::decode(&mut input).expect("decode"), 4_294_967_296u64);
+        assert!(input.is_empty());
+    }
 
     #[test]
     fn normalize_peer_id_valid() {

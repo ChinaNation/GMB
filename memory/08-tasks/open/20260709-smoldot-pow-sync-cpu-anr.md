@@ -80,7 +80,7 @@ Pixel 8a / Android 16 曾出现 `Input dispatching timed out` ANR。任务目标
 
 ### 第 5 步：缓存单调推进
 
-- [x] `smoldot_db_cache` 改为唯一严格信封 `citizenapp.smoldot.database.v1`，记录 genesis hash、finalized 高度/哈希和 database 正文；旧裸格式不兼容，首次读取直接删除。
+- [x] `smoldot_db_cache` 改为唯一严格信封 `citizenapp.smoldot.database`，记录 genesis hash、finalized 高度/哈希和 database 正文；旧裸格式不兼容，首次读取直接删除。
 - [x] genesis hash 从安装包固定 `#0` 的 `finalizedBlockHeader` 计算，并强制 checkpoint block number 为 0；缓存链身份不依赖 Cloudflare 返回值。
 - [x] 启动时严格拒绝损坏 JSON、未知/多余字段、错误类型、超限正文和跨 genesis 数据；smoldot 拒绝有效信封正文时同样清理并回退固定 checkpoint。
 - [x] 真机确认 `addChain(databaseContent)` 返回瞬间仍可能显示安装包 `#0`；恢复校验改为最多等待 5 秒，低于声明高度继续等待，同高度必须 hash 一致，超过声明高度直接接受，持续低于或同高异 hash 才清理，避免误删有效异步恢复缓存。
@@ -94,26 +94,26 @@ Pixel 8a / Android 16 曾出现 `Input dispatching timed out` ANR。任务目标
 
 ### 第 6 步：远端 checkpoint 残留清理
 
-- [x] bootstrap schema 从旧版直接升级为 `citizenapp.chain.bootstrap.v2`；Worker 和 Dart 只接受 v2，不保留旧 schema 兼容。
+- [x] bootstrap schema 从旧版直接收敛为 `citizenapp.chain.bootstrap`；Worker 和 Dart 只接受当前严格结构，不保留旧 schema 兼容。
 - [x] Worker `light_client` 删除整个远端 checkpoint 字段树，只保留 `mode / truth_source / api_is_truth / bundled_assets_required`；删除相关常量、URL/摘要规范化函数和生成逻辑。
 - [x] Cloudflare `Env` 与根、staging、production 三套 Wrangler vars 删除远端轻同步资产配置；启动清单只治理冻结链身份、公开 bootnodes 和服务发现。
 - [x] Dart model 删除远端 checkpoint 属性和摘要解析器，严格校验 `light_client` 精确字段与两个签名安装包资产；任何 checkpoint 字段递归出现都直接拒绝。
-- [x] Worker/Dart 测试更新为 v2，新增旧 schema 与远端 checkpoint 拒绝断言；不保留动态 checkpoint、HTTP RPC、全节点数据库下载或双轨分支。
+- [x] Worker/Dart 测试更新为当前结构，新增旧 schema 与远端 checkpoint 拒绝断言；不保留动态 checkpoint、HTTP RPC、全节点数据库下载或双轨分支。
 - [x] 本地验收：Worker `tsc --noEmit` 通过、全量 Vitest 103/103 通过；全 RPC 与交易页 Flutter 测试 34/34 通过；profile arm64 APK 构建通过；`flutter analyze` 只有两个既有无关 info。
-- [x] 真实 Worker 运行态验收：Wrangler 4.107.0 本地启动成功，`GET /v1/chain/bootstrap` 返回 200、schema v2、6 个 bootnodes，`light_client` 只有四个允许字段；旧 checkpoint 字段不存在，`/v1/chain/rpc` 返回 404。
+- [x] 真实 Worker 运行态验收：Wrangler 4.107.0 本地启动成功，`GET /chain/bootstrap` 返回 200、当前 schema、6 个 bootnodes，`light_client` 只有四个允许字段；旧 checkpoint 字段不存在，`/chain/rpc` 返回 404。
 
-第 6 步结论：代码、配置、测试和协议文档中只剩单一 bootstrap v2 契约。Worker 无法下发 checkpoint，App 也不会接受携带旧字段的响应；轻节点信任锚唯一来自签名安装包固定 `#0`，Cloudflare 只提供经过本地链身份校验后才使用的 bootnodes。第 6 步先完成本地实现与真实本地 HTTP 验收，远端发布记录见第 7 步。
+第 6 步结论：代码、配置、测试和协议文档中只剩单一 bootstrap 契约。Worker 无法下发 checkpoint，App 也不会接受携带旧字段的响应；轻节点信任锚唯一来自签名安装包固定 `#0`，Cloudflare 只提供经过本地链身份校验后才使用的 bootnodes。第 6 步先完成本地实现与真实本地 HTTP 验收，远端发布记录见第 7 步。
 
-### 第 7 步：Bootstrap v2 远端发布
+### 第 7 步：Bootstrap 远端发布
 
 - [x] Wrangler 4.107.0 对 staging、production 分别执行远端部署前 dry-run，确认入口、绑定和三套环境变量均可解析，旧 checkpoint 变量未进入部署绑定。
-- [x] staging `citizenapp-square-api-staging` 从版本 `cb89091f-c393-4e66-a3ad-703bdca91844` 发布到 `ff19bc46-dc17-4f77-a53f-aed2739142a0`，100% 流量；真实 HTTPS 返回 schema v2、6 个 bootnodes、四字段 `light_client`，不存在远端 checkpoint/RPC URL，`/v1/chain/rpc` 为 404。
-- [x] Pixel 8a 使用 staging base URL 的 arm64 profile 包保留数据覆盖安装：读取 v2 启动清单并注入 6 个 bootnodes，接受 finalized `#31` 的本机严格缓存信封，进入“轻节点已就绪”，无 CitizenApp ANR、输入超时或崩溃。
+- [x] staging `citizenapp-square-api-staging` 从发布 `cb89091f-c393-4e66-a3ad-703bdca91844` 更新到 `ff19bc46-dc17-4f77-a53f-aed2739142a0`，100% 流量；真实 HTTPS 返回当前 schema、6 个 bootnodes、四字段 `light_client`，不存在远端 checkpoint/RPC URL，`/chain/rpc` 为 404。
+- [x] Pixel 8a 使用 staging base URL 的 arm64 profile 包保留数据覆盖安装：读取当前启动清单并注入 6 个 bootnodes，接受 finalized `#31` 的本机严格缓存信封，进入“轻节点已就绪”，无 CitizenApp ANR、输入超时或崩溃。
 - [x] production `citizenapp-square-api` 从版本 `6bf9ecd1-4a35-4bba-b8d2-418ff657b529` 发布到 `00d836aa-9c43-4561-ba33-8730d780c1a0`，100% 流量；真实 HTTPS 契约与安全断言全部通过，通用链 RPC 路由仍为 404。
 - [x] 重新构建不带 staging Dart define 的生产 arm64 profile 包并保留数据覆盖安装，确认设备已经恢复生产配置；真实读取 6 个 bootnodes、恢复 genesis 绑定的 finalized `#31` / 6,973-byte 信封并进入“轻节点已就绪”。日志中的一次 `FATAL EXCEPTION` 已定位为独立 `uiautomator dump` 进程重复注册，不属于 `org.citizenapp`；CitizenApp 无 ANR、fatal signal 或进程崩溃。
 - [x] 本步骤没有执行 D1 migration、GitHub push、PR 或 CI/CD，也没有修改 `citizenchain/runtime/`；发布前版本均已留档，可按环境独立回滚。
 
-第 7 步结论：bootstrap v2 已在 staging 和 production 全量生效，生产手机也已恢复到无测试 base URL 的正式 profile 配置。远端只下发公开 bootnodes 和服务发现，安装包固定 `#0` 仍是新安装用户唯一信任锚。正式链当前 finalized 仍为 `#31`，因此本轮只能证明 v2 发布和短尾/缓存恢复，不能冒充 `#33` 以后真实 warp 已验收。
+第 7 步结论：当前 bootstrap 已在 staging 和 production 全量生效，生产手机也已恢复到无测试 base URL 的正式 profile 配置。远端只下发公开 bootnodes 和服务发现，安装包固定 `#0` 仍是新安装用户唯一信任锚。正式链当前 finalized 仍为 `#31`，因此本轮只能证明当前发布和短尾/缓存恢复，不能冒充 `#33` 以后真实 warp 已验收。
 
 ### 第 8 步：正式链 `#33` 真实 Warp 验收
 

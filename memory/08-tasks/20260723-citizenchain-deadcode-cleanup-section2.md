@@ -185,7 +185,7 @@ pub fn generate_dynamic_role_code(
 
 **旧 Chat 版本化协议标识**：最终使用无版本 proto 包名并删除协议版本字段，各端按同一真源重新生成。
 
-**规则提醒注释升级（4 处保留但改措辞）**：`citizenapp/lib/signer/signing.dart:15`、`cloudflare/src/shared/signing_message.ts:8`、`cloudflare/src/auth/wallet_signature.ts:4`、`cloudflare/test/auth.test.ts:132` —— 由「禁 `GMB_*_V1`」升级为「全仓唯一版本化协议标识为 `QR_V1`」。
+**规则提醒注释升级（4 处保留但改措辞）**：`citizenapp/lib/signer/signing.dart:15`、`cloudflare/src/shared/signing_message.ts:8`、`cloudflare/src/auth/wallet_signature.ts:4`、`cloudflare/test/auth.test.ts:132` —— 由“禁止历史版本化字符串域”升级为“全仓唯一版本化协议标识为 `QR_V1`”。
 
 **新硬规则措辞（落 `unified-naming.md` + `AGENTS.md`）**：
 

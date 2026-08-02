@@ -212,14 +212,14 @@ function monthStartMs(): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
 }
 
-/** GET /v1/square/creator/plan —— 当前钱包的档位；平台订阅门禁在服务端复核。 */
+/** GET /square/creator/plan —— 当前钱包的档位；平台订阅门禁在服务端复核。 */
 export async function creatorPlanRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   await requireActiveMembership(env, session.cid_number);
   return jsonResponse({ plan: await readPlan(env, session.cid_number) });
 }
 
-/** GET /v1/square/creator/plan/:cid —— 仅返回当前仍具平台订阅资格的创作者档位。 */
+/** GET /square/creator/plan/:cid —— 仅返回当前仍具平台订阅资格的创作者档位。 */
 export async function creatorPlanOfRoute(
   request: Request,
   env: Env,
@@ -232,7 +232,7 @@ export async function creatorPlanOfRoute(
   return jsonResponse({ plan: await readPlan(env, creatorCidNumber) });
 }
 
-/** GET /v1/square/creator/overview —— 仅统计链时钟下仍有效的订阅关系。 */
+/** GET /square/creator/overview —— 仅统计链时钟下仍有效的订阅关系。 */
 export async function creatorOverviewRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   await requireActiveMembership(env, session.cid_number);
@@ -266,7 +266,7 @@ export async function creatorOverviewRoute(request: Request, env: Env): Promise<
   });
 }
 
-/** POST /v1/square/creator/plan —— 一次链签名后的 finalized 展示镜像。 */
+/** POST /square/creator/plan —— 一次链签名后的 finalized 展示镜像。 */
 export async function creatorPlanSaveRoute(
   request: Request,
   env: Env,
@@ -316,7 +316,7 @@ export async function creatorPlanSaveRoute(
   });
 }
 
-/** POST /v1/square/creator/subscription/confirm —— finalized 创作者订阅镜像。 */
+/** POST /square/creator/subscription/confirm —— finalized 创作者订阅镜像。 */
 export async function creatorSubscriptionConfirmRoute(
   request: Request,
   env: Env,

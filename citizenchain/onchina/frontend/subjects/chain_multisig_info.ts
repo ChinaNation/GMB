@@ -56,5 +56,5 @@ async function publicAppRequest<T>(path: string): Promise<T> {
 
 export async function getInstitutionInfo(cidNumber: string): Promise<InstitutionInfoDetail> {
   const encoded = encodeURIComponent(cidNumber);
-  return publicAppRequest<InstitutionInfoDetail>(`/api/v1/app/institutions/${encoded}`);
+  return publicAppRequest<InstitutionInfoDetail>(`/api/app/institutions/${encoded}`);
 }
