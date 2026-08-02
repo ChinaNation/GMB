@@ -304,7 +304,7 @@
 
 ### 第七步：冻结提交与其他软件 CI
 
-状态：in progress（冻结资产已推送；正在修复 CitizenChain 门禁并重跑最终软件 CI）
+状态：completed（2026-08-02；冻结后全部软件 CI 成功，尚未部署）
 
 - 只提交本次冻结的节点 plain SSOT、CitizenApp 链锚点、公权机构 manifest、Cloudflare
   配置/类型、一次性 CI 名称清理和文档；`citizenchain/runtime/` 无 diff。
@@ -331,6 +331,19 @@
   `frontendDist=frontend/dist` 尚未生成而失败。现有节点前端构建步骤此前错误地排在 Rust
   全 workspace 验证之后；本次将同一步骤前移到 Rust 编译之前，不提交空目录或构建产物，
   不绕过 `tauri::generate_context!`。
+- CitizenChain 最终 run `30724462739` 在提交
+  `363e6023c587bdb3be6acfa87bd3dfc940fba33f` 上完整成功：启动协议、文档与残留、pallet
+  注册表、黄金向量、宪法 SCALE、Rust 格式、全 workspace `check`、全 workspace 测试、
+  全 workspace Clippy、OnChina 前端构建与测试全部通过；节点前端在 Rust 编译前生成，
+  未提交或伪造 `frontend/dist`。
+- 同一 CitizenChain run 的桌面矩阵全部成功并上传检查产物：Linux amd `32m32s`、
+  Linux arm `6m51s`、Windows `19m52s`、macOS Apple `39m2s`。本次是 push 检查，
+  `发布桌面端 GitHub Release` 按条件跳过，不构成部署或发布。
+- CitizenApp/Cloudflare run `30723141631` 与 CitizenWallet run `30723143051` 均成功；
+  后续提交只修改 CitizenChain CI、校验脚本和文档，没有修改 CitizenApp、Cloudflare 或
+  CitizenWallet 软件代码，因此不重复运行已成功的软件 CI。
+- WASM 继续唯一使用并冻结既有成功 run `30721127038` 的 artifact `8824990228`；本步骤
+  没有修改 runtime、没有重跑 WASM、没有替换冻结 WASM，也没有执行部署。
 - 本步骤不部署；CI 全绿后另行输出节点、Worker、App 的部署技术方案并等待确认。
 
 ## 第一步预计修改目录
