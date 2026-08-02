@@ -9,7 +9,7 @@ import type { ChainStatus, NodeIdentity, NodeStatus, TotalIssuance, TotalStake }
 const PARTIAL_REFRESH_ERROR_PREFIX = '部分数据刷新失败：';
 
 const EMPTY_CHAIN: ChainStatus = { blockHeight: null, finalizedHeight: null, syncing: null, specVersion: null, nodeVersion: '' };
-const EMPTY_IDENTITY: NodeIdentity = { peerId: null, role: null };
+const EMPTY_IDENTITY: NodeIdentity = { peerId: null, role: null, genesisHash: null };
 const EMPTY_ISSUANCE: TotalIssuance = { totalIssuance: null };
 const EMPTY_STAKE: TotalStake = { totalStake: null };
 

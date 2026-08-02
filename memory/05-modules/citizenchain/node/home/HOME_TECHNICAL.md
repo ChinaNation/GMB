@@ -5,9 +5,9 @@
 ```
 home/
 ├── mod.rs              # 重新导出所有子模块的 pub 接口
-├── process/mod.rs      # 进程生命周期管理（自动启动、手动启停、退出清理）
-├── rpc/mod.rs          # 节点 RPC 调用（链状态、指纹验证、genesis hash）
-├── identity/mod.rs     # 节点身份管理（名称、PeerId、运行状态）
+├── process.rs          # 进程生命周期管理（自动启动、手动启停、退出清理）
+├── rpc.rs              # 节点 RPC 调用（链状态、指纹验证、genesis hash）
+├── identity.rs         # 节点身份管理（角色、genesis hash、PeerId、运行状态）
 └── sync_guard.rs       # 本机同步守护（检测 P2P 已连但 sync peer 表为空的脱钩状态）
 ```
 
@@ -16,6 +16,12 @@ home/
 - `node/frontend/home/api.ts` 与 `types.ts`：首页节点面板专用 Tauri API 与类型。
 - `node/frontend/home/components/`：链状态、节点身份和发行/质押展示子组件。
 - `node/frontend/transaction/onchain-transaction/`：首页右侧交易面板，承载公民钱包、矿工热钱包、转账签名与提交。
+
+首页信息层级约束：
+- “区块”“身份”“发行”仅在首页通过 `home-summary-section` 使用更大的标题字号，不改变其它页面的 `.section h2`。
+- “身份”区固定按“节点角色 → 节点地址 → 创世哈希”排列；“节点地址”是界面文案，底层仍使用 Substrate 官方 `PeerId` / `peer_id` 命名。
+- 身份项的键使用正文强调字重，值使用次级颜色和较轻字重；创世哈希与节点地址使用等宽字体并允许在窄窗口内换行。
+- 区块区继续读取内部 `finalizedHeight`，界面文案统一显示为“最终高度”；右侧交易备注字节计数位于输入框外部下方并右对齐。
 
 ## Cargo.toml 构建依赖
 
@@ -128,19 +134,21 @@ RPC 暴露说明：
 核心职责：
 - **RPC 指纹校验**：`ss58Format == 2027` + `system_name` 非空 + genesis hash 一致性
 - **genesis hash 缓存**：首次连接缓存，后续比对（`shared::rpc::verify_genesis_hash`）
-- **链同步状态**：区块高度、最终确认高度、同步标志
+- **链同步状态**：区块高度、finalized 区块高度（界面显示“最终高度”）、同步标志
 
 关键安全设计：
 1. genesis hash 只有在格式满足 `0x` + 64 位十六进制时才允许写入缓存
 2. 后续每次校验都会先做同样的格式验证，再与首次缓存比较，避免恶意节点用任意非空字符串污染缓存
 3. 本地 RPC HTTP/WS URL 会跟随共享 RPC 端口变化，避免部分模块仍然访问旧的硬编码端口
+4. 首页身份接口复用已校验的 genesis hash 缓存，不硬编码链指纹，也不在三秒刷新周期内重复请求 block #0
 
 ## identity/mod.rs
 
 核心职责：
-- **节点状态查询**：`current_status`（PID、运行标志、PeerId、节点名）
-- **节点身份读取**：`get_node_identity`（节点名 + PeerId 一次性返回，供前端展示）
+- **节点状态查询**：`current_status`（PID、运行标志与节点生命周期状态）
+- **节点身份读取**：`get_node_identity` 一次性返回节点角色、已校验的 genesis hash 和 PeerId，供前端展示
 - **PeerId 获取**：从 RPC `system_localPeerId` 获取
+- **停止态约束**：节点未运行时 genesis hash 与 PeerId 均返回空值，前端统一显示 `-`，不得把上一条链的身份信息带入停止态
 
 ## transaction/mod.rs
 

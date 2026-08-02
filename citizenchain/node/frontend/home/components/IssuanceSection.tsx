@@ -8,7 +8,7 @@ type Props = {
 
 export function IssuanceSection({ issuance, stake }: Props) {
   return (
-    <section className="section mining-section">
+    <section className="section home-summary-section mining-section">
       <h2>发行</h2>
       <div className="issuance-stack-grid">
         <div className="metric-card">

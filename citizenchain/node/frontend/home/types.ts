@@ -18,6 +18,7 @@ export type ChainStatus = {
 export type NodeIdentity = {
   peerId: string | null;
   role: string | null;
+  genesisHash: string | null;
 };
 
 export type TotalIssuance = {

@@ -2841,14 +2841,50 @@ select option:checked {
   gap: 10px;
 }
 
-.identity-p2p-line {
-  word-break: break-all;
-  overflow-wrap: break-word;
+/* 首页三个信息区使用独立标题层级，避免放大全局 section 标题。 */
+.home-summary-section > h2 {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
-.identity-p2p-address {
+.identity-details {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.identity-detail-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 10px;
+  min-width: 0;
+}
+
+.identity-detail-key,
+.identity-detail-value {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.identity-detail-key {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.identity-detail-value {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.identity-detail-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow-wrap: anywhere;
   word-break: break-all;
-  overflow-wrap: break-word;
 }
 
 /* ── 交易面板 ── */
@@ -3023,6 +3059,20 @@ select option:checked {
 .transfer-form-field input:focus {
   outline: 2px solid var(--primary);
   outline-offset: -1px;
+}
+
+/* 备注计数保持在输入框外部下方，并与输入框右边缘对齐。 */
+.transfer-form-remark-counter {
+  align-self: flex-end;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.transfer-form-remark-counter.is-error {
+  color: #fca5a5;
 }
 
 .transfer-form-amount-row {

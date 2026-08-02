@@ -156,7 +156,7 @@ export function TransferForm({ activeWallet, balance, onSubmit, disabled }: Prop
           placeholder="选填，最多 99 字节"
           disabled={formDisabled}
         />
-        <span className={remarkTooLong ? 'error' : 'transfer-form-status-hint'}>
+        <span className={`transfer-form-remark-counter${remarkTooLong ? ' is-error' : ''}`}>
           {remarkBytes}/{MAX_TRANSFER_REMARK_BYTES} 字节
         </span>
       </div>

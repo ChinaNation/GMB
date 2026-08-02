@@ -25,6 +25,8 @@ pub struct NodeStatus {
 pub struct NodeIdentity {
     pub peer_id: Option<String>,
     pub role: Option<String>,
+    /// 本节点启动链的创世哈希，统一取自本机 RPC 的 block #0 哈希缓存。
+    pub genesis_hash: Option<String>,
 }
 
 // 角色由 bootnode 权威节点标签映射得出，未命中时统一按"全节点"展示。
@@ -111,9 +113,13 @@ fn get_node_identity_sync(app: AppHandle) -> Result<NodeIdentity, String> {
         return Ok(NodeIdentity {
             peer_id: None,
             role: Some("全节点".to_string()),
+            genesis_hash: None,
         });
     }
 
+    // 节点进入 Running 前已经完成 block #0 RPC 就绪校验；这里复用同一缓存，
+    // 不硬编码链指纹，也不为首页三秒刷新重复请求 block #0。
+    let genesis_hash = crate::shared::rpc::cached_genesis_hash()?;
     let local_peer_id = rpc_post("system_localPeerId", Value::Array(vec![]))
         .ok()
         .and_then(|v| v.as_str().map(|s| s.to_string()));
@@ -122,6 +128,7 @@ fn get_node_identity_sync(app: AppHandle) -> Result<NodeIdentity, String> {
     Ok(NodeIdentity {
         peer_id: local_peer_id,
         role: Some(role),
+        genesis_hash: Some(genesis_hash),
     })
 }
 
