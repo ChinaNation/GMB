@@ -26,7 +26,7 @@ PG 官方二进制来源:https://www.postgresql.org/download/(解压后含 bin/l
 ## 内网 TLS + 扫码鉴权
 
 - OnChina 内网 API 固定入口为 `https://onchina.local:8964`，服务监听 `0.0.0.0:8964` 并通过 mDNS 广告 `onchina.local`。
-- OnChina 内网 API 走 HTTPS(机构私有 CA 签发,证书持久化 `ONCHINA_TLS_DIR`);CA 有效期到 2036-01-01,服务证书每次启动重签且有效期 397 天以内,证书 SAN 为 `onchina.local`。
+- OnChina 内网 API 走 HTTPS（机构私有 CA 签发，证书持久化 `ONCHINA_TLS_DIR`）。根 CA 只允许在证书和私钥同时不存在的首次启动生成，有效期到 2036-01-01；重启、升级、配置标识变化均不得覆盖根 CA。根证书或根私钥缺失、损坏、不匹配、用途错误或失效时必须失败关闭，禁止自动补建。`onchina.local` 服务证书有效期不超过 397 天，有效时直接复用，仅在缺失、损坏、域名或签发关系不符、进入到期前 30 天时使用现有根 CA 重签。
 - 身份认证 = 扫码签名(3b 链上 Active 管理员集合鉴权),TLS 只负责传输加密。与 node 的 libp2p WSS 证书相互独立。
 
 ## 大市机房形态(如香港:800万公民/500万公司/百管理员)

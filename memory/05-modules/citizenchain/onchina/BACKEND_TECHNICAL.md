@@ -122,9 +122,11 @@ PublicManage/PrivateManage call 5 及 `0x1e05/0x1f05` 已永久留洞，后端�
 - `onchina-org-root-ca.crt`：员工浏览器可下载和安装的 CA 公钥证书。
 - `onchina-org-root-ca.key`：仅保存在节点服务器本地的 CA 私钥，禁止通过 HTTP、日志或前端接口暴露。
 - `onchina-server.crt` / `onchina-server.key`：由本机构 CA 签发的 `onchina.local` 服务证书。
-- `onchina-cert-profile.txt`：证书策略标记；旧超长期默认有效期证书没有该标记，下次启动必须自动重建。
+- `onchina-cert-profile.txt`：服务证书策略标记；标记变化最多触发服务证书检查或重签，绝对不能触发根 CA 轮换。
 
-CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前 CA 重新签发，有效期 397 天以内，避免 macOS / Safari / Chrome 拒绝超长 TLS 服务证书。
+根 CA 只允许在根证书与根私钥同时不存在的首次初始化生成，有效期固定到 2036-01-01。服务重启、程序升级、配置标识变化均只加载磁盘中的真实根证书和对应私钥，不得重新构造、覆盖或轮换根 CA。根材料不完整、损坏、公私钥不匹配、CA 用途错误、自签名无效或超出有效期时必须失败关闭，由管理员人工处理。
+
+`onchina.local` 服务证书有效期不超过 397 天；证书、公私钥、SAN、ServerAuth 用途、根签名关系均正确且距离到期超过 30 天时直接复用。只有服务证书缺失、损坏、策略或域名不符、签名关系错误或进入到期前 30 天时，才使用现有根 CA 成对重签服务证书和私钥。服务证书重签不得写入根证书或根私钥。
 
 未登录公共接口 `/api/platform/ca-certificate` 只返回 CA 公钥证书 PEM，用于员工首次访问时下载并导入浏览器/系统受信任根证书；`/api/platform/ca-certificate/info` 只返回文件名、证书主题、SHA-256 指纹和有效期展示信息。
 

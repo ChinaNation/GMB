@@ -212,17 +212,13 @@ jobs:
         working-directory: citizenchain
         run: cargo fmt --all -- --check
 
-      - name: 检查全 Rust workspace
+      - name: 执行全 Rust workspace Clippy
         working-directory: citizenchain
-        run: cargo check --workspace --all-targets --locked
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: 运行全 Rust workspace 测试
         working-directory: citizenchain
         run: cargo test --workspace --all-targets --locked
-
-      - name: 执行全 Rust workspace Clippy
-        working-directory: citizenchain
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: 构建 OnChina 前端
         run: |

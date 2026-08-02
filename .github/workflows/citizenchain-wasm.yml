@@ -92,7 +92,7 @@ jobs:
         uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b
         with:
           targets: wasm32v1-none
-          components: rust-src
+          components: rust-src, clippy
 
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
@@ -154,6 +154,12 @@ jobs:
             echo "正式 WASM 依赖图禁止启用 runtime-benchmarks" >&2
             exit 1
           fi
+
+      - name: 执行 Runtime Clippy
+        working-directory: citizenchain
+        # 不设 WASM_BUILD_FROM_SOURCE/WASM_FILE：build.rs 走 else 分支不编 wasm，clippy 为纯 lint 快闸。
+        # scope 与「编译 WASM」同 feature 配置（-p citizenchain --features std），仅覆盖 runtime 装配 crate。
+        run: cargo clippy --locked -p citizenchain --no-default-features --features std -- -D warnings
 
       - name: 编译 WASM
         working-directory: citizenchain
