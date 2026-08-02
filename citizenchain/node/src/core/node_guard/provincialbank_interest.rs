@@ -234,11 +234,16 @@ where
         .ok_or(GuardError::StakeAccountMissing(account))?;
     let info = decode_exact::<MAccountInfo>(&raw, "省储行 stake System::Account")
         .map_err(|_| GuardError::StakeAccountDecodeFailed(account))?;
+    // 质押账户只禁「支出/减少」，允许「转入/增加」。
+    // 年度利息按固定常量本金(stake_amount)计算，与账户实际余额无关，故转入无害；
+    // 只要求 free 不得「低于」本金：free < principal = 被支出/被 slash → 拒;
+    // free == principal(未动)或 free > principal(被转入)→ 放行。
+    // 转出必须由该账户自己签名 → nonce != 0，已被下方 nonce 检查一并挡住。
     if info.nonce != 0
         || info.consumers != 0
         || info.providers != 1
         || info.sufficients != 0
-        || info.data.free != principal
+        || info.data.free < principal
         || info.data.reserved != 0
         || info.data.frozen != 0
         || info.data.flags != NEW_BALANCES_FLAGS
@@ -416,18 +421,28 @@ mod tests {
     }
 
     #[test]
-    fn genesis_requires_every_exact_permanent_principal() {
+    fn genesis_allows_stake_topup_but_rejects_principal_spend() {
         let state = genesis_state();
         assert_eq!(check_imported_genesis(state.iter()), Ok(()));
 
-        let mut changed = state.clone();
         let first = &CHINA_CH[0];
-        changed.insert(
+
+        // 转入/增加（free > 本金）放行:质押账户只禁支出，不禁转入。
+        let mut topped_up = state.clone();
+        topped_up.insert(
             storage_key::system_account(&first.stake_account),
             account(first.stake_amount + 1),
         );
+        assert_eq!(check_imported_genesis(topped_up.iter()), Ok(()));
+
+        // 支出/减少（free < 本金）拒绝:本金被动用即违规。
+        let mut spent = state.clone();
+        spent.insert(
+            storage_key::system_account(&first.stake_account),
+            account(first.stake_amount - 1),
+        );
         assert_eq!(
-            check_imported_genesis(changed.iter()),
+            check_imported_genesis(spent.iter()),
             Err(GuardError::StakeAccountChanged(first.stake_account))
         );
     }
@@ -572,18 +587,35 @@ mod tests {
 
         let first = &CHINA_CH[0];
         let key = storage_key::system_account(&first.stake_account);
-        let mut changed = parent.clone();
-        changed.insert(key.clone(), account(first.stake_amount + 1));
-        let delta = BTreeMap::from([(key.clone(), Some(changed[&key].clone()))]);
+
+        // 支出/减少质押本金 → 拒绝（本金被动用即违规）。
+        let mut spent = parent.clone();
+        spent.insert(key.clone(), account(first.stake_amount - 1));
+        let spent_delta = BTreeMap::from([(key.clone(), Some(spent[&key].clone()))]);
         assert!(check_transition(
             1,
-            &delta,
-            &delta,
+            &spent_delta,
+            &spent_delta,
             &|key| parent.get(key).cloned(),
-            &|key| changed.get(key).cloned(),
-            &|key| changed.get(key).cloned(),
+            &|key| spent.get(key).cloned(),
+            &|key| spent.get(key).cloned(),
             &mut FinalizeIssuancePlan::default(),
         )
         .is_err());
+
+        // 转入/增加质押账户 → 放行（只禁支出，不禁转入）。
+        let mut topped_up = parent.clone();
+        topped_up.insert(key.clone(), account(first.stake_amount + 1));
+        let topup_delta = BTreeMap::from([(key.clone(), Some(topped_up[&key].clone()))]);
+        assert!(check_transition(
+            1,
+            &topup_delta,
+            &topup_delta,
+            &|key| parent.get(key).cloned(),
+            &|key| topped_up.get(key).cloned(),
+            &|key| topped_up.get(key).cloned(),
+            &mut FinalizeIssuancePlan::default(),
+        )
+        .is_ok());
     }
 }
