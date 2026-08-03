@@ -173,8 +173,15 @@ Runtime 配置位置：
 版本要求：
 - `developer_direct_upgrade` 最终通过 `System.set_code` 写入新 runtime code，系统会拒绝 `spec_version` 小于或等于链上当前版本的 WASM，错误表现为 `System::SpecVersionNeedsToIncrease`
 - 正式创世前项目自身 runtime 版本固定为 `0`；没有已配置且可连接的正式目标链时，公民控制台「运行 WASM CI」直接停止。
-- 正式创世后，只有公民控制台「运行 WASM CI」负责读取明确配置的目标链；RPC 实际 genesis hash 必须先与本机保存的 `CHAIN_GENESIS_HASH` 完全相等，源码版本再与链上版本严格相等，才把源码 `spec_version` 及现有版本测试断言同步提高到 `链上版本 + 1`。缺少正式链指纹、链指纹不匹配或版本漂移都必须停止，禁止覆盖。
-- 控制台提交并推送变更后才触发 WASM workflow。CI 只验证源码版本恰好等于目标链版本加一并按源码原样编译；CI 不查询服务器、不读取 SSH/RPC Secret、不临时改写或回写版本。
+- 正式创世后，只有公民控制台「运行 WASM CI」负责读取明确配置的目标链；RPC 实际
+  genesis hash 必须先与本机保存的 `CHAIN_GENESIS_HASH` 完全相等。随后比较链上、本机和
+  `origin/main` 版本：仓库与链同版时把源码 `spec_version` 及现有版本测试断言同步提高到
+  `链上版本 + 1`；仓库已经比链高一版时复用候选以重试此前失败或不可用的构建；其他差值
+  必须停止，禁止覆盖或重复提高。
+- 控制台只允许用同一次 Touch ID 取得正式链目标和已有 GitHub `SSH_KEY`；用户已否决
+  新增 GitHub API 凭证，相关实现必须彻底删除。推送后如何只触发并等待准确 HEAD 的
+  WASM CI 尚待单独方案确认；完成前不得做真实按钮推送与 CI 验收。CI 仍只允许按已
+  提交源码原样编译，不查询服务器、不读取 SSH/RPC Secret、不临时改写或回写版本。
 - 其他位置执行 WASM workflow 属于普通源码构建，不增加任何 runtime 版本字段；`impl_version`、`authoring_version`、`transaction_version`、`system_version` 也不随「运行 WASM CI」机械增加。
 
 ### 5.4 投票引擎状态协同

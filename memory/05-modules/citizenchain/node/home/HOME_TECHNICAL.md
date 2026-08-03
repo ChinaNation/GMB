@@ -47,7 +47,12 @@ home/
 WASM CI 版本规则：
 - 正式创世前项目自身 runtime 版本固定为 `0`；没有已配置且可连接的正式目标链时，公民控制台「运行 WASM CI」直接停止，不得为临时测试链或空目标生成升级版本。
 - 正式创世后的升级构建只能从公民控制台「CitizenChain WASM → 运行 WASM CI」进入：控制台读取充值发币页明确配置的正式目标链 `NODE_WS`，并要求 RPC 实际 genesis hash 与开发者升级区保存的 `CHAIN_GENESIS_HASH` 完全相等；未保存正式链指纹时一律视为尚无正式目标链。
-- 创世哈希匹配后，源码 `spec_version` 还必须与链上版本严格相等，控制台才把源码及其现有精确测试断言同步提高到 `链上版本 + 1`，随后只提交、推送 runtime 范围并触发 `citizenchain-wasm.yml`；目标链不可达、链指纹不匹配或版本漂移时 fail-closed。
+- 创世哈希匹配后，控制台比较链上、本机和 `origin/main` 的 `spec_version`：仓库与链同版时
+  把源码及其现有精确测试断言同步提高到 `链上版本 + 1`；仓库已经比链高一版时复用现有
+  候选以重试失败或不可用的 WASM CI，不重复提高；其他版本差值 fail-closed。
+- 版本判断通过后，控制台应提交并推送本机全部 Git 可见代码到 `origin/main`；但用户
+  已否决额外 GitHub API 凭证，新的“只用已有 SSH 私钥触发并等待准确 HEAD”机制尚待
+  单独方案确认。完成前不得进行真实按钮推送和 CI 验收。
 - `citizenchain-wasm.yml` 始终按已提交源码原样编译，不查询链、不连接服务器、不读取 SSH/RPC Secret，也不临时改写版本；从 GitHub 或其他位置手动触发时只做普通源码构建，不提高 `spec_version`。
 - CI 会校验控制台升级构建满足“源码版本 = 目标链版本 + 1”，并在任务摘要记录构建用途、目标 genesis hash、升级前/后版本与源码提交 SHA。
 - 生成的 `citizenchain-wasm` artifact 只用于公民控制台「CitizenChain WASM → 开发者升级」、下载脚本或链上 `System.set_code` 流程；本地启动脚本不下载、不内置该 artifact

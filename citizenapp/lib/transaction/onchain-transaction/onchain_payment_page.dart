@@ -240,9 +240,13 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           record.status == LocalTxStore.statusInBlock)
       .length;
 
+  /// 只有交易池「确定性拒绝」才算失败。
+  ///
+  /// `dropped`（被交易池剔除：mempool 已满或优先级过低）对 smoldot 只是「停止
+  /// 跟踪」，交易可能仍在其它节点的池中并最终进块，因此**不算失败**：改由
+  /// dropped 分支保持「待确认」，再由只扫 finalized 链的 ChainTxMonitor 对账升级。
   bool _isDefinitivePoolFailure(TxPoolWatchKind kind) {
     return kind == TxPoolWatchKind.invalid ||
-        kind == TxPoolWatchKind.dropped ||
         kind == TxPoolWatchKind.usurped;
   }
 
@@ -257,7 +261,12 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         txHash: txHash,
         failureReason: event.description,
       );
-    } else if (event.kind == TxPoolWatchKind.retracted) {
+    } else if (event.kind == TxPoolWatchKind.retracted ||
+        event.kind == TxPoolWatchKind.dropped) {
+      // retracted：非最终区块被回滚。dropped：被交易池剔除（mempool 已满或优先级
+      // 过低），对 smoldot 只是停止跟踪，交易可能仍在其它节点的池中并最终进块。
+      // 两者都只保持「待确认」；唯有只扫 finalized 链的 ChainTxMonitor 扫到该交易
+      // 所在的**最终块**后，才会升级为「已确认」（已确认恒等于最终性）。绝不误判失败。
       await LocalTxStore.markLocalSubmitPending(
         accountId: wallet.accountId,
         txHash: txHash,

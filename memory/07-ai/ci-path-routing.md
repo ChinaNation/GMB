@@ -23,7 +23,14 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 - workflow：`.github/workflows/citizenchain-wasm.yml`
 - 2026-08-01 正式创世 WASM run `30721127038` 仅该次显示为“创世”；正式冻结时已删除
   临时 `run-name`，后续运行统一恢复标准名称 `CitizenChain WASM`。
-- 正式升级构建入口仅为公民控制台「CitizenChain WASM → 运行 WASM CI」：控制台读取已配置目标链，先要求 RPC genesis hash 等于本机明确保存的 `CHAIN_GENESIS_HASH`，再要求源码 `spec_version` 等于链上版本，然后在源码和现有测试断言中同步加一、提交并推送 runtime 范围。
+- 正式升级构建入口仅为公民控制台「CitizenChain WASM → 运行 WASM CI」：按钮明确要求
+  一次 Touch ID，原子读取 `NODE_WS`、`CHAIN_GENESIS_HASH` 和已有 GitHub `SSH_KEY`。控制台
+  先要求 RPC genesis hash 等于本机明确保存的正式链指纹，再比较链上、
+  本机和 `origin/main` 的 `spec_version`：仓库与链同版时同步提高源码和现有测试断言一版；
+  仓库已经比链高一版时复用该候选以重试失败或不可用的 WASM CI；其他差值全部停止。
+- 用户已明确否决新增 GitHub API 凭证；CitizenConsole 只保留 `SSH_KEY`。推送后只触发
+  准确 HEAD 的 WASM CI 且等待最终结果的新机制，必须在不增加第二 GitHub 密钥的前提下
+  单独出方案并经确认；完成前禁止真实按钮推送和 CI 验收。
 - workflow 按已提交源码原样编译并上传 artifact，不查询链上版本、不读取 RPC/SSH Secret、不连接服务器，也不得在 CI 工作区改写版本；控制台升级构建只额外校验“源码版本 = 目标链版本 + 1”并记录 genesis hash。
 - 从 GitHub 或其他位置手动执行 workflow 属于普通源码构建，不提高版本；正式创世前没有可读取的正式目标链时，控制台升级入口必须停止并保持项目版本 `0`。
 - 正式创世普通源码构建必须钉死不可变 head SHA。优先使用直接指向该提交的轻量候选 tag；

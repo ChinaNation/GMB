@@ -2,6 +2,11 @@
 
 > 状态:**设计已确认,分步实现**。用户已拍板 5 点(见下)。工作流:每步先出方案→确认→执行→更新文档/清残留→出下一步。runtime 升级为链上不可逆高危操作,每步谨慎。
 
+> 2026-08-02 更新：本卡第 1 步的“WASM CI 只推 runtime”已经由任务卡
+> `20260802-citizenconsole-wasm-ci-full-push.md` 取代。当前已确认一次 Touch ID、正式链版本校验、
+> 整仓 `main` 提交和版本判断规则；用户已否决额外 GitHub API 凭证，因此“只用已有 SSH
+> 私钥启动并等待准确 HEAD”仍待单独方案确认，不得依据历史记录恢复局部提交。
+
 ## 需求
 在公民控制台 **CitizenChain WASM** 卡片、`运行 WASM CI` 按钮**右侧**加「协议升级」按钮:点击对**本机链**做 **runtime 升级**,用 **GitHub 上最新且 CI 成功**的 WASM;签名走**公民钱包扫码冷签**(与节点软件"发协议升级"同一套签名方式,只在控制台再实现一遍),控制台只存 NRC 管理员**公钥**,私钥永不进控制台。
 
@@ -22,7 +27,9 @@
 跨语言(Rust→Node/@polkadot)复刻冷签,必须与**钱包解码器**(否则两色 decodeFailed 红拒,见 [[project_qr_signing_two_color]]、[[project_citizenwallet_call_registration_three_points]])+ 节点 Rust 逐字段对齐:action code、QR envelope、call SCALE 编码、ExtrinsicPayload(genesis/nonce/spec/tx/immortal)、签名输入(>256 blake2)、response 格式、signed extrinsic 组装。签名协议单源 [[project_unified_signing_protocol_adr026]] `primitives::sign`。
 
 ## 分步
-1. **WASM CI 只推 runtime**(✅ 已完成,2026-07-18 收敛):`citizenchainwasm.sh` 调 `ensure_runtime_pushed`(原 `ensure_pushed_commit` 的 `git add -A` 推全部→已废)。规则:WASM CI 只编 runtime,故只提交/推送 `citizenchain/runtime/ + Cargo.toml + Cargo.lock`(其余工作区文件一律不动);有 runtime 改动→只 `git add -- 这三处`+commit+push(head_sha=推后 HEAD);无 runtime 改动→不提交、直接触发 CI 出最新(head_sha=origin 分支 tip,供 run_workflow 匹配)。仅 WASM CI 用此函数,不影响 citizenapp/citizenwallet/citizenchain 的 `require_clean_remote_commit`。
+1. **WASM CI 整仓推送并等待完成**（⏳ 仅用已有 SSH 私钥的触发机制待确认）：一次
+   Touch ID 后读取正式链和 GitHub `SSH_KEY`；仓库与链同版时提高一版，仓库已高一版时复用
+   候选。提交推送和准确 HEAD 的 WASM CI 触发/等待尚未验收，不得对外宣称完成。
 2. **控制台配置 NRC 管理员公钥 + 协议升级按钮**(✅ 已完成 as-built):
    - 位置定稿(用户纠正):在 **CitizenChain WASM** 模块——「运行 WASM CI」按钮**右侧**加「协议升级」按钮(红·副标题「钱包扫码冷签」,`action.dialog=true`,前端特判弹窗不走脚本);**密钥状态表**加「管理员公钥 `NRC_ADMIN_PUBKEY`」行。
    - 后端 `server.mjs`:citizenchainwasm 模块加 `localKeys:[{name:'NRC_ADMIN_PUBKEY',env:'rtupg',desc}]` + `protocol-upgrade` dialog 动作;`secretComments` 加 NRC_ADMIN_PUBKEY;`/api/status` 返回 `localKeys` 存在态;`resolveSecretTarget` + `/api/secret/set|delete` 支持 `store:'local'`(keychainPut/Delete,过 Touch ID)。
