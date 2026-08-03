@@ -25,8 +25,12 @@ class LocalTxStore {
         : '0x${blockHash.toLowerCase()}';
   }
 
-  static String pendingRecordKey(String accountId, String txHash) {
-    return '${requireAccountId(accountId)}:pending:${txHash.toLowerCase()}';
+  /// 本机提交交易的唯一身份键：`accountId:tx:txHash`。
+  ///
+  /// 键与状态无关：一笔交易全程只有这一条记录，状态在其上就地流转
+  /// pending → inBlock → finalized，绝不 re-key、绝不另建第二条。
+  static String submitRecordKey(String accountId, String txHash) {
+    return '${requireAccountId(accountId)}:tx:${txHash.toLowerCase()}';
   }
 
   static String blockEventRecordKey(
@@ -116,7 +120,7 @@ class LocalTxStore {
   }) async {
     final normalizedAccountId = requireAccountId(accountId);
     final normalizedTxHash = txHash.toLowerCase();
-    final pendingKey = pendingRecordKey(normalizedAccountId, normalizedTxHash);
+    final pendingKey = submitRecordKey(normalizedAccountId, normalizedTxHash);
     final normalizedBlockHash = blockHash == null || blockHash.isEmpty
         ? null
         : normalizeBlockHash(blockHash);
@@ -251,7 +255,7 @@ class LocalTxStore {
       );
       if (semanticExisting != null) {
         semanticExisting
-          ..recordKey = semanticExisting.recordKey.contains(':pending:')
+          ..recordKey = semanticExisting.recordKey.contains(':tx:')
               ? recordKey
               : semanticExisting.recordKey
           ..ss58Address = ss58Address
@@ -326,7 +330,7 @@ class LocalTxStore {
     required String txHash,
     String? blockHash,
   }) async {
-    final recordKey = pendingRecordKey(accountId, txHash);
+    final recordKey = submitRecordKey(accountId, txHash);
     await WalletIsar.instance.writeTxn((isar) async {
       final entity = await isar.localTxEntitys
           .where()
@@ -354,7 +358,7 @@ class LocalTxStore {
     required String accountId,
     required String txHash,
   }) async {
-    final recordKey = pendingRecordKey(accountId, txHash);
+    final recordKey = submitRecordKey(accountId, txHash);
     await WalletIsar.instance.writeTxn((isar) async {
       final entity = await isar.localTxEntitys
           .where()
@@ -381,7 +385,7 @@ class LocalTxStore {
     required String txHash,
     required String failureReason,
   }) async {
-    final recordKey = pendingRecordKey(accountId, txHash);
+    final recordKey = submitRecordKey(accountId, txHash);
     await WalletIsar.instance.writeTxn((isar) async {
       final entity = await isar.localTxEntitys
           .where()
@@ -393,6 +397,59 @@ class LocalTxStore {
         ..failureReason = failureReason;
       await isar.localTxEntitys.put(entity);
     });
+  }
+
+  /// 按 txHash 精确认：把本机提交的**这一条**记录就地翻成 finalized（已确认）。
+  ///
+  /// 由只扫 finalized 链的 ChainTxMonitor 在最终块里按 txHash 定位到该交易后调用。
+  /// recordKey 全程不变（始终 submitRecordKey），状态就地流转，绝不另建第二条记录。
+  static Future<void> markLocalSubmitFinalized({
+    required String accountId,
+    required String txHash,
+    required String blockHash,
+    required int blockNumber,
+    int? extrinsicIndex,
+    int? confirmedAtMillis,
+  }) async {
+    final recordKey = submitRecordKey(accountId, txHash);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await WalletIsar.instance.writeTxn((isar) async {
+      final entity = await isar.localTxEntitys
+          .where()
+          .recordKeyEqualTo(recordKey)
+          .findFirst();
+      if (entity == null || entity.status == statusFinalized) return;
+      entity
+        ..status = statusFinalized
+        ..blockHash = normalizeBlockHash(blockHash)
+        ..blockNumber = blockNumber
+        ..extrinsicIndex = extrinsicIndex ?? entity.extrinsicIndex
+        ..confirmedAtMillis = confirmedAtMillis ?? now
+        ..failureReason = null;
+      await isar.localTxEntitys.put(entity);
+    });
+  }
+
+  /// 查询某钱包所有"未终态"的本机提交记录（待确认：pending / inBlock）。
+  ///
+  /// 供 ChainTxMonitor 扫每个最终块时，按 txHash 逐条核对是否已进最终块。
+  static Future<List<LocalTxEntity>> queryOpenLocalSubmit(
+    String accountId,
+  ) async {
+    final normalizedAccountId = requireAccountId(accountId);
+    final all = await WalletIsar.instance.read((isar) {
+      return isar.localTxEntitys
+          .where()
+          .accountIdEqualTo(normalizedAccountId)
+          .findAll();
+    });
+    return all
+        .where((r) =>
+            r.source == 'local_submit' &&
+            r.txHash != null &&
+            r.txHash!.isNotEmpty &&
+            (r.status == statusPending || r.status == statusInBlock))
+        .toList();
   }
 
   static String _mergeStatus(String? current, String incoming) {

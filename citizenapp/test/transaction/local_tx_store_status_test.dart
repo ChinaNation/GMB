@@ -13,7 +13,8 @@ void main() {
   const fromSs58Address = 'from-wallet';
   const toSs58Address = 'to-wallet';
 
-  test('本机转出记录按 pending -> inBlock -> finalized 升级且不重复', () async {
+  test('本机转出记录全程一条 :tx: 键，pending->inBlock->finalized 就地翻、不另建',
+      () async {
     await LocalTxStore.upsertLocalSubmitTransfer(
       ss58Address: fromSs58Address,
       accountId: fromAccountId,
@@ -27,39 +28,82 @@ void main() {
       usedNonce: 7,
       createdAtMillis: 1,
     );
+
+    var records = await LocalTxStore.queryByAccountId(fromAccountId);
+    expect(records, hasLength(1));
+    expect(records.single.status, LocalTxStore.statusPending);
+    expect(records.single.recordKey, contains(':tx:'));
+    final txKey = records.single.recordKey;
+
     await LocalTxStore.markLocalSubmitInBlock(
       accountId: fromAccountId,
       txHash: '0xabc',
       blockHash: '0x22',
     );
-
-    var records = await LocalTxStore.queryByAccountId(fromAccountId);
+    records = await LocalTxStore.queryByAccountId(fromAccountId);
     expect(records, hasLength(1));
     expect(records.single.status, LocalTxStore.statusInBlock);
-    expect(records.single.recordKey, contains(':pending:'));
+    expect(records.single.recordKey, txKey);
 
-    final eventKey = LocalTxStore.blockEventRecordKey(fromAccountId, '0x22', 3);
-    await LocalTxStore.upsertBlockTransferEvent(
-      ss58Address: fromSs58Address,
+    // 最终性由 txHash 精确认：就地翻 finalized，键不变、记录数不变、绝不另建。
+    await LocalTxStore.markLocalSubmitFinalized(
       accountId: fromAccountId,
-      recordKey: eventKey,
-      status: LocalTxStore.statusFinalized,
-      amountDeltaFen: '-100',
-      transferAmountFen: '100',
-      fromSs58Address: fromSs58Address,
-      toSs58Address: toSs58Address,
-      counterpartySs58Address: toSs58Address,
-      blockNumber: 9,
+      txHash: '0xabc',
       blockHash: '0x22',
-      eventIndex: 3,
+      blockNumber: 9,
+      extrinsicIndex: 3,
     );
 
     records = await LocalTxStore.queryByAccountId(fromAccountId);
     expect(records, hasLength(1));
-    expect(records.single.recordKey, eventKey);
+    expect(records.single.recordKey, txKey);
     expect(records.single.status, LocalTxStore.statusFinalized);
     expect(records.single.amountDeltaFen, '-101');
     expect(records.single.txHash, '0xabc');
+    expect(records.single.blockNumber, 9);
+    expect(records.single.extrinsicIndex, 3);
+    expect(records.single.confirmedAtMillis, isNotNull);
+  });
+
+  test('dropped 保持待确认（不失败），txHash 认到后就地翻已确认、仍只有一条',
+      () async {
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      ss58Address: fromSs58Address,
+      accountId: fromAccountId,
+      txHash: '0xdef',
+      amountDeltaFen: '-51',
+      transferAmountFen: '50',
+      feeFen: '1',
+      counterpartySs58Address: toSs58Address,
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      usedNonce: 8,
+      createdAtMillis: 2,
+    );
+
+    // dropped 走 markLocalSubmitPending（不判失败），保持待确认。
+    await LocalTxStore.markLocalSubmitPending(
+      accountId: fromAccountId,
+      txHash: '0xdef',
+    );
+    var records = await LocalTxStore.queryByAccountId(fromAccountId);
+    expect(records, hasLength(1));
+    expect(records.single.status, LocalTxStore.statusPending);
+    final txKey = records.single.recordKey;
+    expect(txKey, contains(':tx:'));
+
+    // 该 txHash 在最终块被认到 → 就地翻已确认。
+    await LocalTxStore.markLocalSubmitFinalized(
+      accountId: fromAccountId,
+      txHash: '0xdef',
+      blockHash: '0x33',
+      blockNumber: 12,
+      extrinsicIndex: 1,
+    );
+    records = await LocalTxStore.queryByAccountId(fromAccountId);
+    expect(records, hasLength(1));
+    expect(records.single.recordKey, txKey);
+    expect(records.single.status, LocalTxStore.statusFinalized);
     expect(records.single.confirmedAtMillis, isNotNull);
   });
 

@@ -91,30 +91,38 @@
 
 ## 执行记录
 
+- **2026-08-02 · 全仓协议版本标识门禁收口**
+  - 清理 Worker 反向路由测试和现有技术文档中的废弃版本路由字面量；请求守卫仍只剥离
+    `/api`，并用中性未知前缀验证路由白名单拒绝行为。
+  - Cloudflare Durable Objects 的既有 migrations `tag` 是官方生命周期字段，不是 GMB
+    业务协议标识；生产 `wrangler.toml` 保持不变，AI 门禁只对该文件中的精确官方配置豁免。
+  - `BASE_REF=origin/main ./.github/scripts/check-ai-guardrails.sh` 通过；Worker 上传定向测试
+    8/8 通过。未修改 runtime、Worker 生产配置或其它业务代码。
+
 - **2026-08-02 · 无版本生产 Worker 发布完成（第 2 步）**
   - **根因与边界**：App 唯一生产根已经是 `https://www.crcfrcn.com/api`，业务请求使用
     `/square`、`/chat`、`/chain`、`/security` 无版本路径，但线上 Worker 仍停留在旧
-    `/api/v1/*` 路由，所以广场显示加载失败，创作者与会员显示“接口不存在”，聊天和
+    版本路由，所以广场显示加载失败，创作者与会员显示“接口不存在”，聊天和
     通讯录的登录失败又被上层误呈现成设备安全验证。本步骤只发布当前 Worker 契约，未修改
     第 1 步的数据钥、P-256 登记、页面门禁或钱包私钥读取逻辑。
   - **路径收敛**：Worker 入口只剥离唯一部署前缀 `/api`；业务路由、资源白名单、App
-    请求和 bootstrap schema 全部使用无版本名称，不保留 `/v1` 兼容。bootstrap 返回的
+    请求和 bootstrap schema 全部使用无版本名称，不保留废弃版本兼容。bootstrap 返回的
     `square_base_url`、`chat_base_url`、`media_base_url` 会保留请求所在的 `/api` 部署前缀，
     避免下发不存在的同域根路径。
   - **Durable Object / 数据边界**：`ChatRealtimeObject` 没有新增、重命名或删除，部署沿用
-    Cloudflare 已应用的 `v1` 迁移标记，不伪造第二次 migration。CitizenConsole 只执行
+    Cloudflare 已应用的既有迁移标记，不伪造第二次 migration。CitizenConsole 只执行
     production D1 连通性与表完整性只读检查、Secret 同步和 Worker 发布；没有重建或清空
     D1、KV、R2、Queue。
   - **自动化验证**：Worker 全量 **33 files / 258 tests** 通过；`npm run typecheck`、
     `npm run types:check`、Wrangler dry-run 全部通过。CitizenApp 的 bootstrap、广场、Chat、
     创作者、会员、通讯录、CID 门禁、设备子钥定向测试 **64/64** 通过；`flutter analyze`
     零问题。跨端测试现同时锁定 App 的 `/api` 生产根、无版本业务路径、Worker 路由白名单，
-    并断言旧 `/v1` 路径必须 404。
+    并断言废弃版本路径必须 404。
   - **生产发布**：通过 CitizenConsole 两次 Touch ID 于 2026-08-02 发布成功，Cloudflare
     Worker Version ID 为 `78f87b74-4f39-4fb5-a7e0-c9f7d9b4e81d`。真实线上验收确认
     `/api/health`、`/api/chain/bootstrap`、`/api/security/config` 均为 200；广场、创作者、
-    会员、通讯录、Chat 的无会话请求均命中真实接口并返回 401，不再返回 404；旧
-    `/api/v1/*` 明确返回 404。bootstrap schema 为 `citizenapp.chain.bootstrap`，三条
+    会员、通讯录、Chat 的无会话请求均命中真实接口并返回 401，不再返回 404；废弃版本
+    路径明确返回 404。bootstrap schema 为 `citizenapp.chain.bootstrap`，三条
     service URL 均正确保留 `https://www.crcfrcn.com/api`。
   - **真机边界**：已连接 OnePlus 6T / Android 11 上现有 CitizenApp 可正常启动；当前选中
     钱包没有注册 CID，页面按产品规则停在“需要注册身份”，因此本轮不伪造“已注册 CID

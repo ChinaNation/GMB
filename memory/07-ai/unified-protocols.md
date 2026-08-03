@@ -648,7 +648,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 编码：HTTP JSON，字段统一 snake_case；时间统一毫秒时间戳；hash 字段为 hex；`bootnodes` 元素为 Substrate multiaddr 字符串。
 - 签名/验签规则：本接口不携带用户签名，不接受交易载荷；只声明受控广播 path 是否可用，广播协议见 `P-API-CITIZENAPP-005`。
 - 禁止兼容：不兼容 API-only 链连接方案；不得把本接口演化成通用 JSON-RPC fallback；
-  不保留 `/v1`、版本化 schema 或双轨业务路由。
+  不保留已废弃的版本路径、版本化 schema 或双轨业务路由。
 - 禁止事项：
   - 禁止响应中返回 `CHAIN_URL`、两项 `CHAIN_ID / CHAIN_SECRET`、Validator RPC、Archive RPC 或任何私密 RPC 完整 URL。
   - 禁止 Cloudflare Worker 接触、保存或下发用户私钥、助记词、keystore、签名种子。
@@ -663,7 +663,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `flutter analyze lib/rpc/chain_bootstrap_api.dart lib/rpc/smoldot_client.dart test/rpc/chain_bootstrap_api_test.dart`
 - 远端验收：唯一 production 必须验证当前 schema、`light_client` 精确四字段、无
   checkpoint/RPC URL、三条 service URL 保留 `/api`、受保护无版本路由命中 401、旧
-  `/v1/*` 与 `/chain/rpc` 为 404；生产包不得残留 staging base URL Dart define。
+  版本路径与 `/chain/rpc` 为 404；生产包不得残留 staging base URL Dart define。
 
 ### P-API-CITIZENAPP-005：CitizenApp Signed Extrinsic Relay
 

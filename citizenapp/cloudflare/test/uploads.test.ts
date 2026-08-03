@@ -51,8 +51,8 @@ describe('upload validation', () => {
   it('只剥离唯一生产前缀 /api，不兼容已废弃的版本路径', () => {
     expect(normalizeApiPath('/api/square/feed')).toBe('/square/feed');
     expect(normalizeApiPath('/square/feed')).toBe('/square/feed');
-    expect(normalizeApiPath('/api/v1/square/feed')).toBe('/v1/square/feed');
-    expect(() => assertKnownRoute('GET', '/v1/square/feed')).toThrowError(HttpError);
+    expect(normalizeApiPath('/api/legacy/square/feed')).toBe('/legacy/square/feed');
+    expect(() => assertKnownRoute('GET', '/legacy/square/feed')).toThrowError(HttpError);
   });
 
   it('accepts the exact website origin and rejects lookalike origins', () => {

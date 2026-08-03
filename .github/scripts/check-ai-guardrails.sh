@@ -324,6 +324,11 @@ check_repository_version_tags() {
 
   # 中文注释：先由 git grep 预筛候选，再逐条消去官方名称；禁止对全仓每一行启动子进程。
   while IFS= read -r line; do
+    # 中文注释：Cloudflare legacy Durable Objects migrations 的 tag 是官方生命周期迁移字段，
+    # 不是 GMB 业务协议标识；只豁免当前唯一生产 wrangler 文件中的精确既有迁移标签。
+    if [[ "$line" =~ ^citizenapp/cloudflare/wrangler\.toml:[0-9]+:tag[[:space:]]*=[[:space:]]*\"v1\"$ ]]; then
+      continue
+    fi
     if has_custom_version_name "$line"; then
       version_tag_hits+=("${line}")
     fi

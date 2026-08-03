@@ -924,8 +924,10 @@ class LocalTxEntity {
   /// 单条钱包流水唯一键。
   ///
   /// 钱包对应的链账户由 accountId 唯一，流水记录由 recordKey 唯一。
-  /// 区块事件记录使用 `accountId:blockHash:eventIndex`，本机提交记录
-  /// 使用 `accountId:pending:txHash`，避免把 txHash 误当成单条流水唯一性。
+  /// 区块事件（收入等）记录使用 `accountId:blockHash:eventIndex`；本机提交交易
+  /// 使用状态无关的 `accountId:tx:txHash`——一笔交易全程只有这一条记录，状态在其
+  /// 上就地流转（pending→inBlock→finalized），最终性由 ChainTxMonitor 按 txHash
+  /// 精确认后就地翻已确认，绝不 re-key、绝不另建第二条。
   @Index(unique: true, replace: true)
   late String recordKey;
 

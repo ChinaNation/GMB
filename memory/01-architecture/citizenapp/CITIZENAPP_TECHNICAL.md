@@ -616,10 +616,10 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   单一 production Worker，远端只保留 production D1、KV、两个 R2 桶、通知队列和 16 项
   Worker Secret；staging Worker、路由、Access 应用、D1、KV、两个 R2 桶和队列已彻底
   删除。`/api` 只属于部署入口层，App 与 Worker 内部业务路径统一为无版本的 `/square`、
-  `/chat`、`/chain`、`/security`；禁止恢复 `/v1`、双轨路由或兼容分支。2026-08-02
+  `/chat`、`/chain`、`/security`；禁止恢复已废弃的版本路径、双轨路由或兼容分支。2026-08-02
   production Worker `78f87b74-4f39-4fb5-a7e0-c9f7d9b4e81d` 已完成该契约发布：真实
   `/health`、`/chain/bootstrap`、`/security/config` 返回 200，需会话业务接口返回 401
-  而不是 404，旧 `/v1/*` 返回 404。bootstrap 下发的同域服务根必须保留当前 `/api`
+  而不是 404，已废弃的版本路径返回 404。bootstrap 下发的同域服务根必须保留当前 `/api`
   前缀。会员没有外部支付 webhook；Stream 账户 webhook 固定为
   `/api/square/uploads/stream/webhook`。Images/Stream 只签发短期私有交付地址，
   Feed 不保存长期播放 URL。

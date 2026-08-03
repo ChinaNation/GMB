@@ -54,6 +54,8 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
   禁止用它删除 CID 资料缓存。
 
 ## Worker 接口（详见 unified-protocols P-API-CITIZENAPP-002）
+- Worker 请求守卫只剥离唯一部署前缀 `/api`；其它未知前缀保持原样并由路由白名单拒绝。
+  回归测试使用中性的 `/legacy` 未知前缀验证该边界，不保留任何废弃版本路由标识。
 - `GET /square/posts/self?limit=5&cursor=...`：必须携带本人 Bearer session 与 P-256
   设备请求证明；Worker 只按 session `cid_number` 返回本人已发布内容的原始 manifest
   base64、链锚和 Worker 时间。D1 `object_keys_json` 必须与 `account_id + post_id` 生成的

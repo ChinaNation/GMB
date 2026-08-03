@@ -53,6 +53,10 @@ class ChainTxMonitor {
   /// 当前监控的钱包：AccountId（小写 0x + 64 位 hex） → SS58 地址。
   final Map<String, String> _ss58AddressByAccountId = {};
 
+  /// 本块已被 txHash 认领的转出交易 "accountId#extrinsicIndex" 集合。
+  /// 每块开头由 [_confirmSubmittedByTxHash] 重置；转出侧据此跳过、绝不另建第二条。
+  Set<String> _claimedThisBlock = <String>{};
+
   /// 余额变动回调：当检测到余额变化（写入新交易记录后）通知外部刷新。
   void Function(String ss58Address, double newBalance)? onBalanceChanged;
 
@@ -311,12 +315,78 @@ class ChainTxMonitor {
       );
       if (eventsBytes.isEmpty) return true;
 
+      // 先按 txHash 精确认本机提交的待确认交易（就地翻已确认/失败），并记下
+      // 已认领的 accountId#extrinsicIndex；下面转出侧据此跳过、绝不另建第二条。
+      _claimedThisBlock =
+          await _confirmSubmittedByTxHash(blockNumber, blockHashHex, eventsBytes);
+
       await _decodeTransferEvents(eventsBytes, blockNumber, blockHashHex);
       return true;
     } catch (e) {
       AppLog.d('[TxMonitor] 同步区块 $blockNumber 失败: $e');
       return false;
     }
+  }
+
+  /// 按 txHash 精确认本机提交的待确认交易。
+  ///
+  /// 遍历各监控钱包"未终态"的本机提交记录（[LocalTxStore.queryOpenLocalSubmit]），
+  /// 若其 txHash 出现在本最终块 → 就地翻 finalized；若该 extrinsic 链上 ExtrinsicFailed
+  /// → 翻 failed。全程只动那一条 txHash 记录，绝不另建。返回已认领的
+  /// "accountId#extrinsicIndex" 集合，供转出侧跳过、避免重复建记录。
+  ///
+  /// 没有待确认记录时直接返回、不取块 extrinsics（省节点负担）。
+  Future<Set<String>> _confirmSubmittedByTxHash(
+    int blockNumber,
+    String blockHashHex,
+    Uint8List eventsBytes,
+  ) async {
+    final claimed = <String>{};
+    final openRecords = <LocalTxEntity>[];
+    for (final accountId in _ss58AddressByAccountId.keys) {
+      openRecords.addAll(await LocalTxStore.queryOpenLocalSubmit(accountId));
+    }
+    if (openRecords.isEmpty) return claimed;
+
+    final List<String> extrinsics;
+    try {
+      extrinsics = await SmoldotClientManager.instance
+          .getFinalizedBlockExtrinsicsOnce(blockHashHex);
+    } catch (e) {
+      AppLog.d('[TxMonitor] 取块 $blockNumber extrinsics 失败，跳过 txHash 认领: $e');
+      return claimed;
+    }
+
+    for (final record in openRecords) {
+      final txHash = record.txHash;
+      if (txHash == null || txHash.isEmpty) continue;
+      final idx = ChainRpc.findExtrinsicIndexInHexList(
+        extrinsics,
+        txHashHex: txHash,
+      );
+      if (idx == null) continue; // 这笔不在本块，继续等后面的最终块
+      final failure = _chainRpc.findExtrinsicFailureInEvents(
+        eventsBytes,
+        extrinsicIndex: idx,
+      );
+      if (failure != null) {
+        await LocalTxStore.markLocalSubmitFailed(
+          accountId: record.accountId,
+          txHash: txHash,
+          failureReason: failure.description,
+        );
+      } else {
+        await LocalTxStore.markLocalSubmitFinalized(
+          accountId: record.accountId,
+          txHash: txHash,
+          blockHash: blockHashHex,
+          blockNumber: blockNumber,
+          extrinsicIndex: idx,
+        );
+      }
+      claimed.add('${record.accountId}#$idx');
+    }
+    return claimed;
   }
 
   /// 解码 System.Events，优先提取 OnchainTransaction 转账事件。
@@ -509,20 +579,24 @@ class ChainTxMonitor {
       remark: remark,
     );
 
-    await _writeWalletTransferIfMatched(
-      accountId: fromAccountId,
-      blockNumber: blockNumber,
-      blockHash: blockHash,
-      eventRecordIndex: eventRecordIndex,
-      extrinsicIndex: extrinsicIndex,
-      amountDeltaFen: LocalTxStore.negateFen(transferAmountFen),
-      transferAmountFen: transferAmountFen,
-      fromSs58Address:
-          _ss58AddressByAccountId[fromAccountId] ?? _publicKeyToSs58(fromBytes),
-      toSs58Address: _publicKeyToSs58(toBytes),
-      counterpartySs58Address: _publicKeyToSs58(toBytes),
-      remark: remark,
-    );
+    // 转出侧：若本笔已被 txHash 认领（本机提交、已在 _confirmSubmittedByTxHash
+    // 里就地翻状态）→ 跳过，绝不另建 blockHash 键的第二条记录。收入侧不受影响。
+    if (!_claimedThisBlock.contains('$fromAccountId#$extrinsicIndex')) {
+      await _writeWalletTransferIfMatched(
+        accountId: fromAccountId,
+        blockNumber: blockNumber,
+        blockHash: blockHash,
+        eventRecordIndex: eventRecordIndex,
+        extrinsicIndex: extrinsicIndex,
+        amountDeltaFen: LocalTxStore.negateFen(transferAmountFen),
+        transferAmountFen: transferAmountFen,
+        fromSs58Address: _ss58AddressByAccountId[fromAccountId] ??
+            _publicKeyToSs58(fromBytes),
+        toSs58Address: _publicKeyToSs58(toBytes),
+        counterpartySs58Address: _publicKeyToSs58(toBytes),
+        remark: remark,
+      );
+    }
   }
 
   _DecodedTransferEvent? _readTransferWithRemark(Map<String, dynamic> event) {

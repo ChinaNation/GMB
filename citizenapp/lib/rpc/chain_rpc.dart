@@ -771,7 +771,10 @@ class ChainRpc {
     );
   }
 
-  @visibleForTesting
+  /// 在一批 extrinsic hex 中按 txHash（blake2b256）定位 index；无匹配返回 null。
+  ///
+  /// 纯静态工具：供已取到本块 extrinsics 的调用方（如 ChainTxMonitor 的 txHash
+  /// 精确认）复用，避免按记录数重复取块。
   static int? findExtrinsicIndexInHexList(
     List<String> extrinsics, {
     required String txHashHex,
