@@ -7,7 +7,7 @@
 //! 挖矿特性：
 //! - CPU 多线程挖矿，各线程 nonce 不重叠（stride = 线程数）。
 //! - GPU 挖矿（可选 `gpu-mining` feature），使用 nonce 高半区（bit63=1）。
-//! - 空交易池时不挖矿（避免空块），离线或 major sync 时禁止出块（防分叉）。
+//! - 空交易池时不挖矿（避免空块），major sync 时暂停出块；peer 连接状态不限制挖矿。
 //! - PoW 有效解找到后立即提交；六分钟只是难度调整追踪的长期平均目标。
 
 // Substrate service API 固定返回 sc_service::Error，Node 必须保持框架函数签名。
@@ -289,6 +289,18 @@ fn start_cpu_miner<Proof: Send + 'static>(
                 }
             }
         });
+    }
+}
+
+/// 返回当前允许矿工消费的 ready 交易数。
+///
+/// 只在 major sync 期间暂停挖矿；peer 连接状态不是 PoW 出块权限，调用方不得把
+/// `is_offline()` 混入本门控。交易池为空时原样返回 0，继续禁止提交空块。
+fn mining_ready_transactions(ready: usize, is_major_syncing: bool) -> usize {
+    if is_major_syncing {
+        0
+    } else {
+        ready
     }
 }
 
@@ -605,22 +617,18 @@ pub fn new_full(
         },
     );
 
-    // 空块不提交：构造一个闭包，返回交易池中待打包的交易数。
-    // CPU 和 GPU 矿工在交易池为空时跳过挖矿，避免产生空块。
-    // 额外门控：节点必须先接入网络并完成主要同步，才允许恢复正常出块，
-    // 避免清库后的普通节点在未连上现网前先本地起出一条分叉链。
+    // 空块不提交：构造一个闭包，返回交易池中允许打包的 ready 交易数。
+    // CPU 和 GPU 矿工在交易池为空时跳过挖矿；major sync 期间暂停挖矿，
+    // 但 peer 连接状态不属于 PoW 出块权限，无 peer 且有有效交易时仍允许挖矿。
     let pool_ready: Arc<dyn Fn() -> usize + Send + Sync> = {
         use sc_transaction_pool_api::TransactionPool;
         let pool = transaction_pool.clone();
         let sync_service_for_pool = sync_service.clone();
         Arc::new(move || {
-            // 没有同步 peer 或仍在 major sync 时，禁止本地挖矿，
-            // 防止离线状态继续出块并与现网分叉。
-            if sync_service_for_pool.is_offline() || sync_service_for_pool.is_major_syncing() {
-                return 0;
-            }
-
-            pool.status().ready
+            mining_ready_transactions(
+                pool.status().ready,
+                sync_service_for_pool.is_major_syncing(),
+            )
         })
     };
 
@@ -858,5 +866,21 @@ mod tests {
         let above = target + U256::one();
         let above_bytes: [u8; 32] = above.to_big_endian();
         assert!(!hash_meets_difficulty(&above_bytes, difficulty));
+    }
+
+    #[test]
+    fn mining_ready_transactions_keeps_nonempty_pool_when_not_major_syncing() {
+        // peer 状态不再是参数：没有 peer 不能抹掉交易池中的有效交易。
+        assert_eq!(mining_ready_transactions(3, false), 3);
+    }
+
+    #[test]
+    fn mining_ready_transactions_keeps_empty_pool_blocked() {
+        assert_eq!(mining_ready_transactions(0, false), 0);
+    }
+
+    #[test]
+    fn mining_ready_transactions_blocks_during_major_sync() {
+        assert_eq!(mining_ready_transactions(3, true), 0);
     }
 }

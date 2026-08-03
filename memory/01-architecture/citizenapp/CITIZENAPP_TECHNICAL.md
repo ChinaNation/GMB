@@ -650,7 +650,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   暂不配置，仅影响 iOS 后台推送，不阻塞 Android FCM、前台 Chat、广场或会员。
 - 广场媒体盈利保护由 Worker 强制执行（三档，ADR-036）：自由会员每月 300 图/30 分钟视频/1 个活动上传，民主会员每月 1500 图/180 分钟/2 个活动上传，薪火会员每月 5000 图/1800 分钟/3 个活动上传。媒体估算成本达到有效订阅毛收入预算的 85% 时暂停新视频，达到 100% 时暂停全部新媒体；文字浏览、账户和 Chat 不受媒体熔断影响。
 - 广场链上确认本地 E2E 不使用冻结 `--dev` chainspec；冻结 dev spec 可能仍带旧 WASM，metadata 中没有 `SquarePost`。需要先用当前源码 WASM 构建节点，再基于 `citizenchain-fresh` 生成临时 chainspec 并给测试钱包补余额。
-- 广场本地 E2E 链节点必须至少两个节点通过 WSS peer 互连。当前节点挖矿逻辑在 `sync_service.is_offline()` 时不会出块，单节点即使有 pending extrinsic 也不会打包；第二节点 bootnode 地址必须使用 `/wss/p2p/{peer_id}`，两端 `system_health.peers > 0` 后才能验证 `publish_square_post` 入块。
+- 广场本地 E2E 可使用无 peer 的单节点：只要交易池存在有效交易且节点不在 major sync，CPU/GPU 矿工即可打包；peer 连接状态不限制 PoW 出块。交易池为空时仍禁止挖矿和提交空块。多节点联调需要 WSS bootnode 时，地址使用 `/wss/p2p/{peer_id}`，`system_health.peers > 0` 只证明节点已经互连，不是挖矿授权条件。
 - 本地真实 E2E 必须使用与生产相同的 Worker 上传接口和 D1 目标基线；禁止恢复仅本地存在的上传代理。Images/Stream provider 调用使用测试 Token 或 mock，HTTP 路由、签名、有界读取、R2 与 D1 必须真实运行。
 - `citizenapp/cloudflare/.gitignore` 必须忽略 `.dev.vars`、`.wrangler/`、`node_modules/`、`coverage/` 和 `dist/`；Cloudflare token 与其它 Secret 不得写入仓库。
 - CitizenApp 聊天、广场、会员和媒体共用唯一 production Worker、D1、KV、R2、Queue、
