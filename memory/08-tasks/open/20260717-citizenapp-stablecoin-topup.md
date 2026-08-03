@@ -209,10 +209,10 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
   - 改 `app.js`(`renderReconcileToggles` 两开关同容器、`loadReconcileFlags` 复原 membership+creator 双读)+ `styles.css`(`.reconcile-list` 改 `grid-template-columns:1fr 1fr` 横排,删 `.reconcile-head` 死规则)。后端 `server.mjs`/`cloudflare.sh` reconcile 端点不动。纯前端(静态)刷新即见;实测同一行两开关(top 相同)、标签平台/创作者会员对账、无 head/说明文字、无 console error。
   - 另:发币会话解锁按钮文案从「解锁发币会话（Touch ID）」改为「解锁」(citizenconsole.html)。
 
-- **2026-07-18 · 修正:解锁是功能级开关,放回配置卡右上角(不进配置列表)**
-  - 上一版误把「解锁」做成配置表第 1 行的操作按钮——错。解锁是「整个发币功能」的会话开关,归右上角;配置列表只放"可配置参数"。
-  - 定稿:配置卡标题右上角=`解锁发币会话(Touch ID)`按钮 + 解锁状态 pill(`.tp-head`/`.tp-unlock`,无地址);配置列表第 1 行=`发币地址`(简介列展示解锁后派生的 SS58 地址,操作=配置/更换发币钱包私钥[走 `/wallet`,占位提示输入 64hex 私钥]+删除),其后为 7 个参数行(WORKER_BASE_URL…MIN_CONFIRMATIONS)。发币私钥并入「发币地址」这一行(keychain 字段仍 DISBURSE_KEY),不再单列 DISBURSE_KEY 行。
-  - 纯前端(html/js/css 静态),常驻控制台无需重启,刷新即见;实测 8 行、解锁在右上角不在列表、无 console error。
+- **2026-07-18 · 修正:解锁是功能级开关(布局后来统一到订单台账右侧)**
+  - 上一版误把「解锁」做成配置列表第 1 行的操作按钮——错。解锁是「整个发币功能」的会话开关，不属于配置项。
+  - 当前定稿由 `20260802-citizenconsole-topup-view-layout` 统一：订单台账右侧上方显示解锁状态、下方显示解锁/锁定按钮；配置列表第 1 行为发币地址，操作包含查看公开地址、配置/更换发币钱包私钥和删除。发币私钥并入「发币地址」行的内部字段 `DISBURSE_KEY`，不单独显示私钥行。
+  - 当前页面验收以 2026-08-02 任务记录为准，不再保留旧配置标题栏布局或旧选择器。
 
 - **2026-07-18 · 充值发币配置表微调:发币地址成第 1 行 + 删说明文字 + 解锁移入表内**
   - 配置表**第 1 行改为「发币地址」**(私钥派生、只读展示;简介列解锁后显示 SS58 地址、未解锁显示占位;状态=解锁圆点;操作=「解锁（Touch ID）」);`DISBURSE_KEY` 顺延为第 2 行。
@@ -221,7 +221,7 @@ citizenapp（前端 + Worker）+ deploy（本地控制台）三处；citizenchai
 
 - **2026-07-18 · 充值发币专属页:发币钱包私钥并入配置表 + 独立卡片删除**
   - 删掉独立「发币钱包」卡片(`#privateKey`/`#walletAddress`/`#saveWallet`/`#walletMsg` 全清);发币私钥 `DISBURSE_KEY` 作为**配置表第 1 行**(简介=专用发币热钱包私钥说明),secret+wallet 标记:设置/更换走 `/api/topup/wallet`(64hex 校验+派生地址+Touch ID),删除走 `/api/topup/config/delete`。
-  - 「解锁发币会话(Touch ID)」按钮 + 解锁状态 pill + 发币地址移到**「配置」标题右上角**(`.tp-head`/`.tp-unlock`/`.tp-addr`);解锁/写入反馈统一进 `#configMsg`。
+  - 此处记录的旧标题栏布局已由 `20260802-citizenconsole-topup-view-layout` 取代；当前解锁状态和按钮统一位于订单台账右侧，发币地址保留在配置列表第 1 行，解锁/写入反馈继续统一进入 `#configMsg`。
   - 后端:`deleteConfig` 放宽到 `ALL_ITEMS`(含 `DISBURSE_KEY`),删发币私钥时 `sessionSeedHex=null` 同步锁会话。
   - 验收:`node --check` 过;浏览器实测配置表 8 行(DISBURSE_KEY 居首)、旧卡片 DOM 已无、解锁在 header、无 console error;重启常驻控制台(41731)使后端生效。
   - **重要经验**:控制台后端(server.mjs/topup/*.mjs)改动后**必须重启常驻进程**才生效(Node 不热载 import;静态 web/* 每次读盘所以前端秒见)——本轮已代为重启。

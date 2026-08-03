@@ -194,7 +194,7 @@ GMB/
 
 ## 8. 发布边界
 
-本机统一发布入口固定为 `citizenconsole/` 可视化控制台。控制台属于本机私有运维工具，整目录由 Git 忽略，不得纳入 Git、提交或推送 GitHub；`.runtime/`、日志、编译产物、本机状态和私密材料同样只留在本机。控制台用七个模块图标分别承载 CitizenConsole、CitizenApp Cloudflare、CitizenWeb、CitizenChain WASM（上排四）与 CitizenApp、CitizenWallet、CitizenChain（下排三）；其中 CitizenConsole 卡点击进入专属整页（非弹窗）管理稳定币充值发币订单与发币热钱包，其余六个为部署模块，点开弹窗显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途，但绝不读取到浏览器或显示密钥明文。
+本机统一发布入口固定为 `citizenconsole/` 可视化控制台。控制台属于本机私有运维工具，整目录由 Git 忽略，不得纳入 Git、提交或推送 GitHub；`.runtime/`、日志、编译产物、本机状态和私密材料同样只留在本机。首页固定一行五张中文小卡片：“发币、公民、公民链、公民云、公民钱包”。发币卡点击进入专属整页（非弹窗）管理稳定币充值发币订单与发币热钱包；其余卡片点开弹窗显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途，但绝不读取到浏览器或显示密钥明文。CitizenWeb 不再建立独立控制台模块，官网唯一生产动作归入公民云。
 
 测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，`.ssh`、仓库及根目录不得保留部署私钥明文。GitHub `workflow_dispatch` 使用显式 `mode=ci/release` 隔离构建与发布；服务器部署由本地控制台独立执行，目标服务器直接下载 GitHub 最新成功 CI 产物，CI 模式不得创建 Release 或部署服务器。
 
@@ -210,7 +210,9 @@ Node、网页、动作脚本、充值代码和依赖。Node 只能通过私有�
 继续只监听回环地址，并同时执行 Host、会话 Cookie、Origin、Fetch Metadata、CSP 和安全
 响应头校验；生产动作子进程使用环境白名单，不继承控制台完整进程环境。
 
-CitizenWeb 只保留“测试部署”和“生产部署”两个按钮卡片：“测试部署”在启动前自动停止旧本地测试进程，再在本机构建并启动 `http://127.0.0.1:41732`，不创建测试 Pages 项目；生产部署只更新已经存在的 `citizenweb` Pages 项目，并继续使用 `https://www.crcfrcn.com` 做真实健康检查。官网部署固定使用 `citizenweb/package-lock.json` 锁定的 Wrangler 版本；生产项目存在性门禁只解析 `wrangler pages project list --json`，不得再 grep 表格输出。
+公民云三项操作固定一行，顺序为“生产部署、清空并重建全部数据、官网部署”。“官网部署”复用公民云生产 `CF_ACCOUNT_ID` 和 Pages 最小权限 `CF_DEPLOY_TOKEN`，一次 Touch ID 原子读取，只更新已经存在的 `citizenweb` Pages 项目并使用 `https://www.crcfrcn.com` 做真实健康检查。官网没有测试部署、本地预览、独立密钥或独立控制台卡片；部署固定使用 `citizenweb/package-lock.json` 锁定的 Wrangler 版本，生产项目存在性门禁只解析 `wrangler pages project list --json`。
+
+公民与公民钱包详情页各自三项操作固定为紧凑三列一行。CitizenChain WASM CI 在准确 SHA 的 GitHub run 被公开 API 确认创建后，日志标签才进入可脱离状态；关闭标签只断开当前页面 SSE 跟踪，后台等待和远端 GitHub CI 继续运行。同一页面不会自动重新弹出已主动关闭的运行标签，重新打开控制台仍可接管尚未结束的任务。
 
 - Runtime 升级：修改 `citizenchain/runtime/**` 或被 runtime 直接依赖且影响链上行为的 primitives。
 - Native Node / 桌面安装包：修改 `citizenchain/node/**`、桌面前端、Tauri、打包或发布脚本。

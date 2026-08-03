@@ -149,7 +149,7 @@ Data Protection Keychain，远端运行所需 Secret 由 CitizenConsole 统一�
   Read/Write 最小权限，并通过真实 API 复验，不再存在该权限缺口。
 - 2026-07-26：真实 CitizenConsole 运行态验收通过：未解锁首页只返回锁屏且状态接口
   403；Touch ID 后状态与节点接口均返回 200，Cloudflare production 配置完整且仅五个
-  指定节点为就绪。`CitizenConsole · 充值发币` 独立 Touch ID 长会话锁定前为已解锁，
+  指定节点为就绪。CitizenConsole「发币控制台」独立 Touch ID 长会话锁定前为已解锁，
   点击锁定后立即变为未解锁，过程中未运行结算、未购买、未支付、未发币。
 - 2026-07-26：在 Cloudflare 用户令牌控制台为 `CF_ZT_TOKEN` 补充账户级
   `访问：服务令牌 / 编辑` 最小权限，真实 API 返回 200。发现正式 Access 策略同时引用

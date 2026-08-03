@@ -135,11 +135,14 @@
 - 本机部署 Secret 只允许保存在上述受生物识别保护的 macOS Keychain，远端流水线
   Secret 只允许保存在 GitHub Secrets；禁止明文 Secret 文件、浏览器回传、前端存储、
   日志输出、普通 `security` 命令读取、整服务枚举或 Wrangler OAuth 回退。
-- `CitizenConsole · 充值发币` 是唯一允许一次 Touch ID 后在页面连接生命周期内持续持有
+- CitizenConsole「发币控制台」是唯一允许一次 Touch ID 后在页面连接生命周期内持续持有
   内存 Secret 的模块；不设置时间超时，点击“锁定”、离开页面、连接断开或进程退出必须
   清除内存 Secret。发币私钥必须由原生根进程持有，只能经匿名管道交给已密封的一次性
   发币工作进程，普通 UI Node 不得读取、返回或持有该私钥。其他敏感动作仍逐次 Touch ID，
   不得复用充值发币解锁状态。
+- 发币控制台配置列表的已配置参数和令牌允许逐次 Touch ID 后短时查看；发币地址只能由
+  原生安全进程读取 `DISBURSE_KEY` 后派生并返回公开地址，普通 Node 和浏览器永远不得取得
+  发币私钥。地址查看不得开启、关闭或复用发币控制台的持续解锁状态。
 - CitizenConsole 所有修改类 HTTP 请求必须同时校验精确 `Origin` 和 Fetch Metadata；
   缺失来源或跨站请求一律拒绝。所有响应必须禁止缓存并设置 CSP、`frame-ancestors`、
   `nosniff`、Referrer Policy、Permissions Policy、COOP 与 CORP；部署子进程只能继承

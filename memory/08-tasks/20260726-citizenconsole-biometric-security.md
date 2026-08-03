@@ -11,7 +11,7 @@
 1. CitizenConsole 只能通过 Touch ID 打开，禁止 Mac 密码回退。
 2. 所有本机 Secret 使用 Apple Data Protection Keychain 与
    `biometryCurrentSet` 保护，删除普通命令行明文读取路径。
-3. `CitizenConsole · 充值发币` 经一次 Touch ID 解锁后可持续发币，不设置时间超时；
+3. CitizenConsole「发币控制台」经一次 Touch ID 解锁后可持续发币，不设置时间超时；
    点击锁定、离开页面、连接断开或进程退出时锁定并清除内存密钥。
 4. Cloudflare 本机管理权限拆分为 `CF_DEPLOY_TOKEN`、`CF_DATA_TOKEN`、
    `CF_ZT_TOKEN` 三个最小权限令牌；Worker 运行时 `CF_API_TOKEN` 保持独立。

@@ -59,7 +59,25 @@ jobs:
           components: rust-src, clippy
 
       - name: 安装系统依赖
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
+        # NodeGuard 行为探针会编译完整 node/Tauri 宿主；依赖必须与 Linux 节点 CI 对齐，
+        # 否则 glib-sys 等桌面依赖会在探针真正执行前因缺少 pkg-config 元数据失败。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            llvm \
+            llvm-dev \
+            libclang-dev \
+            libpam0g-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            pkg-config \
+            protobuf-compiler \
+            patchelf \
+            file
 
       - name: 校验锁文件并记录构建环境
         working-directory: citizenchain
