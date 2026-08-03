@@ -4,8 +4,8 @@
 
 > 2026-08-02 更新：本卡第 1 步的“WASM CI 只推 runtime”已经由任务卡
 > `20260802-citizenconsole-wasm-ci-full-push.md` 取代。当前已确认一次 Touch ID、正式链版本校验、
-> 整仓 `main` 提交和版本判断规则；用户已否决额外 GitHub API 凭证，因此“只用已有 SSH
-> 私钥启动并等待准确 HEAD”仍待单独方案确认，不得依据历史记录恢复局部提交。
+> 整仓 `main` 提交和版本判断规则；只用已有 SSH 私钥推送固定消息，由 push workflow
+> 启动并通过公开 API 按准确 HEAD 等待的机制已完成本地实现，不得恢复局部提交或第二凭证。
 
 ## 需求
 在公民控制台 **CitizenChain WASM** 卡片、`运行 WASM CI` 按钮**右侧**加「协议升级」按钮:点击对**本机链**做 **runtime 升级**,用 **GitHub 上最新且 CI 成功**的 WASM;签名走**公民钱包扫码冷签**(与节点软件"发协议升级"同一套签名方式,只在控制台再实现一遍),控制台只存 NRC 管理员**公钥**,私钥永不进控制台。
@@ -27,9 +27,9 @@
 跨语言(Rust→Node/@polkadot)复刻冷签,必须与**钱包解码器**(否则两色 decodeFailed 红拒,见 [[project_qr_signing_two_color]]、[[project_citizenwallet_call_registration_three_points]])+ 节点 Rust 逐字段对齐:action code、QR envelope、call SCALE 编码、ExtrinsicPayload(genesis/nonce/spec/tx/immortal)、签名输入(>256 blake2)、response 格式、signed extrinsic 组装。签名协议单源 [[project_unified_signing_protocol_adr026]] `primitives::sign`。
 
 ## 分步
-1. **WASM CI 整仓推送并等待完成**（⏳ 仅用已有 SSH 私钥的触发机制待确认）：一次
+1. **WASM CI 整仓推送并等待完成**（✅ 本地实现完成，真实按钮验收待单独授权）：一次
    Touch ID 后读取正式链和 GitHub `SSH_KEY`；仓库与链同版时提高一版，仓库已高一版时复用
-   候选。提交推送和准确 HEAD 的 WASM CI 触发/等待尚未验收，不得对外宣称完成。
+   候选。固定消息 push 触发 WASM workflow，控制台用公开 API 按准确 HEAD 等待最终结果。
 2. **控制台配置 NRC 管理员公钥 + 协议升级按钮**(✅ 已完成 as-built):
    - 位置定稿(用户纠正):在 **CitizenChain WASM** 模块——「运行 WASM CI」按钮**右侧**加「协议升级」按钮(红·副标题「钱包扫码冷签」,`action.dialog=true`,前端特判弹窗不走脚本);**密钥状态表**加「管理员公钥 `NRC_ADMIN_PUBKEY`」行。
    - 后端 `server.mjs`:citizenchainwasm 模块加 `localKeys:[{name:'NRC_ADMIN_PUBKEY',env:'rtupg',desc}]` + `protocol-upgrade` dialog 动作;`secretComments` 加 NRC_ADMIN_PUBKEY;`/api/status` 返回 `localKeys` 存在态;`resolveSecretTarget` + `/api/secret/set|delete` 支持 `store:'local'`(keychainPut/Delete,过 Touch ID)。

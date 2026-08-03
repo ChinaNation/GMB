@@ -28,7 +28,8 @@ on:
           - release
 
 concurrency:
-  group: citizenapp-ci-${{ github.ref }}
+  # 中文注释：WASM 固定标记产生的 skipped 运行使用独立组，不能取消同分支正在执行的正常 CI。
+  group: citizenapp-ci-${{ github.event_name == 'push' && github.event.head_commit.message == 'CitizenChain WASM' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -44,6 +45,7 @@ jobs:
   # ── 代码检查 ──
   check:
     name: Flutter 代码检查
+    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -95,6 +97,7 @@ jobs:
   # ── Cloudflare Worker 与公民属于同一产品 CI，不拆分第五条流水线 ──
   cloudflare:
     name: Cloudflare 代码与 D1 结构检查
+    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码

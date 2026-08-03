@@ -19,7 +19,7 @@
 - 本任务卡的新建路径、用途和 Git 跟踪已经用户明确确认。
 - 涉及 `citizenchain/runtime/` 的真实运行验收必须另行取得 runtime 二次确认。
 
-## 已核实的当前事实
+## 修复前核实的事实
 
 - WASM CI 动作配置为 `production:false`，前端因此错误显示“无需密码”。
 - 服务端在创建运行任务之前读取 Keychain 并连接目标链；Touch ID 和 RPC 预检期间没有
@@ -51,23 +51,30 @@
 - 链上版本等于仓库版本：同步提高 runtime 真源和现有测试断言一版。
 - 仓库版本等于链上版本加一：复用已存在的升级候选，不重复提高。
 - 其他差值、创世哈希不一致或远端版本分叉全部停止。
-- `git add -A` 提交全部 Git 可见改动，固定提交信息带 `[skip ci]`，避免整仓推送误触发
-  其他 push CI；使用临时 SSH 文件推送 `origin/main`，退出即删除临时文件。
+- `git add -A` 提交全部 Git 可见改动，完整提交消息固定为 `CitizenChain WASM`，不得附加
+  跳过自动流程的标记；使用临时 SSH 文件推送 `origin/main`，退出即删除临时文件。
 
 ### 第四步：准确启动并等待 WASM CI
 
-- 用户已否决额外 GitHub API 凭证方案，原方案撤销。
-- 新方案必须只复用已有 `SSH_KEY`，且仍需保证只启动准确 HEAD 的 WASM CI、支持
-  同版本重试并等待最终结果。该方案尚未确认，不得先行实施。
+- `.github/workflows/citizenchain-wasm.yml` 只接受完整消息为 `CitizenChain WASM` 的
+  `main` push，不保留手动触发入口；无路径过滤，允许同一代码树用空提交重试。
+- CitizenChain、CitizenApp、CitizenWallet 的 push workflow 在该固定消息下于根 job
+  分配 runner 前跳过，并使用独立 concurrency 组，避免整仓推送执行无关 CI 或取消同分支
+  已经运行的正常 CI。
+- 推送后不登录 GitHub、不读取第二凭证；用公开 Actions API 按精确 40 位 `head_sha` 和
+  `event=push` 查找任务，等待到 `completed/success` 才结束。限流按响应头自动等待。
 
 ### 第五步：文档、测试和残留清理
 
 - 增加按钮安全标识、单次鉴权、版本关系、整仓推送、失败重试和等待 CI 的回归测试。
-- 删除 `ensure_runtime_pushed`、`nowatch` 和“只提交 runtime 范围”等旧代码、注释与文档。
+- 删除局部提交、触发即退出和“只提交 runtime 范围”等旧代码、注释与文档。
 - 更新 CI 路由、Runtime 升级和 CitizenConsole 技术文档，记录真实验收证据。
 
 ## 预计修改目录
 
+- `/Users/rhett/GMB/.github/workflows/`
+  - 修改四条现有 CI 的 push 路由、固定消息门禁和并发隔离；涉及 Git 跟踪配置与旧手动
+    WASM 入口清理，不新增 workflow 文件。
 - `/Users/rhett/GMB/citizenconsole/`
   - 修改本机私有控制台的按钮、服务端编排、原生 Keychain 白名单、动作脚本和测试；涉及代码、
     中文注释和旧流程残留清理，整目录继续由 Git 忽略。
@@ -96,7 +103,7 @@
 - [x] 第一步：统一安全动作和可见运行状态
 - [x] 第二步：一次鉴权读取全部所需配置
 - [x] 第三步：版本判断和整仓推送
-- [ ] 第四步：仅用已有 SSH 私钥启动并等待 WASM CI
+- [x] 第四步：仅用已有 SSH 私钥启动并等待 WASM CI
 - [x] 第五步：文档、测试和残留清理
 - [ ] Runtime 二次确认与真实按钮验收
 
@@ -106,7 +113,7 @@
   CitizenConsole 与文档，不运行按钮、不修改 runtime、不推送 GitHub、不触发远端 CI。
 - 2026-08-02：本机私有 CitizenConsole 已完成按钮生产标识、可见 run 预检、单次 Touch ID
   正式链与 SSH 配置原子读取、`main` 整仓 SSH 推送和 `spec_version` 同版提高/高一版复用。
-  旧的 `ensure_runtime_pushed`、`nowatch`、局部提交代码和当前技术文档口径已清理。
+  旧的局部提交、触发即退出代码和当前技术文档口径已清理。
 - 2026-08-02：Node/浏览器/Bash 语法、ShellCheck、diff whitespace 和 WASM 专项 9 项测试
   通过；版本测试在隔离临时 Git 仓库真实覆盖“同版提高一版、高一版原版本重试、漂移拒绝”。
   同时修正旧 D1 安全测试与“唯一创世基线禁止 schema 版本第二真源”的反向断言，CitizenConsole
@@ -118,3 +125,8 @@
   读取/注入、脚本要求、测试和文档口径已删除；GitHub 卡片只保留原有 `SSH_KEY`。
 - 2026-08-02：删除后 CitizenConsole 52 项测试全部通过，原生安全代理与控制台已重新
   编译、签名和原子换包，完整性验收通过；源码与签名运行包已不含新增 GitHub API 凭证口径。
+- 2026-08-02：用户确认固定消息 push 方案。本地已改为 `CitizenChain WASM` 精确提交消息
+  触发唯一 WASM push workflow，并以公开 API 按精确 SHA 等待；其它三条产品 workflow
+  对该消息在 runner 分配前跳过且不干扰已有正常 CI。公开 API 已做无凭证真实只读检查，
+  返回字段满足精确 SHA 等待需求；53 项测试、ShellCheck、Actionlint、签名换包与完整性校验
+  全部通过。实现阶段未修改 runtime、未提交推送、未触发远端 CI。

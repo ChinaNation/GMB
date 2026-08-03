@@ -31,7 +31,8 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: citizenchain-${{ github.ref }}
+  # 中文注释：WASM 固定标记产生的 skipped 运行使用独立组，不能取消同分支正在执行的正常 CI。
+  group: citizenchain-${{ github.event_name == 'push' && github.event.head_commit.message == 'CitizenChain WASM' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -44,6 +45,7 @@ env:
 jobs:
   changes:
     name: 识别公民链变更范围
+    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     outputs:
       citizenchain: ${{ steps.scope.outputs.citizenchain }}
@@ -97,10 +99,12 @@ jobs:
           echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
 
   # 金标向量真源在本仓 citizenchain/runtime/primitives/tests/fixtures/。
-  # 独立成 job 且不设 if：guardrails 只在 PR 跑，而真源改动常直接推 main，
-  # 挂在那里等于门禁失效。本 job 是纯 Node 静态比对，秒级、无需工具链。
+  # 独立成 job：guardrails 只在 PR 跑，而真源改动常直接推 main，挂在那里等于门禁失效。
+  # 唯一例外是 WASM 固定标记 push；该次整仓提交由专用 workflow 验证并在分配 runner 前跳过。
+  # 本 job 是纯 Node 静态比对，秒级、无需工具链。
   golden-vectors:
     name: 校验金标向量跨端一致
+    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -111,6 +115,7 @@ jobs:
 
   guardrails:
     name: 文档、残留与 pallet 注册表门禁
+    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取完整变更历史

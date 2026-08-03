@@ -28,11 +28,20 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   先要求 RPC genesis hash 等于本机明确保存的正式链指纹，再比较链上、
   本机和 `origin/main` 的 `spec_version`：仓库与链同版时同步提高源码和现有测试断言一版；
   仓库已经比链高一版时复用该候选以重试失败或不可用的 WASM CI；其他差值全部停止。
-- 用户已明确否决新增 GitHub API 凭证；CitizenConsole 只保留 `SSH_KEY`。推送后只触发
-  准确 HEAD 的 WASM CI 且等待最终结果的新机制，必须在不增加第二 GitHub 密钥的前提下
-  单独出方案并经确认；完成前禁止真实按钮推送和 CI 验收。
-- workflow 按已提交源码原样编译并上传 artifact，不查询链上版本、不读取 RPC/SSH Secret、不连接服务器，也不得在 CI 工作区改写版本；控制台升级构建只额外校验“源码版本 = 目标链版本 + 1”并记录 genesis hash。
-- 从 GitHub 或其他位置手动执行 workflow 属于普通源码构建，不提高版本；正式创世前没有可读取的正式目标链时，控制台升级入口必须停止并保持项目版本 `0`。
+- CitizenConsole 只保留 `SSH_KEY`，不保存 GitHub API 凭证、不要求 GitHub 登录。版本校验后
+  用 SSH 把全部 Git 可见代码提交到 `main`，提交完整消息固定为 `CitizenChain WASM`；
+  `citizenchain-wasm.yml` 只接受该消息的 `main` push。失败重试创建相同代码树的新提交，
+  只更换 SHA，不再次提高 `spec_version`。
+- 控制台通过公开仓库的 GitHub Actions 只读 API 按 40 位 `head_sha` 和 `event=push` 查询并
+  等待准确运行；不发送凭证。API 限流或暂时不可用只延迟查询，不能误报为构建失败。
+- workflow 按已提交源码原样编译并上传 artifact，不查询链上版本、不读取 RPC/SSH Secret、
+  不连接服务器，也不得在 CI 工作区改写版本。正式链创世哈希和升级前版本由控制台在推送前
+  校验；CI 记录源码 `spec_version` 与精确提交 SHA。
+- WASM workflow 不提供 `workflow_dispatch`，避免脱离正式链校验的第二触发入口。固定标记提交
+  即使同时命中 CitizenChain、CitizenApp 或 CitizenWallet 的路径，这三条 workflow 的根 job
+  也会在分配 runner 前全部跳过，不执行无关编译；标记运行使用独立 concurrency 组，不会
+  取消同分支已经运行的正常 CI。
+- 正式创世前没有可读取的正式目标链时，控制台升级入口必须停止并保持项目版本 `0`。
 - 正式创世普通源码构建必须钉死不可变 head SHA。优先使用直接指向该提交的轻量候选 tag；
   用户明确指定使用 `main` 运行时，必须同时钉死 run ID、40 位 head SHA、唯一 artifact ID
   与 GitHub artifact digest，不得按“最新成功”推断产物。
@@ -49,9 +58,8 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   大版本 tag 或上游 `refs/heads/1.97.1` 分支。Cargo 必须同时执行
   `metadata --locked` 和 `build --locked`，并在 Step Summary 记录 runner image、
   Rust/Cargo/Protobuf/Clang 版本、Cargo.lock SHA-256 与 action SHA。
-- 主要命中目录：
-  - `citizenchain/runtime/**`
-  - `.github/workflows/citizenchain-wasm.yml`
+- 触发契约：不使用路径过滤，固定消息的 `main` push 才分配 WASM runner；其它 push 只产生
+  skipped 记录。这样既能提交全仓代码，也能用同一代码树的空提交重试。
 
 ### 2.2 CitizenChain 全工程与桌面安装包
 

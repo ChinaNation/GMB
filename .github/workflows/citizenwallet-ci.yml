@@ -23,7 +23,8 @@ env:
   GMB_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
 
 concurrency:
-  group: citizenwallet-ci-${{ github.ref }}
+  # 中文注释：WASM 固定标记产生的 skipped 运行使用独立组，不能取消同分支正在执行的正常 CI。
+  group: citizenwallet-ci-${{ github.event_name == 'push' && github.event.head_commit.message == 'CitizenChain WASM' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -32,6 +33,7 @@ permissions:
 jobs:
   build-apk:
     name: 构建 公民钱包.apk
+    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码

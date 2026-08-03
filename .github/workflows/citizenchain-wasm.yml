@@ -1,26 +1,16 @@
 name: CitizenChain WASM
 
 on:
-  # 中文注释：公民控制台按钮会先在源码中把 spec_version 提高 1，再带目标链版本触发；
-  # 其它手动触发不提高版本。无论入口为何，本 workflow 都只按提交源码原样编译。
-  workflow_dispatch:
-    inputs:
-      runtime_upgrade:
-        description: '是否由公民控制台发起 Runtime 升级构建'
-        required: true
-        type: boolean
-        default: false
-      chain_spec_version:
-        description: '升级前目标链 spec_version（仅升级构建填写）'
-        required: false
-        type: string
-      chain_genesis_hash:
-        description: '升级目标链 genesis hash（仅升级构建填写）'
-        required: false
-        type: string
+  # 中文注释：CitizenConsole 把全部 Git 可见代码提交为这个固定消息并推送 main；
+  # 不设置 paths，保证同一代码树的空提交也能重试失败构建。非标记提交只产生 skipped 记录，
+  # 不分配 runner、不编译 WASM。
+  push:
+    branches: [main]
 
 concurrency:
-  group: citizenchain-wasm-${{ github.ref }}
+  # 中文注释：普通 main push 虽然会产生 skipped 记录，但使用独立 run id，不能取消正在
+  # 编译的正式 WASM；只有两个固定标记构建之间允许新任务替代旧任务。
+  group: citizenchain-wasm-${{ github.event.head_commit.message == 'CitizenChain WASM' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -30,16 +20,13 @@ env:
 jobs:
   build-wasm:
     name: 编译 WASM
+    if: ${{ github.event.head_commit.message == 'CitizenChain WASM' }}
     runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: 校验源码版本与构建用途
-        env:
-          RUNTIME_UPGRADE: ${{ inputs.runtime_upgrade }}
-          CHAIN_SPEC_VERSION: ${{ inputs.chain_spec_version }}
-          CHAIN_GENESIS_HASH: ${{ inputs.chain_genesis_hash }}
         run: |
           python3 - <<'PY'
           import os
@@ -52,39 +39,16 @@ jobs:
           if len(matches) != 1:
               raise SystemExit("runtime/src/lib.rs 必须且只能包含一个 spec_version 字段")
           source_version = int(matches[0])
-          is_upgrade = os.environ.get("RUNTIME_UPGRADE", "false").lower() == "true"
+          if source_version <= 0:
+              raise SystemExit("runtime spec_version 必须大于 0")
           summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
-
-          if is_upgrade:
-              chain_text = os.environ.get("CHAIN_SPEC_VERSION", "")
-              genesis_hash = os.environ.get("CHAIN_GENESIS_HASH", "").lower()
-              if not re.fullmatch(r"\d+", chain_text):
-                  raise SystemExit("Runtime 升级构建缺少有效的目标链 spec_version")
-              if not re.fullmatch(r"0x[0-9a-f]{64}", genesis_hash):
-                  raise SystemExit("Runtime 升级构建缺少有效的目标链 genesis hash")
-              chain_version = int(chain_text)
-              if source_version != chain_version + 1:
-                  raise SystemExit(
-                      f"源码 spec_version={source_version}，但目标链 spec_version={chain_version}；"
-                      "升级构建必须严格等于目标链版本 + 1"
-                  )
-              purpose = "公民控制台 Runtime 升级构建"
-              details = (
-                  f"- 目标链 genesis hash：`{genesis_hash}`\n"
-                  f"- 升级前 spec_version：`{chain_version}`\n"
-                  f"- 本次源码 spec_version：`{source_version}`\n"
-              )
-          else:
-              if os.environ.get("CHAIN_SPEC_VERSION") or os.environ.get("CHAIN_GENESIS_HASH"):
-                  raise SystemExit("普通源码构建不得携带升级目标链参数")
-              purpose = "普通源码构建（不自增版本）"
-              details = f"- 源码 spec_version：`{source_version}`\n"
 
           with summary.open("a", encoding="utf-8") as out:
               out.write("## CitizenChain WASM 构建来源\n\n")
-              out.write(f"- 构建用途：{purpose}\n")
-              out.write(details)
+              out.write("- 构建用途：公民控制台 Runtime 升级构建\n")
+              out.write(f"- 源码 spec_version：`{source_version}`\n")
               out.write(f"- 源码提交：`{os.environ['GITHUB_SHA']}`\n")
+              out.write("- 正式链创世哈希与升级前版本已由 CitizenConsole 在推送前校验\n")
           PY
 
       - name: 安装 Rust 工具链
