@@ -568,6 +568,28 @@ class LocalTxStore {
     });
   }
 
+  /// 一次性迁移：删除旧格式（`:pending:` 键）的本机提交孤儿记录。
+  ///
+  /// 旧对账用"地址+金额"语义匹配，匹配失败会另建一条 `:blockHash:` 已确认记录、
+  /// 把原 `:pending:` 记录丢成"待确认"孤儿。新设计改用 `:tx:` 键 + txHash 精确认，
+  /// 不再产生孤儿；但已躺在库里的旧 `:pending:` 孤儿不会被新逻辑触碰，需一次性清掉
+  /// （对应的 `:blockHash:` 已确认记录会保留，交易仍显示已确认）。
+  ///
+  /// 只删键含 `:pending:` 的记录，绝不碰 `:tx:`（新提交）和 `:blockHash:`（区块事件）。
+  /// 幂等：清完后再调是 0 命中的空操作。
+  static Future<int> purgeLegacyPendingRecords() async {
+    return WalletIsar.instance.writeTxn((isar) async {
+      final legacy = await isar.localTxEntitys
+          .filter()
+          .recordKeyContains(':pending:')
+          .findAll();
+      if (legacy.isEmpty) return 0;
+      final ids = legacy.map((e) => e.id).toList();
+      await isar.localTxEntitys.deleteAll(ids);
+      return ids.length;
+    });
+  }
+
   /// 确保钱包交易同步游标存在。
   static Future<WalletTxSyncCursorEntity> ensureCursor({
     required String ss58Address,

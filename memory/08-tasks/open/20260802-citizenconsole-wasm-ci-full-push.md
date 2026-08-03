@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-修复 CitizenConsole「CitizenChain WASM → 运行 WASM CI」按钮的安全标识、运行反馈和
+修复 CitizenConsole「CitizenChain → 运行 WASM CI」按钮的安全标识、运行反馈和
 执行顺序。按钮必须只验证一次 Touch ID，鉴权后读取正式链当前 `spec_version` 与
 `genesis_hash`，按链上版本与仓库版本关系决定是否把仓库 `spec_version` 提高一版，随后
 提交并推送本机全部 Git 可见代码，最后启动并等待准确提交对应的 WASM CI 完成。
@@ -42,7 +42,8 @@
 ### 第二步：一次鉴权读取全部所需配置
 
 - 一次 Touch ID 原子读取 `NODE_WS`、`CHAIN_GENESIS_HASH` 和已有 GitHub `SSH_KEY`。
-- GitHub 卡片只保留 `SSH_KEY`，禁止新增 API 凭证或转去浏览器登录 GitHub。
+- 独立 GitHub 卡片已经删除；同一个 `SSH_KEY` 归入 CitizenApp、CitizenChain、CitizenWallet
+  三张产品卡片，禁止复制密钥、回显私钥、新增 API 凭证或转去浏览器登录 GitHub。
 - Secret 只经原生安全代理进入目标子进程，不写源码、日志、命令行参数或持久明文文件。
 
 ### 第三步：版本判断和整仓推送
@@ -105,6 +106,7 @@
 - [x] 第三步：版本判断和整仓推送
 - [x] 第四步：仅用已有 SSH 私钥启动并等待 WASM CI
 - [x] 第五步：文档、测试和残留清理
+- [x] CitizenChain WASM 与 GitHub 独立卡片归并清理
 - [ ] Runtime 二次确认与真实按钮验收
 
 ## 执行记录
@@ -122,7 +124,7 @@
   `start.sh verify` 完整性验收通过；运行包中 `server.mjs`、`web/app.js` 和三个 Git/WASM
   动作脚本均与源码逐字节一致。换包后无旧 CitizenConsole 进程驻留，下次打开将加载新签名包。
 - 2026-08-02：用户否决新增 GitHub API 凭证与浏览器登录方案。相关字段、原生白名单、
-  读取/注入、脚本要求、测试和文档口径已删除；GitHub 卡片只保留原有 `SSH_KEY`。
+  读取/注入、脚本要求、测试和文档口径已删除，只保留原有 `SSH_KEY`。
 - 2026-08-02：删除后 CitizenConsole 52 项测试全部通过，原生安全代理与控制台已重新
   编译、签名和原子换包，完整性验收通过；源码与签名运行包已不含新增 GitHub API 凭证口径。
 - 2026-08-02：用户确认固定消息 push 方案。本地已改为 `CitizenChain WASM` 精确提交消息
@@ -130,3 +132,16 @@
   对该消息在 runner 分配前跳过且不干扰已有正常 CI。公开 API 已做无凭证真实只读检查，
   返回字段满足精确 SHA 等待需求；53 项测试、ShellCheck、Actionlint、签名换包与完整性校验
   全部通过。实现阶段未修改 runtime、未提交推送、未触发远端 CI。
+- 2026-08-02：按用户确认删除 CitizenChain WASM 与 GitHub 两张独立卡片。WASM CI 和
+  「开发升级」归入 CitizenChain；`SSH_KEY` 作为唯一共享 Keychain 项归入 CitizenApp、
+  CitizenChain、CitizenWallet，三款产品 CI/Release 均在一次 Touch ID 中读取。旧模块 ID、
+  独立脚本、通用推送按钮和旧 UI 文案已清理；GitHub workflow 名称保持不变。
+- 2026-08-02：CitizenConsole 54 项测试、Node/Bash/Swift 检查、ShellCheck 与 diff whitespace
+  全部通过。已通过控制台自身的 Touch ID「编译」入口重新构建、签名并原子换包，
+  `start.sh verify` 通过，签名包内 `server.mjs`、`web/app.js`、`citizenchain.sh` 与源码一致。
+  真实页面确认首页只剩 6 张模块卡片；WASM CI 在节点 CI 正下方，开发升级在启动节点正下方；
+  三张产品卡片均显示同一个 `SSH_KEY`，未触发任何产品 CI、未提交或推送 GitHub。
+- 2026-08-02：用户确认首页六张模块卡片改为固定一行中文小卡片，顺序为「发币、公民、
+  公民链、公民云、公民网、公民钱包」。首页卡片只显示名称，不再显示图标、简介、生产状态
+  或进入标识；技术模块名、详情页、密钥状态和业务动作保持不变。窄窗口保持单行并允许横向
+  滚动，不恢复两列或单列卡片布局。

@@ -107,6 +107,13 @@ class ChainTxMonitor {
     }
     _running = true;
 
+    // 一次性迁移：先清掉旧 `:pending:` 键的本机提交孤儿（新设计只用 `:tx:` 键，
+    // 已确认的 `:blockHash:` 记录保留）；幂等，详见 purgeLegacyPendingRecords。
+    final purged = await LocalTxStore.purgeLegacyPendingRecords();
+    if (purged > 0) {
+      AppLog.d('[TxMonitor] 清理旧 :pending: 孤儿记录 $purged 条');
+    }
+
     _listener = _subscription.events.listen(_onEvent);
     _ensureSubscription();
     AppLog.d('[TxMonitor] 交易监控已启动，监控 ${_ss58AddressByAccountId.length} 个钱包');

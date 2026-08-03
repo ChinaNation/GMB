@@ -46,11 +46,15 @@ home/
 
 WASM CI 版本规则：
 - 正式创世前项目自身 runtime 版本固定为 `0`；没有已配置且可连接的正式目标链时，公民控制台「运行 WASM CI」直接停止，不得为临时测试链或空目标生成升级版本。
-- 正式创世后的升级构建只能从公民控制台「CitizenChain WASM → 运行 WASM CI」进入：控制台读取充值发币页明确配置的正式目标链 `NODE_WS`，并要求 RPC 实际 genesis hash 与开发者升级区保存的 `CHAIN_GENESIS_HASH` 完全相等；未保存正式链指纹时一律视为尚无正式目标链。
+- 正式创世后的升级构建只能从公民控制台「CitizenChain → 运行 WASM CI」进入：该按钮位于
+  「运行节点 CI」下方。控制台读取充值发币页明确配置的正式目标链 `NODE_WS`，并要求 RPC
+  实际 genesis hash 与 CitizenChain 密钥列表保存的 `CHAIN_GENESIS_HASH` 完全相等；未保存
+  正式链指纹时一律视为尚无正式目标链。
 - 创世哈希匹配后，控制台比较链上、本机和 `origin/main` 的 `spec_version`：仓库与链同版时
   把源码及其现有精确测试断言同步提高到 `链上版本 + 1`；仓库已经比链高一版时复用现有
   候选以重试失败或不可用的 WASM CI，不重复提高；其他版本差值 fail-closed。
-- 版本判断通过后，控制台用已有 GitHub `SSH_KEY` 把本机全部 Git 可见代码提交并推送到
+- 版本判断通过后，控制台用 CitizenApp、CitizenChain、CitizenWallet 三张产品卡片共用的
+  GitHub `SSH_KEY` 把本机全部 Git 可见代码提交并推送到
   `origin/main`，完整提交消息固定为 `CitizenChain WASM`，不得附加跳过自动流程的标记。同版本失败重试
   只创建相同代码树的新 SHA，不再次提高 `spec_version`。
 - `citizenchain-wasm.yml` 只接受固定消息的 `main` push，始终按已提交源码原样编译，不查询
@@ -59,7 +63,9 @@ WASM CI 版本规则：
   `head_sha + event=push` 等待最终结果。CI 摘要记录构建用途、源码版本和源码提交 SHA。
 - 固定 WASM 提交即使命中其他产品的路径，其它 workflow 也会在分配 runner 前跳过根 job，
   不执行 CitizenChain 全工程、CitizenApp 或 CitizenWallet 的无关构建。
-- 生成的 `citizenchain-wasm` artifact 只用于公民控制台「CitizenChain WASM → 开发者升级」、下载脚本或链上 `System.set_code` 流程；本地启动脚本不下载、不内置该 artifact
+- 生成的 `citizenchain-wasm` artifact 只用于公民控制台「CitizenChain → 开发升级」、下载
+  脚本或链上 `System.set_code` 流程；「开发升级」位于「启动节点」下方，本地启动脚本不下载、
+  不内置该 artifact。
 - 三端桌面安装包 CI 不再由 WASM CI 自动触发，也不再下载/内置最新 WASM；现有链要使用最新 runtime 仍必须走 runtime 升级
 - GitHub workflow 只保留 CI 与正式 Release，不再持有固定服务器清单或批量部署入口。Linux 服务器部署统一从本机 `citizenconsole/` 控制台选择44个权威节点之一，下载当前提交已成功 CI 的 `公民链-Linux-amd.deb`，逐节点写入匹配的身份/GRANDPA 密钥并部署；不会清除 `/opt/citizenchain/data` 区块库。
 

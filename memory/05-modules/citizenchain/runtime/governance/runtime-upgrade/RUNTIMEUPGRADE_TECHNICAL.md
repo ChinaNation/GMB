@@ -173,12 +173,14 @@ Runtime 配置位置：
 版本要求：
 - `developer_direct_upgrade` 最终通过 `System.set_code` 写入新 runtime code，系统会拒绝 `spec_version` 小于或等于链上当前版本的 WASM，错误表现为 `System::SpecVersionNeedsToIncrease`
 - 正式创世前项目自身 runtime 版本固定为 `0`；没有已配置且可连接的正式目标链时，公民控制台「运行 WASM CI」直接停止。
-- 正式创世后，只有公民控制台「运行 WASM CI」负责读取明确配置的目标链；RPC 实际
+- 正式创世后，只有公民控制台「CitizenChain → 运行 WASM CI」负责读取明确配置的目标链；
+  该入口与「开发升级」都归属 CitizenChain，不再存在独立 CitizenChain WASM 卡片。RPC 实际
   genesis hash 必须先与本机保存的 `CHAIN_GENESIS_HASH` 完全相等。随后比较链上、本机和
   `origin/main` 版本：仓库与链同版时把源码 `spec_version` 及现有版本测试断言同步提高到
   `链上版本 + 1`；仓库已经比链高一版时复用候选以重试此前失败或不可用的构建；其他差值
   必须停止，禁止覆盖或重复提高。
-- 控制台只允许用同一次 Touch ID 取得正式链目标和已有 GitHub `SSH_KEY`；不保存 GitHub
+- 控制台只允许用同一次 Touch ID 取得正式链目标和三款产品 CI 共用的 GitHub `SSH_KEY`；
+  不提供独立 GitHub 卡片，不保存 GitHub
   API 凭证、不登录 GitHub。校验通过后以固定完整提交消息 `CitizenChain WASM` 把全部 Git
   可见代码推送到 `main`；WASM workflow 只接受该消息的 push，不提供手动触发第二入口。
 - 推送成功后，控制台使用公开 Actions 只读 API 按精确 40 位 `head_sha` 与 `event=push`

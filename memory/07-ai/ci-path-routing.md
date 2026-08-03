@@ -23,12 +23,15 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 - workflow：`.github/workflows/citizenchain-wasm.yml`
 - 2026-08-01 正式创世 WASM run `30721127038` 仅该次显示为“创世”；正式冻结时已删除
   临时 `run-name`，后续运行统一恢复标准名称 `CitizenChain WASM`。
-- 正式升级构建入口仅为公民控制台「CitizenChain WASM → 运行 WASM CI」：按钮明确要求
+- 正式升级构建入口仅为公民控制台「CitizenChain → 运行 WASM CI」：按钮位于「运行节点 CI」
+  下方并明确要求
   一次 Touch ID，原子读取 `NODE_WS`、`CHAIN_GENESIS_HASH` 和已有 GitHub `SSH_KEY`。控制台
   先要求 RPC genesis hash 等于本机明确保存的正式链指纹，再比较链上、
   本机和 `origin/main` 的 `spec_version`：仓库与链同版时同步提高源码和现有测试断言一版；
   仓库已经比链高一版时复用该候选以重试失败或不可用的 WASM CI；其他差值全部停止。
-- CitizenConsole 只保留 `SSH_KEY`，不保存 GitHub API 凭证、不要求 GitHub 登录。版本校验后
+- CitizenConsole 不再提供独立 GitHub 卡片；同一个 `SSH_KEY` 归入 CitizenApp、CitizenChain、
+  CitizenWallet 三张产品卡片，由各产品 CI、Release 和 CitizenChain WASM CI 在一次 Touch ID
+  中读取。密钥只保存一份，不复制、不回显，也不保存 GitHub API 凭证。版本校验后
   用 SSH 把全部 Git 可见代码提交到 `main`，提交完整消息固定为 `CitizenChain WASM`；
   `citizenchain-wasm.yml` 只接受该消息的 `main` push。失败重试创建相同代码树的新提交，
   只更换 SHA，不再次提高 `spec_version`。

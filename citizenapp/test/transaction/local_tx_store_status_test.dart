@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 
 import '../support/isar_test_env.dart';
@@ -367,5 +368,70 @@ void main() {
     record = records.singleWhere((item) => item.txHash == '0xfailed');
     expect(record.status, LocalTxStore.statusFailed);
     expect(record.failureReason, '交易无效');
+  });
+
+  test('purgeLegacyPendingRecords 只删旧 :pending: 孤儿，保留 :tx: 与 :blockHash:',
+      () async {
+    // 旧格式孤儿（:pending: 键）——直接注入，模拟迁移前遗留。
+    await LocalTxStore.upsert(LocalTxEntity()
+      ..recordKey = '$fromAccountId:pending:0xold'
+      ..ss58Address = fromSs58Address
+      ..accountId = fromAccountId
+      ..type = 'transfer'
+      ..amountDeltaFen = '-10'
+      ..transferAmountFen = '10'
+      ..fromSs58Address = fromSs58Address
+      ..toSs58Address = toSs58Address
+      ..source = 'local_submit'
+      ..status = LocalTxStore.statusPending
+      ..txHash = '0xold'
+      ..createdAtMillis = 1);
+
+    // 新格式本机提交（:tx: 键）。
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      ss58Address: fromSs58Address,
+      accountId: fromAccountId,
+      txHash: '0xnew',
+      amountDeltaFen: '-11',
+      transferAmountFen: '10',
+      feeFen: '1',
+      counterpartySs58Address: toSs58Address,
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      usedNonce: 1,
+      createdAtMillis: 2,
+    );
+
+    // 区块事件（:blockHash: 键，收入侧）。
+    final eventKey = LocalTxStore.blockEventRecordKey(toAccountId, '0x77', 5);
+    await LocalTxStore.upsertBlockTransferEvent(
+      ss58Address: toSs58Address,
+      accountId: toAccountId,
+      recordKey: eventKey,
+      status: LocalTxStore.statusFinalized,
+      amountDeltaFen: '20',
+      transferAmountFen: '20',
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      counterpartySs58Address: fromSs58Address,
+      blockNumber: 3,
+      blockHash: '0x77',
+      eventIndex: 5,
+    );
+
+    final removed = await LocalTxStore.purgeLegacyPendingRecords();
+    expect(removed, 1); // 只删了那条 :pending: 孤儿
+
+    final fromRecords = await LocalTxStore.queryByAccountId(fromAccountId);
+    expect(fromRecords, hasLength(1));
+    expect(fromRecords.single.recordKey, contains(':tx:'));
+    expect(fromRecords.single.txHash, '0xnew');
+
+    final toRecords = await LocalTxStore.queryByAccountId(toAccountId);
+    expect(toRecords, hasLength(1));
+    expect(toRecords.single.recordKey, eventKey);
+
+    // 幂等：清完再调 0 命中。
+    expect(await LocalTxStore.purgeLegacyPendingRecords(), 0);
   });
 }

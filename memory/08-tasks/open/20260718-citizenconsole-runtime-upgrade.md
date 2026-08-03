@@ -1,4 +1,4 @@
-# 任务卡(分步·逐步确认):公民控制台 协议升级(runtime dev-direct 冷签)
+# 任务卡(分步·逐步确认):公民控制台开发升级(runtime dev-direct 冷签)
 
 > 状态:**设计已确认,分步实现**。用户已拍板 5 点(见下)。工作流:每步先出方案→确认→执行→更新文档/清残留→出下一步。runtime 升级为链上不可逆高危操作,每步谨慎。
 
@@ -8,12 +8,14 @@
 > 启动并通过公开 API 按准确 HEAD 等待的机制已完成本地实现，不得恢复局部提交或第二凭证。
 
 ## 需求
-在公民控制台 **CitizenChain WASM** 卡片、`运行 WASM CI` 按钮**右侧**加「协议升级」按钮:点击对**本机链**做 **runtime 升级**,用 **GitHub 上最新且 CI 成功**的 WASM;签名走**公民钱包扫码冷签**(与节点软件"发协议升级"同一套签名方式,只在控制台再实现一遍),控制台只存 NRC 管理员**公钥**,私钥永不进控制台。
+在公民控制台 **CitizenChain** 卡片提供「开发升级」按钮，固定显示在「启动节点」下方：
+点击后使用 GitHub 上最新且 CI 成功的 WASM 对目标链执行 runtime dev-direct 升级；签名走
+公民钱包扫码冷签。控制台只保存 NRC 签名者公钥，私钥永不进入控制台。
 
 ## 用户拍板(锁定)
-1. 控制台配置管理员**公钥**;点协议升级弹**二维码→公民钱包扫码签名**(冷签,同节点软件)。
+1. 控制台配置签名者**公钥**；点开发升级弹**二维码→公民钱包扫码签名**。
 2. **开发期直升**(`developer_direct_upgrade`);链进**运行期后此功能下线**(读链 `DeveloperUpgradeEnabled`,false 即隐藏/禁用)。
-3. 协议升级=**仅 runtime 升级**,不做别的。
+3. 开发升级=**仅 runtime dev-direct 升级**,不做别的。
 4. 签名载荷带 **NRC(国储会)CID + COMMITTEE_MEMBER 岗位码**；只有该岗位的任职管理员钱包可直升 runtime。
 5. WASM **两个条件都必须**:GitHub 上**最新** + **CI 成功**。
 
@@ -30,15 +32,19 @@
 1. **WASM CI 整仓推送并等待完成**（✅ 本地实现完成，真实按钮验收待单独授权）：一次
    Touch ID 后读取正式链和 GitHub `SSH_KEY`；仓库与链同版时提高一版，仓库已高一版时复用
    候选。固定消息 push 触发 WASM workflow，控制台用公开 API 按准确 HEAD 等待最终结果。
-2. **控制台配置 NRC 管理员公钥 + 协议升级按钮**(✅ 已完成 as-built):
-   - 位置定稿(用户纠正):在 **CitizenChain WASM** 模块——「运行 WASM CI」按钮**右侧**加「协议升级」按钮(红·副标题「钱包扫码冷签」,`action.dialog=true`,前端特判弹窗不走脚本);**密钥状态表**加「管理员公钥 `NRC_ADMIN_PUBKEY`」行。
-   - 后端 `server.mjs`:citizenchainwasm 模块加 `localKeys:[{name:'NRC_ADMIN_PUBKEY',env:'rtupg',desc}]` + `protocol-upgrade` dialog 动作;`secretComments` 加 NRC_ADMIN_PUBKEY;`/api/status` 返回 `localKeys` 存在态;`resolveSecretTarget` + `/api/secret/set|delete` 支持 `store:'local'`(keychainPut/Delete,过 Touch ID)。
-   - 前端 `app.js`:`secretRows` 纳入 `localKeys`(store local,密钥表出行);`openSecretEditor` local 用明文 text(公钥公开);动作渲染支持 `dialog`(副标题「钱包扫码冷签」);点击 dialog 动作 → `openProtocolUpgrade`(**当前占位**:未配公钥则提示先配、已配则提示第 3–7 步冷签流程建设中,零链上动作)。
+2. **控制台配置 NRC 签名者公钥 + 开发升级按钮**(✅ 已完成 as-built):
+   - 入口统一归入 **CitizenChain** 模块；「开发升级」固定显示在「启动节点」下方，副标题为
+     「钱包扫码冷签」。密钥列表使用签名者公钥 `NRC_SIGNER_PUBLIC_KEY`。
+   - 后端 `server.mjs` 的 CitizenChain `localKeys` 登记 `NRC_SIGNER_PUBLIC_KEY`，动作 ID 统一为
+     `developer-upgrade`；`/api/status` 仅返回配置存在态，写入、删除和读取均经 Touch ID。
+   - 前端 `app.js` 使用 `openDeveloperUpgrade` 打开冷签流程；旧 CitizenChain WASM 模块、
+     `protocol-upgrade` 动作 ID 与旧显示文案均已删除。
    - NRC CID:不做单独配置项,后续第 4 步从机构目录/链上取 NRC 的 CID(单一已知机构)。
    - 实测(8888):CI 右侧现「协议升级」按钮、密钥表现 NRC_ADMIN_PUBKEY 行、无 console error。
 3. **WASM 获取 + 表单**(✅ 已完成):
    - 新增 `rtupg/fetch_wasm.mjs` `fetchLatestSuccessfulWasm`:`gh run list --status success --limit 1`(最新且成功)→ `gh run download <id> --name citizenchain-wasm` → 取 `citizenchain.compact.compressed.wasm` → 缓存 `.runtime/rtupg-latest.wasm` + 返回 {run/commit/时间/大小/sha256/路径}。
-   - `server.mjs` `POST /api/rtupg/latest-wasm`(需已配公钥,回 wasm 元数据 + adminPubkey);`app.js` `openProtocolUpgrade`→ 拉取 → 弹表单 `<dialog id=rtupgDialog>`(最新 WASM 只读 + 来源 CI + 时间 + SHA-256 + 管理员公钥 + 取消/确认);取消关闭,确认 → 第 4–5 步(当前占位)。`styles.css` 加 `.rtupg-*`。
+   - `server.mjs` `POST /api/rtupg/latest-wasm`(需已配公钥,回 WASM 元数据和签名者公钥)；
+     `app.js` `openDeveloperUpgrade` 拉取后显示最新 WASM、来源 CI、时间、SHA-256 和签名者公钥。
    - **顺带修真 bug**:控制台在 launchd 下 PATH 精简(`/usr/bin:/bin:…`)找不到 gh(在 `/opt/homebrew/bin`)→ 之前 `githubSecretNames` 失败致 GitHub 密钥全显未配置。已给所有 `spawnSync('gh')`(list/set/delete)+ fetch 传 `env: baseChildEnv()`(带登录 shell 完整 PATH)。GMB_SSH_KEY 等现应正确显示。
    - 实测(8888,临时占位公钥):点协议升级→控制台进程 gh 成功拉取 run #29636312704(commit 03bf213dc0,1.07MB)→ 表单渲染齐全 → 确认转第 4–5 步占位 → 取消/关闭正常;无 console error;临时公钥+测试 WASM 已清。
 
@@ -56,7 +62,7 @@
    - **✅ 后端全链路已验(节点在跑时)**:真临时 sr25519 密钥跑 build→sign→submit,dry-run 到达 `{"invalid":{"payment":null}}`(随机账户没钱)=签名验过+组装正确,非 BadProof/解码错。**✅ 前端 QR 客户端验**:vendor qrcode 对 201 字样例生成 53×53 SVG。
    - **未完(节点中途掉线,矿工端我不启)**:走控制台进程的 build-request→真 QR→相机扫→submit 的整链 UI 实测,及真钱包扫码上链 = 第 7 步(需节点在跑 + 真钱包 + 真 NRC 管理员密钥+费账户)。
 5. **弹窗 QR + 扫码回签 + 验签 + 提交**:控制台弹 QR(qrcode)→ 公民钱包扫码签 → 回填/回扫 signature → 验 pubkey+payload_hash → 组 signed extrinsic → 提交本机节点 → 等 finalized。
-6. **开发期门禁**:读链 `DeveloperUpgradeEnabled`;false 则「协议升级」按钮隐藏/禁用(运行期下线)。
+6. **开发期门禁**:读链 `DeveloperUpgradeEnabled`;false 则「开发升级」按钮隐藏/禁用(运行期下线)。
 7. **E2E**:真公民钱包扫码签 + 真本机链 dev-direct 升级到 GitHub 最新成功 WASM。
 
 ## 验收
