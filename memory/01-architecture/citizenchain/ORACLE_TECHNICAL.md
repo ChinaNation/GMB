@@ -31,7 +31,10 @@
 
 - 公开入口：每个权威引导节点只开放 `30333/TCP` 的 WSS/libp2p，服务 CitizenApp 轻节点、普通全节点和其他权威节点。
 - 本机入口：RPC `9944` 只监听 `127.0.0.1`；Prometheus 默认关闭；OnChina、数据库和管理端口不向公网开放。
-- Cloudflare 链连接：首期 Worker 只通过 Access + 独立 Tunnel 访问国储会节点的本机 RPC，不需要另建独立 RPC 节点。Worker 侧必须使用成套的 RPC HTTPS URL 与 Access 服务令牌 Secret，缺失任一项时关闭 relay；当前代码不接受公网 HTTP、回环 HTTP 或无 Access 凭据的上游。
+- Cloudflare 链连接：首期 Worker 和 CitizenConsole「运行 WASM CI」只通过 Access + 独立
+  Tunnel 访问国储会节点的本机 RPC，不需要另建独立 RPC 节点。两者复用 CitizenConsole
+  管理的 `CHAIN_URL / CHAIN_ID / CHAIN_SECRET` 单一生产配置；缺失任一项时关闭链读取。
+  当前代码不接受公网 HTTP、回环 HTTP、非 `chain.crcfrcn.com` 上游或无 Access 凭据的请求。
 - 后续容灾：最多选择少量不同地区的权威引导节点作为 Worker 私有 RPC 备用，每个节点使用独立 Tunnel 和凭证，不连接全部 44 个节点。
 
 CitizenApp 不直接依赖国储会节点 RPC；App 的链上真源是内置轻节点验证的 finalized 链状态。
@@ -271,6 +274,9 @@ Oracle Cloud Network Security Group 只创建一条固定公网业务入站规�
 - 远程管理 Tunnel `nrcgch-rpc` 健康，运行 1 个 connector。
 - 唯一链入口为 `chain.crcfrcn.com` 的 Access 保护路径，Tunnel 转发到 `127.0.0.1:18080` 固定方法网关，网关再连接本机 `127.0.0.1:9944`。
 - Access 使用 `chain` 自托管应用、`CitizenChain` Service Auth 策略和唯一链服务令牌；Worker 的 `CHAIN_URL`、`CHAIN_ID`、`CHAIN_SECRET` 只保存在远端 Secret。
+- CitizenConsole 的「运行 WASM CI」复用本机 Keychain 中同名三项生产配置，经固定方法网关
+  读取 `chain_getFinalizedHead`、`chain_getBlockHash(0)` 和 finalized 头对应的
+  `state_getRuntimeVersion`；不再依赖本机 `NODE_WS`，也不把 P2P `30333` 当作 RPC。
 - 不增加 `Everyone`、交互式 `Allow` 或 `Bypass`，也不把令牌、Tunnel token 或完整私有 URL 写入仓库、安装包、日志或命令文档。
 
 服务器部署顺序：

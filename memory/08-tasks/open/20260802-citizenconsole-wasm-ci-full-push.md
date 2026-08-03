@@ -41,7 +41,8 @@
 
 ### 第二步：一次鉴权读取全部所需配置
 
-- 一次 Touch ID 原子读取 `NODE_WS`、`CHAIN_GENESIS_HASH` 和已有 GitHub `SSH_KEY`。
+- 一次 Touch ID 原子读取国储会 `CHAIN_URL / CHAIN_ID / CHAIN_SECRET`、
+  `CHAIN_GENESIS_HASH` 和已有 GitHub `SSH_KEY`；WASM CI 不依赖本机 `NODE_WS`。
 - 独立 GitHub 卡片已经删除；同一个 `SSH_KEY` 归入 CitizenApp、CitizenChain、CitizenWallet
   三张产品卡片，禁止复制密钥、回显私钥、新增 API 凭证或转去浏览器登录 GitHub。
 - Secret 只经原生安全代理进入目标子进程，不写源码、日志、命令行参数或持久明文文件。
