@@ -108,6 +108,76 @@ void main() {
     expect(records.single.confirmedAtMillis, isNotNull);
   });
 
+  test('dropped 保留 blockHash 作确认锚(不清空)—— 守卫永久卡待确认的命门', () async {
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      ss58Address: fromSs58Address,
+      accountId: fromAccountId,
+      txHash: '0xanchor',
+      amountDeltaFen: '-101',
+      transferAmountFen: '100',
+      feeFen: '1',
+      counterpartySs58Address: toSs58Address,
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      usedNonce: 21,
+      createdAtMillis: 5,
+    );
+    await LocalTxStore.markLocalSubmitInBlock(
+      accountId: fromAccountId,
+      txHash: '0xanchor',
+      blockHash: '0x19abc',
+    );
+    final inBlockHash = (await LocalTxStore.queryOpenLocalSubmit(fromAccountId))
+        .singleWhere((r) => r.txHash == '0xanchor')
+        .blockHash;
+    expect(inBlockHash, isNotNull);
+
+    // dropped(进块后被交易池剔除,不算失败)→ 回待确认,但锚必须原样保留:
+    // 它是 ChainTxMonitor 判据一(锚比对)的入口;清空即与锚路径永久失联。
+    await LocalTxStore.markLocalSubmitPending(
+      accountId: fromAccountId,
+      txHash: '0xanchor',
+    );
+    final afterDropped = (await LocalTxStore.queryOpenLocalSubmit(fromAccountId))
+        .singleWhere((r) => r.txHash == '0xanchor');
+    expect(afterDropped.status, LocalTxStore.statusPending);
+    expect(afterDropped.blockHash, inBlockHash,
+        reason: 'dropped 必须保留 blockHash —— 确认判据一的定点锚');
+  });
+
+  test('nonce 兜底路径:无块号翻 finalized,保留原有块字段', () async {
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      ss58Address: fromSs58Address,
+      accountId: fromAccountId,
+      txHash: '0xnoncefb',
+      amountDeltaFen: '-101',
+      transferAmountFen: '100',
+      feeFen: '1',
+      counterpartySs58Address: toSs58Address,
+      fromSs58Address: fromSs58Address,
+      toSs58Address: toSs58Address,
+      usedNonce: 22,
+      createdAtMillis: 6,
+    );
+    await LocalTxStore.markLocalSubmitInBlock(
+      accountId: fromAccountId,
+      txHash: '0xnoncefb',
+      blockHash: '0x77aa',
+    );
+
+    // 判据二只证明"已上链"、不知道具体块:blockHash/blockNumber 传 null,
+    // 翻 finalized 且不得抹掉 inBlock 阶段已记的锚。
+    await LocalTxStore.markLocalSubmitFinalized(
+      accountId: fromAccountId,
+      txHash: '0xnoncefb',
+    );
+    final record = (await LocalTxStore.queryByAccountId(fromAccountId))
+        .singleWhere((r) => r.txHash == '0xnoncefb');
+    expect(record.status, LocalTxStore.statusFinalized);
+    expect(record.blockHash, isNotNull, reason: '无块号翻转不得抹掉已有锚');
+    expect(record.confirmedAtMillis, isNotNull);
+  });
+
   test('区块事件先到时，本机提交记录按同区块同转账合并为一条', () async {
     final eventKey = LocalTxStore.blockEventRecordKey(fromAccountId, '0x44', 2);
     await LocalTxStore.upsertBlockTransferEvent(
@@ -299,7 +369,8 @@ void main() {
     final records = await LocalTxStore.queryByAccountId(fromAccountId);
     var record = records.singleWhere((item) => item.txHash == '0xretracted');
     expect(record.status, LocalTxStore.statusPending);
-    expect(record.blockHash, isNull);
+    // dropped / retracted 保留 blockHash 作为确认判据一(锚比对)的定点锚。
+    expect(record.blockHash, isNotNull);
 
     final eventKey = LocalTxStore.blockEventRecordKey(
       fromAccountId,

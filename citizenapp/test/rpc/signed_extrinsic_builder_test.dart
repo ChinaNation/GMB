@@ -49,7 +49,7 @@ void main() {
       final target = Uint8List.fromList([4, 5, 6]);
       final targetHash = Hasher.blake2b256.hash(target);
 
-      final index = ChainRpc.findExtrinsicIndexInHexList(
+      final index = ChainRpc.findExtrinsicIndexInHexListSync(
         ['0x${hexOf(first)}', '0x${hexOf(target)}'],
         txHashHex: '0x${hexOf(targetHash)}',
       );

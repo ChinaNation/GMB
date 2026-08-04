@@ -350,10 +350,13 @@ class LocalTxStore {
     });
   }
 
-  /// 非最终区块被回滚时恢复为待确认。
+  /// 非最终区块被回滚(dropped / retracted)时恢复为待确认。
   ///
-  /// `inBlock` 只是内部进度，未获得 finalized 前始终属于 UI 的“待确认”；
-  /// 回滚只清理候选区块信息，不会影响已经最终性确认或明确失败的记录。
+  /// `inBlock` 只是内部进度，未获得 finalized 前始终属于 UI 的“待确认”。
+  /// **关键:保留 blockHash(不清空)** —— `dropped` 按设计不算失败,而 blockHash
+  /// 是 ChainTxMonitor 确认判据一(锚比对)的定点锚;清空会让记录与锚路径失联。
+  /// 锚可能过期无害:确认前会与最终链哈希比对,不等就降级 nonce 兜底。
+  /// 不影响已最终性确认或明确失败的记录。
   static Future<void> markLocalSubmitPending({
     required String accountId,
     required String txHash,
@@ -369,9 +372,9 @@ class LocalTxStore {
           entity.status == statusFailed) {
         return;
       }
+      // 不清 blockHash:见上方文档,它是确认判据一的定点锚。
       entity
         ..status = statusPending
-        ..blockHash = null
         ..failureReason = null;
       await isar.localTxEntitys.put(entity);
     });
@@ -401,13 +404,15 @@ class LocalTxStore {
 
   /// 按 txHash 精确认：把本机提交的**这一条**记录就地翻成 finalized（已确认）。
   ///
-  /// 由只扫 finalized 链的 ChainTxMonitor 在最终块里按 txHash 定位到该交易后调用。
-  /// recordKey 全程不变（始终 submitRecordKey），状态就地流转，绝不另建第二条记录。
+  /// 由 ChainTxMonitor 调用。recordKey 全程不变（始终 submitRecordKey），状态就地
+  /// 流转，绝不另建第二条记录。块信息按来源可选：
+  /// - 最终块里按 txHash 定位到（前向扫描 / 锚比对路径）→ 带 blockHash+blockNumber；
+  /// - nonce 兜底路径（只证明"已上链"，不知道具体块）→ 两者传 null，保留原字段。
   static Future<void> markLocalSubmitFinalized({
     required String accountId,
     required String txHash,
-    required String blockHash,
-    required int blockNumber,
+    String? blockHash,
+    int? blockNumber,
     int? extrinsicIndex,
     int? confirmedAtMillis,
   }) async {
@@ -421,11 +426,15 @@ class LocalTxStore {
       if (entity == null || entity.status == statusFinalized) return;
       entity
         ..status = statusFinalized
-        ..blockHash = normalizeBlockHash(blockHash)
-        ..blockNumber = blockNumber
         ..extrinsicIndex = extrinsicIndex ?? entity.extrinsicIndex
         ..confirmedAtMillis = confirmedAtMillis ?? now
         ..failureReason = null;
+      if (blockHash != null && blockHash.isNotEmpty) {
+        entity.blockHash = normalizeBlockHash(blockHash);
+      }
+      if (blockNumber != null) {
+        entity.blockNumber = blockNumber;
+      }
       await isar.localTxEntitys.put(entity);
     });
   }

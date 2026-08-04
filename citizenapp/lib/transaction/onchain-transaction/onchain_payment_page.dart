@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_models.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/rpc/chain_tx_monitor.dart';
 import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/transaction/shared/tx_auto_refresh_mixin.dart';
@@ -338,6 +340,16 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
       }
     });
     startTxAutoRefresh(nextAccountId);
+    // 确认者跟着交易 Tab 常驻:注册当前钱包并启动 ChainTxMonitor(start 幂等)。
+    // 此前监视器只在「我的→钱包」页启动,用户常驻交易 Tab 时无人把
+    // "待确认"翻成"已确认"。widget test 跳过:真启监视器会连真轻节点并留下
+    // 重试 Timer(与 ChainProgressBanner 的 FLUTTER_TEST 守卫同模式)。
+    if (wallet != null &&
+        nextAccountId != null &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
+      ChainTxMonitor.instance.watchWallet(wallet.ss58Address, wallet.accountId);
+      unawaited(ChainTxMonitor.instance.start());
+    }
   }
 
   Future<void> _reloadWalletAndLocalRecords() async {

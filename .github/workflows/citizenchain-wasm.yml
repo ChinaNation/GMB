@@ -16,6 +16,10 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+# 发布永久档案 Release 需要写权限；除此之外本 workflow 不需要任何额外权限。
+permissions:
+  contents: write
+
 jobs:
   build-wasm:
     name: 编译 WASM
@@ -25,6 +29,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: 校验源码版本与构建用途
+        id: source
         run: |
           python3 - <<'PY'
           import os
@@ -39,6 +44,9 @@ jobs:
           source_version = int(matches[0])
           if source_version <= 0:
               raise SystemExit("runtime spec_version 必须大于 0")
+          # 供后续「发布永久档案」步骤取用；tag 一一对应 spec_version，不得推断。
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
+              out.write(f"spec_version={source_version}\n")
           summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
 
           with summary.open("a", encoding="utf-8") as out:
@@ -217,3 +225,42 @@ jobs:
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
           retention-days: 30
+
+      # 永久档案：artifact 只留 30 天，超期后历史升级的原始 WASM 字节就永远消失，
+      # 既无法复核当初上链的到底是什么，也无法回滚。runtime 是全链安全等级最高的产物，
+      # 一次 set_code 直接改写全网 44 个节点的执行逻辑，30 天留存远远不够。
+      #
+      # tag 与 spec_version 一一对应且不可变：同一个 spec_version 若出现两份不同字节，
+      # 正是最该当场拦下的情况，所以 tag 已存在就让整次运行失败，绝不覆盖。
+      # 升级流程本身仍走 artifact（30 天内够用），本 Release 只作审计溯源，不进热路径。
+      - name: 发布 WASM 永久档案 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPEC_VERSION: ${{ steps.source.outputs.spec_version }}
+          WBUILD: citizenchain/target/release/wbuild/citizenchain
+        run: |
+          set -euo pipefail
+          tag="runtime-v${SPEC_VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::${tag} 已存在：同一 spec_version 不得发布第二份 WASM"
+            exit 1
+          fi
+          {
+            echo "CitizenChain Runtime 永久档案（审计与升级溯源用，非用户下载）。"
+            echo
+            echo "- spec_version：\`${SPEC_VERSION}\`"
+            echo "- 源码提交：\`${GITHUB_SHA}\`"
+            echo "- runner：\`${ImageOS:-ubuntu-24.04}\`"
+            echo
+            echo "| 产物 | Blake2-256 |"
+            echo "| --- | --- |"
+            for f in citizenchain.wasm citizenchain.compact.wasm citizenchain.compact.compressed.wasm; do
+              echo "| \`${f}\` | \`0x$(b2sum -l 256 "${WBUILD}/${f}" | awk '{print $1}')\` |"
+            done
+          } > release-notes.md
+          gh release create "$tag" \
+            --title "Runtime spec_version ${SPEC_VERSION}" \
+            --notes-file release-notes.md \
+            "${WBUILD}/citizenchain.wasm" \
+            "${WBUILD}/citizenchain.compact.wasm" \
+            "${WBUILD}/citizenchain.compact.compressed.wasm"

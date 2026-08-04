@@ -12,8 +12,16 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
 - `citizenchain-ci.yml` 与 `citizenapp-ci.yml` 保留 `pull_request` 触发：文档/残留门禁
   与金标向量是 PR 唯一的把关点，不得删除
 - 文档、残留和 pallet 注册表门禁属于跨模块能力，作为 `citizenchain-ci.yml` 内部 job 对 PR 全局生效
+- **CI 与 Release 是同一份代码的两种产物，四个软件形态完全一致，不得给任何一个搞特殊**：
+  - `mode=ci` → 涨版本 → 构建**不签名**产物 → 上传 artifact
+  - `mode=release` → 校验代码已通过 CI → 涨版本 → **在同一份代码上重新构建并正式签名** → 发布 GitHub Release
+  - 代码相同、流程相同、版本规则相同、失败重跑规则相同，唯一区别就是产物签不签名
 - `pull_request` 与 `mode=ci` 的 dispatch 只允许执行校验、编译、测试和检查构建,不得访问服务器、不得发布 GitHub Release、不得部署、不得读取部署 SSH 密钥或正式签名密钥
 - 只有 `mode=release` 的 dispatch(控制台「正式 Release」按钮)才允许进入正式发布链路,包括 `GMB_APP_KEY`、`GMB_TOP_KEY / GMB_TOP_PUBKEY`、GitHub Release 发布、正式安装包上传和旧发布产物清理
+- **Release 必须建立在已通过 CI 的提交上**：`require_ci_verified_head <workflow>` 取该
+  workflow 最近一次成功运行的 `headSha`，与 `origin/main` 当前 tip 比对，不等就拒绝并要求
+  先跑 CI。否则会把从未验证过的代码签名公开发布。正常流程天然通过：点 CI → 成功 →
+  不改代码 → 点 Release，两者必然相等
 - **已废除「固定提交名路由」**：它是 push 触发时代的分流手段，代价是每次普通 push 都留下
   一条 skipped 记录污染 Actions 列表，失败重试还只能靠造空提交换 SHA。dispatch 可直接对
   同一 SHA 重跑，该机制连同 `wait_public_workflow`、`allow_empty`、`skip_ci` 全部删除
@@ -75,6 +83,13 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
   用户明确指定使用 `main` 运行时，必须同时钉死 run ID、40 位 head SHA、唯一 artifact ID
   与 GitHub artifact digest，不得按“最新成功”推断产物。
 - WASM 上传前必须校验三个产物存在且非空，并把大小和 Blake2-256 写入 CI Summary；上传失败必须使运行失败。历史 artifact 由 retention 自动过期，不得在新上传前删除审计证据。
+- **两层留存：artifact 供升级，Release 供审计。** artifact 只留 30 天，超期后历史升级的
+  原始 WASM 字节永远消失，既无法复核当初上链的到底是什么，也无法回滚——而 runtime 是全链
+  安全等级最高的产物，一次 `set_code` 直接改写全网 44 个节点的执行逻辑。因此 WASM CI 成功后
+  自动发布**不可变永久档案 Release**：tag 为 `runtime-v<spec_version>`，与 `spec_version`
+  一一对应，携带三个 wasm 产物与各自 Blake2-256。**tag 已存在则整次运行失败，绝不覆盖**
+  ——同一个 `spec_version` 出现两份不同字节，正是最该当场拦下的情况。
+  升级流程本身仍走 artifact（30 天内够用），Release 不进热路径。
 - 候选 tag 运行通过 `download-wasm.sh --run-id ... --head-sha ... --ref ...` 下载；用户明确
   指定的 `main` 运行必须由 GitHub CLI 精确读取同一 run 的 workflow、event、status、
   conclusion、head SHA、head branch、唯一未过期 artifact ID/digest，再下载指定 artifact。

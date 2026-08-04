@@ -340,19 +340,8 @@ class SmoldotClientManager {
       // 2. 从 assets 加载 citizenchain 链规格文件
       final chainSpecRaw = await rootBundle.loadString('assets/chainspec.json');
 
-      // 开发期 USB 桥接 —— 给 chainspec 内存版临时注入一条 localhost
-      // bootnode，让手机通过 ADB reverse (`adb reverse tcp:30334 tcp:30334`)
-      // 直接 peer 上开发机本地的 citizenchain 诊断节点。
-      //
-      // 这条 bootnode 只存在于内存里 chainspec JSON 字符串中，绝不写回文件，
-      // 不影响 chainspec.json 的 sha256 lock 与冻结规则。
-      // 出门后这条 bootnode 不可达 smoldot 会自动忽略，回退到 dns4 远端 bootnode。
-      // 必须用 plain ws（不是 wss）—— smoldot 的 multiaddr 解析器只支持
-      // `/ip4/.../tcp/.../ws`，不支持 `/ip4/.../tcp/.../wss`。
-      // 详见 citizenapp/smoldotpow/light-base/src/platform/address_parse.rs
-      final withBootnode = _injectLocalhostBootnode(chainSpecRaw);
       final withBootstrapBootnodes =
-          _injectBootstrapBootnodes(withBootnode, bootstrap);
+          _injectBootstrapBootnodes(chainSpecRaw, bootstrap);
 
       // 注入签名安装包固定的创世信任锚。该资产永远只提供 #0，不随链高变化；
       // peer 最新 finalized F 必须从本机 H 出发通过 GRANDPA warp 验证获得。
@@ -576,47 +565,6 @@ class SmoldotClientManager {
         snapshot.startupFinalizedBlockNumber == 0 &&
         snapshot.startupFinalizedBlockHash?.toLowerCase() ==
             expectedGenesisHash.toLowerCase();
-  }
-
-  /// 开发期 USB 桥接专用。
-  ///
-  /// 在内存里给 chainspec 的 bootNodes 数组**前置**一条 localhost bootnode，
-  /// 让手机端 smoldot 优先尝试 `/ip4/127.0.0.1/tcp/30334/ws/p2p/<peer>`，
-  /// 这条地址通过 `adb reverse tcp:30334 tcp:30334` 转发到开发机本地的
-  /// citizenchain 诊断节点。
-  ///
-  /// 设计要点：
-  /// - 不写回 citizenapp/assets/chainspec.json 文件，保持创世冻结
-  /// - peer_id 与 ws 端口通过 `--dart-define` 传入，没有传就不注入
-  /// - smoldot 多地址解析器不支持 /ip4/.../wss，所以只能用 plain ws
-  /// - 出门后 localhost 不可达，smoldot 自动 fallback 到 dns4 远端 bootnode
-  String _injectLocalhostBootnode(String chainSpecJson) {
-    const localPeerId = String.fromEnvironment(
-      'CITIZENAPP_DEV_LOCAL_PEER_ID',
-      defaultValue: '',
-    );
-    const localPort = String.fromEnvironment(
-      'CITIZENAPP_DEV_LOCAL_WS_PORT',
-      defaultValue: '30334',
-    );
-    if (localPeerId.isEmpty) {
-      return chainSpecJson;
-    }
-    try {
-      final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
-      final List<dynamic> bootNodes =
-          (spec['bootNodes'] as List?)?.cast<dynamic>() ?? <dynamic>[];
-      const localBoot = '/ip4/127.0.0.1/tcp/$localPort/ws/p2p/$localPeerId';
-      // 去重（防止热重载叠加）
-      bootNodes.removeWhere((e) => e == localBoot);
-      bootNodes.insert(0, localBoot);
-      spec['bootNodes'] = bootNodes;
-      AppLog.d('[Smoldot] 注入开发期本地 bootnode: $localBoot');
-      return jsonEncode(spec);
-    } catch (e) {
-      AppLog.d('[Smoldot] 注入本地 bootnode 失败，回退原始 chainspec: $e');
-      return chainSpecJson;
-    }
   }
 
   @visibleForTesting

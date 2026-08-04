@@ -118,6 +118,17 @@ class ChainTxMonitor {
     _ensureSubscription();
     AppLog.d('[TxMonitor] 交易监控已启动，监控 ${_ss58AddressByAccountId.length} 个钱包');
 
+    // 预热进程级 metadata/registry(polkadart 最贵的 CPU 构建):挪到启动闲时
+    // 一次完成,发送/确认热路径不再现场构建(此前懒建在"发送后首个最终块解码"
+    // 那一刻,是发送后 ANR 的最大头)。失败静默,首次使用时会自行再取。
+    unawaited(() async {
+      try {
+        await _chainRpc.fetchMetadata();
+      } catch (e) {
+        AppLog.d('[TxMonitor] metadata 预热失败,首次使用时再取: $e');
+      }
+    }());
+
     // 启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
     // 以当前 finalized 区块为起点，不回扫导入前历史。
     unawaited(_syncToLatest());
@@ -172,7 +183,6 @@ class ChainTxMonitor {
 
   Future<void> _connectSubscriptionOnce() async {
     final connected = await _subscription.connect();
-    AppLog.d('[TxMonitor-Diag] subscription.connect()=$connected');
     if (!_running) {
       _subscription.disconnect();
       return;
@@ -201,7 +211,6 @@ class ChainTxMonitor {
         // 业务数据来源；流水统一等 finalized 头驱动。
         break;
       case ChainEventType.newFinalizedBlock:
-        AppLog.d('[TxMonitor-Diag] onEvent newFinalizedBlock head=$blockNumber');
         // (ADR-018 卡⑤)：新 finalized 块=链上状态已更新,立即失效
         // ChainReadCache,让换块后的余额/storage 读取拿到最新 finalized 状态。
         ChainReadCache.instance.invalidate();
@@ -223,8 +232,6 @@ class ChainTxMonitor {
     if (_ss58AddressByAccountId.isEmpty) return;
     try {
       final finalized = await _chainRpc.fetchFinalizedBlock();
-      AppLog.d(
-          '[TxMonitor-Diag] syncToLatest fetchFinalizedBlock=${finalized.blockNumber}');
       await _syncThrough(
         finalized.blockNumber,
         missingCursorStartsAt: finalized.blockNumber,
@@ -258,6 +265,15 @@ class ChainTxMonitor {
   }) async {
     if (_ss58AddressByAccountId.isEmpty) return;
 
+    // 确认先行,与前向扫描互不牵制:前向循环的让路/失败分支会提前 return,
+    // 确认若挂在末尾会被跳过(轻节点验证态回炉时前向常年失败 → 确认永不执行,
+    // 交易明明已最终却一直停在"待确认")。确认失败也只记日志,绝不挡前向。
+    try {
+      await _confirmOpenSubmits();
+    } catch (e) {
+      AppLog.d('[TxMonitor] 确认待确认记录失败,下轮再试: $e');
+    }
+
     final cursors = await LocalTxStore.ensureCursorsForWallets(
       ss58AddressByAccountId: _ss58AddressByAccountId,
       startBlock: missingCursorStartsAt,
@@ -268,8 +284,6 @@ class ChainTxMonitor {
     final startBlock = lastByPublicKey.values
             .fold<int>(targetBlock, (min, value) => value < min ? value : min) +
         1;
-    AppLog.d('[TxMonitor-Diag] runSyncThrough target=$targetBlock '
-        'startBlock=$startBlock 游标=$lastByPublicKey');
     if (startBlock <= targetBlock) {
       final endBlock = startBlock + _maxBlocksPerRun - 1 < targetBlock
           ? startBlock + _maxBlocksPerRun - 1
@@ -304,10 +318,6 @@ class ChainTxMonitor {
       }
     }
 
-    // 游标只前进不回头；若某本机提交记录在"其所在块被扫过之后"才落库
-    //（提交竞态），前向扫描永远补不上它。这里按记录自带的 blockHash 直接
-    // 取该块回补确认，与游标解耦，兜住这条竞态。
-    await _reconcileOpenSubmitsByStoredBlock();
   }
 
   /// 处理一个 finalized 区块的 System.Events。
@@ -315,15 +325,10 @@ class ChainTxMonitor {
   /// 调用方保证 [blockNumber] ≤ finalized 高度，按块哈希钉块读取，
   /// 写入的流水状态恒为 finalized(已确认)。
   Future<bool> _processBlock(int blockNumber) async {
-    AppLog.d('[TxMonitor-Diag] processBlock($blockNumber) 开始');
     try {
       final blockHashHex =
           await SmoldotClientManager.instance.getBlockHash(blockNumber);
-      if (blockHashHex == null || blockHashHex.isEmpty) {
-        AppLog.d(
-            '[TxMonitor-Diag] processBlock($blockNumber) getBlockHash 空 → 失败');
-        return false;
-      }
+      if (blockHashHex == null || blockHashHex.isEmpty) return false;
 
       final keyHex = '0x${_hexEncode(_eventsStorageKey)}';
       final result = await SmoldotClientManager.instance.request(
@@ -369,27 +374,25 @@ class ChainTxMonitor {
     for (final accountId in _ss58AddressByAccountId.keys) {
       openRecords.addAll(await LocalTxStore.queryOpenLocalSubmit(accountId));
     }
-    AppLog.d(
-        '[TxMonitor-Diag] confirm block $blockNumber 待确认记录=${openRecords.length}');
     if (openRecords.isEmpty) return claimed;
 
     final List<String> extrinsics;
     try {
       extrinsics = await SmoldotClientManager.instance
           .getFinalizedBlockExtrinsicsOnce(blockHashHex)
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 8));
     } catch (e) {
-      // 有待确认记录却取不到块体(smoldot 丢 peer / 超时):绝不能吞掉当“跳过认领”，
-      // 否则 _processBlock 会带着未确认记录推进游标、永久漏确认。抛出 → _processBlock
-      // 判本块失败 → 不推进游标、稍后重试;peer 一回来即自动补确认,监视器不再冻死。
-      AppLog.d('[TxMonitor] 取块 $blockNumber extrinsics 失败(有待确认记录)，本块重试: $e');
-      rethrow;
+      // 取不到块体(丢 peer / 超时):跳过本块认领、游标照常推进,监视器绝不因此
+      // 卡死或重试风暴;确认下限由 [_confirmOpenSubmits](锚比对 + nonce 兜底)
+      // 保证,漏掉的记录会在那里翻状态。8s 超时防原生调用无限挂起。
+      AppLog.d('[TxMonitor] 取块 $blockNumber extrinsics 失败，跳过 txHash 认领: $e');
+      return claimed;
     }
 
     for (final record in openRecords) {
       final txHash = record.txHash;
       if (txHash == null || txHash.isEmpty) continue;
-      final idx = ChainRpc.findExtrinsicIndexInHexList(
+      final idx = await ChainRpc.findExtrinsicIndexInHexList(
         extrinsics,
         txHashHex: txHash,
       );
@@ -418,27 +421,78 @@ class ChainTxMonitor {
     return claimed;
   }
 
-  /// 回补对账：对每条“未终态、但已带 blockHash”的本机提交记录，直接按其
-  /// blockHash 取块号、重扫该块 → 就地翻已确认/失败。与前向游标解耦，专治
-  /// “监视器扫过某块之后本地记录才诞生”的提交竞态；记录变 finalized 后即从
-  /// [LocalTxStore.queryOpenLocalSubmit] 移除，幂等自终止。
-  Future<void> _reconcileOpenSubmitsByStoredBlock() async {
+  /// 确认所有"未终态"本机提交记录的唯一兜底 —— 与前向游标完全解耦,零扫块。
+  ///
+  /// 每轮同步末尾执行;无待确认记录时一次本地查询即返回。对每条记录按两级判据:
+  ///
+  /// - **判据一(锚比对)**:blockHash 是交易池 inBlock 事件写入的"本笔所在块"锚
+  ///   (`dropped` 不再清它)。读该块头取块号 N;若 N ≤ finalized 高度且最终链在
+  ///   N 高度的块哈希与锚相等 ⇒ 锚块已最终、本笔已上链 → 对这一个块跑一次
+  ///   [_processBlock](按 txHash 认领 + ExtrinsicFailed 精查 + 事件补写;单块
+  ///   一次性,与前向扫描处理一个新块同量级)。锚不等/块头取不到 → 降级判据二。
+  ///
+  /// - **判据二(nonce 兜底)**:账户 nonce 单调递增、只有交易上链才被消费。
+  ///   finalized 状态下账户 nonce > 记录 usedNonce ⇒ 该 nonce 已被最终链消费 ⇒
+  ///   本笔已上链 → 翻 finalized(不带块号,保留原字段)。私钥仅在本机、app 串行
+  ///   提交,同 nonce 顶替(usurped)已在交易池 watch 单独判失败,判据严格成立。
+  ///   局限:不区分"上链但执行失败"(该情形 nonce 同样被消费;概率极低 ——
+  ///   提交前有余额/ED 校验,带锚记录会走判据一精查)。
+  ///
+  /// 资源账:每条记录至多 2 次读头 + 每账户至多 1 次 System.Account 快照读;
+  /// **永不窗口扫块、永不批量下载块体**,绝不挤占链状态轮询(ChainProgressBanner)。
+  Future<void> _confirmOpenSubmits() async {
     if (!_running || _ss58AddressByAccountId.isEmpty) return;
-    final blockHashes = <String>{};
+    final head = (await _chainRpc.fetchFinalizedBlock()).blockNumber;
     for (final accountId in _ss58AddressByAccountId.keys) {
-      for (final record in await LocalTxStore.queryOpenLocalSubmit(accountId)) {
-        final blockHash = record.blockHash;
-        if (blockHash != null && blockHash.isNotEmpty) {
-          blockHashes.add(blockHash);
+      var records = await LocalTxStore.queryOpenLocalSubmit(accountId);
+      if (records.isEmpty) continue;
+
+      // 判据一:锚比对(同锚块只处理一次)。
+      final processedAnchors = <String>{};
+      for (final record in records) {
+        if (!_running) return;
+        final anchor = record.blockHash;
+        if (anchor == null || anchor.isEmpty) continue;
+        if (!processedAnchors.add(anchor)) continue;
+        final blockNumber = await _blockNumberByHash(anchor);
+        if (blockNumber == null || blockNumber > head) continue;
+        final finalizedHash =
+            await SmoldotClientManager.instance.getBlockHash(blockNumber);
+        if (finalizedHash == null ||
+            LocalTxStore.normalizeBlockHash(finalizedHash) !=
+                LocalTxStore.normalizeBlockHash(anchor)) {
+          // 锚块被最终链顶掉(交易可能被重排进别的块):交给判据二兜底。
+          continue;
+        }
+        await _processBlock(blockNumber);
+      }
+
+      // 判据二:nonce 兜底(锚路径后仍未终态的记录)。
+      records = await LocalTxStore.queryOpenLocalSubmit(accountId);
+      if (records.isEmpty) continue;
+      final int? finalizedNonce;
+      try {
+        finalizedNonce = (await SmoldotClientManager.instance
+                .getFinalizedSystemAccountSnapshot(accountId))
+            ?.nonce;
+      } catch (e) {
+        AppLog.d('[TxMonitor] 读取账户 nonce 失败,下轮再确认: $e');
+        continue;
+      }
+      if (finalizedNonce == null) continue;
+      for (final record in records) {
+        final txHash = record.txHash;
+        final usedNonce = record.usedNonce;
+        if (txHash == null || txHash.isEmpty || usedNonce == null) continue;
+        if (finalizedNonce > usedNonce) {
+          await LocalTxStore.markLocalSubmitFinalized(
+            accountId: record.accountId,
+            txHash: txHash,
+          );
+          AppLog.d('[TxMonitor] nonce 兜底确认: tx=$txHash '
+              'usedNonce=$usedNonce < 账户nonce=$finalizedNonce');
         }
       }
-    }
-    if (blockHashes.isEmpty) return;
-    for (final blockHashHex in blockHashes) {
-      if (!_running) return;
-      final blockNumber = await _blockNumberByHash(blockHashHex);
-      if (blockNumber == null) continue;
-      await _processBlock(blockNumber);
     }
   }
 

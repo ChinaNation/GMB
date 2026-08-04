@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:citizenapp/log/app_log.dart';
@@ -250,20 +251,40 @@ class ChainRpc {
   // 钱包交易流水由区块事件监听写入,不逐块拉 body 求 extrinsic 哈希
   // (逐块拉 body 会触发 substrate block-request 反滥用 ban 把轻节点打死)。
 
-  /// 获取运行时 metadata（含 registry，用于 extrinsic 编码）。结果缓存。
+  /// 获取运行时 metadata（含 registry，用于 extrinsic 编码/事件解码）。
+  ///
+  /// **进程级共享缓存 + 并发去重**:registry 构建是 polkadart 最贵的 CPU 操作
+  /// (秒级,且在 UI isolate 上)。此前每个 ChainRpc 实例各建一份、懒建在
+  /// "发送时/首次确认解码时",正是发送后 ANR 的最大头;现在全进程只建一次,
+  /// 并由 ChainTxMonitor 启动时预热,热路径零现场构建。
   Future<RuntimeMetadata> fetchMetadata() async {
-    if (_cachedMetadata != null) return _cachedMetadata!;
+    final cached = _sharedMetadata;
+    if (cached != null) return cached;
+    final inflight = _sharedMetadataInflight;
+    if (inflight != null) return inflight;
+    final task = _fetchMetadataOnce();
+    _sharedMetadataInflight = task;
+    try {
+      return await task;
+    } finally {
+      _sharedMetadataInflight = null;
+    }
+  }
 
+  static Future<RuntimeMetadata> _fetchMetadataOnce() async {
     // 轻节点模式直接读取原生 metadata hex，避免 Dart 层再拼 `state_getMetadata`。
     final metadataHex = await SmoldotClientManager.instance.getMetadataHex();
     if (metadataHex == null || metadataHex.isEmpty) {
       throw StateError('smoldot 轻节点尚未提供 metadata');
     }
-    _cachedMetadata = RuntimeMetadata.fromHex(metadataHex);
-    return _cachedMetadata!;
+    final metadata = RuntimeMetadata.fromHex(metadataHex);
+    _sharedMetadata = metadata;
+    return metadata;
   }
 
-  RuntimeMetadata? _cachedMetadata;
+  /// 进程级共享的 metadata/registry（见 [fetchMetadata]）。
+  static RuntimeMetadata? _sharedMetadata;
+  static Future<RuntimeMetadata>? _sharedMetadataInflight;
 
   /// 读一个链上 pallet 常量(`#[pallet::constant]`)的解码值。
   ///
@@ -271,7 +292,7 @@ class ChainRpc {
   /// 真源恒在链上(费率库 `primitives::fee_policy`,经 runtime 转发到 metadata),
   /// App 侧一律现取现用,**绝不在 Dart 里另立常量副本**。
   ///
-  /// metadata 已按 [_cachedMetadata] 缓存,重复读取不产生额外网络往返。
+  /// metadata 走进程级共享缓存([fetchMetadata]),重复读取不产生额外网络往返。
   /// 常量不存在(链未下发)时抛 [StateError],由调用方 fail-closed 处理,不得静默兜默认值。
   Future<Object?> fetchPalletConstant(String pallet, String name) async {
     final metadata = await fetchMetadata();
@@ -773,9 +794,22 @@ class ChainRpc {
 
   /// 在一批 extrinsic hex 中按 txHash（blake2b256）定位 index；无匹配返回 null。
   ///
-  /// 纯静态工具：供已取到本块 extrinsics 的调用方（如 ChainTxMonitor 的 txHash
-  /// 精确认）复用，避免按记录数重复取块。
-  static int? findExtrinsicIndexInHexList(
+  /// blake2 逐条哈希整块 extrinsics 是 CPU 重活,放 [Isolate.run] 后台隔离执行,
+  /// UI isolate 零哈希扫（发送后 ANR 的第二大头）;出入参均为可跨 isolate 的纯
+  /// 数据。供已取到本块 extrinsics 的调用方（如 ChainTxMonitor 的 txHash 精确认）
+  /// 复用,避免按记录数重复取块。
+  static Future<int?> findExtrinsicIndexInHexList(
+    List<String> extrinsics, {
+    required String txHashHex,
+  }) {
+    return Isolate.run(
+      () => findExtrinsicIndexInHexListSync(extrinsics, txHashHex: txHashHex),
+    );
+  }
+
+  /// [findExtrinsicIndexInHexList] 的同步实现;生产恒走 isolate 版,单测可直调。
+  @visibleForTesting
+  static int? findExtrinsicIndexInHexListSync(
     List<String> extrinsics, {
     required String txHashHex,
   }) {

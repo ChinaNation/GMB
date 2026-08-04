@@ -36,7 +36,7 @@
 | 二 | 标签彻底独立：随时可关、去全局生产串行、去重键加 `nodeId`、运行中可停、部署标签带节点名；删净 `canDetach` + `CITIZENCONSOLE_REMOTE_RUN_STARTED` | 完成 |
 | 三 | 版本号两个 bump 函数合并为单源 + 99 进位 | 完成 |
 | 四 | 四个 workflow 去 `on.push`、WASM 加 `workflow_dispatch`、保留 `pull_request`；清掉提交名路由全部残桩；失败重跑不涨版本 | 完成 |
-| 五 | WASM 按 `spec_version` 发不可变 Release 作永久档案 | 方案待确认 |
+| 五 | Release 必须建立在已通过 CI 的提交上；WASM 按 `spec_version` 发不可变永久档案 | 完成 |
 | 六 | GitHub Ruleset 锁 main（用户在网页操作，或第一步完成后用 API 核对） | 待办 |
 
 每步固定收尾：更新文档 → 完善注释 → 完善测试 → 清理残留 → 输出下一步技术方案，
@@ -113,3 +113,37 @@ WASM CI 会在取令牌时取空并当场抛错。
 `skip_ci` / 提交名路由 全仓零残留。
 
 **未验证项**：真实 dispatch 与 `gh run delete` 未跑过（需 `GH_TOKEN` 配好且重新构建控制台）。
+
+## 第五步落地记录
+
+统一模型定稿（用户在本步中定死，四个软件零区别）：
+
+```
+CI      → 涨版本 c+1（上次失败则删掉那条记录、沿用同一版本）
+        → 构建不签名产物 → 上传 artifact
+Release → 校验 HEAD 就是最近一次成功 CI 的提交
+        → 涨版本 b+1、c 归零（失败重跑规则同上）
+        → 在同一份代码上重新构建 + 正式签名 → 发布 GitHub Release
+```
+
+代码相同、流程相同、版本规则相同、失败重跑规则相同，**唯一区别是产物签不签名**。
+安全边界不动：CI 仍不读正式签名密钥。
+
+| 文件 | 改动 |
+|---|---|
+| `actions/common.sh` | 新增 `require_ci_verified_head <workflow>`：取最近一次成功运行的 `headSha`，与 `origin/main` tip 比对，不等即拒绝 |
+| 三个产品脚本 | `mode == release` 时调用该门禁，位置在 `previous_failed_run` 之后、`bump_*` 之前；三处写法逐字一致 |
+| `citizenchain-wasm.yml` | `permissions: contents: write`；`校验源码版本` 步骤加 `id: source` 并输出 `spec_version`；新增「发布 WASM 永久档案 Release」步骤（tag `runtime-v<spec_version>`，三个产物 + Blake2-256，tag 冲突即整次失败） |
+| `test/production-security.test.mjs` | 新增两条：Release 前置门禁三处形态逐字一致且早于 bump；WASM 永久档案 tag 与冲突即失败 |
+
+**一处实现选择**：`require_ci_verified_head` 用 `gh api repos/{owner}/{repo}/commits/main`
+读远端 tip，而不是 `git ls-remote "$ssh_url"`——`ssh_url` 由 `prepare_github_ssh` 设置，
+而那个函数每次调用都新建临时目录并重置 EXIT trap，不能为了本门禁提前多调一次。
+
+**一处我自己搞出来的不统一已作废**：原第五步方案曾提议 WASM Release 与桌面端 Release
+采用不同形态（per-spec_version 不可变 tag vs 滚动 latest），被用户当场否掉。
+现在四个软件同一套模型，WASM 的永久档案只是「同一模型下 artifact 保留期不足的补充」，
+不是另一种发布形态。
+
+验收：`npm test` 68/68；四个脚本 `bash -n` 全过；全仓 `wait_public_workflow` /
+`allow_empty` / `skip_ci` / `head_commit` / `canDetach` / `anyProductionRunActive` 零残留。

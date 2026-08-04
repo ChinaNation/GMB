@@ -92,6 +92,14 @@ plist 是 launchd **socket 激活**（`Sockets.Listeners` 127.0.0.1:8888，`RunA
 
 ### 六、本机数据清理三按钮重整（用户指令）
 
+> **2026-08-03 已作废：三个按钮连同全部实现整体删除。** 公民控制台不再提供任何本机数据
+> 清理入口——控制台的职责是构建、发布与部署，删本机数据不属于它。随之删除的还有
+> `clear_non_chain_data` / `delete_all_data` 两个函数，以及只被它们调用的
+> `ensure_local_data_path` / `assert_deletable` / `stop_local_processes_for_clear`
+> 三个辅助函数（`actions/citizenchain.sh` 由 435 行降到 290 行）。
+> `production-security.test.mjs` 已改为**反向门禁**，钉住这些入口不得回归。
+> 下方原有内容仅作历史记录保留，不再是当前契约。
+
 | 原 | 现 |
 | --- | --- |
 | 清空链数据 `clear-chain-data` | **删除**（按钮 + `clear_local_chain_data` + mode 白名单 + case 分支） |

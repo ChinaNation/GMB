@@ -70,32 +70,6 @@ flutter clean
 echo "==> 获取依赖..."
 flutter pub get
 
-# ── 开发期 USB 桥接：自动检测本地诊断节点并打开 ADB reverse + 注入 dart-define ──
-# 远端 prczss/nrcgch 偶发 SubstreamReset 时，本地节点 (--listen-addr ws/30334)
-# 作为 citizenapp 第三个稳定 peer 兜底。出门后 localhost 不可达 smoldot 自动忽略。
-DEV_NODE_RPC="${CITIZENAPP_DEV_LOCAL_RPC:-http://localhost:9944}"
-DEV_NODE_PORT="${CITIZENAPP_DEV_LOCAL_WS_PORT:-30334}"
-DEV_NODE_PEER_ID="$(curl -sS --max-time 2 -H 'Content-Type: application/json' \
-  -d '{"id":1,"jsonrpc":"2.0","method":"system_localPeerId","params":[]}' \
-  "$DEV_NODE_RPC" 2>/dev/null \
-  | python3 -c "import json,sys
-try:
-    print(json.load(sys.stdin)['result'])
-except Exception:
-    pass" 2>/dev/null || true)"
-if [[ -n "$DEV_NODE_PEER_ID" ]]; then
-  echo "==> 检测到本地诊断节点 peer_id=$DEV_NODE_PEER_ID (port=$DEV_NODE_PORT)"
-  ADB_BIN="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
-  if [[ -x "$ADB_BIN" ]]; then
-    "$ADB_BIN" reverse "tcp:$DEV_NODE_PORT" "tcp:$DEV_NODE_PORT" >/dev/null 2>&1 || true
-    echo "    已配置 adb reverse tcp:$DEV_NODE_PORT -> host:$DEV_NODE_PORT"
-  fi
-  DART_DEFINES+=(--dart-define=CITIZENAPP_DEV_LOCAL_PEER_ID="$DEV_NODE_PEER_ID")
-  DART_DEFINES+=(--dart-define=CITIZENAPP_DEV_LOCAL_WS_PORT="$DEV_NODE_PORT")
-else
-  echo "==> 未检测到本地诊断节点 ($DEV_NODE_RPC)，跳过 USB 桥接（仅走远端 bootnode）"
-fi
-
 sync_android_artifact() {
   local source_apk="build/app/outputs/flutter-apk/app-debug.apk"
   if [[ -f "$source_apk" ]]; then

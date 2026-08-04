@@ -48,7 +48,7 @@ citizenapp/lib/transaction/shared/
 4. 调用 `OnchainPaymentService.submitTransfer()`
 5. 服务调用 `OnchainRpc.transferWithRemark()` 完成 extrinsic 构造、签名和广播
 6. 广播成功后写入 `LocalTxEntity(source=local_submit, status=pending, usedNonce=..., remark=...)`
-7. 交易池 watch 收到 included 后先把本机记录升级为 `inBlock`；`ChainTxMonitor` 监听 newHeads 并补扫 finalized 之后的未确认区块，把命中本机钱包的收支先写为 `inBlock`，再按 finalized 高度把匹配记录合并并升级为 `finalized`
+7. 交易池 watch 收到 included 后先把本机记录升级为 `inBlock`（记下 blockHash 作确认锚）；`dropped`/`retracted` 只回到 `pending` 且**保留锚**（按设计不算失败）。确认与前向游标完全解耦，由 `ChainTxMonitor._confirmOpenSubmits` **每轮同步开头先行**（前向循环的让路/失败分支会提前 return，确认挂末尾会被跳过；先行后前向卡死也照常确认），两级判据、零扫块：**判据一（锚比对）**——读锚块头取块号 N，最终链在 N 高度的块哈希与锚相等 ⇒ 锚块已最终 ⇒ 对这一个块一次性 txHash 认领 + ExtrinsicFailed 精查；**判据二（nonce 兜底）**——finalized 账户 nonce > 记录 `usedNonce` ⇒ 该 nonce 已被最终链消费 ⇒ 已上链 ⇒ 直接翻 `finalized`（无块号）。监视器在交易 Tab 与钱包页都会启动（start 幂等），确认者跟人走
 
 交易状态仍保留 `pending / inBlock / finalized` 三段；余额、可用金额、余额不足提示和钱包余额回写统一读取 finalized 余额，不能因为 `inBlock` 事件先到就把 best 余额写入展示缓存。
 
@@ -70,7 +70,7 @@ citizenapp/lib/transaction/shared/
 
 普通链上支付提交成功后写入 `LocalTxEntity`：
 
-- `recordKey = accountId:pending:txHash`
+- `recordKey = accountId:tx:txHash`（本机提交唯一键；旧 `:pending:` 键已弃用并由 `purgeLegacyPendingRecords` 一次性清理）
 - `type = transfer`
 - `status = pending`
 - `source = local_submit`
@@ -83,7 +83,7 @@ citizenapp/lib/transaction/shared/
 
 `LocalTxStore` 留在 `lib/transaction/shared/`，因为它服务于交易记录展示，不属于 onchain 支付目录私有实现。
 
-链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析区块 `System.Events` 写入；newHeads 命中或未确认区块补扫命中时先写 `inBlock`，finalized 命中后升级为 `finalized`。区块事件记录唯一键为 `accountId:blockHash:eventIndex`，pending 记录只用于本机提交后的即时展示和匹配合并；普通转账本机写入统一走 `LocalTxStore.upsertLocalSubmitTransfer()`，区块事件先到时也合并为同一条。
+链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析区块 `System.Events` 写入，finalized 命中后升级为 `finalized`。区块事件记录唯一键为 `accountId:blockHash:eventIndex`，本机提交记录唯一键为 `accountId:tx:txHash`；普通转账本机写入统一走 `LocalTxStore.upsertLocalSubmitTransfer()`，区块事件先到时也合并为同一条。**本机提交的最终确认**：前向扫描（`_confirmSubmittedByTxHash`，在 finalized 块 extrinsics 里按 blake2 哈希匹配 txHash；取块体 8s 超时、失败只跳过认领、游标照常推进，绝不卡死）只是尽力而为；确认下限由与游标解耦的 `_confirmOpenSubmits` 两级判据保证——**判据一锚比对**（`dropped` 保留 blockHash 作锚、绝不清空；锚块与最终链同高度哈希相等 ⇒ 单块一次性认领 + ExtrinsicFailed 精查），**判据二 nonce 兜底**（finalized 账户 nonce > `usedNonce` ⇒ 该 nonce 已被最终链消费 ⇒ 已上链 ⇒ 翻 `finalized`，无块号；局限：不区分"上链但执行失败"，该情形 nonce 同样被消费、概率极低）。**永不窗口扫块、永不批量下载块体，绝不挤占链状态轮询（ChainProgressBanner）**。UI 主线程减负（发送后 ANR 的两大头）：metadata/registry 为**进程级共享缓存 + 监视器启动预热**（不再每 ChainRpc 实例懒建一份）；`findExtrinsicIndexInHexList` 的 blake2 整块哈希扫在 `Isolate.run` 后台隔离执行。开发期 localhost bootnode 注入（`_injectLocalhostBootnode` + `citizenapp-run.sh` 的 ADB reverse/dart-define 管线）已整体删除，bootnodes 只走 chainspec + Cloudflare 启动清单两个正源。
 
 交易页 `OnchainPaymentPanel` 中 `签名交易` 下方的 `已提交 / 已出块 / 已确认 / 失败` 状态行只统计当前交易钱包自己发起的链上转出记录：
 
