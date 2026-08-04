@@ -76,6 +76,8 @@ export async function routeRequest(
       ok: true,
       service: "citizenapp-square-api",
       storage_backend: "cloudflare-images-stream",
+      // CitizenConsole 用此不可伪造的运行时绑定确认 Version Override 和正式切流命中同一候选版本。
+      worker_version_id: env.CF_VERSION_METADATA?.id ?? null,
       // 广场主媒体进 Images / Stream；R2 只保留 manifest，链上只记录发布索引和哈希。
       content_on_chain: false,
     });

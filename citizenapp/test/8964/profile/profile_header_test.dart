@@ -129,7 +129,7 @@ void main() {
     expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
     expect(find.byIcon(Icons.person_add_alt), findsNothing);
     expect(find.byIcon(Icons.how_to_reg), findsNothing);
-    // 认证以头像角的公民徽章呈现（链上身份分色 + 会员匹配带勾）。
+    // 认证以头像角的公民徽章呈现；无会员显示身份档，会员显示对应会员档位。
     expect(find.byType(IdentityBadge), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.more_vert));
@@ -205,14 +205,14 @@ void main() {
     expect(badge.style.checked, isFalse);
   });
 
-  testWidgets('voting identity + voting membership -> blue, checked',
+  testWidgets('voting identity + democracy membership -> blue, checked',
       (tester) async {
     await tester.pumpWidget(
       _wrap(
         isSelf: false,
         api: FakeProfileApi(sampleProfile(
           identityLevel: 'voting',
-          membershipLevel: 'voting',
+          membershipLevel: 'democracy',
         )),
       ),
     );
@@ -222,14 +222,14 @@ void main() {
     expect(badge.style.checked, isTrue);
   });
 
-  testWidgets('candidate identity + candidate membership -> red, checked',
+  testWidgets('candidate identity + spark membership -> red, checked',
       (tester) async {
     await tester.pumpWidget(
       _wrap(
         isSelf: false,
         api: FakeProfileApi(sampleProfile(
           identityLevel: 'candidate',
-          membershipLevel: 'candidate',
+          membershipLevel: 'spark',
         )),
       ),
     );
@@ -239,21 +239,21 @@ void main() {
     expect(badge.style.checked, isTrue);
   });
 
-  testWidgets('candidate identity + any active membership -> red, checked',
+  testWidgets('candidate identity + freedom membership -> gold, checked',
       (tester) async {
-    // 规则简化：买了会员（任意档）就带勾，颜色仍按链上身份=竞选红。
+    // 会员徽章按会员档位着色，不复用竞选身份的红色。
     await tester.pumpWidget(
       _wrap(
         isSelf: false,
         api: FakeProfileApi(sampleProfile(
           identityLevel: 'candidate',
-          membershipLevel: 'voting',
+          membershipLevel: 'freedom',
         )),
       ),
     );
     await tester.pumpAndSettle();
     final badge = tester.widget<IdentityBadge>(find.byType(IdentityBadge));
-    expect(badge.style.color, AppTheme.identityCandidate);
+    expect(badge.style.color, AppTheme.identityVisitor);
     expect(badge.style.checked, isTrue);
   });
 

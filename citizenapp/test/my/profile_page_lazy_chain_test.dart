@@ -65,7 +65,10 @@ class _FakeSquareApi extends SquareApiClient {
   int membershipCalls = 0;
 
   @override
-  Future<SquareMembershipState> fetchMembership(SquareSession session) async {
+  Future<SquareMembershipState> fetchMembership(
+    SquareSession session, {
+    bool verifyOnDeny = false,
+  }) async {
     membershipCalls += 1;
     return const SquareMembershipState(active: false, paidUntil: 0);
   }
@@ -132,6 +135,10 @@ void main() {
     expect(find.text('会员｜订阅'), findsOneWidget);
     expect(find.text('创作者'), findsOneWidget);
     expect(find.text('通讯录'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('my-header-status-bar-scrim')),
+      findsOneWidget,
+    );
     final creatorTop = tester.getTopLeft(find.text('创作者')).dy;
     final contactsTop = tester.getTopLeft(find.text('通讯录')).dy;
     final membershipTop = tester.getTopLeft(find.text('会员｜订阅')).dy;

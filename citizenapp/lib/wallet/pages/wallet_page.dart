@@ -13,6 +13,7 @@ import 'package:citizenapp/qr/scan_dispatch_flow.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
+import 'package:citizenapp/transaction/shared/tx_auto_refresh_mixin.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/ui/widgets/shimmer_loading.dart';
@@ -1273,7 +1274,8 @@ class WalletDetailPage extends StatefulWidget {
   State<WalletDetailPage> createState() => _WalletDetailPageState();
 }
 
-class _WalletDetailPageState extends State<WalletDetailPage> {
+class _WalletDetailPageState extends State<WalletDetailPage>
+    with TxAutoRefreshMixin<WalletDetailPage> {
   final WalletManager _walletService = WalletManager();
 
   /// 本页是否有修改落盘过(用于 pop 时回传给上一页刷新列表)。
@@ -1313,6 +1315,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   @override
   void dispose() {
+    stopTxAutoRefresh();
     ChainTxMonitor.instance.onBalanceChanged = null;
     if (_screenshotGuardActive) ScreenshotGuard.disable();
     super.dispose();
@@ -1322,6 +1325,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   void initState() {
     super.initState();
     _loadRecentRecords();
+    startTxAutoRefresh(widget.wallet.accountId);
     // 启动链上交易监控（余额变化触发模式）。
     ChainTxMonitor.instance.watchWallet(
       widget.wallet.ss58Address,
@@ -1356,6 +1360,9 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       // 加载失败静默忽略，钱包详情页仍可正常使用
     }
   }
+
+  @override
+  Future<void> onTxRecordsChanged() => _loadRecentRecords();
 
   Future<void> _onMenuAction(String action) async {
     switch (action) {

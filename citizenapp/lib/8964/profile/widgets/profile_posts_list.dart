@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
@@ -19,7 +21,9 @@ class ProfilePostsTab extends StatefulWidget {
     required this.api,
     required this.emptyLabel,
     required this.session,
+    required this.sessionReady,
     required this.isSelf,
+    this.onSessionExpired,
     this.category,
     this.contentFormat,
     this.mediaKind,
@@ -36,6 +40,13 @@ class ProfilePostsTab extends StatefulWidget {
   /// 本人身份已经由上层以永久 `cid_number` 判定；断网或 Worker 不可用时会话可能为空，
   /// 此时仍必须允许本人读取本机已校验的发布副本。
   final SquareSession? session;
+
+  /// 上层是否已经完成首次会话解析。false 表示仍在握手，禁止拿 null 抢跑远端请求；
+  /// true + null 表示本次确实没有可用钱包会话。
+  final bool sessionReady;
+
+  /// Worker 明确返回 401 时由上层清理缓存并重新握手；每个请求最多调用一次。
+  final Future<SquareSession?> Function()? onSessionExpired;
   final bool isSelf;
   final SquarePostCategory? category;
   final SquarePostContentFormat? contentFormat;
@@ -57,20 +68,51 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
   bool _loading = false;
   bool _done = false;
   bool _failedFirst = false;
+  bool _sessionUnavailable = false;
+  int _loadGeneration = 0;
+  SquareSession? _requestSession;
 
   @override
   void initState() {
     super.initState();
-    _loadFirst();
+    _requestSession = widget.session;
+    unawaited(_loadFirst());
   }
 
-  Future<void> _loadFirst() async {
+  @override
+  void didUpdateWidget(covariant ProfilePostsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final contractChanged = oldWidget.cidNumber != widget.cidNumber ||
+        oldWidget.api != widget.api ||
+        oldWidget.category != widget.category ||
+        oldWidget.contentFormat != widget.contentFormat ||
+        oldWidget.mediaKind != widget.mediaKind ||
+        oldWidget.isSelf != widget.isSelf;
+    final incomingSessionChanged =
+        _sessionKey(widget.session) != _sessionKey(_requestSession) ||
+            oldWidget.sessionReady != widget.sessionReady;
+    if (!contractChanged && !incomingSessionChanged) return;
+    _requestSession = widget.session;
+    // 只有作者/过滤契约变化才重读本地副本；单纯 Session 就绪或刷新只补远端，避免
+    // 首次进入时重复读取并闪空已经展示的本人本地内容。
+    unawaited(_loadFirst(reloadLocal: contractChanged));
+  }
+
+  Future<void> _loadFirst({bool reloadLocal = true}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _loading = true;
       _failedFirst = false;
+      _sessionUnavailable = false;
+      _cursor = null;
+      _done = false;
+      if (reloadLocal) {
+        _posts.clear();
+        _unavailableMediaKindsByPostId.clear();
+      }
     });
-    var localHasContent = false;
-    if (widget.isSelf) {
+    var localHasContent = _posts.isNotEmpty;
+    if (widget.isSelf && reloadLocal) {
       try {
         final localCopies =
             await widget.api.fetchLocalPublishedPosts(widget.cidNumber);
@@ -79,7 +121,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
             .where(_matchesLocalFilters)
             .toList(growable: false);
         localHasContent = presentations.isNotEmpty;
-        if (!mounted) return;
+        if (!mounted || generation != _loadGeneration) return;
         setState(() {
           _posts
             ..clear()
@@ -102,15 +144,23 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       }
     }
 
+    final session = _requestSession;
+    if (!widget.sessionReady || session == null) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        // 本人已有本地副本时直接展示；其余情况在握手完成前保持加载态。
+        _loading = !widget.sessionReady && _posts.isEmpty;
+        _sessionUnavailable = widget.sessionReady && session == null;
+      });
+      return;
+    }
+
     try {
-      final page = await widget.api.fetchAuthorPosts(
-        widget.cidNumber,
-        category: widget.category,
-        contentFormat: widget.contentFormat,
-        limit: _pageSize,
-        session: widget.session,
+      final page = await _fetchRemotePage(
+        generation: generation,
+        session: session,
       );
-      if (!mounted) return;
+      if (page == null || !mounted || generation != _loadGeneration) return;
       setState(() {
         _mergeRemotePosts(page.posts);
         _cursor = page.nextCursor;
@@ -118,7 +168,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
         _loading = false;
       });
     } on Exception {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _loading = false;
         _failedFirst = _posts.isEmpty && !localHasContent;
@@ -127,18 +177,17 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
   }
 
   Future<void> _loadMore() async {
-    if (_loading || _done || _cursor == null) return;
+    final session = _requestSession;
+    if (_loading || _done || _cursor == null || session == null) return;
+    final generation = _loadGeneration;
     setState(() => _loading = true);
     try {
-      final page = await widget.api.fetchAuthorPosts(
-        widget.cidNumber,
-        category: widget.category,
-        contentFormat: widget.contentFormat,
-        limit: _pageSize,
+      final page = await _fetchRemotePage(
+        generation: generation,
+        session: session,
         cursor: _cursor,
-        session: widget.session,
       );
-      if (!mounted) return;
+      if (page == null || !mounted || generation != _loadGeneration) return;
       setState(() {
         _mergeRemotePosts(page.posts);
         _cursor = page.nextCursor;
@@ -146,10 +195,47 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
         _loading = false;
       });
     } on Exception {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() => _loading = false);
     }
   }
+
+  /// 按当前 Tab 契约拉一页；401 只委托上层刷新一次 Session，第二次失败直接上抛。
+  Future<({List<SquarePost> posts, int? nextCursor})?> _fetchRemotePage({
+    required int generation,
+    required SquareSession session,
+    int? cursor,
+  }) async {
+    Future<({List<SquarePost> posts, int? nextCursor})> request(
+      SquareSession activeSession,
+    ) {
+      return widget.api.fetchAuthorPosts(
+        widget.cidNumber,
+        category: widget.category,
+        contentFormat: widget.contentFormat,
+        limit: _pageSize,
+        cursor: cursor,
+        session: activeSession,
+      );
+    }
+
+    try {
+      return await request(session);
+    } on SquareApiException catch (error) {
+      if (!mounted || generation != _loadGeneration) return null;
+      final refresh = widget.onSessionExpired;
+      if (error.statusCode != 401 || refresh == null) rethrow;
+      final refreshed = await refresh();
+      if (!mounted || generation != _loadGeneration) return null;
+      if (refreshed == null) rethrow;
+      _requestSession = refreshed;
+      return request(refreshed);
+    }
+  }
+
+  String? _sessionKey(SquareSession? session) => session == null
+      ? null
+      : '${session.accountId}:${session.cidNumber}:${session.bindingRevision}:${session.sessionToken}';
 
   bool _matchesLocalFilters(SquareLocalPostPresentation presentation) {
     final post = presentation.post;
@@ -209,33 +295,42 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
 
   @override
   Widget build(BuildContext context) {
-    return NotificationListener<ScrollNotification>(
-      onNotification: _onScroll,
-      child: CustomScrollView(
-        key: PageStorageKey<String>(
-          '${widget.category?.name ?? 'all'}:${widget.mediaKind?.name ?? 'posts'}',
-        ),
-        slivers: [
-          SliverOverlapInjector(
-            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+    return RefreshIndicator(
+      onRefresh: _loadFirst,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScroll,
+        child: CustomScrollView(
+          key: PageStorageKey<String>(
+            '${widget.category?.name ?? 'all'}:${widget.mediaKind?.name ?? 'posts'}',
           ),
-          ..._contentSlivers(),
-        ],
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverOverlapInjector(
+              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+            ),
+            if (_loading)
+              const SliverToBoxAdapter(
+                child: LinearProgressIndicator(
+                  key: ValueKey('profile-posts-load-progress'),
+                  minHeight: 2,
+                ),
+              ),
+            ..._contentSlivers(),
+          ],
+        ),
       ),
     );
   }
 
   List<Widget> _contentSlivers() {
     if (_loading && _posts.isEmpty) {
-      return const [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      ];
+      return [_message('正在读取内容')];
     }
     if (_failedFirst) {
       return [_message('加载失败，下拉重试')];
+    }
+    if (_sessionUnavailable && _posts.isEmpty) {
+      return [_message('需要钱包账户才能浏览主页')];
     }
     if (widget.mediaKind != null) {
       return _mediaSlivers();
@@ -359,21 +454,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
       _unavailableMediaKindsByPostId[postId]?.isNotEmpty ?? false;
 
   Widget _footer() {
-    if (!_loading || _posts.isEmpty) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-    }
-    return const SliverToBoxAdapter(
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      ),
-    );
+    return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
 
   Widget _message(String text) {

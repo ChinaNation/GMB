@@ -1,0 +1,25 @@
+{
+  "name": "gmb",
+  "version": "1.0.0",
+  "description": "GMB 的正式项目文档与 AI 编程系统统一收口到 [`memory/`](/Users/rhett/GMB/memory)。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChinaNation/GMB.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ChinaNation/GMB/issues"
+  },
+  "homepage": "https://github.com/ChinaNation/GMB#readme"
+}

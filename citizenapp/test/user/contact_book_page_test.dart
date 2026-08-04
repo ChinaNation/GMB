@@ -1,7 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import '../support/identity_gate_test_util.dart';
 
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
@@ -41,7 +41,7 @@ const _profile = CitizenProfile(
   cidNumber: _contactCidNumber,
   isCertified: true,
   identityLevel: 'voting',
-  membershipLevel: 'voting',
+  membershipLevel: 'democracy',
   membershipActive: true,
   following: 1,
   followers: 2,
@@ -97,6 +97,13 @@ class _FakeContacts extends UserContactService {
   }
 }
 
+class _PendingContacts extends _FakeContacts {
+  final Completer<List<UserContact>> completer = Completer<List<UserContact>>();
+
+  @override
+  Future<List<UserContact>> getContacts() => completer.future;
+}
+
 class _FakeProfileApi extends CitizenProfileApi {
   _FakeProfileApi(this.profile);
 
@@ -124,6 +131,7 @@ class _FakeSessionProvider extends SquareSessionProvider {
 Widget _page({
   ContactPickMode mode = ContactPickMode.browse,
   CitizenProfile profile = _profile,
+  UserContactService? service,
   DirectChatOpener? directChatOpener,
   Future<void> Function(
     BuildContext context, {
@@ -133,7 +141,7 @@ Widget _page({
     MaterialApp(
       home: ContactBookPage(
         mode: mode,
-        service: _FakeContacts(),
+        service: service ?? _FakeContacts(),
         profileApi: _FakeProfileApi(profile),
         sessionProvider: _FakeSessionProvider(),
         initialProfiles: {_contactCidNumber: profile},
@@ -152,12 +160,33 @@ class _NullIdentityCache extends IdentityAccountCache {
 }
 
 void main() {
-  useRegisteredIdentityGate();
   setUp(() {
     IdentityAccountCache.debugInstance = _NullIdentityCache();
   });
 
   tearDown(IdentityAccountCache.resetDebugInstance);
+
+  testWidgets('本地通讯录未返回时直接显示页面结构且不使用整页转圈', (tester) async {
+    final service = _PendingContacts();
+    await tester.pumpWidget(_page(service: service));
+    await tester.pump();
+
+    expect(find.text('我的通讯录'), findsOneWidget);
+    expect(find.byKey(const ValueKey('contact-search')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('contacts-local-load-progress')),
+      findsOneWidget,
+    );
+    expect(find.text('正在读取本地通讯录'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    service.completer.complete(const <UserContact>[]);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('contacts-local-load-progress')),
+      findsNothing,
+    );
+  });
 
   testWidgets('联系人卡以公开昵称为主并分别展示备注、CID、SS58', (tester) async {
     await tester.pumpWidget(_page());

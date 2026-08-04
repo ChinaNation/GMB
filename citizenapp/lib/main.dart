@@ -335,6 +335,20 @@ class _AppLockGateState extends State<_AppLockGate>
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
+  /// 主 Tab 的系统栏样式由壳层单源控制，避免保活页面留下上一页的明暗状态。
+  ///
+  /// 「我的」顶部是照片，使用浅色图标；其余四个主 Tab 都是浅色背景，必须使用深色
+  /// 图标。子路由的 AppBar 仍可用更靠前的 AnnotatedRegion 覆盖本样式。
+  static SystemUiOverlayStyle systemUiOverlayStyleForTab(int tabIndex) {
+    final statusStyle =
+        tabIndex == 4 ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark;
+    return statusStyle.copyWith(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: AppTheme.surfaceCard,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    );
+  }
+
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -466,7 +480,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final scaffold = Scaffold(
       body: Column(
         children: [
           if (_isRooted)
@@ -612,6 +626,11 @@ class _AppShellState extends State<AppShell> {
           ],
         ),
       ),
+    );
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      key: const ValueKey('app-shell-system-ui-style'),
+      value: AppShell.systemUiOverlayStyleForTab(_currentIndex),
+      child: scaffold,
     );
   }
 }

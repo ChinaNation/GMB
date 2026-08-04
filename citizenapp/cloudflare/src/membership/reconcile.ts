@@ -5,6 +5,7 @@ import {
   readChainTimestampAtBlock,
   readSubscriptionAtBlock,
   updateChainClock,
+  updateChainClockStatement,
   type ChainSubscriptionState,
 } from "../chain/subscription";
 
@@ -47,6 +48,11 @@ export interface SubscriptionReconcileResult {
   creator: ReconcileResult;
   /// 本轮对账读取的 finalized 区块时间戳；未读取链时为 null。
   finalized_chain_timestamp: number | null;
+}
+
+export interface MembershipReconcileInput {
+  cidNumber: string;
+  accountId: string;
 }
 
 const EMPTY_RESULT: ReconcileResult = { scanned: 0, updated: 0, failed: 0 };
@@ -136,6 +142,46 @@ export async function reconcileCreatorSubscriptions(
   return reconcileCreatorCandidates(env, point, deps, reconcileBatchSize(env));
 }
 
+/**
+ * 发布授权拒绝前的单 CID finalized 对账。
+ *
+ * 不受 Cron 开关控制：调用方已经用当前钱包会话校验 CID 与 account_id，本函数只在 D1
+ * 快路径即将拒绝时执行。链时钟和平台会员行通过同一 D1 batch 原子提交；任何一步失败都
+ * 不留下半套权益镜像。
+ */
+export async function reconcileMembershipForCid(
+  env: Env,
+  input: MembershipReconcileInput,
+  deps: ReconcileDeps = defaultDeps,
+): Promise<ChainSubscriptionState | null> {
+  if (!isChainRpcConfigured(env)) {
+    throw new Error("chain rpc not configured");
+  }
+  const point = await deps.finalizedPoint(env);
+  const state = await deps.readSubscriptionAtBlock(
+    env,
+    input.cidNumber,
+    { kind: "platform" },
+    point.blockHash,
+  );
+  await env.DB.batch([
+    updateChainClockStatement(env, {
+      chainTimestamp: point.chainTimestamp,
+      blockNumber: point.blockNumber,
+      blockHash: point.blockHash,
+      observedAt: point.observedAt,
+    }),
+    platformStateStatement(
+      env,
+      input.cidNumber,
+      input.accountId,
+      state,
+      point,
+    ),
+  ]);
+  return state;
+}
+
 async function readFinalizedPoint(env: Env): Promise<FinalizedPoint> {
   const blockHash = await fetchFinalizedHead(env);
   const [header, chainTimestamp] = await Promise.all([
@@ -159,11 +205,14 @@ async function reconcilePlatformCandidates(
   const rows = await env.DB.prepare(
     // active（可能转挂起）与 suspended/creatorPaused（可能链上恢复为 active）都要复核。
     // 按身份主键 CID 直接读取链上订阅；账户换绑不会改变 storage key。
-    `SELECT cid_number FROM square_memberships
+    `SELECT cid_number, account_id FROM square_memberships
       WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
         AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
-  ).bind(point.chainTimestamp, batch).all<{ cid_number: string }>();
+  ).bind(point.chainTimestamp, batch).all<{
+    cid_number: string;
+    account_id: string;
+  }>();
   return runBatch(rows.results ?? [], async (row) => {
     const state = await deps.readSubscriptionAtBlock(
       env,
@@ -171,7 +220,13 @@ async function reconcilePlatformCandidates(
       { kind: "platform" },
       point.blockHash,
     );
-    await applyPlatformState(env, row.cid_number, state, point);
+    await applyPlatformState(
+      env,
+      row.cid_number,
+      row.account_id,
+      state,
+      point,
+    );
   });
 }
 
@@ -207,24 +262,77 @@ async function reconcileCreatorCandidates(
 async function applyPlatformState(
   env: Env,
   cidNumber: string,
+  accountId: string,
   state: ChainSubscriptionState | null,
   point: FinalizedPoint,
 ): Promise<void> {
+  await platformStateStatement(
+    env,
+    cidNumber,
+    accountId,
+    state,
+    point,
+  ).run();
+}
+
+/** 同一 finalized 高度只允许等高幂等或向前更新，旧链读不得覆盖新镜像。 */
+function platformStateStatement(
+  env: Env,
+  cidNumber: string,
+  accountId: string,
+  state: ChainSubscriptionState | null,
+  point: FinalizedPoint,
+): D1PreparedStatement {
   if (!state || state.plan.kind !== "platform") {
-    await env.DB.prepare(
+    return env.DB.prepare(
       `UPDATE square_memberships SET subscription_status = 'terminated',
         entitlement_lapsed_at = paid_until,
         finalized_block_number = ?, finalized_block_hash = ?, verified_at = ?
-        WHERE cid_number = ?`,
-    ).bind(point.blockNumber, point.blockHash, point.observedAt, cidNumber).run();
-    return;
+        WHERE cid_number = ? AND finalized_block_number <= ?
+          AND ? >= COALESCE(
+            (SELECT finalized_block_number FROM chain_clock WHERE clock_id = 1),
+            ?
+          )`,
+    ).bind(
+      point.blockNumber,
+      point.blockHash,
+      point.observedAt,
+      cidNumber,
+      point.blockNumber,
+      point.blockNumber,
+      point.blockNumber,
+    );
   }
-  await env.DB.prepare(
-    `UPDATE square_memberships SET membership_level = ?,
-      started_at = ?, last_charged_at = ?, last_charged_price_fen = ?, paid_until = ?,
-      subscription_status = ?, finalized_block_number = ?, finalized_block_hash = ?,
-      verified_at = ?, entitlement_lapsed_at = ? WHERE cid_number = ?`,
+  return env.DB.prepare(
+    `INSERT INTO square_memberships
+      (cid_number, account_id, membership_level, started_at, last_charged_at,
+       last_charged_price_fen, paid_until, subscription_status, finalized_block_number,
+       finalized_block_hash, verified_at, entitlement_lapsed_at, last_tx_hash)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+      WHERE ? >= COALESCE(
+        (SELECT finalized_block_number FROM chain_clock WHERE clock_id = 1),
+        ?
+      )
+      ON CONFLICT(cid_number) DO UPDATE SET
+        account_id = excluded.account_id,
+        membership_level = excluded.membership_level,
+        started_at = excluded.started_at,
+        last_charged_at = excluded.last_charged_at,
+        last_charged_price_fen = excluded.last_charged_price_fen,
+        paid_until = excluded.paid_until,
+        subscription_status = excluded.subscription_status,
+        finalized_block_number = excluded.finalized_block_number,
+        finalized_block_hash = excluded.finalized_block_hash,
+        verified_at = excluded.verified_at,
+        entitlement_lapsed_at = excluded.entitlement_lapsed_at
+      WHERE excluded.finalized_block_number >= square_memberships.finalized_block_number
+        AND excluded.finalized_block_number >= COALESCE(
+          (SELECT finalized_block_number FROM chain_clock WHERE clock_id = 1),
+          excluded.finalized_block_number
+        )`,
   ).bind(
+    cidNumber,
+    accountId,
     state.plan.membershipLevel,
     state.startedAt,
     state.lastChargedAt,
@@ -235,8 +343,9 @@ async function applyPlatformState(
     point.blockHash,
     point.observedAt,
     state.status === "active" ? null : state.paidUntil,
-    cidNumber,
-  ).run();
+    point.blockNumber,
+    point.blockNumber,
+  );
 }
 
 async function applyCreatorState(

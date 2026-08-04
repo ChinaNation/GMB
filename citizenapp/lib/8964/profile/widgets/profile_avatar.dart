@@ -80,6 +80,7 @@ class ProfileAvatar extends StatelessWidget {
               size: (size * 0.34).clamp(18, 28),
               tooltip: identityBadgeLabel(
                 identityLevel: identityLevel,
+                membershipLevel: membershipLevel,
                 checked: badge.checked,
               ),
             ),

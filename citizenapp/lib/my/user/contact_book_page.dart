@@ -12,10 +12,10 @@ import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
-import 'package:citizenapp/my/myid/widgets/identity_registration_gate.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 通讯录页使用模式。
@@ -350,101 +350,99 @@ class _ContactBookPageState extends State<ContactBookPage> {
   @override
   Widget build(BuildContext context) {
     final visible = _visibleContacts;
-    // 整个 Scaffold 交给 gate 包裹:未注册时连 AppBar 的「扫码添加联系人」入口也一并
-    // 被挡在门后(fail-closed,不留 AppBar 动作绕过);gate 未放行态自带标题栏 + 返回键。
-    return IdentityRegistrationGate(
-      featureLabel: '通讯录',
-      scaffoldTitle:
+    return Scaffold(
+      backgroundColor: AppTheme.scaffoldBg,
+      appBar: AppBar(
+        title: Text(
           widget.mode == ContactPickMode.pickForMessage ? '选择联系人' : '我的通讯录',
-      child: Scaffold(
-        backgroundColor: AppTheme.scaffoldBg,
-        appBar: AppBar(
-          title: Text(
-            widget.mode == ContactPickMode.pickForMessage ? '选择联系人' : '我的通讯录',
-          ),
-          centerTitle: true,
-          actions: [
-            // 纯选人(发私信)模式只保留选择,不提供扫码加联系人入口。
-            if (widget.mode != ContactPickMode.pickForMessage)
-              IconButton(
-                tooltip: '扫码添加联系人',
-                onPressed: _scanContactQr,
-                icon: SvgPicture.asset(
-                  'assets/icons/scan-line.svg',
-                  width: 20,
-                  height: 20,
+        ),
+        centerTitle: true,
+        actions: [
+          // 纯选人(发私信)模式只保留选择,不提供扫码加联系人入口。
+          if (widget.mode != ContactPickMode.pickForMessage)
+            IconButton(
+              tooltip: '扫码添加联系人',
+              onPressed: _scanContactQr,
+              icon: SvgPicture.asset(
+                'assets/icons/scan-line.svg',
+                width: 20,
+                height: 20,
+              ),
+            ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _sync,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
+          children: [
+            if (_loading) ...[
+              const LinearProgressIndicator(
+                key: ValueKey('contacts-local-load-progress'),
+                minHeight: 2,
+              ),
+              const SizedBox(height: 10),
+            ],
+            _SyncBanner(state: _syncState, onRetry: _sync),
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('contact-search'),
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: InputDecoration(
+                hintText: '搜索昵称、备注、CID 或钱包账户',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                filled: true,
+                fillColor: AppTheme.surfaceCard,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            if (_loading && _contacts.isEmpty)
+              const _ContactsLoadingNotice()
+            else if (_contacts.isEmpty)
+              const _EmptyContacts()
+            else if (visible.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 56),
+                child: Center(child: Text('没有匹配的联系人')),
+              )
+            else
+              for (final contact in visible) ...[
+                _ContactCard(
+                  contact: contact,
+                  profile: _profileOf(contact),
+                  avatarUrl: _avatarUrl(_profileOf(contact)),
+                  avatarHeaders: _session == null
+                      ? null
+                      : <String, String>{
+                          'authorization': 'Bearer ${_session!.sessionToken}',
+                        },
+                  // 纯选私信模式只允许点选,不显示逐项操作菜单。
+                  showActions: widget.mode != ContactPickMode.pickForMessage,
+                  onTap: () => _open(contact),
+                  onTransfer: () => _transfer(contact),
+                  onMessage: () => _message(contact),
+                  onRename: () => _rename(contact),
+                  onDelete: () => _delete(contact),
+                ),
+                const SizedBox(height: 10),
+              ],
           ],
         ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _sync,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
-                  children: [
-                    _SyncBanner(state: _syncState, onRetry: _sync),
-                    const SizedBox(height: 10),
-                    TextField(
-                      key: const ValueKey('contact-search'),
-                      controller: _searchController,
-                      onChanged: (value) => setState(() => _query = value),
-                      decoration: InputDecoration(
-                        hintText: '搜索昵称、备注、CID 或钱包账户',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: _query.isEmpty
-                            ? null
-                            : IconButton(
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _query = '');
-                                },
-                                icon: const Icon(Icons.close_rounded),
-                              ),
-                        filled: true,
-                        fillColor: AppTheme.surfaceCard,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_contacts.isEmpty)
-                      const _EmptyContacts()
-                    else if (visible.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 56),
-                        child: Center(child: Text('没有匹配的联系人')),
-                      )
-                    else
-                      for (final contact in visible) ...[
-                        _ContactCard(
-                          contact: contact,
-                          profile: _profileOf(contact),
-                          avatarUrl: _avatarUrl(_profileOf(contact)),
-                          avatarHeaders: _session == null
-                              ? null
-                              : <String, String>{
-                                  'authorization':
-                                      'Bearer ${_session!.sessionToken}',
-                                },
-                          // 纯选私信模式只允许点选,不显示逐项操作菜单。
-                          showActions:
-                              widget.mode != ContactPickMode.pickForMessage,
-                          onTap: () => _open(contact),
-                          onTransfer: () => _transfer(contact),
-                          onMessage: () => _message(contact),
-                          onRename: () => _rename(contact),
-                          onDelete: () => _delete(contact),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                  ],
-                ),
-              ),
       ),
     );
   }
@@ -663,6 +661,31 @@ class _SyncBanner extends StatelessWidget {
   }
 }
 
+class _ContactsLoadingNotice extends StatelessWidget {
+  const _ContactsLoadingNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 64, horizontal: 28),
+      child: Column(
+        children: [
+          Icon(
+            Icons.perm_contact_calendar_outlined,
+            size: 52,
+            color: AppTheme.primary,
+          ),
+          SizedBox(height: 16),
+          Text(
+            '正在读取本地通讯录',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyContacts extends StatelessWidget {
   const _EmptyContacts();
 
@@ -699,6 +722,29 @@ class _EmptyContacts extends StatelessWidget {
 /// 打开 contact 模式扫码页,扫到用户名片码即写入本人密文通讯录
 /// (写库与「已加入/已更新通讯录」提示均在扫码页内完成)。调用方返回后自行刷新列表。
 Future<void> scanAndAddContact(BuildContext context) async {
+  // 通讯录浏览直接开放；扫码写入关系前才执行真实链身份校验，禁止未注册身份写库。
+  try {
+    final identity = await IdentityAccountResolver().resolve();
+    if (!context.mounted) return;
+    if (identity == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
+      );
+      return;
+    }
+    if (!identity.isRegistered) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在「我的 → 身份」注册身份')),
+      );
+      return;
+    }
+  } on Exception {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('暂时无法验证身份，请稍后重试')),
+    );
+    return;
+  }
   await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (_) => const QrScanPage(mode: QrScanMode.contact),

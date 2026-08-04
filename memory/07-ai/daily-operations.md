@@ -37,7 +37,7 @@ GitHub 自动运行：
 
 - CitizenChain workflow 内的 `guardrails` job
 - 变更目录命中的 CitizenChain、CitizenApp 或 CitizenWallet 产品 CI
-- CitizenChain WASM 只允许在明确的手动流程中执行
+- CitizenChain WASM 只允许由 CitizenConsole 明确发起，并通过固定提交消息的 `main` push 执行
 
 ### 2.4 审查修复
 

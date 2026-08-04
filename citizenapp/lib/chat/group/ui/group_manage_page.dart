@@ -219,91 +219,93 @@ class _GroupManagePageState extends State<GroupManagePage> {
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : group == null
-              ? const Center(child: Text('群不存在或已退出'))
-              : Column(
-                  children: [
-                    if (_error != null)
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                              color: Theme.of(context).colorScheme.error),
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Row(
-                        children: [
-                          Text('成员 ${group.roster.length} / 1989',
-                              style: Theme.of(context).textTheme.titleSmall),
-                          const Spacer(),
-                          if (_isAdmin)
-                            TextButton.icon(
-                              onPressed: _busy ? null : _addMembers,
-                              icon: const Icon(Icons.person_add_alt_1),
-                              label: const Text('添加'),
-                            ),
-                        ],
-                      ),
+      body: Column(
+        children: [
+          if (_loading)
+            const LinearProgressIndicator(
+              key: ValueKey('group-manage-load-progress'),
+              minHeight: 2,
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Text('成员 ${group?.roster.length ?? '--'} / 1989',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const Spacer(),
+                if (_isAdmin)
+                  TextButton.icon(
+                    onPressed: _busy ? null : _addMembers,
+                    icon: const Icon(Icons.person_add_alt_1),
+                    label: const Text('添加'),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: group == null
+                ? Center(
+                    child: Text(
+                      _loading ? '正在读取群聊信息' : '群不存在或已退出',
                     ),
-                    Expanded(
-                      child: ListView(
-                        children: [
-                          for (final member in group.roster)
-                            ListTile(
-                              leading: CircleAvatar(
-                                child: Text(
-                                  member.cidNumber.isEmpty
-                                      ? '?'
-                                      : member.cidNumber.substring(0, 1),
-                                ),
-                              ),
-                              title: Text(_short(member.cidNumber)),
-                              subtitle:
-                                  member.isAdmin ? const Text('管理员') : null,
-                              trailing: (_isAdmin &&
-                                      member.cidNumber != _myCidNumber &&
-                                      member.cidNumber !=
-                                          group.creatorCidNumber)
-                                  ? IconButton(
-                                      tooltip: '移除',
-                                      icon: const Icon(
-                                          Icons.remove_circle_outline),
-                                      onPressed: _busy
-                                          ? null
-                                          : () => _run(
-                                              () => _runtime.removeGroupMembers(
-                                                    groupId: widget.groupId,
-                                                    targetCidNumbers: [
-                                                      member.cidNumber
-                                                    ],
-                                                  )),
-                                    )
-                                  : null,
+                  )
+                : ListView(
+                    children: [
+                      for (final member in group.roster)
+                        ListTile(
+                          leading: CircleAvatar(
+                            child: Text(
+                              member.cidNumber.isEmpty
+                                  ? '?'
+                                  : member.cidNumber.substring(0, 1),
                             ),
-                        ],
-                      ),
-                    ),
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: OutlinedButton.icon(
-                          onPressed: _busy ? null : _leave,
-                          icon: const Icon(Icons.exit_to_app),
-                          label: const Text('退出群聊'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                Theme.of(context).colorScheme.error,
                           ),
+                          title: Text(_short(member.cidNumber)),
+                          subtitle: member.isAdmin ? const Text('管理员') : null,
+                          trailing: (_isAdmin &&
+                                  member.cidNumber != _myCidNumber &&
+                                  member.cidNumber != group.creatorCidNumber)
+                              ? IconButton(
+                                  tooltip: '移除',
+                                  icon: const Icon(Icons.remove_circle_outline),
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _run(
+                                          () => _runtime.removeGroupMembers(
+                                                groupId: widget.groupId,
+                                                targetCidNumbers: [
+                                                  member.cidNumber
+                                                ],
+                                              )),
+                                )
+                              : null,
                         ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: OutlinedButton.icon(
+                onPressed: _loading || group == null || _busy ? null : _leave,
+                icon: const Icon(Icons.exit_to_app),
+                label: const Text('退出群聊'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
                 ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

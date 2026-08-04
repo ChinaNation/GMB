@@ -2,13 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/ui/app_theme.dart';
 
-/// 公民徽章样式：扇贝底色=链上身份档，内符号=会员(勾)/仅身份(小人)。
+/// 公民徽章样式：无有效会员时展示身份档，有有效会员时展示会员档位。
 ///
-/// 规则（用户定稿）：底色 访客橙 / 投票蓝 / 竞选红；有生效会员→勾，否则→小人。
-/// 全体统一显示徽章（含纯访客=橙+小人）。
-///
-/// 勾色默认白。会员与身份已彻底解耦（ADR-036）：底色只取链上身份档，对勾只看会员是否
-/// 有效，二者互不影响（[membershipLevel] 仅保留为调用方签名，不参与着色）。
+/// 身份档配色：访客金 / 投票蓝 / 竞选红，中心为小人；会员档位配色：自由金 / 民主蓝 /
+/// 薪火红，中心为白色对勾。徽章只负责展示，身份和会员的业务资格仍按 ADR-036 独立校验。
 class IdentityBadgeStyle {
   const IdentityBadgeStyle({
     required this.color,
@@ -16,7 +13,7 @@ class IdentityBadgeStyle {
     this.checkColor = Colors.white,
   });
 
-  /// 扇贝底色 = 链上身份档（竞选红 / 投票蓝 / 访客橙）。
+  /// 扇贝底色：无有效会员取身份档，有有效会员取会员档位。
   final Color color;
 
   /// true=有生效会员→显示对勾；false=只有身份/纯访客→显示小人。
@@ -26,24 +23,32 @@ class IdentityBadgeStyle {
   final Color checkColor;
 }
 
-/// 档位对应颜色。
+/// 链上身份档位对应颜色。
 Color _identityTierColor(String? level) => switch (level) {
       'candidate' => AppTheme.identityCandidate,
       'voting' => AppTheme.identityVoting,
       _ => AppTheme.identityVisitor,
     };
 
-/// 计算徽章样式。底色只取身份档，有有效会员时显示白色对勾。
-/// [membershipLevel] 与身份解耦后不参与着色，仅保留兼容调用方签名。
+/// 有效会员档位对应颜色；未知档位返回 null，避免把异常数据误展示为有效会员。
+Color? _membershipTierColor(String? level) => switch (level) {
+      'freedom' => AppTheme.identityVisitor,
+      'democracy' => AppTheme.identityVoting,
+      'spark' => AppTheme.identityCandidate,
+      _ => null,
+    };
+
+/// 计算徽章样式。会员必须同时满足有效态和合法档位才显示会员徽章，否则回落身份徽章。
 IdentityBadgeStyle? identityBadgeStyle({
   required String? identityLevel,
   required String? membershipLevel,
   required bool membershipActive,
 }) {
-  final color = _identityTierColor(identityLevel);
+  final membershipColor =
+      membershipActive ? _membershipTierColor(membershipLevel) : null;
   return IdentityBadgeStyle(
-    color: color,
-    checked: membershipActive,
+    color: membershipColor ?? _identityTierColor(identityLevel),
+    checked: membershipColor != null,
     checkColor: Colors.white,
   );
 }
@@ -51,6 +56,7 @@ IdentityBadgeStyle? identityBadgeStyle({
 /// 徽章无障碍/提示文案。
 String identityBadgeLabel({
   required String? identityLevel,
+  required String? membershipLevel,
   required bool checked,
 }) {
   final base = switch (identityLevel) {
@@ -58,11 +64,17 @@ String identityBadgeLabel({
     'voting' => '投票公民',
     _ => '访客',
   };
-  return checked ? '$base · 会员' : base;
+  final membership = switch (membershipLevel) {
+    'freedom' => '自由会员',
+    'democracy' => '民主会员',
+    'spark' => '薪火会员',
+    _ => null,
+  };
+  return checked && membership != null ? '$base · $membership' : base;
 }
 
 /// 推特式扇贝勋章徽章（四处认证展示点共用）：
-/// 底为身份色扇贝勋章，中心 checked=白色对勾（有会员）/ 否则=白色小人（仅身份）。
+/// 底为身份档或会员档位色，中心 checked=白色对勾（有效会员）/ 否则=白色小人（身份）。
 class IdentityBadge extends StatelessWidget {
   const IdentityBadge({
     super.key,

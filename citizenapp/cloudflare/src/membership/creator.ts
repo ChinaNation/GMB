@@ -215,7 +215,7 @@ function monthStartMs(): number {
 /** GET /square/creator/plan —— 当前钱包的档位；平台订阅门禁在服务端复核。 */
 export async function creatorPlanRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  await requireActiveMembership(env, session.cid_number);
+  await requireActiveMembership(env, session.cid_number, session.account_id);
   return jsonResponse({ plan: await readPlan(env, session.cid_number) });
 }
 
@@ -235,7 +235,7 @@ export async function creatorPlanOfRoute(
 /** GET /square/creator/overview —— 仅统计链时钟下仍有效的订阅关系。 */
 export async function creatorOverviewRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  await requireActiveMembership(env, session.cid_number);
+  await requireActiveMembership(env, session.cid_number, session.account_id);
   const creatorCidNumber = session.cid_number;
   const observedAt = nowMs();
   const countRow = await env.DB.prepare(

@@ -1,9 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import '../support/identity_gate_test_util.dart';
 
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/chat/chat_page.dart';
@@ -23,7 +23,68 @@ const _peerAccountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
 
 void main() {
-  useRegisteredIdentityGate();
+  testWidgets('本地会话未返回时直接显示聊天页面且不使用整页转圈', (tester) async {
+    final store = _PendingChatStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatTab(
+            store: store,
+            cidNumber: _ownerCidNumber,
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('聊天'), findsOneWidget);
+    expect(find.text('搜索会话、联系人和聊天记录'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-sync-progress')), findsOneWidget);
+    expect(find.text('正在读取本地会话'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    store.completer.complete(const <ChatConversationPreview>[]);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('chat-sync-progress')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('聊天记录未返回时直接显示会话页和输入区域', (tester) async {
+    final store = _PendingMessagesStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatPage(
+          conversationId: 'dm:me:peer',
+          ownerCidNumber: _ownerCidNumber,
+          accountId:
+              '0x1111111111111111111111111111111111111111111111111111111111111111',
+          peerUserId: _peerCidNumber,
+          title: '张三',
+          store: store,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('张三'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('chat-peer-profile-entry')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-emoji-toggle')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-page-progress')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    store.completer.complete(const <ChatStoredMessage>[]);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('chat-page-progress')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('聊天标题误传账户时仍按对方 CID 生成稳定默认昵称', (tester) async {
     const peerCidNumber = 'CN220-CTZN2-100000002-2026';
     const peerAccount = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
@@ -294,13 +355,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(runtime.syncCount, 1);
-    expect(store.readPreviewCount, 1);
+    // 首次本地读立即出首屏；发送队列重试完成后再读一次以合并最新状态。
+    expect(store.readPreviewCount, 2);
 
     await tester.pump(const Duration(seconds: 15));
     await tester.pump();
 
     expect(runtime.syncCount, 2);
-    expect(store.readPreviewCount, 2);
+    expect(store.readPreviewCount, 3);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -666,6 +728,9 @@ void main() {
     // 视频封面用 metadata['blurhash'];若误读 message.blurhash(VideoMessage 无此字段)
     // 则渲染空 Container,BlurHash 不出现。
     expect(find.byType(BlurHash), findsOneWidget);
+    // Chat 首帧已经入树时会安排 250ms 的初始滚动，推进到定时器结束，
+    // 避免把组件库的正常滚动任务泄漏到下一条测试。
+    await tester.pump(const Duration(milliseconds: 300));
   });
 
   // ---- 顶栏改造：搜索框 + 加号 5 入口 ----
@@ -879,6 +944,31 @@ class _FakeChatStore extends ChatStore {
   Future<int> outboundQueueCount(String ownerCidNumber) async {
     return 0;
   }
+}
+
+class _PendingChatStore extends _FakeChatStore {
+  final Completer<List<ChatConversationPreview>> completer =
+      Completer<List<ChatConversationPreview>>();
+
+  @override
+  Future<List<ChatConversationPreview>> readConversationPreviews({
+    required String ownerCidNumber,
+    required String currentAccountId,
+  }) =>
+      completer.future;
+}
+
+class _PendingMessagesStore extends _FakeChatStore {
+  final Completer<List<ChatStoredMessage>> completer =
+      Completer<List<ChatStoredMessage>>();
+
+  @override
+  Future<List<ChatStoredMessage>> readMessages({
+    required String ownerCidNumber,
+    required String currentAccountId,
+    required String conversationId,
+  }) =>
+      completer.future;
 }
 
 class _FakeRuntime extends ChatRuntime {

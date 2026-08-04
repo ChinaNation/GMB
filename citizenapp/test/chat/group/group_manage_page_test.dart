@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:citizenapp/chat/group/group_model.dart';
 import 'package:citizenapp/chat/group/ui/group_manage_page.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
@@ -16,6 +18,14 @@ class _FakeStore extends ChatStore {
     String groupId,
   ) async =>
       _group;
+}
+
+class _PendingStore extends ChatStore {
+  final Completer<ChatGroup?> completer = Completer<ChatGroup?>();
+
+  @override
+  Future<ChatGroup?> readGroup(String ownerCidNumber, String groupId) =>
+      completer.future;
 }
 
 ChatGroup _group() => const ChatGroup(
@@ -43,6 +53,37 @@ Future<void> _pump(WidgetTester tester, String cidNumber) async {
 }
 
 void main() {
+  testWidgets('群信息未返回时直接显示管理页结构并禁用退出', (tester) async {
+    final store = _PendingStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GroupManagePage(
+          groupId: 'grp:CN220-CTZN2-100000003-2026:n',
+          store: store,
+          cidNumber: 'CN220-CTZN2-100000003-2026',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('群聊'), findsOneWidget);
+    expect(find.text('成员 -- / 1989'), findsOneWidget);
+    expect(find.text('正在读取群聊信息'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('group-manage-load-progress')),
+      findsOneWidget,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    final leave = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '退出群聊'),
+    );
+    expect(leave.onPressed, isNull);
+
+    store.completer.complete(_group());
+    await tester.pumpAndSettle();
+    expect(find.text('测试群'), findsOneWidget);
+    expect(find.text('成员 2 / 1989'), findsOneWidget);
+  });
   testWidgets('admin 可见 添加 / 移除 / 改群名', (tester) async {
     await _pump(tester, 'CN220-CTZN2-100000003-2026');
     expect(find.text('添加'), findsOneWidget);

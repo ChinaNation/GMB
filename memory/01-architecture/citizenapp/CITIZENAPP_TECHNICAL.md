@@ -156,6 +156,13 @@ citizenapp 不采用“首启强制弹出全部权限”的模式，按平台权
 citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 永久 `cid_number` 聊天身份 + 当前绑定账户签名鉴权 + Cloudflare 瞬时转发 + WebRTC 设备附件 + 近场无网点对点通信”架构：
 
 - 用户入口：公民端在“多签”Tab 与“交易”Tab 之间提供“聊天”Tab；互联网聊天和近场聊天的消息都在“聊天”Tab 集中显示，用户不选择底层通信模式。聊天页顶栏为“搜索框 + 右上角加号”：搜索框进独立搜索页（会话 / 联系人 / 聊天记录三段）；加号弹出五个入口——扫一扫、收付款、发私信、发群聊、加好友。五者全部复用既有链路（交易扫码统一分派、全 App 唯一用户二维码、通讯录选人、建群、扫码加好友），聊天页不自建重复实现。
+- 聊天 Tab 第一帧必须直接渲染标题、搜索和本地会话区域；本地读取、发送队列重试和网络同步
+  只显示非阻塞顶部细进度，不得用全屏转圈或身份门替换页面。私信、群聊和加好友在动作发生
+  时校验热钱包与 CID，浏览页面不以链读取结果为前置条件。
+- 聊天二级页面遵守同一首帧契约：会话页先构建消息区和输入区，再读取本地消息并同步网络；
+  搜索页先显示输入框和提示；建群页先显示群名称、成员选择和创建按钮；群管理页先显示标题、
+  成员容量和退出入口。读取期间统一使用顶部细进度并禁用依赖真实数据的动作，只有用户主动
+  执行同步、创建、上传或删除等动作时，才允许在对应按钮或动作区域显示受限加载反馈。
 - 聊天身份：用户可见且永久的聊天身份是 `cid_number`；当前绑定 `account_id` 只负责
   设备登记签名、会话鉴权和聊天内付款。进入 Chat 页面不检查或生成设备子钥；已有 P-256
   子钥与设备用途钥直接静默使用。只有真实登录被 Worker 明确拒绝为
@@ -171,6 +178,8 @@ citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 永
   历史私有数据；只有同次换绑取得当前账户签名时，客户端才执行端内重加密交接。
   Worker 不持有任何用户数据密钥，也不能读取联系人 CID、账户、SS58 或私人备注。
   扫码添加只接受用户码：先把码内账户经链上双向绑定解析成 CID，收款码不得兼作联系人码。
+  通讯录第一帧直接展示标题、搜索和本地内容区域，本地密文读取与云端同步不得用全屏转圈
+  阻塞页面；扫码写入联系人前再严格读取链上身份。
 - 附件：Worker 只转发 SDP/ICE，附件经 WebRTC DTLS DataChannel 设备间传输；Chat 禁止使用 R2。
 - 近场通信：不设计独立“局域网模式”，不要求同一路由器；Android 优先 Nearby Connections，必要时回退 Wi-Fi Direct / Wi-Fi Aware / BLE；iOS 使用 Multipeer Connectivity；Android 与 iOS 跨平台近场通过 BLE GATT 做发现和短消息控制。
 - 删除边界：区块链节点聊天、桌面通信节点设置、手机节点配对和云端聊天内容存储均不得恢复。
@@ -324,6 +333,10 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - 列表行默认最小触控高度 48；纯图标操作的可点击区域不得小于 44×44。
 - 设计基准画布为 390×844；同时必须保证 320 逻辑像素宽度下不溢出，并正确适配
   SafeArea。设计效果图只展示 App 内容时，不绘制设备外框、系统状态栏或系统手势条。
+- 主 Tab 的系统状态栏样式由 `AppShell` 按当前选中页单源控制，不能依赖保活子页留下的
+  上一次样式：广场、公民、聊天、交易的浅色背景使用深色图标，“我的”照片头部使用白色
+  图标并在顶部安全区叠加固定暗色渐隐，保证任意用户背景图下时间、信号和电池均可读。
+  普通 AppBar 子路由继续使用浅色栏面和深色图标；Android/iOS 明暗字段必须成对设置。
 
 ##### 4.1.1.5 底部导航硬规则
 
@@ -393,10 +406,11 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
   `assets/profile_defaults/` 稳定选择默认照片。
 - 头像右下角统一使用 `IdentityBadge` 的 8 花瓣扇贝勋章，不得重画成盾牌、圆环、贝壳、
   星章或认证 V。
-- 扇贝底色只表达链上身份：访客金、投票蓝、竞选红。
-- 中心符号只表达会员有效态：有效会员为白色对勾；无有效会员为白色小人。
-- 身份与会员是两个独立信号；不得用会员档改变身份底色，也不得用徽章替代真实业务资格
-  校验。
+- 无有效会员时，扇贝底色表达链上身份：访客金、投票蓝、竞选红，中心为白色小人。
+- 有效会员同时具备合法会员档位时，扇贝改为对应会员档位色：自由金、民主蓝、薪火红，
+  中心为白色对勾；有效态与档位缺一时失败关闭并回落身份徽章。
+- 身份与会员仍是两个独立业务信号；会员徽章只改变头像展示，不得替代身份或会员的真实
+  业务资格校验。
 
 ##### 4.1.1.9 卡片、列表与状态
 
@@ -432,6 +446,9 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
   主页。
 - 钱包、电子护照作为等高紧凑双列主入口，整体靠近头部，不保留过大的无意义空白。
 - “会员｜订阅 / 创作者 / 通讯录”放入一个“个人服务”分组列表；设置使用独立分组。
+- 个人服务页面第一帧直接显示页面结构：会员显示三张内置卡片；创作者显示不可编辑的概览与
+  档位结构；通讯录显示搜索和本地内容区域。后台状态未决时只允许非阻塞顶部细进度，禁止
+  全屏身份门或圆形转圈；订阅、创作者档位保存和联系人写入继续在动作边界严格校验。
 - 底部五个 Tab 严格遵守本节导航硬规则，不因单页视觉稿重新生成图标。
 
 ##### 4.1.1.11 四个主页面落地基线
@@ -474,6 +491,10 @@ CitizenApp 页面，必须先读取本节、目标页面现有实现和对应模
 - `8964/`：底部“广场”Tab 目录，承载图文/视频动态、推荐、关注、竞选分类和发布入口
 - `citizen/public/`：公权机构地理浏览与关注组
 - `citizen/governance/`：治理 tab 壳和 NRC/PRC/PRB 浏览入口
+- 公民二级页面第一帧必须直接显示自身标题、固定卡片、地区导航和稳定内容区。治理机构、
+  公权目录、城市机构列表、立法目录、法律列表及法律阅读器的数据读取只使用顶部细进度与
+  明确读取文案，不得用整页圆形转圈替换页面；读取失败保留页面定位和重试入口。依赖真实
+  数据的机构入口在数据到达前保持禁用，缓存和页面壳不得被当作链上授权真源。
 - `citizen/proposal/`：统一发起提案入口与各提案页面
 - `citizen/institution/`：机构身份/账户/管理员**只读**链访问核心 + ADR-028 统一机构模型(机构创建/关闭已收归 onchina 控制台 + 冷钱包)
 - `transaction/multisig-transfer/`：机构(公权/私权)+ 个人**共用**多签转账交易
@@ -542,18 +563,19 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 当前代码已提供推荐、关注、竞选三分类前端壳、发布页和详情页；目标状态为用户图文/视频动态广场，不承载个人多签、机构账户或提案列表逻辑。
 - 广场用户身份统一使用 `cid_number`；会员、关注关系、推荐信号、发布草稿和上传任务都归属
   CID。`account_id` 只表示当前绑定签名钱包或某笔不可变链上事实的签名者。
-- 会员体系为三档（ADR-036，**会员与身份彻底解耦**）：自由会员 `freedom`、民主会员 `democracy`、薪火会员 `spark`。`membership_level` 是纯付费订阅轴，任意身份可订阅任意会员档；发帖分类权限按链上身份，Cloudflare 用量额度按平台会员档，两个权限轴互不替代。平台价格唯一真源为 finalized `SquarePost::PlatformPrice`，付款统一使用链上公民币；CitizenApp 保留三张会员卡，在 App 内完成订阅、取消和换档的一次热钱包签名，不打开外部支付页面。权益口径为未陈旧 finalized 链时钟下仍未到 `paid_until` 的 `Active` 或 `Cancelled`；`Terminated`、过期、缺失或陈旧镜像全部拒绝。
+- 会员体系为三档（ADR-036，**会员与身份彻底解耦**）：自由会员 `freedom`、民主会员 `democracy`、薪火会员 `spark`。`membership_level` 是纯付费订阅轴，任意身份可订阅任意会员档；发帖分类权限按链上身份，Cloudflare 用量额度按平台会员档，两个权限轴互不替代。平台价格唯一真源为 finalized `SquarePost::PlatformPrice`，付款统一使用链上公民币；CitizenApp 保留三张会员卡，在 App 内完成订阅、取消和换档的一次热钱包签名，不打开外部支付页面。权益口径为未陈旧 finalized 链时钟下仍未到 `paid_until` 的 `Active` 或 `Cancelled`。普通展示读取对 `Terminated`、过期、缺失或陈旧镜像失败关闭；发布等授权入口在即将拒绝时，必须按当前 Session `cid_number` 点查一次 finalized 订阅并原子重建 D1 镜像，复核后仍无效才拒绝。
 - 会员页三张套餐卡及权益字段是 App 内置静态界面，进入页面第一帧直接渲染，不等待会话、
   Cloudflare 或轻节点。按 `cid_number` 持久化 finalized 订阅展示快照；三档链上价格是平台级
   公共缓存：订阅态缓存 5 分钟、价格缓存 30 分钟，有效期内不重复链读，过期后只在后台
   更新动态字段。首次无缓存时价格显示占位且订阅按钮禁用。手动刷新以及订阅、换档、取消等
-  动权操作必须绕过展示缓存重新核验 finalized 状态和价格；Cloudflare 回执镜像重试不得
-  阻塞页面链读。
+  动权操作必须绕过展示缓存重新核验热钱包、CID、finalized 状态和价格；页面查看不得套用
+  共享全屏身份门或其它全屏链读门禁，自动首刷也不得用转圈替换卡片或工具栏。
+  Cloudflare 回执镜像重试不得阻塞页面链读。
 - 认证用户必须同时满足钱包反查永久 CID、CID Active、CID↔钱包双向绑定一致和 `VotingIdentityByCid` 完整有效；任一条件缺失都是未认证。身份认证与会员档位彼此独立（ADR-036）。普通动态 / 普通文章三档会员都可发布但额度不同；竞选动态 / 竞选文章必须由完整 `CandidateIdentityByCid` 派生的竞选身份（`candidate`）发布，与会员档无关。runtime `SquarePost::publish_post`、App（compose / SquarePublishService）和 Worker（`prepareUpload` / `confirm`）三层都校验竞选身份；仅有投票身份或匿名 CID 一律拒绝竞选内容。
 - 广场默认分类为推荐；用户可切换关注、竞选，后续可按产品需要增加最新分类。推荐流初期只做可解释规则，不做黑盒模型。
 - 广场媒体内容不存链上，不改造 CitizenChain 全节点存储媒体；`manifest.json` 存 Cloudflare R2，图片/首图经 Worker 有界校验后由服务端写 Cloudflare Images，视频全部使用绑定精确字节和最长时长的 Cloudflare Stream TUS，经签名 Images delivery / Stream playback URL 访问。
 - CitizenChain 负责发布交易入块、统一链上交易收费、竞选发布权限校验、发布索引和事件；`SquarePost` pallet index 为 `34`、发布 call index 为 `0`。同一 pallet 的订阅 call、状态、价格、扣款和自动续费契约见 P-TX-014/P-STORAGE-006。
-- Cloudflare Worker 负责设备子钥钱包登录、finalized 订阅镜像与权益门禁、链上身份资格校验、加密通讯录密文 CRUD、统一资源限制、D1 原子额度预留、R2/Images/Stream 写入、上传回执、Stream webhook 实际时长/分辨率复核、链上发布事件确认、帖子删除和 feed。登录 Session 不读取 `System.Account` 或余额；链身份/余额只在需要它的业务入口校验。登录挑战先以 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期必须同时命中；并发重放只允许一个 Session，后续 KV 写入失败也不恢复挑战并删除孤立 Session。设备子密钥登记只接受五分钟窗口内的安全整数 `issued_at`，同一账户用条件 UPSERT 保证严格单调更新，拒绝重复与回滚。`citizenapp/cloudflare/src/limits/catalog.ts` 是所有请求体、文件、账户数量、周期用量和出站载荷的唯一硬上限；环境变量只能收紧。`POST /square/uploads/prepare` 在调用媒体提供商前先用未陈旧链时钟校验平台订阅，再原子预留活动上传数、订阅周期图片数和视频秒数；`complete` 核销一次，删除帖子只回收实际存储总量而不返还周期上传额度。帖子删除、权益到期和注销释放存储总量时，`resource_totals` 扣减必须与对应媒体/内容索引删除处于同一 D1 原子 batch，禁止先释放后删除。
+- Cloudflare Worker 负责设备子钥钱包登录、finalized 订阅镜像与权益门禁、链上身份资格校验、加密通讯录密文 CRUD、统一资源限制、D1 原子额度预留、R2/Images/Stream 写入、上传回执、Stream webhook 实际时长/分辨率复核、链上发布事件确认、帖子删除和 feed。登录 Session 不读取 `System.Account` 或余额；链身份/余额只在需要它的业务入口校验。登录挑战先以 D1 条件更新原子消费，账户、挑战编号、未消费状态和有效期必须同时命中；并发重放只允许一个 Session，后续 KV 写入失败也不恢复挑战并删除孤立 Session。设备子密钥登记只接受五分钟窗口内的安全整数 `issued_at`，同一账户用条件 UPSERT 保证严格单调更新，拒绝重复与回滚。`citizenapp/cloudflare/src/limits/catalog.ts` 是所有请求体、文件、账户数量、周期用量和出站载荷的唯一硬上限；环境变量只能收紧。`POST /square/uploads/prepare` 在调用媒体提供商前调用统一 `requireActiveMembership`：有效镜像直接放行，即将拒绝时对当前 CID 做 finalized 点查，使用同一 D1 batch 更新 `chain_clock` 与 `square_memberships`，并以 finalized 区块号阻止旧结果覆盖新镜像；链服务或镜像重建异常返回 `503 membership_verification_unavailable`，链上确认无有效会员才返回 402。门禁通过后再原子预留活动上传数、订阅周期图片数和视频秒数；`complete` 核销一次，删除帖子只回收实际存储总量而不返还周期上传额度。帖子删除、权益到期和注销释放存储总量时，`resource_totals` 扣减必须与对应媒体/内容索引删除处于同一 D1 原子 batch，禁止先释放后删除。
 - 广场用户业务以 `cid_number` 为唯一稳定主键：帖子归属/计数、平台订阅、续费索引、
   创作者套餐和创作者订阅关系均直接使用 CID。`account_id` 只用于当前链交易签名、首次扣款、
   自动续费时由 CID 解析出的当前付款/收款账户及不可变审计；换绑后不得读取或扣取历史账户。
@@ -573,7 +595,13 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   此前实时连接。旧实时连接关闭失败时设备登记必须返回 503，禁止报告收敛成功。App 随后
   使 Square Session 只保留新三元组，完整关闭此前 Chat HTTP/WebSocket/MLS 上下文，再建立
   新绑定上下文。清理不是第二套控制权授权，也不接收任何此前账户材料。
-- App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
+- App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；普通会员展示读取只查 D1 镜像，发布按钮与上传流程请求 `verify_on_deny=1`，让 Worker 在拒绝前按 CID 复核 finalized 订阅。App 只消费服务端结果，不上传或自证会员资格；402 显示确实无有效会员，401 提示重新登录，503、网络或空响应统一显示“暂时无法验证会员状态”，禁止再吞成 `null` 后误报无会员。manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
+- 广场冷启动第一帧必须直接渲染分类栏、水印、内容区域和发布按钮；Square Session、feed
+  与通知轮询在页面显示后后台启动，只允许以非阻塞顶部细进度表示首拉，不得设置全屏身份门
+  或圆形转圈。发布动作发生时才严格读取真实链上热钱包与 CID，再复核 finalized 会员。
+  分类请求在创建时固定 `feedKind` 与加载代际，迟到结果不得覆盖当前分类状态。
+  Worker 明确返回 401 时，`SquareSessionProvider.refreshSession` 清除当前身份账户的缓存并只
+  重新握手一次；第二次失败进入正常错误界面，禁止无限重试。
 - 本人已发布内容以 `SquareLocalPostEntity` / `SquarePostStore` 保存规范 manifest 原始字节和
   不可变发布锚，归属主键为 `cid_number`，不保存媒体文件或公共 feed。发布确认成功后立即
   写本地；磁盘失败不把远端成功改判为发布失败，而是告警并调度
@@ -584,11 +612,17 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   不猜测 URL。单帖删除、文章删除和编辑替换统一按 session `cid_number` 执行远端优先删除；
   仅 `404/post_not_found` 可继续清同 CID 本地残留。注销服务端成功后按 CID 删除副本与
   检查点，并继续尝试其余全部本地清理。
+- 用户主页由父页唯一持有 Session Future 和 `sessionResolved` 状态；首次握手完成前，五个
+  `ProfilePostsTab` 禁止向需要 Bearer Session 的作者帖子接口抢跑。本人 Tab 可先读一次本地
+  已校验副本，Session 到达后只补远端；他人 Tab 保持加载态。Tab 在 Session、CID、分类或
+  内容过滤契约变化时通过 `didUpdateWidget` 自动重置分页并重载，不再依赖切换标签恢复。
+  每次加载使用单调代际丢弃迟到响应，401 只委托父页刷新一次 Session；空态和失败态均支持
+  下拉重试，无可用钱包时显示明确的钱包会话提示。
 - Worker 链上游由 `citizenapp/cloudflare/src/chain/rpc.ts` 通过 `CHAIN_URL` 与两项 `CHAIN_ID / CHAIN_SECRET` Secret 访问 Access 保护的 HTTPS 服务。内部方法白名单只包含 finalized storage、签名交易广播、区块头/区块体/规范区块哈希读取所需方法，不接收 App 指定的 method 或 RPC URL。订阅镜像必须复核完整已签名 extrinsic 的 finalized 区块包含关系和同一区块 storage；发布确认继续交叉校验链上事件、上传记录和 R2 manifest。
 - 阶段 6 已在 App 端改为正式 feed 口径：`SquarePublishService` 链上入块后调用 Worker `POST /square/posts/confirm`，`SquareHomePage` 默认和分类切换均通过 `SquareApiClient.fetchFeed()` 拉取 Worker 推荐、关注、竞选 feed。
 - App 发布页已支持图片/视频选择、热钱包本机签名和冷钱包 QR 签名；动态页限制 300 字、最多 9 张图片和 1 个视频；文章页限制标题 10-50 字、正文 UI 上限 30000 字、正文图 UI 上限 100 张，并支持普通文章 / 竞选文章选择。竞选内容在 App 端先按 finalized 永久 CID 身份闭环做基础拦截，竞选公民会员资格由 Worker 再按当前会员状态强制校验。
 - 阶段 5 的 R2 manifest 是 App 先生成的规范化内容清单，字段包含 `schema`、`account_id`、`post_category`、可选 `content_format`、可选 `title`、`text`、`media_items[].file_name/content_type/byte_size/sha256`；`content_format` 默认 `normal`，文章写 `article`，链上仍只写 `post_category`。`post_id`、`storage_receipt_id` 和 manifest R2 object key 由 Worker/D1 的 `square_uploads` 记录维护，Images/Stream asset id、provider、状态和播放地址由 `square_media_assets` 维护，不要求 App 在 prepare 前伪造。
-- `storage_until` 由 App 读取 Worker 的 finalized 会员镜像字段 `membership.paid_until` 后写入链上发布交易；Worker prepare 已先执行同一未陈旧订阅门禁，响应返回预生成 `storage_receipt_id`，complete 响应返回同一个回执。Worker 不托管钱包资金、不签链上交易，也不计算订阅日期。
+- `storage_until` 由 App 读取 Worker 经拒绝前 finalized 复核的会员镜像字段 `membership.paid_until` 后写入链上发布交易；Worker prepare、complete 与 confirm 继续调用同一个会员授权门禁，响应返回预生成 `storage_receipt_id`，complete 响应返回同一个回执。Worker 不托管钱包资金、不签链上交易，也不计算订阅日期。
 - Worker 工程位于 `citizenapp/cloudflare/`，功能目录包括 `auth/`、`membership/`、`contacts/`、`limits/`、`uploads/`、`storage/`、`posts/`、`feeds/`、`chat/` 和 `moderation/`。所有外部方法/path 先匹配路由白名单和正文上限，未知路由不得进入 D1。
 - R2 路径中的 `account_id_hex` 固定为规范 `account_id` 去掉 `0x` 后的 64 位小写十六进制，入口严格校验完整 AccountId，不执行清洗、大小写归一或 SS58 转换。广场 manifest 的 R2 object key 固定使用 `square/{account_id_hex}/posts/{post_id}/manifest.json`；头像、背景和 manifest 只通过同域 Worker 上传。图片不生成 R2 主媒体 key，由 Worker 写 Images；视频只拿 Stream TUS 地址。不存在 R2 PUT 预签名、Images 客户端直传或本地开发代理分支。
 - Worker D1 使用 `chain_clock`、`square_memberships`、`square_creator_tiers`、`square_creator_subscriptions` 和 `chain_transaction_confirmations` 保存可重建 finalized 镜像与最小交易证明，并使用 `resource_reservations`、`resource_usage`、`resource_totals` 强制资源额度；`square_media_assets.resource_key` 指向统一限制表。KV session、session index 和身份缓存写入前同样校验实际 JSON 字节。Cloudflare API token、Stream webhook secret 和链 RPC 地址只放部署环境。
@@ -613,7 +647,7 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   节点重建不改变 Tunnel、Access、域名或网关地址。2026-08-01 重新创世后必须按新锚点
   重建节点，并在部署收口时重新实测 Tunnel 链路返回该创世。
 - Cloudflare 唯一 API 入口为 `https://www.crcfrcn.com/api`。2026-07-26 已把配置收敛为
-  单一 production Worker，远端只保留 production D1、KV、两个 R2 桶、通知队列和 16 项
+  单一 production Worker，远端只保留 production D1、KV、两个 R2 桶、通知队列和 14 项
   Worker Secret；staging Worker、路由、Access 应用、D1、KV、两个 R2 桶和队列已彻底
   删除。`/api` 只属于部署入口层，App 与 Worker 内部业务路径统一为无版本的 `/square`、
   `/chat`、`/chain`、`/security`；禁止恢复已废弃的版本路径、双轨路由或兼容分支。2026-08-02
@@ -658,6 +692,18 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   该目录属于本机私有运维工具，整目录由 Git 忽略，不得提交或推送 GitHub。生产部署逐次
   通过 Touch ID，Secret 只保存在 macOS Data Protection Keychain、Cloudflare Worker
   Secret 或 GitHub Secrets。
+- 公民云日常控制台只保留 Worker“生产部署”和“官网部署”。Worker 发布不读取
+  `CF_DATA_TOKEN`，也不存在 D1、KV、R2、Queue 全量清空或重建能力；数据恢复属于隔离的
+  灾难恢复边界，必须使用独立权限、独立方案和再次确认，不能复用发布按钮。
+- Worker 生产发布在一次 Touch ID 后先运行锁定依赖安装、零漏洞审计、类型生成、TypeScript 检查和全量
+  自动化测试；生产 Secret 在这些本地门禁结束前只停留在匿名管道，所有 npm 子进程 stdin
+  关闭。门禁通过后，代码、配置和 14 项必需 Worker Secret 通过 `--secrets-file` 原子上传为
+  不承载普通流量的候选版本，禁止逐项 `secret put` 生成可见中间版本。
+- 发布前要求当前流量由单一旧版本 100% 承载；候选先以 0% 加入部署，CitizenConsole 使用
+  `Cloudflare-Workers-Version-Overrides` 经正式域名访问 `/api/health`，并核对
+  `CF_VERSION_METADATA.id` 精确等于候选 version id。通过后候选一次切至 100%，切流后再次
+  核对 version id；任一步失败自动恢复旧版本 100%。`wrangler.toml` 与唯一 D1 schema 的
+  受审哈希不一致时普通发布失败关闭，持久资源或数据库结构变更必须走独立方案。
 - `citizenapp/cloudflare/schema/citizenapp.sql` 是 Cloudflare 唯一无版本创世 schema；
   仓库不保留增量 migration、升级日志、schema 版本标识或废弃 schema。创世冻结前只允许
   用当前单一 schema 重建数据库；生产数据库变更必须停止发布并单独审查、人工确认执行目标。
@@ -745,9 +791,9 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
 - 广场与 Chat 后台登录只使用无生物门禁、不可导出的硬件 P-256 设备子钥签名，不读取
   child mini-secret。iOS 设备子钥同样在 Secure Enclave 生成，每个 `walletIndex` 一把。
 - P-256 设备子钥与本地设备数据钥按**各自的实际缺钥**独立初始化，两者不在建钱包、
-  CID finalized 或页面门禁时生成。
-  `IdentityRegistrationGate` 只判断 CID，registered 直接放行，不增加任何设备子钥页面、
-  按钮或门禁状态。已有 P-256 子钥与设备用途钥直接静默使用。
+  CID finalized 或页面浏览时生成。广场、聊天、创作者、通讯录和会员页面不设置共享全屏
+  身份门；需要身份或设备能力的写操作在动作边界严格校验。已有 P-256 子钥与设备用途钥
+  直接静默使用。
   `WalletManager.ensureDeviceDataKeysForBinding` 只在真实数据访问发现用途钥缺失或硬件封装
   失效时派生并封装本地数据钥，不调用 Worker、Turnstile 或设备登记；
   `WalletManager.registerDeviceSubkeyForBinding` 只在真实登录被 Worker 明确拒绝为

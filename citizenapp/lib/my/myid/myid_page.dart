@@ -626,7 +626,7 @@ class _PassportFieldRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: 126,
+                  width: 76,
                   child: Text(
                     field.label,
                     style: const TextStyle(
@@ -637,11 +637,11 @@ class _PassportFieldRow extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     field.value ?? '—',
-                    textAlign: TextAlign.right,
+                    textAlign: TextAlign.left,
                     style: TextStyle(
                       fontSize: field.mono ? 12 : 13,
                       height: 1.4,

@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/identity_gate_test_util.dart';
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/pages/square_home_page.dart';
@@ -35,6 +36,30 @@ class _FakeWalletManager extends WalletManager {
   @override
   Future<WalletProfile?> getDefaultWallet() async => wallet;
 }
+
+const _registeredWallet = WalletProfile(
+  walletIndex: 1,
+  walletName: '测试钱包',
+  walletIcon: '',
+  balance: 0,
+  ss58Address: 'gmb_test_account_id',
+  accountId:
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  alg: 'sr25519',
+  ss58: 2027,
+  createdAtMillis: 1,
+  source: 'test',
+  signMode: 'local',
+);
+
+SquareIdentityService _registeredIdentityService({
+  _FakeSquareChainService? chainService,
+}) =>
+    SquareIdentityService(
+      walletManager: _FakeWalletManager(_registeredWallet),
+      chainService:
+          chainService ?? _FakeSquareChainService('CN220-CTZN2-100000001-2026'),
+    );
 
 class _FakeSquareChainService extends SquareChainService {
   _FakeSquareChainService(this.cidNumber);
@@ -95,6 +120,7 @@ class _FakeSquareApiClient extends SquareApiClient {
 /// 记录最近一次请求的分类，用于断言分类切换真的按 feedKind 重新拉流。
 class _RecordingFeedSource implements SquareFeedSource {
   SquareFeedKind? lastFeedKind;
+  int calls = 0;
 
   @override
   Future<List<SquarePost>> fetchFeed({
@@ -102,8 +128,25 @@ class _RecordingFeedSource implements SquareFeedSource {
     int limit = 20,
     SquareSession? session,
   }) async {
+    calls++;
     lastFeedKind = feedKind;
     return const <SquarePost>[];
+  }
+}
+
+/// 控制 feed 完成时机，验证网络未返回时页面结构仍已显示。
+class _PendingFeedSource implements SquareFeedSource {
+  final Completer<List<SquarePost>> completer = Completer<List<SquarePost>>();
+  int calls = 0;
+
+  @override
+  Future<List<SquarePost>> fetchFeed({
+    required SquareFeedKind feedKind,
+    int limit = 20,
+    SquareSession? session,
+  }) {
+    calls += 1;
+    return completer.future;
   }
 }
 
@@ -160,13 +203,42 @@ Widget _wrap(Widget child) {
 }
 
 void main() {
-  useRegisteredIdentityGate();
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     IdentityAccountCache.debugInstance = _NullIdentityCache();
   });
 
   tearDown(IdentityAccountCache.resetDebugInstance);
+
+  testWidgets('feed 未返回时直接显示广场页面且不使用整页转圈', (tester) async {
+    final feedSource = _PendingFeedSource();
+
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: SquareIdentityService(
+          walletManager: _FakeWalletManager(null),
+        ),
+        feedSource: feedSource,
+        membershipLoader: () async => null,
+      )),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(feedSource.calls, 1);
+    expect(find.byTooltip('发布动态'), findsOneWidget);
+    expect(find.byKey(const ValueKey('square-tank-watermark')), findsOneWidget);
+    expect(find.byKey(const ValueKey('square-feed-progress')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('广场内容加载失败'), findsNothing);
+
+    feedSource.completer.complete(const <SquarePost>[]);
+    await tester.pumpAndSettle();
+
+    expect(feedSource.calls, 1);
+    expect(find.byKey(const ValueKey('square-feed-progress')), findsNothing);
+    expect(find.text('广场内容加载失败'), findsNothing);
+  });
 
   testWidgets('广场顶部删旧标题/空态字、显示坦克水印与左上头像并可切换分类', (tester) async {
     final identityService = SquareIdentityService(
@@ -283,26 +355,9 @@ void main() {
   });
 
   testWidgets('无订阅钱包禁止打开任何发布页', (tester) async {
-    final chainService = _FakeSquareChainService(null);
-    final identityService = SquareIdentityService(
-      walletManager: _FakeWalletManager(
-        const WalletProfile(
-          walletIndex: 1,
-          walletName: '测试钱包',
-          walletIcon: '',
-          balance: 0,
-          ss58Address: 'gmb_test_account_id',
-          accountId:
-              '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          alg: 'sr25519',
-          ss58: 2027,
-          createdAtMillis: 1,
-          source: 'test',
-          signMode: 'local',
-        ),
-      ),
-      chainService: chainService,
-    );
+    final chainService = _FakeSquareChainService('CN220-CTZN2-100000001-2026');
+    final identityService =
+        _registeredIdentityService(chainService: chainService);
 
     await tester.pumpWidget(
       _wrap(SquareHomePage(
@@ -322,11 +377,69 @@ void main() {
     await tester.tap(find.byTooltip('发布动态'));
     await tester.pumpAndSettle();
 
-    // 无订阅时服务入口立即阻断，不打开类型选择或编辑器，也不触发链身份查询。
+    // 发布动作先做一次真实链身份校验，再由会员门禁阻断，不打开编辑器。
     expect(find.text('需要有效会员才能发布广场内容'), findsOneWidget);
     expect(find.text('发动态'), findsNothing);
     expect(find.text('发文章'), findsNothing);
-    expect(chainService.fetchIdentityCount, 0);
+    expect(chainService.fetchIdentityCount, 1);
+  });
+
+  testWidgets('会员 finalized 验证异常时提示稍后重试，不误报无会员', (tester) async {
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: _registeredIdentityService(),
+        feedSource: const _FakeFeedSource(),
+        membershipLoader: () async => throw const SquareApiException(
+          '暂时无法验证会员状态，请稍后重试',
+          statusCode: 503,
+          errorCode: 'membership_verification_unavailable',
+        ),
+      )),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('发布动态'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('暂时无法验证会员状态，请稍后重试'), findsOneWidget);
+    expect(find.text('需要有效会员才能发布广场内容'), findsNothing);
+  });
+
+  testWidgets('会员状态缺失时提示验证失败，不把 null 当成无会员', (tester) async {
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: _registeredIdentityService(),
+        feedSource: const _FakeFeedSource(),
+        membershipLoader: () async => null,
+      )),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('发布动态'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('暂时无法验证会员状态，请稍后重试'), findsOneWidget);
+    expect(find.text('需要有效会员才能发布广场内容'), findsNothing);
+  });
+
+  testWidgets('会员检查会话失效时提示重新登录', (tester) async {
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: _registeredIdentityService(),
+        feedSource: const _FakeFeedSource(),
+        membershipLoader: () async => throw const SquareApiException(
+          '钱包登录态已过期',
+          statusCode: 401,
+          errorCode: 'expired_session',
+        ),
+      )),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('发布动态'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('广场登录状态已失效，请重试'), findsOneWidget);
   });
 
   group('关注流', () {

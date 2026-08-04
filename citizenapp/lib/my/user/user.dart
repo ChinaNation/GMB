@@ -78,7 +78,7 @@ class _ProfilePageState extends State<MyTab> {
   /// 每个 MyTab 生命周期同一 CID 最多后台刷新一次；反复进入页面只读缓存。
   String? _profileRefreshCid;
 
-  /// 默认钱包的会员购买态（徽章「勾」）；best-effort，读失败为 null。
+  /// 默认钱包的会员购买态（档位色 + 对勾）；best-effort，读失败为 null。
   late final SquareApiClient _squareApi;
   SquareMembershipState? _membership;
 
@@ -600,6 +600,29 @@ class _ProfilePageState extends State<MyTab> {
                       path: _userProfile.backgroundPath,
                       height: headerHeight,
                       seed: _communicationAccountId,
+                    ),
+                  ),
+                  // 用户可选任意明暗的背景图；状态栏区域固定叠加暗色渐隐，保证白色
+                  // 时间、信号和电池图标不会落在浅色天空或高光区域后失去对比度。
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: topPadding + 72,
+                    child: const IgnorePointer(
+                      child: DecoratedBox(
+                        key: ValueKey('my-header-status-bar-scrim'),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0x66000000),
+                              Color(0x00000000),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   Positioned(

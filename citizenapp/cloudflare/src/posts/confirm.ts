@@ -150,7 +150,11 @@ export async function confirmPublishedPost(
   body: ConfirmRequest
 ): Promise<SquarePostFeedItem> {
   // 发布确认是最后一道服务端闸门；会员在上传后失效也不得把链上事件投影为广场内容。
-  const membership = await requireActiveMembership(env, session.cid_number);
+  const membership = await requireActiveMembership(
+    env,
+    session.cid_number,
+    session.account_id,
+  );
   if (typeof body.post_id !== 'string' || body.post_id.trim().length === 0) {
     throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
   }

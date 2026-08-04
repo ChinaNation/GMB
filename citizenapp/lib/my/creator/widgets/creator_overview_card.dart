@@ -6,9 +6,16 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 创作者概览卡：订阅人数 + 预计月收入（金色锚点）+ 预计提示。
 class CreatorOverviewCard extends StatelessWidget {
-  const CreatorOverviewCard({super.key, required this.overview});
+  const CreatorOverviewCard({
+    super.key,
+    required this.overview,
+    this.resolved = true,
+  });
 
   final CreatorOverview overview;
+
+  /// false 表示首帧尚在后台同步，只展示稳定骨架，不把未知状态误写成“已开通”。
+  final bool resolved;
 
   @override
   Widget build(BuildContext context) {
@@ -47,9 +54,13 @@ class CreatorOverviewCard extends StatelessWidget {
                   color: AppTheme.primary.withAlpha(24),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('已开通',
-                    style:
-                        TextStyle(fontSize: 11, color: AppTheme.primaryDark)),
+                child: Text(
+                  resolved ? '已开通' : '同步中',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.primaryDark,
+                  ),
+                ),
               ),
             ],
           ),
@@ -59,7 +70,7 @@ class CreatorOverviewCard extends StatelessWidget {
               Expanded(
                 child: _stat(
                   '订阅人数',
-                  overview.subscriberCount.toString(),
+                  resolved ? overview.subscriberCount.toString() : '--',
                   AppTheme.primary,
                 ),
               ),
@@ -67,7 +78,9 @@ class CreatorOverviewCard extends StatelessWidget {
               Expanded(
                 child: _stat(
                   '本月已收入',
-                  '${fenToYuanLabel(overview.monthIncomeFen)} 元',
+                  resolved
+                      ? '${fenToYuanLabel(overview.monthIncomeFen)} 元'
+                      : '--',
                   AppTheme.gold,
                 ),
               ),

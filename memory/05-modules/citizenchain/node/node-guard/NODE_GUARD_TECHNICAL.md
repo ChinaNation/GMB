@@ -255,6 +255,10 @@ PoW 难度调整不再属于 NodeGuard 策略；节点共识仍从链上读取�
 - WASM CI 从空 `target` 编译正式候选产物，并在上传前通过 `WASM_FILE` 把同一份
   `citizenchain.compact.compressed.wasm` 交给该行为测试。测试通过只证明该次候选产物，
   不允许拿其它本地构建或 benchmark WBUILD 缓存替代。
+- 行为测试使用 `cargo test -p node` 编译完整 Node/Tauri 宿主，因此干净 runner 必须先按
+  `node/frontend/package-lock.json` 安装 Node.js 24 依赖并执行真实前端构建，使
+  `tauri::generate_context!` 能读取 `frontend/dist`。该目录继续作为 Git 忽略构建产物，
+  禁止提交 `dist`、创建空占位文件或条件编译绕过桌面模块。
 
 ## 9. 第 3 步验收基线
 

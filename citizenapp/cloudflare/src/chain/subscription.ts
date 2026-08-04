@@ -531,7 +531,7 @@ export async function bindFinalizedTransactionConfirmation(
 }
 
 /** 更新全局 finalized 链时间；旧交易的延迟镜像不得把时钟回退。 */
-export async function updateChainClock(
+export function updateChainClockStatement(
   env: Env,
   input: {
     chainTimestamp: number;
@@ -539,8 +539,8 @@ export async function updateChainClock(
     blockHash: string;
     observedAt: number;
   },
-): Promise<void> {
-  await env.DB.prepare(
+): D1PreparedStatement {
+  return env.DB.prepare(
     `INSERT INTO chain_clock
       (clock_id, chain_timestamp, finalized_block_number, finalized_block_hash, observed_at)
       VALUES (1, ?, ?, ?, ?)
@@ -551,8 +551,20 @@ export async function updateChainClock(
         observed_at = excluded.observed_at
       WHERE excluded.finalized_block_number > chain_clock.finalized_block_number`,
   )
-    .bind(input.chainTimestamp, input.blockNumber, input.blockHash, input.observedAt)
-    .run();
+    .bind(input.chainTimestamp, input.blockNumber, input.blockHash, input.observedAt);
+}
+
+/** 单独刷新链时钟时直接执行；需要与业务镜像原子提交时复用 prepared statement。 */
+export async function updateChainClock(
+  env: Env,
+  input: {
+    chainTimestamp: number;
+    blockNumber: number;
+    blockHash: string;
+    observedAt: number;
+  },
+): Promise<void> {
+  await updateChainClockStatement(env, input).run();
 }
 
 function decodeSignedSubscriptionExtrinsic(encoded: Uint8Array): {

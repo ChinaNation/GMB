@@ -133,14 +133,18 @@
   公共 Unix Socket、任意 Keychain 名称或任意 Touch ID 提示文案。Node、网页、动作脚本、
   充值代码和 Node 运行时必须封入同一个签名资源边界，代码被修改后必须无法启动。
 - 本机部署 Secret 只允许保存在上述受生物识别保护的 macOS Keychain，远端流水线
-  Secret 只允许保存在 GitHub Secrets；禁止明文 Secret 文件、浏览器回传、前端存储、
-  日志输出、普通 `security` 命令读取、整服务枚举或 Wrangler OAuth 回退。
+  Secret 只允许保存在 GitHub Secrets。移动端 `GMB_APP_KEY` 的本机 Keychain 项是唯一可查看
+  生产真源，GitHub 同名 Secret 只是 Release 前强制覆盖的流水线投影，不得作为第二真源。
+  禁止明文 Secret 文件、前端存储、日志输出、普通 `security` 命令读取、整服务枚举或
+  Wrangler OAuth 回退。除发币私钥永不返回外，已登记 Keychain 项只允许在用户主动点击“查看”且本次
+  Touch ID 成功后短时返回当前页面；关闭或 Esc 必须立即清空 DOM 与临时变量。
 - CitizenConsole「发币控制台」是唯一允许一次 Touch ID 后在页面连接生命周期内持续持有
   内存 Secret 的模块；不设置时间超时，点击“锁定”、离开页面、连接断开或进程退出必须
   清除内存 Secret。发币私钥必须由原生根进程持有，只能经匿名管道交给已密封的一次性
   发币工作进程，普通 UI Node 不得读取、返回或持有该私钥。其他敏感动作仍逐次 Touch ID，
   不得复用充值发币解锁状态。
-- 发币控制台配置列表的已配置参数和令牌允许逐次 Touch ID 后短时查看；发币地址只能由
+- 发币控制台配置弹窗中的已配置参数和令牌允许逐次 Touch ID 后短时查看；关闭弹窗必须
+  立即清空浏览器内的输入、回显值和自动隐藏计时器，但不得锁定持续发币会话。发币地址只能由
   原生安全进程读取 `DISBURSE_KEY` 后派生并返回公开地址，普通 Node 和浏览器永远不得取得
   发币私钥。地址查看不得开启、关闭或复用发币控制台的持续解锁状态。
 - CitizenConsole 所有修改类 HTTP 请求必须同时校验精确 `Origin` 和 Fetch Metadata；

@@ -664,9 +664,15 @@ class SquareApiClient
     });
   }
 
-  Future<SquareMembershipState> fetchMembership(SquareSession session) async {
+  /// 读取平台会员镜像。[verifyOnDeny] 只供发布等授权前检查使用：Worker 在镜像即将拒绝时
+  /// 按当前 Session CID 点查 finalized 链；普通头像和资料展示保持 D1 快路径。
+  Future<SquareMembershipState> fetchMembership(
+    SquareSession session, {
+    bool verifyOnDeny = false,
+  }) async {
+    const membershipPath = '/square/membership';
     final data = await _getJson(
-      '/square/membership',
+      '$membershipPath${verifyOnDeny ? '?verify_on_deny=1' : ''}',
       session: session,
     );
     final membership = data['membership'];

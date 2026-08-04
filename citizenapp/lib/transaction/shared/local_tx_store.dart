@@ -452,6 +452,18 @@ class LocalTxStore {
         .toList();
   }
 
+  /// 监听某账户交易记录的任何变更(增/改/删)。后台 [ChainTxMonitor] 把记录
+  /// 写成 finalized 后即触发,供交易列表页响应式重刷(见 TxAutoRefreshMixin),
+  /// 取代"提交后延时 N 秒盲刷"。走同一个 WalletIsar 实例,写侧的变更必达。
+  static Stream<void> watchAccountChanges(String accountId) async* {
+    final normalizedAccountId = requireAccountId(accountId);
+    final isar = await WalletIsar.instance.db();
+    yield* isar.localTxEntitys
+        .where()
+        .accountIdEqualTo(normalizedAccountId)
+        .watchLazy();
+  }
+
   static String _mergeStatus(String? current, String incoming) {
     final currentRank = _statusRank(current);
     final incomingRank = _statusRank(incoming);

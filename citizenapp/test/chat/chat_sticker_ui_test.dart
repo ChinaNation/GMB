@@ -64,10 +64,10 @@ Widget _host({
     );
 
 Future<void> _settleOpen(WidgetTester tester) async {
-  // flutter_chat_ui 空列表动画会再排一个 timer;pump 两帧稳定,不 settle(贴纸/媒体
-  // 的 Image.asset 异步解码会让 pumpAndSettle 挂起)。
+  // Chat 第一帧入树后，flutter_chat_ui 会安排 250ms 初始滚动；推进到该
+  // 定时器完成但不 settle（贴纸/媒体的 Image.asset 异步解码可能持续排帧）。
   await tester.pump(const Duration(milliseconds: 100));
-  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {

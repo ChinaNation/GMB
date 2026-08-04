@@ -14,6 +14,7 @@ import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_servi
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
+import 'package:citizenapp/transaction/shared/tx_auto_refresh_mixin.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
@@ -62,7 +63,6 @@ class OnchainPaymentPanel extends StatefulWidget {
     this.walletPicker,
     this.currentWalletLoader,
     this.localRecordsLoader,
-    this.enableDelayedLocalRecordRefresh = true,
   }) : assert(
           chainStatusInHeader || title != null,
           '非交易 Tab 的链上支付面板必须提供标题',
@@ -91,14 +91,12 @@ class OnchainPaymentPanel extends StatefulWidget {
   /// 默认读取本地流水；测试可替换为内存流水。
   final OnchainLocalRecordsLoader? localRecordsLoader;
 
-  /// 真机保留延迟刷新兜底；widget test 可关闭，避免残留 Timer。
-  final bool enableDelayedLocalRecordRefresh;
-
   @override
   State<OnchainPaymentPanel> createState() => _OnchainPaymentPanelState();
 }
 
-class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
+class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
+    with TxAutoRefreshMixin<OnchainPaymentPanel> {
   /// 链的 SS58 地址前缀。
 
   /// 链上存在性保证金（Existential Deposit）= 111 分 = 1.11 元。
@@ -140,6 +138,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
   @override
   void dispose() {
+    stopTxAutoRefresh();
     WalletManager.walletsRevision.removeListener(_onWalletsChanged);
     _remarkController.removeListener(_onRemarkChanged);
     _toController.dispose();
@@ -160,17 +159,8 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
   Future<void> _bootstrap() async {
     await _reloadWalletAndLocalRecords();
-    // 交易流水确认由 ChainTxMonitor 写入，本页只做一次延迟本地刷新；
-    // 不再发 nonce 轮询确认 RPC，避免增加节点负担。
-    if (!widget.enableDelayedLocalRecordRefresh) {
-      return;
-    }
-    unawaited(Future<void>.delayed(const Duration(seconds: 20), () async {
-      if (!mounted || WalletIsar.instance.hasActiveOperation) {
-        return;
-      }
-      await _loadLocalRecords();
-    }));
+    // 交易确认由 ChainTxMonitor 写库、列表经 TxAutoRefreshMixin 响应式重刷,
+    // 不再定时盲刷、也不发 nonce 轮询确认 RPC。
   }
 
   /// 从本地 Isar 加载链上转账记录。
@@ -212,6 +202,9 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       AppLog.d('[链上交易] 加载本地记录失败: $e');
     }
   }
+
+  @override
+  Future<void> onTxRecordsChanged() => _loadLocalRecords();
 
   String? _accountIdOf(WalletProfile? wallet) {
     if (wallet == null) return null;
@@ -344,6 +337,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         _localTxRecords = [];
       }
     });
+    startTxAutoRefresh(nextAccountId);
   }
 
   Future<void> _reloadWalletAndLocalRecords() async {
@@ -640,10 +634,6 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           );
         }
         if (mounted) await _loadLocalRecords();
-
-        // 本机先展示待确认；交易池 inBlock 只更新内部进度，finalized
-        // 成功事件写回后才展示已确认。这里仅兜底延迟刷新本地列表。
-        unawaited(_reloadAfterChainEventWindow());
       } catch (e) {
         AppLog.d('[交易记录] 写入本地失败: $e');
       }
@@ -679,14 +669,6 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         });
       }
     }
-  }
-
-  Future<void> _reloadAfterChainEventWindow() async {
-    await Future<void>.delayed(const Duration(seconds: 20));
-    if (!mounted || WalletIsar.instance.hasActiveOperation) {
-      return;
-    }
-    await _loadLocalRecords();
   }
 
   InputDecoration _transactionFieldDecoration({

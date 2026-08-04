@@ -33,6 +33,7 @@ class CityInstitutionListPage extends StatefulWidget {
 class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
   List<PublicInstitutionEntity> _items = const [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -41,13 +42,25 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
   }
 
   Future<void> _load() async {
-    final items = await widget.repository
-        .listInstitutionsByCity(widget.provinceCode, widget.cityCode);
-    if (!mounted) return;
     setState(() {
-      _items = items;
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+    try {
+      final items = await widget.repository
+          .listInstitutionsByCity(widget.provinceCode, widget.cityCode);
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = '公权机构列表读取失败，请重试';
+      });
+    }
   }
 
   @override
@@ -60,13 +73,42 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          if (_loading)
+            const LinearProgressIndicator(
+              key: ValueKey('city-institution-load-progress'),
+              minHeight: 2,
+            ),
+          Expanded(child: _buildBody()),
+        ],
+      ),
     );
   }
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(
+        child: Text(
+          '正在读取公权机构',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _error!,
+              style: const TextStyle(color: AppTheme.textTertiary),
+            ),
+            const SizedBox(height: 8),
+            TextButton(onPressed: _load, child: const Text('重试')),
+          ],
+        ),
+      );
     }
     if (_items.isEmpty) {
       return Center(

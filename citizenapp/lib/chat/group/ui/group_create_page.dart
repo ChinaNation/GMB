@@ -59,7 +59,9 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
 
   /// 发群聊最少 2 人(1 人应走「发私信」),群名非空方可创建。
   bool get _canCreate =>
-      _nameController.text.trim().isNotEmpty && _selected.length >= 2;
+      !_loading &&
+      _nameController.text.trim().isNotEmpty &&
+      _selected.length >= 2;
 
   Future<void> _create() async {
     if (!_canCreate || _creating) return;
@@ -102,82 +104,85 @@ class _GroupCreatePageState extends State<GroupCreatePage> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      body: Column(
+        children: [
+          if (_loading)
+            const LinearProgressIndicator(
+              key: ValueKey('group-create-load-progress'),
+              minHeight: 2,
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              controller: _nameController,
+              maxLength: 40,
+              decoration: const InputDecoration(
+                labelText: '群名称',
+                counterText: '',
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: TextField(
-                    controller: _nameController,
-                    maxLength: 40,
-                    decoration: const InputDecoration(
-                      labelText: '群名称',
-                      counterText: '',
-                    ),
-                  ),
+                Text(
+                  '选择成员',
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Text(
-                        '选择成员',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const Spacer(),
-                      // 未满 2 人时提示门槛,满足后只显示已选人数。
-                      Text(
-                        _selected.length < 2
-                            ? '已选 ${_selected.length}·至少 2 人'
-                            : '已选 ${_selected.length}',
-                      ),
-                    ],
-                  ),
-                ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      _error!,
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error),
-                    ),
-                  ),
-                Expanded(
-                  child: _contacts.isEmpty
-                      ? const Center(child: Text('通讯录为空,先在「我的 → 通讯录」添加联系人'))
-                      : ListView.builder(
-                          itemCount: _contacts.length,
-                          itemBuilder: (context, index) {
-                            final contact = _contacts[index];
-                            final checked =
-                                _selected.contains(contact.cidNumber);
-                            return CheckboxListTile(
-                              value: checked,
-                              onChanged: (value) => setState(() {
-                                if (value ?? false) {
-                                  _selected.add(contact.cidNumber);
-                                } else {
-                                  _selected.remove(contact.cidNumber);
-                                }
-                              }),
-                              title: Text(
-                                contact.contactRemark.isEmpty
-                                    ? _short(contact.cidNumber)
-                                    : contact.contactRemark,
-                              ),
-                              subtitle: Text(
-                                _short(contact.cidNumber),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          },
-                        ),
+                const Spacer(),
+                // 未满 2 人时提示门槛,满足后只显示已选人数。
+                Text(
+                  _selected.length < 2
+                      ? '已选 ${_selected.length}·至少 2 人'
+                      : '已选 ${_selected.length}',
                 ),
               ],
             ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          Expanded(
+            child: _loading && _contacts.isEmpty
+                ? const Center(child: Text('正在读取本地通讯录'))
+                : _contacts.isEmpty
+                    ? const Center(child: Text('通讯录为空,先在「我的 → 通讯录」添加联系人'))
+                    : ListView.builder(
+                        itemCount: _contacts.length,
+                        itemBuilder: (context, index) {
+                          final contact = _contacts[index];
+                          final checked = _selected.contains(contact.cidNumber);
+                          return CheckboxListTile(
+                            value: checked,
+                            onChanged: (value) => setState(() {
+                              if (value ?? false) {
+                                _selected.add(contact.cidNumber);
+                              } else {
+                                _selected.remove(contact.cidNumber);
+                              }
+                            }),
+                            title: Text(
+                              contact.contactRemark.isEmpty
+                                  ? _short(contact.cidNumber)
+                                  : contact.contactRemark,
+                            ),
+                            subtitle: Text(
+                              _short(contact.cidNumber),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }

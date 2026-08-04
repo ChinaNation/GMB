@@ -558,9 +558,9 @@
 - 生产动作只通过已签名且包内源码逐字一致的 CitizenConsole 执行，并由用户完成 Touch ID
   鉴权。控制台确认 16 项 Worker 业务 Secret 与 3 项 Cloudflare 最小权限 Token 均已配置；
   远端 D1 部署前检查和 26 张业务表完整性检查通过。
-- 本次只执行“生产部署”，没有执行“清空并重建全部数据”，没有删除或重建 D1、KV、R2、
-  Queue 及其已有业务数据。部署同步 16 项 Worker Secret，仅记录配置项名称，不读取或输出
-  Secret 值。
+- 本次只执行“生产部署”，没有操作 D1、KV、R2、Queue 及其已有业务数据。旧高危全量数据
+  重建动作已在 2026-08-03 从日常控制台永久移除；当前部署通过单一候选版本原子携带完整
+  Worker Secret 集合，仅记录配置项名称，不读取或输出 Secret 值。
 - Wrangler 上传 937.82 KiB、gzip 后 326.33 KiB，启动时间 33 ms。Durable Object、KV、
   Queue、D1、两个 R2 bucket、Stream 和变量绑定全部加载；`www.crcfrcn.com/api/*`、两个
   cron 任务以及队列生产者/消费者触发器部署成功。生产 Worker 版本为

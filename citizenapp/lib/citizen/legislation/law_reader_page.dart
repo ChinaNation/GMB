@@ -178,7 +178,10 @@ class _LawReaderPageState extends State<LawReaderPage> {
         _expandedSections.clear();
       });
     } else {
-      setState(() => _loading = true);
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
     }
     try {
       final v = await _api.lawVersion(
@@ -377,22 +380,75 @@ class _LawReaderPageState extends State<LawReaderPage> {
             ),
         ],
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          if (_loading)
+            const LinearProgressIndicator(
+              key: ValueKey('law-reader-load-progress'),
+              minHeight: 2,
+            ),
+          Expanded(child: _buildBody()),
+        ],
+      ),
     );
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    final v = _version;
+    final law = _law;
+    if (_loading && (v == null || law == null)) {
+      // 标题栏与阅读区域先出现，正文读取不再用整页圆形转圈替换页面。
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            key: const ValueKey('law-reader-loading-shell'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceCard,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '正在读取法律正文',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  '正文将在本地快照或 finalized 链数据返回后显示',
+                  style: TextStyle(color: AppTheme.textTertiary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
     }
     if (_error != null) {
       return Center(
-        child:
-            Text(_error!, style: const TextStyle(color: AppTheme.textTertiary)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _error!,
+              style: const TextStyle(color: AppTheme.textTertiary),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _load,
+              child: Text(_showEn ? 'Retry' : '重试'),
+            ),
+          ],
+        ),
       );
     }
-    final v = _version;
-    final law = _law;
     if (v == null || law == null) {
       return Center(child: Text(_showEn ? 'No content' : '暂无正文'));
     }

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev --local",
     "dev:local": "wrangler dev --local",
-    "generate:types": "wrangler types --env-interface CloudflareBindings && node -e \"const fs=require('node:fs');const p='worker-configuration.d.ts';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace(/[ \\\\t]+$/gm,''));\"",
+    "generate:types": "CI=1 WRANGLER_SEND_METRICS=false wrangler types --env-interface CloudflareBindings && node -e \"const fs=require('node:fs');const p='worker-configuration.d.ts';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace(/[ \\\\t]+$/gm,''));\"",
     "types:check": "sh -c 'before=$(shasum -a 256 worker-configuration.d.ts | cut -d \" \" -f 1); npm run generate:types >/dev/null; after=$(shasum -a 256 worker-configuration.d.ts | cut -d \" \" -f 1); if [ \"$before\" != \"$after\" ]; then echo \"worker-configuration.d.ts 已过期，请运行 npm run generate:types\" >&2; exit 1; fi'",
     "typecheck": "npm run generate:types && tsc --noEmit",
     "test": "vitest run",
@@ -21,6 +21,9 @@
   "devDependencies": {
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "wrangler": "^4.114.0"
+    "wrangler": "^4.118.0"
+  },
+  "overrides": {
+    "undici": "7.29.0"
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
+import 'package:citizenapp/transaction/shared/tx_auto_refresh_mixin.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 class TransactionHistoryPage extends StatefulWidget {
@@ -20,7 +21,8 @@ class TransactionHistoryPage extends StatefulWidget {
   State<TransactionHistoryPage> createState() => _TransactionHistoryPageState();
 }
 
-class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
+class _TransactionHistoryPageState extends State<TransactionHistoryPage>
+    with TxAutoRefreshMixin<TransactionHistoryPage> {
   static const int _pageSize = 20;
   final ScrollController _scrollController = ScrollController();
 
@@ -35,10 +37,12 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadFirstPage();
+    startTxAutoRefresh(widget.accountId);
   }
 
   @override
   void dispose() {
+    stopTxAutoRefresh();
     _scrollController.dispose();
     super.dispose();
   }
@@ -95,6 +99,27 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
       AppLog.d('[TxHistory] 分页加载失败: $e');
       if (!mounted) return;
       setState(() => _loadingMore = false);
+    }
+  }
+
+  /// 后台监视器写库后:只重查当前已加载窗口、刷新其状态(如翻已确认),
+  /// 不重置分页;空列表时退化为首页加载,拾起新到的第一条。
+  @override
+  Future<void> onTxRecordsChanged() async {
+    if (_records.isEmpty) {
+      await _loadFirstPage();
+      return;
+    }
+    try {
+      final refreshed = await LocalTxStore.queryByAccountId(
+        widget.accountId,
+        limit: _records.length,
+        offset: 0,
+      );
+      if (!mounted) return;
+      setState(() => _records = refreshed);
+    } catch (e) {
+      AppLog.d('[TxHistory] 响应式刷新失败: $e');
     }
   }
 

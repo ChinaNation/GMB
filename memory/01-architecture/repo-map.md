@@ -161,7 +161,8 @@ OnChina 是 `citizenchain` 内置能力，不再作为独立产品目录存在�
 GMB 只保留四条产品 workflow：
 
 - `.github/workflows/citizenchain-ci.yml`：CitizenChain 全工程 CI，包含 runtime、node、OnChina、共享 Rust workspace、两个链端前端和 PR AI 门禁；桌面端依然以同一 workflow matrix 构建四平台。
-- `.github/workflows/citizenchain-wasm.yml`：唯一 runtime WASM 产物入口，只允许手动触发。
+- `.github/workflows/citizenchain-wasm.yml`：唯一 runtime WASM 产物入口，只接受 CitizenConsole
+  生成的固定 `CitizenChain WASM` 提交消息对应的 `main` push；不提供手动 dispatch 第二入口。
 - `.github/workflows/citizenapp-ci.yml`：CitizenApp Flutter、Android 与同产品 Cloudflare Worker/D1 的共用 CI。
 - `.github/workflows/citizenwallet-ci.yml`：CitizenWallet Flutter、Android CI。
 - `citizenweb`：官网不使用 GitHub Actions，发布前在本地构建并部署 `citizenweb/dist/`。
@@ -170,4 +171,5 @@ GMB 只保留四条产品 workflow：
 
 - OnChina 不再保留独立发布包、独立部署 workflow 或独立产品入口。
 - 原独立 `ai-guardrails.yml` 已删除，门禁 job 并入 `citizenchain-ci.yml`，不构成第五条流水线。
-- 共享 Rust 与 `citizenchain/**` 变更统一进入 CitizenChain 全工程验证；WASM 继续保持手动、独立、可审计。
+- 共享 Rust 与 `citizenchain/**` 变更统一进入 CitizenChain 全工程验证；WASM 继续保持由
+  CitizenConsole 明确发起、独立且可审计，普通 push 不执行 WASM job。

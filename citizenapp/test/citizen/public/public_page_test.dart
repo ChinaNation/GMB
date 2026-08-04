@@ -7,12 +7,53 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/public/public_page.dart';
+import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
+import 'fake_public_institution_store.dart';
 import 'public_nav_harness.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
+class _PendingPublicRepository extends PublicInstitutionRepository {
+  _PendingPublicRepository() : super(store: FakePublicInstitutionStore());
+
+  final Completer<List<PublicInstitutionEntity>> completer =
+      Completer<List<PublicInstitutionEntity>>();
+
+  @override
+  Future<bool> ensureSynced() async => false;
+
+  @override
+  Future<List<PublicInstitutionEntity>> listSubscribed(
+    String subscriberCidNumber,
+  ) =>
+      completer.future;
+}
+
 void main() {
+  testWidgets('关注目录未返回时直接显示公权导航且不使用整页转圈', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        PublicTab(
+          repository: _PendingPublicRepository(),
+          cidNumberProvider: () async => 'CID-USER',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('公权机构'), findsOneWidget);
+    expect(find.text('关注'), findsOneWidget);
+    expect(find.text('中枢'), findsOneWidget);
+    expect(find.text('正在读取公权机构目录'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('public-directory-load-progress')),
+      findsOneWidget,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('字典延迟就绪:先回退 code,ensureSynced 完成后回刷成市名(时序回归)', (tester) async {
     // 回归 20260623 时序 bug:首装字典(4.2 万条)还在灌库时市名回退 code(001),
     // 同步完成后 _syncThenRefresh 须清脏缓存按就绪字典重 join,否则永远停在 001。

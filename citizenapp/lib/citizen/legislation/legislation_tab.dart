@@ -81,6 +81,7 @@ class _LegislationTabState extends State<LegislationTab> {
   String? _selectedProvince;
   List<Institution> _provinceContent = const [];
   bool _contentLoading = true;
+  String? _contentError;
 
   @override
   void initState() {
@@ -90,10 +91,14 @@ class _LegislationTabState extends State<LegislationTab> {
 
   Future<void> _bootstrap() async {
     _provinces = publicProvinceItems();
-    final nationals =
-        await _repo.listByCodes({_codeNlg, _codeNed, _codeNrp, _codeNsn});
-    for (final inst in nationals) {
-      _national[inst.institutionCode] = inst;
+    try {
+      final nationals =
+          await _repo.listByCodes({_codeNlg, _codeNed, _codeNrp, _codeNsn});
+      for (final inst in nationals) {
+        _national[inst.institutionCode] = inst;
+      }
+    } on Object {
+      // 国家机构卡保持禁用占位；省市目录仍继续读取，不以单组失败阻塞整个页面。
     }
     if (!mounted) return;
     setState(() {});
@@ -108,15 +113,24 @@ class _LegislationTabState extends State<LegislationTab> {
     setState(() {
       _selectedProvince = provinceCode;
       _contentLoading = true;
+      _contentError = null;
     });
-    final rows =
-        await _repo.listByProvinceAndCodes(provinceCode, _provinceCodes);
-    final sorted = sortProvinceLegislationRows(rows);
-    if (!mounted || _selectedProvince != provinceCode) return;
-    setState(() {
-      _provinceContent = sorted;
-      _contentLoading = false;
-    });
+    try {
+      final rows =
+          await _repo.listByProvinceAndCodes(provinceCode, _provinceCodes);
+      final sorted = sortProvinceLegislationRows(rows);
+      if (!mounted || _selectedProvince != provinceCode) return;
+      setState(() {
+        _provinceContent = sorted;
+        _contentLoading = false;
+      });
+    } on Object {
+      if (!mounted || _selectedProvince != provinceCode) return;
+      setState(() {
+        _contentLoading = false;
+        _contentError = '立法机构读取失败，请重试';
+      });
+    }
   }
 
   void _openDetail(String cidNumber) {
@@ -141,6 +155,11 @@ class _LegislationTabState extends State<LegislationTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_contentLoading)
+          const LinearProgressIndicator(
+            key: ValueKey('legislation-load-progress'),
+            minHeight: 2,
+          ),
         // ── 固定顶部(不滚)──
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -324,7 +343,32 @@ class _LegislationTabState extends State<LegislationTab> {
 
   Widget _provinceContentView() {
     if (_contentLoading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(
+        child: Text(
+          '正在读取立法机构',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
+    }
+    if (_contentError != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _contentError!,
+              style: const TextStyle(color: AppTheme.textTertiary),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _selectedProvince == null
+                  ? null
+                  : () => _selectProvince(_selectedProvince!),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
     }
     if (_provinceContent.isEmpty) {
       return const Center(

@@ -44,41 +44,76 @@ class _DraftsPageState extends State<DraftsPage> {
       body: FutureBuilder<List<SquareComposeDraft>>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          final loading = snapshot.connectionState != ConnectionState.done;
           final drafts = snapshot.data ?? const <SquareComposeDraft>[];
-          if (drafts.isEmpty) {
-            return const Center(
-              child:
-                  Text('还没有草稿', style: TextStyle(color: AppTheme.textTertiary)),
+          final Widget content;
+          if (loading && drafts.isEmpty) {
+            content = const Center(
+              child: Text(
+                '正在读取本地草稿',
+                style: TextStyle(color: AppTheme.textTertiary),
+              ),
+            );
+          } else if (snapshot.hasError) {
+            content = const Center(
+              child: Text(
+                '草稿读取失败，请返回重试',
+                style: TextStyle(color: AppTheme.textTertiary),
+              ),
+            );
+          } else if (drafts.isEmpty) {
+            content = const Center(
+              child: Text(
+                '还没有草稿',
+                style: TextStyle(color: AppTheme.textTertiary),
+              ),
+            );
+          } else {
+            content = ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              itemCount: drafts.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final draft = drafts[index];
+                return Dismissible(
+                  key: ValueKey(draft.draftId),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                  onDismissed: (_) => _delete(draft),
+                  child: _DraftCard(
+                    draft: draft,
+                    onTap: () => Navigator.of(context).pop(draft),
+                  ),
+                );
+              },
             );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            itemCount: drafts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final draft = drafts[index];
-              return Dismissible(
-                key: ValueKey(draft.draftId),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.danger,
-                    borderRadius: BorderRadius.circular(12),
+          // 草稿是本地内容，页面结构立即显示；磁盘读取只占顶部细进度，不替换整页。
+          return Stack(
+            children: [
+              Positioned.fill(child: content),
+              if (loading)
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: LinearProgressIndicator(
+                    key: ValueKey('drafts-load-progress'),
+                    minHeight: 2,
                   ),
-                  child: const Icon(Icons.delete_outline, color: Colors.white),
                 ),
-                onDismissed: (_) => _delete(draft),
-                child: _DraftCard(
-                  draft: draft,
-                  onTap: () => Navigator.of(context).pop(draft),
-                ),
-              );
-            },
+            ],
           );
         },
       ),

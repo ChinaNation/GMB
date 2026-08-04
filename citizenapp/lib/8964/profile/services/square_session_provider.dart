@@ -61,6 +61,19 @@ class SquareSessionProvider {
     );
   }
 
+  /// Worker 明确返回 401 后清除当前身份账户的本地缓存并重新握手一次。
+  ///
+  /// 仅供已经收到未授权响应的前台请求调用；普通首次加载仍走 [ensureSession] 的缓存与
+  /// in-flight 去重，避免把每次页面进入都放大成新的登录挑战。
+  Future<SquareSession?> refreshSession() async {
+    final wallet = await _walletManager.getDefaultWallet();
+    if (wallet == null || !wallet.isHotWallet) return null;
+    final identityAccountId =
+        await _identityCache.accountId() ?? wallet.accountId;
+    _client.clearSession(identityAccountId);
+    return ensureSession();
+  }
+
   /// 已由精确 finalized 交易结果确认换绑后，为目标账户建立新会话。
   ///
   /// 本入口不再自行解析身份或读链；Worker 登录挑战仍会按链上当前绑定 fail-closed。

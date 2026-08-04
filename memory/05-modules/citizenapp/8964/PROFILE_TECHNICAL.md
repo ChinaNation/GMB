@@ -77,7 +77,7 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - 关注/取关复用已有 `POST/DELETE /square/follows`。
 
 ## 前端结构（lib/8964/profile）
-- `user_profile_page.dart`：`NestedScrollView + SliverAppBar(pinned,expandedHeight:372) + FlexibleSpaceBar + bottom:分类TabBar + TabBarView`；cache-first 加载 + session-aware is_following。展开高度为昵称、SS58、CID、签名和三项计数保留独立空间，避免窄屏与分类标签重叠。
+- `user_profile_page.dart`：`NestedScrollView + SliverAppBar(pinned,expandedHeight:372) + FlexibleSpaceBar + bottom:分类TabBar + TabBarView`；cache-first 加载 + session-aware is_following。页面用一个 in-flight Future 建立 Session，并显式下发 `sessionReady`，首次握手完成前帖子 Tab 不得把 null Session 发往 Worker。展开高度为昵称、SS58、CID、签名和三项计数保留独立空间，避免窄屏与分类标签重叠。
 - `widgets/collapsible_header.dart`：折叠比例驱动 `ImageFiltered` 单图层虚化（非全屏 `BackdropFilter`）+ 资料主体淡出 + 折叠标题浮现；真实 R2 背景优先，缺失/失败时显示稳定本地背景照片。
 - `widgets/profile_header_card.dart`：圆角方形头像（真实 R2 图片优先、缺失/失败回落稳定本地照片）+ 身份徽章 + 公开昵称 + SS58 及唯一复制按钮 + 独立 CID 行 + 签名 + 关注/关注者/帖子三项计数 + 右上三图标槽。SS58 只从规范 `account_id` 即时派生；非法或未加载账户显示“暂不可用”且隐藏复制入口。CID 使用页面路由身份真源，不提供复制按钮。
 - `widgets/profile_action_icons.dart`：本人 通知/聊天/关注；他人 关注(toggle)/消息（**图标非按钮**）。
@@ -87,7 +87,7 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
   `UserQrPage.userContact` 固定身份码并支持存相册；钱包/账户/聊天入口统一通过
   `openAccountQrPage()`，只有链上身份账户生成 `k=3`，其它账户生成五分钟 `k=4`。
   「我的」tab 原二维码图标已删。
-- `widgets/profile_category_tabs.dart` + `widgets/profile_posts_list.dart`：帖子/竞选/照片/视频/文章五 Tab；照片/视频从帖子 `media_items` 客户端派生（不建表）；本人 Tab 即使没有 session 也先按页面 CID 读取本地副本，session 只用于远端请求和受保护媒体；他人 Tab 禁止访问本机副本。帖子 Tab 传 `content_format=normal` 排除文章，文章 Tab 传 `content_format=article` 拉真数据，用 `widgets/square_article_card.dart` 渲染、点开 `pages/square_article_detail_page.dart`。
+- `widgets/profile_category_tabs.dart` + `widgets/profile_posts_list.dart`：帖子/竞选/照片/视频/文章五 Tab；照片/视频从帖子 `media_items` 客户端派生（不建表）；本人 Tab 即使没有 Session 也先按页面 CID 读取一次本地副本，Session 到达后只合并远端，他人 Tab 禁止访问本机副本且在会话解析完成前不发请求。内容请求未完成时保留主页头部、分类栏与当前内容区域，仅在顶部显示细进度和“正在读取内容”，禁止用圆形转圈替换当前 Tab。`didUpdateWidget` 统一监听 Session、CID 与过滤契约变化并重置分页；加载代际阻止旧响应覆盖新状态，401 最多刷新一次 Session，空态/失败态可下拉重试。帖子 Tab 传 `content_format=normal` 排除文章，文章 Tab 传 `content_format=article` 拉真数据，用 `widgets/square_article_card.dart` 渲染、点开 `pages/square_article_detail_page.dart`。
 - 广场发布已合并为**统一发布页** `lib/8964/compose/`（home `_openCompose` 直进，不再底部分流）：
   - `compose_page.dart` 壳：顶栏 取消/草稿/发布（去中间标题）、头像+**类型下拉**（普通 2 项动态/文章、
     认证公民 4 项加竞选动态/竞选文章）、IndexedStack 挂 动态/文章子编辑区、底部会员额度、发布协调
@@ -111,8 +111,11 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
     发布成功删草稿、发布失败保留可重发。壳持 `_draftId`、向 body 注入 `persistMedia`/`onChanged`，body 加
     `snapshot()/restore()`。旧"每人一条失败恢复草稿"（`storage/square_draft_store.dart` +
     发布服务 `_saveDraftAfterFailure`/`_deleteDraftAfterSuccess` + home `draftStore` 参数）**已彻底删除**——
-    失败内容由草稿箱持续自动保存兜底；发布失败仅上抛错误消息。
-- `follows_list_page.dart`：关注/粉丝列表；按分页并行补公开资料，单个资料失败时显示稳定本地昵称和头像，账户只放副标题。
+    失败内容由草稿箱持续自动保存兜底；发布失败仅上抛错误消息。草稿本地读取期间先显示草稿箱
+    标题和稳定内容区，以顶部细进度表示读取状态，不用整页圆形转圈阻塞返回与页面识别。
+- `follows_list_page.dart`：关注/粉丝列表；页面标题和列表区域第一帧直接显示，初次读取与翻页只用
+  顶部或列表内细进度，不以整页圆形转圈替换正文；按分页并行补公开资料，单个资料失败时显示
+  稳定本地昵称和头像，账户只放副标题。
 - `profile_edit_page.dart`：`CitizenProfileEditPage` 公开昵称/签名/头像/背景编辑；保存上传 R2 + `PUT /profile`，不得读取或重命名本机钱包；本地旧图迁移后清空。
 - `models/profile_presentation.dart`：唯一展示解析器；公开昵称只接受 `display_name`，优先以 `cid_number` 做 FNV-1a 稳定分桶，从内置词库与 `assets/profile_defaults/` 11 张照片中选择默认昵称、头像和背景。头像与背景使用不同盐值且避免同图；任何钱包名、完整或截断账户都不能成为公开昵称。
 - `models/citizen_profile.dart`、`services/citizen_profile_api.dart`、`citizen_profile_cache.dart`、`profile_asset_service.dart`、`square_session_provider.dart`。
@@ -121,7 +124,7 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 
 ## 广场 feed 卡片（lib/8964/widgets）
 - 六类（图片/视频/文章 × 普通/竞选）共用统一版式；竞选与普通**媒体布局一致**，只靠身份表达区分。
-- `square_post_header.dart`（图文/文章卡共用作者头部）：**圆角方形头像（真实图片优先、缺失/失败回落稳定本地照片）+ 右下角扇贝身份勋章**（复用 `ProfileAvatar`，竞选红/投票蓝/访客金，会员=勾/仅身份=小人，布局同主页头像）；昵称后**只有竞选公民**显示红色"竞选"药丸；副标题**只有竞选公民**显示岗位（`post.campaignPosition` 有值时 `岗位 · 时间`，否则只时间）；右上更多按钮 `CrossAxisAlignment.start` 贴上边缘。
+- `square_post_header.dart`（图文/文章卡共用作者头部）：**圆角方形头像（真实图片优先、缺失/失败回落稳定本地照片）+ 右下角扇贝徽章**（复用 `ProfileAvatar`；无有效会员时按竞选红/投票蓝/访客金显示身份小人，有效会员按自由金/民主蓝/薪火红显示白色对勾，布局同主页头像）；昵称后**只有竞选公民**显示红色"竞选"药丸；副标题**只有竞选公民**显示岗位（`post.campaignPosition` 有值时 `岗位 · 时间`，否则只时间）；右上更多按钮 `CrossAxisAlignment.start` 贴上边缘。
 - `square_media_grid.dart`（`SquareMediaGrid` + 共享 `SquareMediaTile`）：横竖屏由 `mediaItems.first.isPortrait`（媒体原始 width/height，缺失按横屏兜底）决定。1图/视频=横屏 16:9 / 竖屏 3:4 单块；2图/3图以上=只出前两张、左右各半、**外侧圆角+中缝直角+2px 缝**（容器比例横 2:1、竖 3:2 使左右图为 1:1/3:4），3图以上第二张**右下角 `+N`**（N=总数-2）；视频叠播放键、冷归档态占位。
 - `square_post_card.dart`：头部 → 正文/媒体 → `square_post_actions.dart` 互动栏。**竖屏单图/单视频=左媒体（flex2,3:4）+右正文（flex3）**；其余=正文在上、下走 `SquareMediaGrid`。
 - `square_article_card.dart`：头部 → **标题(2行截断)+正文(2行截断)在上 → 强制横屏 16:9 首图在下** → 互动栏；首图=`media_items[0]`，方向恒横屏不随原始朝向。home feed 与 profile 文章 Tab 均按 `content_format==article` 分发到此卡。
@@ -136,12 +139,21 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
   用户进入动态/文章发布页时通过
   `SquareIdentityService.loadCurrent(readLiveChain: true)` 读取 finalized 身份，
   快照不得用于发布资格判断。
+- 发布按钮与上传流程读取会员时显式要求 Worker 执行拒绝前复核：有效 D1 镜像走快路径，
+  缺失、无效或链时钟陈旧时按 Session CID 点查 finalized 订阅并原子重建镜像。链服务异常
+  显示“暂时无法验证会员状态”，不得冒充“需要有效会员”；普通头像和资料读取不触发链复核。
 - 若轻节点已被交易、治理或发布等其他主动流程启动并进入 operational，广场首页
   通过可取消状态监听为当前永久 CID 刷新一次徽章快照；钱包换绑后继续按同一 CID
   读取，不轮询。
-- 广场首页的信息流 Future 在创建时立即挂只读错误观察器，随后仍由 `FutureBuilder`
-  接收同一个原始 Future 并展示失败态；这消除了 Worker 快速失败发生在首帧监听前的
-  未处理时间窗，不会把前台错误转换成成功或空列表。
+- 广场首页第一帧直接显示分类栏、水印、信息流区域和发布按钮，并立即在后台启动首个 feed
+  Future；未完成时只显示顶部细进度，禁止用全屏身份门或圆形转圈替换页面。信息流 Future
+  创建时立即挂只读错误观察器，随后仍由 `FutureBuilder` 接收同一个原始 Future；请求固定
+  创建时的分类与加载代际，旧分类迟到结果不得覆盖新状态。Worker 返回 401 时清理当前身份
+  Session 并只重试一次，不会把前台错误转换成成功或空列表。发布动作才严格读取真实链上
+  热钱包、CID 和 finalized 会员，浏览态缓存不得授予发布权限。
+- 广场二级浏览页面同样先构建稳定页面结构：草稿箱、用户主页当前内容 Tab、关注与粉丝列表
+  均在本地或远端数据到达前保留标题、导航和内容区域，只使用顶部或局部细进度。首次读取、
+  分页和分类切换不得恢复整页圆形转圈；失败态保留页面并提供返回、下拉或明确重试路径。
 - 广场与关注通知红点属于后台软功能：会话建立、拉取和清读任一失败都捕获到 `Object`
   边界并静默降级，不得从 `unawaited` 任务逸出影响浏览；信息流失败仍单独显示
   “广场内容加载失败”。

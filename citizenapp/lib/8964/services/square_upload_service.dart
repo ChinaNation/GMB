@@ -129,7 +129,11 @@ class SquareUploadService implements SquareContentUploader {
     final manifestHash = sha256.convert(manifestBytes).toString();
 
     onStage?.call(SquarePublishStage.preparingStorage);
-    final membership = await _api.fetchMembership(session);
+    // 发布过程不能使用普通展示镜像；即将拒绝时由 Worker 按当前 CID 点查 finalized 链。
+    final membership = await _api.fetchMembership(
+      session,
+      verifyOnDeny: true,
+    );
     if (!membership.active || membership.paidUntil <= 0) {
       throw const SquareApiException('需要有效会员才能使用广场内容存储');
     }

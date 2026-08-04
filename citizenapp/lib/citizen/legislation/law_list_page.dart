@@ -51,6 +51,10 @@ class _LawListPageState extends State<LawListPage> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final ids = await _api.listLaws(widget.tier, widget.scopeCode);
       final items = await Future.wait(ids.map((id) async {
@@ -90,18 +94,41 @@ class _LawListPageState extends State<LawListPage> {
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          if (_loading)
+            const LinearProgressIndicator(
+              key: ValueKey('law-list-load-progress'),
+              minHeight: 2,
+            ),
+          Expanded(child: _buildBody()),
+        ],
+      ),
     );
   }
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(
+        child: Text(
+          '正在读取法律列表',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
     }
     if (_error != null) {
       return Center(
-        child:
-            Text(_error!, style: const TextStyle(color: AppTheme.textTertiary)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _error!,
+              style: const TextStyle(color: AppTheme.textTertiary),
+            ),
+            const SizedBox(height: 8),
+            TextButton(onPressed: _load, child: const Text('重试')),
+          ],
+        ),
       );
     }
     if (_items.isEmpty) {

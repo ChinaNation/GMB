@@ -155,13 +155,32 @@ class _FollowsListPageState extends State<FollowsListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.type.label), centerTitle: true),
-      body: _body(),
+      body: Stack(
+        children: [
+          Positioned.fill(child: _body()),
+          if (_loading)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                key: ValueKey('follows-load-progress'),
+                minHeight: 2,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _body() {
     if (_loading && _entries.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Text(
+          '正在读取关注关系',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
     }
     if (_failedFirst) {
       return const Center(
@@ -185,13 +204,10 @@ class _FollowsListPageState extends State<FollowsListPage> {
         itemBuilder: (context, index) {
           if (index >= _entries.length) {
             return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: LinearProgressIndicator(
+                key: ValueKey('follows-more-progress'),
+                minHeight: 2,
               ),
             );
           }

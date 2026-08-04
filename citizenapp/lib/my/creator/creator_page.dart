@@ -8,12 +8,11 @@ import 'package:citizenapp/my/creator/widgets/creator_gate_view.dart';
 import 'package:citizenapp/my/creator/widgets/creator_overview_card.dart';
 import 'package:citizenapp/my/creator/widgets/creator_tier_card.dart';
 import 'package:citizenapp/my/membership/membership_page.dart';
-import 'package:citizenapp/my/myid/widgets/identity_registration_gate.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 「我的 → 创作者」：管理自己的创作者会员（档位 / 收入概览）。
 ///
-/// 三态：加载中 / 无当前有效平台会员 / 已开通。档位价格链上保存，名称由 Cloudflare 保存；
+/// 三态：后台同步 / 无当前有效平台会员 / 已开通。档位价格链上保存，名称由 Cloudflare 保存；
 /// 整次保存只产生一次 `set_creator_plans` 账户签名。
 class CreatorPage extends StatefulWidget {
   const CreatorPage({super.key, CreatorService? service}) : _service = service;
@@ -67,38 +66,61 @@ class _CreatorPageState extends State<CreatorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('创作者')),
-      body: IdentityRegistrationGate(
-        featureLabel: '创作者',
-        child: _body(),
-      ),
+      body: _body(),
     );
   }
 
   Widget _body() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+    final data = _data;
+    final Widget content;
+    if (data == null) {
+      // 首帧立即展示页面结构；未知状态下所有写入口禁用，后台完成后再替换真数据。
+      content = _activeView(
+        CreatorPlan.empty(''),
+        CreatorOverview.zero,
+        resolved: false,
+      );
+    } else if (data.gated) {
+      content = CreatorGateView(onOpenMembership: _openMembership);
+    } else {
+      content = _activeView(data.plan!, data.overview!);
     }
-    if (_error != null) {
-      return _errorView(_error!);
-    }
-    final data = _data!;
-    if (data.gated) {
-      return CreatorGateView(onOpenMembership: _openMembership);
-    }
-    return _activeView(data.plan!, data.overview!);
+    return Stack(
+      children: [
+        content,
+        if (_loading)
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: LinearProgressIndicator(
+              key: ValueKey('creator-sync-progress'),
+              minHeight: 2,
+            ),
+          ),
+      ],
+    );
   }
 
-  Widget _activeView(CreatorPlan plan, CreatorOverview overview) {
+  Widget _activeView(
+    CreatorPlan plan,
+    CreatorOverview overview, {
+    bool resolved = true,
+  }) {
     final atMax = plan.tiers.length >= CreatorPlan.maxTiers;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          CreatorOverviewCard(overview: overview),
+          CreatorOverviewCard(overview: overview, resolved: resolved),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            _inlineError(_error!),
+          ],
           const SizedBox(height: 16),
           if (plan.tiers.isEmpty)
-            _emptyTiers()
+            _emptyTiers(resolved: resolved)
           else ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -123,13 +145,18 @@ class _CreatorPageState extends State<CreatorPage> {
             ),
             const SizedBox(height: 12),
             for (final tier in plan.tiers) ...[
-              CreatorTierCard(tier: tier, onEdit: () => _openEdit(tier)),
+              CreatorTierCard(
+                tier: tier,
+                onEdit: () {
+                  if (resolved) _openEdit(tier);
+                },
+              ),
               const SizedBox(height: 12),
             ],
-            _addTierButton(atMax),
+            _addTierButton(atMax, resolved: resolved),
           ],
           const SizedBox(height: 16),
-          _subscribersEntry(overview.subscriberCount),
+          _subscribersEntry(overview.subscriberCount, resolved: resolved),
           const SizedBox(height: 14),
           const Center(
             child: Text(
@@ -143,7 +170,7 @@ class _CreatorPageState extends State<CreatorPage> {
     );
   }
 
-  Widget _emptyTiers() {
+  Widget _emptyTiers({required bool resolved}) {
     return Container(
       decoration: AppTheme.cardDecoration(),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -161,30 +188,30 @@ class _CreatorPageState extends State<CreatorPage> {
                 size: 26, color: AppTheme.primary),
           ),
           const SizedBox(height: 12),
-          const Text('还没有会员档',
-              style: TextStyle(
+          Text(resolved ? '还没有会员档' : '正在同步会员档',
+              style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: AppTheme.textPrimary)),
           const SizedBox(height: 6),
-          const Text('创建第一个会员档，粉丝就能用公民币订阅你。',
+          Text(resolved ? '创建第一个会员档，粉丝就能用公民币订阅你。' : '页面已就绪，状态将在后台更新。',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                   fontSize: 13, height: 1.5, color: AppTheme.textSecondary)),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: () => _openEdit(null),
+            onPressed: resolved ? () => _openEdit(null) : null,
             icon: const Icon(Icons.add, size: 19),
-            label: const Text('创建会员档'),
+            label: Text(resolved ? '创建会员档' : '状态同步中'),
           ),
         ],
       ),
     );
   }
 
-  Widget _addTierButton(bool atMax) {
+  Widget _addTierButton(bool atMax, {required bool resolved}) {
     return InkWell(
-      onTap: atMax ? null : () => _openEdit(null),
+      onTap: !resolved || atMax ? null : () => _openEdit(null),
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -217,11 +244,13 @@ class _CreatorPageState extends State<CreatorPage> {
     );
   }
 
-  Widget _subscribersEntry(int count) {
+  Widget _subscribersEntry(int count, {required bool resolved}) {
     return InkWell(
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('订阅者明细即将上线')),
-      ),
+      onTap: resolved
+          ? () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('订阅者明细即将上线')),
+              )
+          : null,
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         decoration: AppTheme.cardDecoration(),
@@ -247,7 +276,7 @@ class _CreatorPageState extends State<CreatorPage> {
                       fontWeight: FontWeight.w600,
                       color: AppTheme.textPrimary)),
             ),
-            Text('$count 位',
+            Text(resolved ? '$count 位' : '--',
                 style: const TextStyle(
                     fontSize: 13, color: AppTheme.textSecondary)),
             const SizedBox(width: 4),
@@ -259,24 +288,25 @@ class _CreatorPageState extends State<CreatorPage> {
     );
   }
 
-  Widget _errorView(String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline,
-                size: 40, color: AppTheme.textTertiary),
-            const SizedBox(height: 12),
-            Text(message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 14, color: AppTheme.textSecondary)),
-            const SizedBox(height: 16),
-            OutlinedButton(onPressed: _load, child: const Text('重试')),
-          ],
-        ),
+  Widget _inlineError(String message) {
+    return Container(
+      decoration: AppTheme.cardDecoration(),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: AppTheme.textTertiary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          OutlinedButton(onPressed: _load, child: const Text('重试')),
+        ],
       ),
     );
   }

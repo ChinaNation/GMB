@@ -14,38 +14,59 @@ IdentityBadgeStyle _style(String? identity, String? membership,
 }
 
 void main() {
-  group('identityBadgeStyle 底色 = 身份档', () {
-    test('竞选=红 / 投票=蓝 / 访客(空或 visitor)=橙', () {
-      expect(
-          _style('candidate', 'candidate').color, AppTheme.identityCandidate);
-      expect(_style('voting', 'voting').color, AppTheme.identityVoting);
-      expect(_style('visitor', 'visitor').color, AppTheme.identityVisitor);
-      expect(_style(null, 'visitor').color, AppTheme.identityVisitor);
-    });
-  });
+  group('identityBadgeStyle 会员档位徽章', () {
+    test('有效会员按自由金 / 民主蓝 / 薪火红显示并带白色对勾', () {
+      final freedom = _style('candidate', 'freedom');
+      expect(freedom.color, AppTheme.identityVisitor);
+      expect(freedom.checked, isTrue);
+      expect(freedom.checkColor, Colors.white);
 
-  group('勾色规则', () {
-    test('同档买会员 → 勾保持白色', () {
-      expect(_style('candidate', 'candidate').checkColor, Colors.white);
-      expect(_style('voting', 'voting').checkColor, Colors.white);
-      expect(_style('visitor', 'visitor').checkColor, Colors.white);
-    });
+      final democracy = _style('visitor', 'democracy');
+      expect(democracy.color, AppTheme.identityVoting);
+      expect(democracy.checked, isTrue);
 
-    test('传入低于身份的会员档：底色仍随身份、勾恒白（精确匹配已无降档）', () {
-      // exact-match 禁降档后不存在「身份高于会员」的真实组合；即便被喂入，
-      // 底色只取身份档，勾色统一白（不再按会员档着色）。
-      final s1 = _style('candidate', 'voting');
-      expect(s1.color, AppTheme.identityCandidate);
-      expect(s1.checkColor, Colors.white);
-      final s2 = _style('voting', 'visitor');
-      expect(s2.color, AppTheme.identityVoting);
-      expect(s2.checkColor, Colors.white);
+      final spark = _style('voting', 'spark');
+      expect(spark.color, AppTheme.identityCandidate);
+      expect(spark.checked, isTrue);
     });
 
-    test('无生效会员 → 小人(checked=false)，勾色不参与', () {
-      final s = _style('candidate', null, active: false);
+    test('无有效会员时按竞选红 / 投票蓝 / 访客金显示身份小人', () {
+      final candidate = _style('candidate', 'spark', active: false);
+      expect(candidate.color, AppTheme.identityCandidate);
+      expect(candidate.checked, isFalse);
+
+      final voting = _style('voting', null, active: false);
+      expect(voting.color, AppTheme.identityVoting);
+      expect(voting.checked, isFalse);
+
+      final visitor = _style(null, null, active: false);
+      expect(visitor.color, AppTheme.identityVisitor);
+      expect(visitor.checked, isFalse);
+    });
+
+    test('会员有效态缺少合法档位时失败关闭并回落身份徽章', () {
+      final s = _style('candidate', 'unknown');
       expect(s.checked, isFalse);
       expect(s.color, AppTheme.identityCandidate);
+    });
+
+    test('提示文案同时说明身份和具体会员档位', () {
+      expect(
+        identityBadgeLabel(
+          identityLevel: 'candidate',
+          membershipLevel: 'spark',
+          checked: true,
+        ),
+        '竞选公民 · 薪火会员',
+      );
+      expect(
+        identityBadgeLabel(
+          identityLevel: 'voting',
+          membershipLevel: null,
+          checked: false,
+        ),
+        '投票公民',
+      );
     });
   });
 }

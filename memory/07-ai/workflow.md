@@ -55,7 +55,8 @@
 ## 4. 路径分流执行原则
 
 - `citizenchain/**` 和共享 Rust 变更先进入 `citizenchain-ci.yml` 全 workspace 验证，成功后再由同一 workflow matrix 构建 Linux / Windows / macOS 桌面安装包
-- `citizenchain-wasm.yml` 仅作为手动、独立、可审计的 runtime WASM 产物入口
+- `citizenchain-wasm.yml` 仅作为 CitizenConsole 明确发起、独立且可审计的 runtime WASM
+  产物入口；只接受固定提交消息的 `main` push，不提供 `workflow_dispatch`
 - `citizenapp`、`citizenwallet` 分别独立执行
 - 纯文档 PR 仍进入 CitizenChain `guardrails` job，不触发无关产品构建
 - 目录路由细则统一记录在 `memory/07-ai/ci-path-routing.md`

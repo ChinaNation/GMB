@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -95,6 +97,18 @@ class _FakeChatStore extends ChatStore {
   }
 }
 
+class _PendingSearchStore extends _FakeChatStore {
+  final Completer<List<ChatConversationPreview>> completer =
+      Completer<List<ChatConversationPreview>>();
+
+  @override
+  Future<List<ChatConversationPreview>> readConversationPreviews({
+    required String ownerCidNumber,
+    required String currentAccountId,
+  }) =>
+      completer.future;
+}
+
 class _FakeContacts extends UserContactService {
   _FakeContacts(this.contacts) : super(autoSync: false);
 
@@ -143,6 +157,32 @@ void main() {
     await tester.pump();
     await tester.pump();
   }
+
+  testWidgets('本地搜索数据未返回时直接显示输入框与提示', (tester) async {
+    final store = _PendingSearchStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatSearchPage(
+          store: store,
+          contactService: _FakeContacts(const <UserContact>[]),
+          cidNumber: _ownerCidNumber,
+          accountId: _accountId,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('搜索'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-search-input')), findsOneWidget);
+    expect(find.text('输入关键词，搜索会话、联系人与聊天记录'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-search-progress')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    store.completer.complete(const <ChatConversationPreview>[]);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('chat-search-progress')), findsNothing);
+  });
 
   testWidgets('空关键词只显示提示且不触发聊天记录检索', (tester) async {
     final store = await pumpPage(

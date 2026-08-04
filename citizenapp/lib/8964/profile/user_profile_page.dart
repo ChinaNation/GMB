@@ -89,6 +89,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   late final DirectChatOpener _directChat;
   CitizenProfile? _profile;
   SquareSession? _session;
+  Future<SquareSession?>? _sessionFuture;
+  bool _sessionResolved = false;
   int _postsRevision = 0;
 
   /// 「他人视角」下看的是不是自己账户；true → 关注/私信/通知/订阅按钮置灰不可点。
@@ -154,16 +156,50 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  /// 默认热钱包静默登录换 session；无热钱包或异常返回 null（按不可用降级处理）。
-  Future<SquareSession?> _ensureSession() async {
+  /// 默认热钱包静默登录换 Session；同一时刻只允许一个握手。首次结果落地前
+  /// [_sessionResolved] 保持 false，让帖子 Tab 等待而不是用 null 抢跑请求 Worker。
+  Future<SquareSession?> _ensureSession({bool refresh = false}) {
+    final pending = _sessionFuture;
+    if (pending != null) return pending;
+    if (refresh && mounted) {
+      setState(() => _sessionResolved = false);
+    }
+    late final Future<SquareSession?> future;
+    future = _resolveSession(refresh).whenComplete(() {
+      if (identical(_sessionFuture, future)) _sessionFuture = null;
+    });
+    _sessionFuture = future;
+    return future;
+  }
+
+  /// 把成功、无钱包和异常统一收敛成同一个共享 Future，保证并发调用者不会有的收到
+  /// null、有的却收到未捕获异常。
+  Future<SquareSession?> _resolveSession(bool refresh) async {
     try {
-      final session = await _sessionProvider.ensureSession();
-      if (mounted) setState(() => _session = session);
+      final session = await (refresh
+          ? _sessionProvider.refreshSession()
+          : _sessionProvider.ensureSession());
+      if (mounted) {
+        setState(() {
+          _session = session;
+          _sessionResolved = true;
+        });
+      }
       return session;
     } on Exception {
+      if (mounted) {
+        setState(() {
+          _session = null;
+          _sessionResolved = true;
+        });
+      }
       return null;
     }
   }
+
+  /// 帖子请求收到 401 时清缓存并只重新握手一次；新 Session 仍由本页统一持有。
+  Future<SquareSession?> _refreshSessionAfterUnauthorized() =>
+      _ensureSession(refresh: true);
 
   Future<void> _toggleFollow() async {
     final current = _profile;
@@ -476,6 +512,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
           contentFormat: SquarePostContentFormat.normal,
           emptyLabel: '还没有帖子',
           session: session,
+          sessionReady: _sessionResolved,
+          onSessionExpired: _refreshSessionAfterUnauthorized,
           isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
@@ -487,6 +525,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
           category: SquarePostCategory.campaign,
           emptyLabel: '还没有竞选内容',
           session: session,
+          sessionReady: _sessionResolved,
+          onSessionExpired: _refreshSessionAfterUnauthorized,
           isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
@@ -498,6 +538,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
           mediaKind: SquareMediaKind.image,
           emptyLabel: '还没有照片',
           session: session,
+          sessionReady: _sessionResolved,
+          onSessionExpired: _refreshSessionAfterUnauthorized,
           isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
@@ -509,6 +551,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
           mediaKind: SquareMediaKind.video,
           emptyLabel: '还没有视频',
           session: session,
+          sessionReady: _sessionResolved,
+          onSessionExpired: _refreshSessionAfterUnauthorized,
           isSelf: widget.isSelf,
           onOpenPost: _openPost,
         );
@@ -520,6 +564,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
           contentFormat: SquarePostContentFormat.article,
           emptyLabel: '还没有文章',
           session: session,
+          sessionReady: _sessionResolved,
+          onSessionExpired: _refreshSessionAfterUnauthorized,
           isSelf: widget.isSelf,
           onOpenPost: _openArticle,
         );

@@ -33,11 +33,11 @@ class CitizenProfile {
   final bool isCertified;
 
   /// 链上身份档位：visitor 未认证 / voting 认证投票公民 / candidate 认证竞选公民。
-  /// 认证真源=链上，徽章据此分色（访客橙/投票蓝/竞选红）。
+  /// 认证真源=链上；无有效会员时，徽章据此分色（访客金/投票蓝/竞选红）。
   final String identityLevel;
 
   /// 已购买的会员档位（公开）：freedom/democracy/spark/null（未购买）。
-  /// ADR-036 起与链上身份档彻底解耦：徽章「勾」= 会员订阅有效，与 [identityLevel] 无关。
+  /// ADR-036 起与链上身份档彻底解耦；有效会员徽章按本字段分色并显示对勾。
   final String? membershipLevel;
 
   /// 会员是否当前有效。

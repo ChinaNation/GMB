@@ -288,14 +288,18 @@ CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继�
 - 构建脚本、CI/CD、前端界面、说明文档。
 
 ### 11.3 CI 发布边界
-- `citizenchain-wasm.yml` 只允许手动触发并始终按仓库源码原样编译 WASM，不查询链、不读取
-  SSH/RPC Secret、不连接服务器，也不在 CI 工作区改写版本。正式创世前版本保持 `0`；正式
-  创世后只有 CitizenConsole「运行 WASM CI」通过 `chain.crcfrcn.com` 的 Access + Tunnel
-  固定方法网关读取国储会节点 finalized Runtime 版本，不依赖本机节点或 P2P `30333`。
-  入口要求 RPC 实际 genesis hash 与本机明确保存的 `CHAIN_GENESIS_HASH` 相等；随后在源码
-  版本严格等于链上版本时把源码 `spec_version` 及现有测试断言同步加一、提交并触发带
-  版本/genesis 校验的升级构建。其他手动触发只做普通源码构建，不提高版本；该入口只生成
-  WASM，不自动执行链上升级。
+- `citizenchain-wasm.yml` 只接受完整提交消息为 `CitizenChain WASM` 的 `main` push；其他
+  `main` push 只产生 skipped 记录，不分配 runner，也不保留 `workflow_dispatch` 第二入口。
+  Workflow 始终按已提交源码原样编译 WASM，不查询链、不读取 SSH/RPC Secret、不连接服务器，
+  也不在 CI 工作区改写版本。正式创世后只有 CitizenConsole「运行 WASM CI」通过
+  `chain.crcfrcn.com` 的 Access + Tunnel 固定方法网关读取国储会节点 finalized Runtime
+  版本，不依赖本机节点或 P2P `30333`。入口要求 RPC 实际 genesis hash 与本机明确保存的
+  `CHAIN_GENESIS_HASH` 相等；源码与链同版时同步提高 `spec_version` 和现有测试断言一版，
+  仓库已比链高一版时复用该候选重试，其他差值全部失败关闭。该入口只生成 WASM，不自动执行
+  链上升级。
+- 候选 WASM 上传前必须对同一份压缩产物执行 NodeGuard 行为探针。探针编译完整 Node/Tauri
+  宿主，因此 runner 使用 Node.js 24 按节点前端锁文件执行真实构建，再进入 `cargo test -p node`；
+  `node/frontend/dist` 继续保持 Git 忽略，不作为源码或 artifact 上传。
 - `citizenchain-ci.yml` 是 CitizenChain 唯一常规 CI：PR 全局执行文档/残留/pallet 注册表门禁；链工程变更执行启动协议、宪法 SCALE 自检、全 Rust workspace 的 fmt/check/test/clippy 以及 OnChina/节点前端构建；随后再进入四平台桌面端打包。push 和 `mode=ci` 不读取 Tauri updater 签名私钥、不发布 GitHub Release、不部署服务器。
 - 根 `citizenconsole/` 控制台选择“正式 Release”时以 `mode=release` 自动触发 updater 签名、`citizenchain-latest.json` 和 GitHub Release。节点卡片“部署该节点”是与本地工作区、当前 HEAD 和 Release 解耦的独立生产入口，也是唯一的服务器部署路径（无批量入口，一次一台）：从 `institution-catalog.json` 选择节点后，只消费 GitHub `main` 最新成功 CitizenChain CI 的 Linux amd artifact；目标服务器使用 GitHub 短期签名地址直接下载，本机只传服务配置和节点密钥，不下载或转传安装包。
 - 每个权威节点的服务器 IP、节点身份 Ed25519 私钥和 GRANDPA 验证私钥按 `node-01` 至 `node-44` 隔离保存在 macOS Keychain。由部署控制台管理的服务器统一使用 `deploy` SSH 身份，私钥复制到对应节点 Keychain 项但不得保留 `.ssh` 明文文件，本机只保留 `deploy.pub`；网页只返回 IP、公开 PeerId、公开 GRANDPA 公钥和“已配置/缺失”状态，且 SSH 项只有完整私钥才算已配置。保存、更换与部署均逐次要求 Touch ID。

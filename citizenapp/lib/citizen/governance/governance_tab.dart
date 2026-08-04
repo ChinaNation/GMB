@@ -112,6 +112,7 @@ class _GovernanceTabState extends State<GovernanceTab> {
   List<Institution> _provincialCouncils = const [];
   List<Institution> _provincialBanks = const [];
   bool _loading = true;
+  String? _loadError;
   bool _provincialCouncilsExpanded = false;
   bool _provincialBanksExpanded = false;
 
@@ -123,29 +124,43 @@ class _GovernanceTabState extends State<GovernanceTab> {
 
   /// 从统一目录按机构码取治理机构,按 orgType 分三组,再叠加本机保存的拖拽顺序。
   Future<void> _loadInstitutions() async {
-    final all = await _repo.listByCodes(_governanceCodes);
-    final national =
-        all.where((i) => i.orgType == OrgType.nrc).toList(growable: false);
-    final councilsRaw =
-        all.where((i) => i.orgType == OrgType.prc).toList(growable: false);
-    final banksRaw =
-        all.where((i) => i.orgType == OrgType.prb).toList(growable: false);
-    final prefs = await SharedPreferences.getInstance();
-    final councils = applyGovernanceInstitutionOrder(
-      councilsRaw,
-      prefs.getStringList(governanceProvincialCouncilOrderPrefsKey),
-    );
-    final banks = applyGovernanceInstitutionOrder(
-      banksRaw,
-      prefs.getStringList(governanceProvincialBankOrderPrefsKey),
-    );
-    if (!mounted) return;
-    setState(() {
-      _national = national;
-      _provincialCouncils = councils;
-      _provincialBanks = banks;
-      _loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final all = await _repo.listByCodes(_governanceCodes);
+      final national =
+          all.where((i) => i.orgType == OrgType.nrc).toList(growable: false);
+      final councilsRaw =
+          all.where((i) => i.orgType == OrgType.prc).toList(growable: false);
+      final banksRaw =
+          all.where((i) => i.orgType == OrgType.prb).toList(growable: false);
+      final prefs = await SharedPreferences.getInstance();
+      final councils = applyGovernanceInstitutionOrder(
+        councilsRaw,
+        prefs.getStringList(governanceProvincialCouncilOrderPrefsKey),
+      );
+      final banks = applyGovernanceInstitutionOrder(
+        banksRaw,
+        prefs.getStringList(governanceProvincialBankOrderPrefsKey),
+      );
+      if (!mounted) return;
+      setState(() {
+        _national = national;
+        _provincialCouncils = councils;
+        _provincialBanks = banks;
+        _loading = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '治理机构读取失败，请重试';
+      });
+    }
   }
 
   Future<void> _reorderInstitution(
@@ -197,71 +212,106 @@ class _GovernanceTabState extends State<GovernanceTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+    // 页面结构先于本地目录读取出现，避免公民二级导航切换时只剩整页转圈。
+    return Stack(
       children: [
-        const Text(
-          '治理机构',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+        ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          children: [
+            const Text(
+              '治理机构',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            if (_loading) ...[
+              const SizedBox(height: 8),
+              const Text(
+                '正在读取治理机构',
+                style: TextStyle(color: AppTheme.textTertiary),
+              ),
+            ] else if (_loadError != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _loadError!,
+                      style: const TextStyle(color: AppTheme.textTertiary),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadInstitutions,
+                    child: const Text('重试'),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 20),
+            _GovernanceSection(
+              sectionKind: _GovernanceSectionKind.nationalCouncil,
+              title: '国家储委会',
+              icon: Icons.account_balance,
+              badgeColor: AppTheme.primaryDark,
+              institutions: _national,
+              onReturnFromDetail: () => setState(() {}),
+            ),
+            _GovernanceSection(
+              sectionKind: _GovernanceSectionKind.provincialCouncil,
+              title: '省储委会',
+              icon: Icons.groups_2_outlined,
+              iconAsset: _governanceProvincialCouncilIconAsset,
+              badgeColor: AppTheme.primary,
+              institutions: _provincialCouncils,
+              collapsible: true,
+              expanded: _provincialCouncilsExpanded,
+              onToggleExpanded: () {
+                setState(() {
+                  _provincialCouncilsExpanded = !_provincialCouncilsExpanded;
+                });
+              },
+              onReorder: (fromIndex, toIndex) => _reorderInstitution(
+                _GovernanceSectionKind.provincialCouncil,
+                fromIndex,
+                toIndex,
+              ),
+              onReturnFromDetail: () => setState(() {}),
+            ),
+            _GovernanceSection(
+              sectionKind: _GovernanceSectionKind.provincialBank,
+              title: '省储行',
+              icon: Icons.account_balance_wallet_outlined,
+              iconAsset: _governanceProvincialBankIconAsset,
+              badgeColor: AppTheme.accent,
+              institutions: _provincialBanks,
+              collapsible: true,
+              expanded: _provincialBanksExpanded,
+              onToggleExpanded: () {
+                setState(() {
+                  _provincialBanksExpanded = !_provincialBanksExpanded;
+                });
+              },
+              onReorder: (fromIndex, toIndex) => _reorderInstitution(
+                _GovernanceSectionKind.provincialBank,
+                fromIndex,
+                toIndex,
+              ),
+              onReturnFromDetail: () => setState(() {}),
+            ),
+          ],
+        ),
+        if (_loading)
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: LinearProgressIndicator(
+              key: ValueKey('governance-load-progress'),
+              minHeight: 2,
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        _GovernanceSection(
-          sectionKind: _GovernanceSectionKind.nationalCouncil,
-          title: '国家储委会',
-          icon: Icons.account_balance,
-          badgeColor: AppTheme.primaryDark,
-          institutions: _national,
-          onReturnFromDetail: () => setState(() {}),
-        ),
-        _GovernanceSection(
-          sectionKind: _GovernanceSectionKind.provincialCouncil,
-          title: '省储委会',
-          icon: Icons.groups_2_outlined,
-          iconAsset: _governanceProvincialCouncilIconAsset,
-          badgeColor: AppTheme.primary,
-          institutions: _provincialCouncils,
-          collapsible: true,
-          expanded: _provincialCouncilsExpanded,
-          onToggleExpanded: () {
-            setState(() {
-              _provincialCouncilsExpanded = !_provincialCouncilsExpanded;
-            });
-          },
-          onReorder: (fromIndex, toIndex) => _reorderInstitution(
-            _GovernanceSectionKind.provincialCouncil,
-            fromIndex,
-            toIndex,
-          ),
-          onReturnFromDetail: () => setState(() {}),
-        ),
-        _GovernanceSection(
-          sectionKind: _GovernanceSectionKind.provincialBank,
-          title: '省储行',
-          icon: Icons.account_balance_wallet_outlined,
-          iconAsset: _governanceProvincialBankIconAsset,
-          badgeColor: AppTheme.accent,
-          institutions: _provincialBanks,
-          collapsible: true,
-          expanded: _provincialBanksExpanded,
-          onToggleExpanded: () {
-            setState(() {
-              _provincialBanksExpanded = !_provincialBanksExpanded;
-            });
-          },
-          onReorder: (fromIndex, toIndex) => _reorderInstitution(
-            _GovernanceSectionKind.provincialBank,
-            fromIndex,
-            toIndex,
-          ),
-          onReturnFromDetail: () => setState(() {}),
-        ),
       ],
     );
   }

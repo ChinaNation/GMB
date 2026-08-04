@@ -49,6 +49,20 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   useIsolatedIsar();
 
+  test('主 Tab 系统栏按当前背景切换且底部导航始终使用深色图标', () {
+    for (var tabIndex = 0; tabIndex < 4; tabIndex++) {
+      final style = AppShell.systemUiOverlayStyleForTab(tabIndex);
+      expect(style.statusBarIconBrightness, Brightness.dark);
+      expect(style.statusBarBrightness, Brightness.light);
+      expect(style.systemNavigationBarIconBrightness, Brightness.dark);
+    }
+
+    final myStyle = AppShell.systemUiOverlayStyleForTab(4);
+    expect(myStyle.statusBarIconBrightness, Brightness.light);
+    expect(myStyle.statusBarBrightness, Brightness.dark);
+    expect(myStyle.systemNavigationBarIconBrightness, Brightness.dark);
+  });
+
   const secureStorageChannel =
       MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
   const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');

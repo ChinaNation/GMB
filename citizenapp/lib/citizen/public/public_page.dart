@@ -71,7 +71,9 @@ class _PublicPageState extends State<PublicTab> {
   @override
   void initState() {
     super.initState();
-    _bootstrap();
+    // 固定省份导航不依赖身份或目录读取，首帧直接提供完整页面定位。
+    _provinces = publicProvinceItems();
+    unawaited(_bootstrap());
   }
 
   Future<String?> _resolveCidNumber() async {
@@ -87,13 +89,15 @@ class _PublicPageState extends State<PublicTab> {
     // 字典还在灌 Isar,市名会暂时回退 code(001),字典就绪后须清脏缓存重新 join,
     // 否则永远停在 001(根因见任务卡 20260623-citizenapp-public-city-001-timing-fix)。
     unawaited(_syncThenRefresh());
-    final cidNumber = await _resolveCidNumber();
+    String? cidNumber;
+    try {
+      cidNumber = await _resolveCidNumber();
+    } on Object {
+      // 浏览公权目录不以身份缓存为前置条件；解析失败按未登录展示关注空态。
+      cidNumber = null;
+    }
     if (!mounted) return;
-    setState(() {
-      _subscriberCidNumber = cidNumber;
-      // 省份是固定行政区(43 省),始终全显,与数据是否加载无关。
-      _provinces = publicProvinceItems();
-    });
+    setState(() => _subscriberCidNumber = cidNumber);
     await _selectGroup(_kFollowGroup);
   }
 
@@ -114,53 +118,61 @@ class _PublicPageState extends State<PublicTab> {
   }
 
   Future<void> _selectGroup(String group) async {
-    if (group == _kFollowGroup) {
+    try {
+      if (group == _kFollowGroup) {
+        setState(() {
+          _selected = group;
+          _contentLoading = true;
+          _contentError = null;
+        });
+        final subs = _subscriberCidNumber == null
+            ? <PublicInstitutionEntity>[]
+            : await _repo.listSubscribed(_subscriberCidNumber!);
+        // 预 join 关注机构的所属地(省名·市名),不在 build 里 await。
+        final areas = <String, String>{};
+        for (final inst in subs) {
+          areas[inst.cidNumber] = await _repo.areaPath(
+            provinceCode: inst.provinceCode,
+            cityCode: inst.cityCode,
+          );
+        }
+        if (!mounted) return;
+        setState(() {
+          _subscribed = subs;
+          _subscribedArea = areas;
+          _contentLoading = false;
+        });
+        return;
+      }
+      // 省(group=省 code):命中内存缓存 → **秒显不转圈**;未命中时保留页面结构读本地一次。
+      // 之后后台增量刷新(成功会回写缓存与列表)。
+      final cached = _cityCache[group];
       setState(() {
         _selected = group;
-        _contentLoading = true;
         _contentError = null;
+        _cities = cached ?? const [];
+        _contentLoading = cached == null;
       });
-      final subs = _subscriberCidNumber == null
-          ? <PublicInstitutionEntity>[]
-          : await _repo.listSubscribed(_subscriberCidNumber!);
-      // 预 join 关注机构的所属地(省名·市名),不在 build 里 await。
-      final areas = <String, String>{};
-      for (final inst in subs) {
-        areas[inst.cidNumber] = await _repo.areaPath(
-          provinceCode: inst.provinceCode,
-          cityCode: inst.cityCode,
-        );
+      if (cached == null) {
+        final localCities = await _loadCityVms(group);
+        if (!mounted || _selected != group) return;
+        // 加固:字典就绪(至少一个市 join 到非 code 的真名)才写缓存;首装字典未灌完时
+        // 市名全回退 code,这种脏列表不入缓存,等 _syncThenRefresh 灌完后重 join。
+        final dictReady = localCities.any((c) => c.name != c.code);
+        if (dictReady) _cityCache[group] = localCities;
+        setState(() {
+          _cities = localCities;
+          _contentLoading = false;
+        });
       }
-      if (!mounted) return;
-      setState(() {
-        _subscribed = subs;
-        _subscribedArea = areas;
-        _contentLoading = false;
-      });
-      return;
-    }
-    // 省(group=省 code):命中内存缓存 → **秒显不转圈**;未命中才转圈读本地一次后入缓存。
-    // 之后后台增量刷新(成功会回写缓存与列表)。
-    final cached = _cityCache[group];
-    setState(() {
-      _selected = group;
-      _contentError = null;
-      _cities = cached ?? const [];
-      _contentLoading = cached == null;
-    });
-    if (cached == null) {
-      final localCities = await _loadCityVms(group);
+      unawaited(_refreshProvince(group));
+    } on Object {
       if (!mounted || _selected != group) return;
-      // 加固:字典就绪(至少一个市 join 到非 code 的真名)才写缓存;首装字典未灌完时
-      // 市名全回退 code,这种脏列表不入缓存,等 _syncThenRefresh 灌完后重 join。
-      final dictReady = localCities.any((c) => c.name != c.code);
-      if (dictReady) _cityCache[group] = localCities;
       setState(() {
-        _cities = localCities;
         _contentLoading = false;
+        _contentError = '公权机构目录读取失败，请稍后重试';
       });
     }
-    unawaited(_refreshProvince(group));
   }
 
   /// 读某省市 code 列表 + **一次批量 join 市名**(消 N+1)成 view-model。
@@ -210,6 +222,11 @@ class _PublicPageState extends State<PublicTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_contentLoading)
+          const LinearProgressIndicator(
+            key: ValueKey('public-directory-load-progress'),
+            minHeight: 2,
+          ),
         // 标题与治理 tab"治理机构"对称。
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 12),
@@ -242,7 +259,19 @@ class _PublicPageState extends State<PublicTab> {
 
   Widget _buildContent() {
     if (_contentLoading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(
+        child: Text(
+          '正在读取公权机构目录',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
+    }
+    if (_selected == _kFollowGroup && _contentError != null) {
+      return _emptyHint(
+        icon: Icons.cloud_off_outlined,
+        title: _contentError!,
+        subtitle: '稍后重试，公权目录浏览不受身份状态阻塞',
+      );
     }
     if (_selected == _kFollowGroup) {
       return _buildFollowList();

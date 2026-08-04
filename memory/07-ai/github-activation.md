@@ -42,7 +42,9 @@ CitizenChain workflow 内的 `guardrails` job 对每个非草稿 PR 执行全局
 
 预期结果：CitizenChain workflow 的 `guardrails` job 失败，并报告“改代码后未更新文档”或检测到的残留。
 
-再分别修改 CitizenApp/Cloudflare、CitizenWallet 和 CitizenChain 路径，确认只触发对应的产品 workflow；手动 WASM 在未明确执行时不得自动触发。
+再分别修改 CitizenApp/Cloudflare、CitizenWallet 和 CitizenChain 路径，确认只触发对应的产品
+workflow；普通提交不得执行 WASM job，只有完整提交消息为 `CitizenChain WASM` 的 `main` push
+才允许进入 WASM 构建。
 
 ## 5. 启用完成判定
 

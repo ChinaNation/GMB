@@ -49,10 +49,10 @@ class ProfileHeaderCard extends StatelessWidget {
   static const double _avatarSize = 80;
   static const double _avatarOverlap = 40;
 
-  /// 链上身份档位；徽章据此分色（访客橙/投票蓝/竞选红/纯访客无）。
+  /// 链上身份档位；无有效会员时徽章据此分色（访客金/投票蓝/竞选红）。
   String? get _identityLevel => profile?.identityLevel;
 
-  /// 会员信号（决定徽章是否带勾）。
+  /// 会员信号；有效态与合法档位共同决定会员徽章的档位色和对勾。
   String? get _membershipLevel => profile?.membershipLevel;
   bool get _membershipActive => profile?.membershipActive ?? false;
 

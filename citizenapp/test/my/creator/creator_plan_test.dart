@@ -1,7 +1,45 @@
+import 'dart:async';
+
+import 'package:citizenapp/my/creator/creator_page.dart';
+import 'package:citizenapp/my/creator/creator_service.dart';
+import 'package:citizenapp/my/creator/models/creator_overview.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _PendingCreatorService extends CreatorService {
+  final Completer<CreatorPageData> completer = Completer<CreatorPageData>();
+
+  @override
+  Future<CreatorPageData> load() => completer.future;
+}
+
 void main() {
+  testWidgets('创作者状态未返回时直接显示安全页面结构且不使用整页转圈', (tester) async {
+    final service = _PendingCreatorService();
+    await tester.pumpWidget(
+      MaterialApp(home: CreatorPage(service: service)),
+    );
+    await tester.pump();
+
+    expect(find.text('创作者'), findsOneWidget);
+    expect(find.text('我的创作者会员'), findsOneWidget);
+    expect(find.text('同步中'), findsOneWidget);
+    expect(find.text('状态同步中'), findsOneWidget);
+    expect(find.byKey(const ValueKey('creator-sync-progress')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    service.completer.complete(
+      CreatorPageData.active(
+        plan: CreatorPlan.empty('CN220-CTZN2-100000001-2026'),
+        overview: CreatorOverview.zero,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('creator-sync-progress')), findsNothing);
+    expect(find.text('已开通'), findsOneWidget);
+  });
+
   group('CreatorTier JSON', () {
     test('toJson/fromJson 往返（分口径）', () {
       const tier = CreatorTier(

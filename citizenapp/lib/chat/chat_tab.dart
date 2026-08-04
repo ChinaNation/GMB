@@ -6,7 +6,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../8964/profile/widgets/local_identity_avatar.dart';
 import '../my/myid/identity_account_cache.dart';
-import '../my/myid/widgets/identity_registration_gate.dart';
 import '../my/user/contact_book_page.dart';
 import '../qr/scan_dispatch_flow.dart';
 import '../ui/app_theme.dart';
@@ -236,10 +235,16 @@ class _ChatTabState extends State<ChatTab> {
       if (!_isActive) {
         return;
       }
-      if (syncFirst && activeWallet.isNotEmpty) {
-        await _retryOutgoingSilently();
+      if (!mounted || generation != _reloadGeneration) {
+        return;
       }
-      final conversations = await widget.store.readConversationPreviews(
+      setState(() {
+        _cidNumber = ownerCidNumber;
+        _accountId = activeWallet;
+      });
+      _configurePolling(activeWallet);
+      // 首先只读本地会话并立即渲染；发送队列重试与网络同步不得挡住聊天首帧。
+      var conversations = await widget.store.readConversationPreviews(
         ownerCidNumber: ownerCidNumber,
         currentAccountId: activeWallet,
       );
@@ -248,10 +253,18 @@ class _ChatTabState extends State<ChatTab> {
       }
       setState(() {
         _conversations = conversations;
-        _cidNumber = ownerCidNumber;
-        _accountId = activeWallet;
       });
-      _configurePolling(activeWallet);
+      if (syncFirst && activeWallet.isNotEmpty) {
+        await _retryOutgoingSilently();
+        conversations = await widget.store.readConversationPreviews(
+          ownerCidNumber: ownerCidNumber,
+          currentAccountId: activeWallet,
+        );
+        if (!mounted || !_isActive || generation != _reloadGeneration) {
+          return;
+        }
+        setState(() => _conversations = conversations);
+      }
     } catch (error) {
       if (mounted && generation == _reloadGeneration) {
         setState(() {
@@ -479,12 +492,7 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   void _openConversation(ChatConversationPreview preview) {
-    if (_accountId.isEmpty) {
-      setState(() {
-        _error = '请先在「我的 → 我的钱包」创建热钱包';
-      });
-      return;
-    }
+    if (!_requireChatIdentity()) return;
     if (preview.isGroup) {
       openGroupChat(
         context,
@@ -497,7 +505,7 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   void _openCreateGroup() {
-    if (!_requireAccount()) return;
+    if (!_requireChatIdentity()) return;
     final opener = widget.openers?.openCreateGroup;
     if (opener != null) {
       unawaited(opener(context));
@@ -514,6 +522,16 @@ class _ChatTabState extends State<ChatTab> {
   bool _requireAccount() {
     if (_accountId.isEmpty) {
       setState(() => _error = '请先在「我的 → 我的钱包」创建热钱包');
+      return false;
+    }
+    return true;
+  }
+
+  /// 页面浏览直接开放；私信、群聊、加好友等动作发生时再严格要求热钱包与 CID。
+  bool _requireChatIdentity() {
+    if (!_requireAccount()) return false;
+    if (_cidNumber.isEmpty) {
+      setState(() => _error = '请先在「我的 → 身份」注册身份');
       return false;
     }
     return true;
@@ -574,7 +592,7 @@ class _ChatTabState extends State<ChatTab> {
 
   /// 发私信 = 通讯录单选，点联系人直接开私聊。
   Future<void> _openSendMessage() async {
-    if (!_requireAccount()) return;
+    if (!_requireChatIdentity()) return;
     final opener = widget.openers?.openSendMessage;
     if (opener != null) {
       await opener(context);
@@ -592,7 +610,7 @@ class _ChatTabState extends State<ChatTab> {
 
   /// 加好友 = 扫对方二维码写入本人密文通讯录。
   Future<void> _openAddFriend() async {
-    if (!_requireAccount()) return;
+    if (!_requireChatIdentity()) return;
     final opener = widget.openers?.openAddFriend;
     if (opener != null) {
       await opener(context);
@@ -603,6 +621,7 @@ class _ChatTabState extends State<ChatTab> {
 
   /// 搜索 = 进入独立搜索页；透传 store 与账户，避免搜索页重复解析依赖。
   Future<void> _openSearch() async {
+    if (!_requireChatIdentity()) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => ChatSearchPage(
@@ -713,57 +732,64 @@ class _ChatTabState extends State<ChatTab> {
 
   @override
   Widget build(BuildContext context) {
-    return IdentityRegistrationGate(
-      featureLabel: '聊天',
-      child: SafeArea(
-        child: ColoredBox(
-          color: AppTheme.scaffoldBg,
-          child: RefreshIndicator(
-            onRefresh: () => _reload(syncFirst: true),
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                    child: _ChatHeader(onAction: _onEntryAction)),
-                if (_error != null)
-                  SliverToBoxAdapter(child: _ErrorBanner(message: _error!)),
-                if (!_loading && _accountId.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: _SearchEntry(onTap: () => unawaited(_openSearch())),
+    return SafeArea(
+      child: ColoredBox(
+        color: AppTheme.scaffoldBg,
+        child: RefreshIndicator(
+          onRefresh: () => _reload(syncFirst: true),
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _ChatHeader(onAction: _onEntryAction)),
+              if (_error != null)
+                SliverToBoxAdapter(child: _ErrorBanner(message: _error!)),
+              SliverToBoxAdapter(
+                child: _SearchEntry(onTap: () => unawaited(_openSearch())),
+              ),
+              if (_loading)
+                const SliverToBoxAdapter(
+                  child: LinearProgressIndicator(
+                    key: ValueKey('chat-sync-progress'),
+                    minHeight: 2,
                   ),
-                if (_loading)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_accountId.isEmpty)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _NoAccount(),
-                  )
-                else if (_conversations.isNotEmpty)
-                  SliverList.builder(
-                    itemCount: _conversations.length,
-                    itemBuilder: (context, index) {
-                      final preview = _conversations[index];
-                      return _ConversationTile(
-                        preview: preview,
-                        isFirst: index == 0,
-                        isLast: index == _conversations.length - 1,
-                        onTap: () => _openConversation(preview),
-                        onDelete: () => _confirmAndDeleteConversation(preview),
-                        onManage: preview.isGroup
-                            ? () => _openGroupManage(preview)
-                            : null,
-                      );
-                    },
-                  )
-                else
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _EmptyConversationList(),
-                  ),
-              ],
-            ),
+                ),
+              if (_loading && _conversations.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _ChatSyncNotice(),
+                )
+              else if (_accountId.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _NoAccount(),
+                )
+              else if (_cidNumber.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _NoIdentity(),
+                )
+              else if (_conversations.isNotEmpty)
+                SliverList.builder(
+                  itemCount: _conversations.length,
+                  itemBuilder: (context, index) {
+                    final preview = _conversations[index];
+                    return _ConversationTile(
+                      preview: preview,
+                      isFirst: index == 0,
+                      isLast: index == _conversations.length - 1,
+                      onTap: () => _openConversation(preview),
+                      onDelete: () => _confirmAndDeleteConversation(preview),
+                      onManage: preview.isGroup
+                          ? () => _openGroupManage(preview)
+                          : null,
+                    );
+                  },
+                )
+              else
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _EmptyConversationList(),
+                ),
+            ],
           ),
         ),
       ),
@@ -1326,6 +1352,49 @@ class _NoAccount extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(32, 32, 32, 80),
         child: Text(
           '请先在「我的 → 我的钱包」创建热钱包',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatSyncNotice extends StatelessWidget {
+  const _ChatSyncNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(32, 32, 32, 80),
+        child: Text(
+          '正在读取本地会话',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoIdentity extends StatelessWidget {
+  const _NoIdentity();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(32, 32, 32, 80),
+        child: Text(
+          '请先在「我的 → 身份」注册身份',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textSecondary,

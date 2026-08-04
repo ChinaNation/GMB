@@ -67,6 +67,8 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
   List<ChatStoredMessage> _messageHits = const <ChatStoredMessage>[];
   String _query = '';
   bool _loading = true;
+  bool _searching = false;
+  String? _error;
 
   /// 消息检索是异步的：用递增序号丢弃过期结果，
   /// 避免快速输入时旧关键词的结果覆盖新关键词的结果。
@@ -85,47 +87,77 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
   }
 
   Future<void> _load() async {
-    final identity = widget.cidNumber != null && widget.accountId != null
-        ? null
-        : await IdentityAccountCache.instance.resolve();
-    final accountId = widget.accountId ?? identity?.accountId ?? '';
-    final cidNumber = widget.cidNumber ?? identity?.snapshot?.cidNumber ?? '';
-    final conversations = await _store.readConversationPreviews(
-      ownerCidNumber: cidNumber,
-      currentAccountId: accountId,
-    );
-    List<UserContact> contacts;
     try {
-      contacts = await _contactService.getContacts();
+      final identity = widget.cidNumber != null && widget.accountId != null
+          ? null
+          : await IdentityAccountCache.instance.resolve();
+      final accountId = widget.accountId ?? identity?.accountId ?? '';
+      final cidNumber = widget.cidNumber ?? identity?.snapshot?.cidNumber ?? '';
+      final conversations = await _store.readConversationPreviews(
+        ownerCidNumber: cidNumber,
+        currentAccountId: accountId,
+      );
+      List<UserContact> contacts;
+      try {
+        contacts = await _contactService.getContacts();
+      } on Exception {
+        // 通讯录读失败只让「联系人」段为空，不阻塞会话与聊天记录搜索。
+        contacts = const <UserContact>[];
+      }
+      if (!mounted) return;
+      setState(() {
+        _accountId = accountId;
+        _cidNumber = cidNumber;
+        _conversations = conversations;
+        _contacts = contacts;
+        _loading = false;
+      });
     } on Exception {
-      // 通讯录读失败只让「联系人」段为空，不阻塞会话与聊天记录搜索。
-      contacts = const <UserContact>[];
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = '本地聊天数据读取失败';
+      });
     }
-    if (!mounted) return;
-    setState(() {
-      _accountId = accountId;
-      _cidNumber = cidNumber;
-      _conversations = conversations;
-      _contacts = contacts;
-      _loading = false;
-    });
   }
 
   Future<void> _onQueryChanged(String value) async {
     final query = value.trim();
-    setState(() => _query = query);
     if (query.isEmpty) {
-      setState(() => _messageHits = const <ChatStoredMessage>[]);
+      ++_searchSeq;
+      setState(() {
+        _query = query;
+        _messageHits = const <ChatStoredMessage>[];
+        _searching = false;
+        _error = null;
+      });
       return;
     }
     final seq = ++_searchSeq;
-    final hits = await _store.searchMessages(
-      ownerCidNumber: _cidNumber,
-      currentAccountId: _accountId,
-      keyword: query,
-    );
-    if (!mounted || seq != _searchSeq) return;
-    setState(() => _messageHits = hits);
+    setState(() {
+      _query = query;
+      _searching = true;
+      _error = null;
+    });
+    try {
+      final hits = await _store.searchMessages(
+        ownerCidNumber: _cidNumber,
+        currentAccountId: _accountId,
+        keyword: query,
+      );
+      if (!mounted || seq != _searchSeq) return;
+      setState(() {
+        _messageHits = hits;
+        _searching = false;
+      });
+    } on Exception {
+      if (!mounted || seq != _searchSeq) return;
+      setState(() {
+        _messageHits = const <ChatStoredMessage>[];
+        _searching = false;
+        _error = '聊天记录搜索失败';
+      });
+    }
   }
 
   List<ChatConversationPreview> get _conversationHits {
@@ -231,11 +263,24 @@ class _ChatSearchPageState extends State<ChatSearchPage> {
               ),
             ),
           ),
+          if (_loading || _searching)
+            const LinearProgressIndicator(
+              key: ValueKey('chat-search-progress'),
+              minHeight: 2,
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : !hasQuery
-                    ? const _SearchHint()
+            child: !hasQuery
+                ? const _SearchHint()
+                : (_loading || _searching) && noHit
+                    ? const Center(child: Text('正在搜索本地内容'))
                     : noHit
                         ? const Center(child: Text('没有找到相关内容'))
                         : ListView(

@@ -11,6 +11,20 @@ const testGenesisHash = `0x${'11'.repeat(32)}`;
 const testStateRoot = `0x${'22'.repeat(32)}`;
 
 describe('chain bootstrap manifest', () => {
+  it('returns the exact running Worker version for deployment verification', async () => {
+    const response = await routeRequest(
+      new Request('https://worker.test/health'),
+      env({ CF_VERSION_METADATA: { id: 'candidate-version', tag: '', timestamp: '2026-08-03T00:00:00Z' } })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      service: 'citizenapp-square-api',
+      worker_version_id: 'candidate-version'
+    });
+  });
+
   it('returns a light-node bootstrap manifest without exposing RPC', () => {
     const response = buildChainBootstrapResponse(
       new Request('https://api.onchina.org/api/chain/bootstrap'),

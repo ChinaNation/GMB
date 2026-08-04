@@ -4,6 +4,7 @@ import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
+import 'package:citizenapp/transaction/shared/tx_auto_refresh_mixin.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/transaction_history_page.dart';
@@ -33,7 +34,8 @@ class AccountDetailPage extends StatefulWidget {
   State<AccountDetailPage> createState() => _AccountDetailPageState();
 }
 
-class _AccountDetailPageState extends State<AccountDetailPage> {
+class _AccountDetailPageState extends State<AccountDetailPage>
+    with TxAutoRefreshMixin<AccountDetailPage> {
   final WalletManager _walletManager = WalletManager();
 
   /// 充值/提现/零钱包动作卡:下拉刷新时通过此 key 触发清算行余额重查。
@@ -48,13 +50,18 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   @override
   void initState() {
     super.initState();
-    // 初始化加载最近交易记录;链上到账由钱包 Tab 的 ChainTxMonitor 后台写入本地库,
-    // 本页通过下拉刷新 / 操作后回刷重新读取(不重复启动监听、不劫持全局回调)。
+    // 初始化加载最近交易记录;之后由 ChainTxMonitor 后台写库触发响应式重刷
+    // (不重复启动监听、不劫持全局回调)。
     _loadRecentRecords();
+    startTxAutoRefresh(widget.account.accountId);
   }
 
   @override
+  Future<void> onTxRecordsChanged() => _loadRecentRecords();
+
+  @override
   void dispose() {
+    stopTxAutoRefresh();
     if (_screenshotGuardActive) ScreenshotGuard.disable();
     super.dispose();
   }

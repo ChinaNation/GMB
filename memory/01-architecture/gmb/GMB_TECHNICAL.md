@@ -194,9 +194,9 @@ GMB/
 
 ## 8. 发布边界
 
-本机统一发布入口固定为 `citizenconsole/` 可视化控制台。控制台属于本机私有运维工具，整目录由 Git 忽略，不得纳入 Git、提交或推送 GitHub；`.runtime/`、日志、编译产物、本机状态和私密材料同样只留在本机。首页固定一行五张中文小卡片：“发币、公民、公民链、公民云、公民钱包”。发币卡点击进入专属整页（非弹窗）管理稳定币充值发币订单与发币热钱包；其余卡片点开弹窗显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途，但绝不读取到浏览器或显示密钥明文。CitizenWeb 不再建立独立控制台模块，官网唯一生产动作归入公民云。
+本机统一发布入口固定为 `citizenconsole/` 可视化控制台。控制台属于本机私有运维工具，整目录由 Git 忽略，不得纳入 Git、提交或推送 GitHub；`.runtime/`、日志、编译产物、本机状态和私密材料同样只留在本机。首页固定一行四张中文小卡片，顺序为“发币、公民、公民链、公民云”，每张卡片宽度为旧四等分宽度的二分之一并靠左排列。“公民”只是 CitizenConsole 内部 `mobile` 界面分组的展示名，内部分别保留 CitizenApp 与 CitizenWallet 的正式产品身份和动作脚本，不形成第三个移动产品。发币卡点击进入专属整页（非弹窗）管理稳定币充值发币订单与发币热钱包；其余卡片点开弹窗显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途。已登记的本机 Keychain 配置只允许逐次 Touch ID 后在短时弹窗查看，关闭即清除；GitHub 远程 Secret 不可回读。CitizenWeb 不再建立独立控制台模块，官网唯一生产动作归入公民云。
 
-测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，`.ssh`、仓库及根目录不得保留部署私钥明文。GitHub `workflow_dispatch` 使用显式 `mode=ci/release` 隔离构建与发布；服务器部署由本地控制台独立执行，目标服务器直接下载 GitHub 最新成功 CI 产物，CI 模式不得创建 Release 或部署服务器。
+测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，`.ssh`、仓库及根目录不得保留部署私钥明文。移动端 `GMB_APP_KEY` 以 macOS Keychain 为唯一可查看生产真源，GitHub 同名 Secret 只是流水线投影；CitizenApp 或 CitizenWallet 正式 Release 必须在同一次 Touch ID 后先用本机值覆盖投影，同步失败则禁止启动 Release。GitHub `workflow_dispatch` 使用显式 `mode=ci/release` 隔离构建与发布；服务器部署由本地控制台独立执行，目标服务器直接下载 GitHub 最新成功 CI 产物，CI 模式不得创建 Release 或部署服务器。
 
 CitizenConsole 的生产进程模型固定为：Apple `Developer ID Application` 签名并完成公证的
 原生应用作为根进程，创建不可重新连接的匿名 `AF_UNIX socketpair`，再启动签名包内的
@@ -208,11 +208,25 @@ Node、网页、动作脚本、充值代码和依赖。Node 只能通过私有�
 普通 UI Node 只持有非私密配置和原生会话状态。每笔发币由原生根进程通过匿名管道调用签名包
 内的一次性隔离工作进程；点击锁定、离页、断连或根进程退出时原地清零私钥。控制台 HTTP
 继续只监听回环地址，并同时执行 Host、会话 Cookie、Origin、Fetch Metadata、CSP 和安全
-响应头校验；生产动作子进程使用环境白名单，不继承控制台完整进程环境。
+响应头校验；生产动作子进程使用环境白名单，不继承控制台完整进程环境。发币控制台页面主体
+只保留订单列表，不显示“订单台账”标题；“刷新台账、拉取并发币、解锁/锁定、配置”固定在顶部
+左侧同一操作行，红/绿解锁状态圆点固定在订单区域右上角，与顶部和右侧边框各间隔 16px。订单表按本地台账现有 `updated_at` 倒序生成从 1 开始的跨页连续展示序号，前端每页固定 20 条，右下角提供上一页和下一页。序号不写入本地台账、Cloudflare 或链上数据。配置列表只通过专用弹窗显示，关闭弹窗立即清理临时输入和短时查看值，
+但不改变持续发币解锁会话。
 
-公民云三项操作固定一行，顺序为“生产部署、清空并重建全部数据、官网部署”。“官网部署”复用公民云生产 `CF_ACCOUNT_ID` 和 Pages 最小权限 `CF_DEPLOY_TOKEN`，一次 Touch ID 原子读取，只更新已经存在的 `citizenweb` Pages 项目并使用 `https://www.crcfrcn.com` 做真实健康检查。官网没有测试部署、本地预览、独立密钥或独立控制台卡片；部署固定使用 `citizenweb/package-lock.json` 锁定的 Wrangler 版本，生产项目存在性门禁只解析 `wrangler pages project list --json`。
+公民云只保留“生产部署、官网部署”两个动作。日常控制台没有 D1、KV、R2 或 Queue
+全量删除/重建入口；灾难恢复必须另建隔离流程、另行审查和授权，禁止与发布共享权限。
+Worker“生产部署”一次 Touch ID 原子读取完整 Secret 和最小权限 `CF_DEPLOY_TOKEN`，但不读取
+`CF_DATA_TOKEN`；本地依赖安装、零漏洞审计、类型检查和测试结束前，生产 Secret 封存在匿名管道且 npm
+子进程无权读取 stdin。代码、配置和 Secret 原子上传为 0% 候选版本，通过正式域名 Version
+Override 返回的准确 version id 后才一次切至 100%；切流后健康检查失败自动恢复旧版本 100%。
+`wrangler.toml` 与 D1 schema 使用受审哈希门禁，普通发布检测到 Route、绑定、持久资源拓扑或
+数据库结构变化时失败关闭。“官网部署”复用公民云生产 `CF_ACCOUNT_ID` 和 Pages 最小权限
+`CF_DEPLOY_TOKEN`，一次 Touch ID 原子读取，只更新已经存在的 `citizenweb` Pages 项目并使用
+`https://www.crcfrcn.com` 做真实健康检查。官网没有测试部署、本地预览、独立密钥或独立
+控制台卡片；部署固定使用 `citizenweb/package-lock.json` 锁定的 Wrangler 版本，生产项目
+存在性门禁只解析 `wrangler pages project list --json`。
 
-公民与公民钱包详情页各自三项操作固定为紧凑三列一行。CitizenChain WASM CI 在准确 SHA 的 GitHub run 被公开 API 确认创建后，日志标签才进入可脱离状态；关闭标签只断开当前页面 SSE 跟踪，后台等待和远端 GitHub CI 继续运行。同一页面不会自动重新弹出已主动关闭的运行标签，重新打开控制台仍可接管尚未结束的任务。
+“公民”详情页固定两行：第一行是公民的“编译软件 / 运行 CI / 正式 Release”，第二行是公民钱包的同三项操作。公民云和公民的每个动作按钮保留原宽度的三分之二；公民链、公民云和公民的动作按钮主标题与说明文字均居中。两个移动产品的 `GMB_APP_KEY` 和 `SSH_KEY` 合并去重后各显示一次；每个动作仍携带精确 `productId` 并调用原 CitizenApp 或 CitizenWallet 脚本。CitizenChain WASM CI 在准确 SHA 的 GitHub run 被公开 API 确认创建后，日志标签才进入可脱离状态；关闭标签只断开当前页面 SSE 跟踪，后台等待和远端 GitHub CI 继续运行。同一页面不会自动重新弹出已主动关闭的运行标签，重新打开控制台仍可接管尚未结束的任务。
 
 - Runtime 升级：修改 `citizenchain/runtime/**` 或被 runtime 直接依赖且影响链上行为的 primitives。
 - Native Node / 桌面安装包：修改 `citizenchain/node/**`、桌面前端、Tauri、打包或发布脚本。

@@ -1,6 +1,8 @@
 // 治理 tab 视图(ADR-028 P2)测试 —— 替代旧 governance_list_page_test。
 // 机构改由统一目录按机构码加载(注入 seeded fake 仓库),分组/折叠/拖拽 UI 保持。
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +35,17 @@ PublicInstitutionDto _dto(String name, String cid, String code) =>
       'city_code': '',
       'account_count': 1,
     });
+
+class _PendingInstitutionRepository extends InstitutionRepository {
+  _PendingInstitutionRepository(PublicInstitutionRepository directory)
+      : super(directory: directory);
+
+  final Completer<List<Institution>> completer = Completer<List<Institution>>();
+
+  @override
+  Future<List<Institution>> listByCodes(Set<String> institutionCodes) =>
+      completer.future;
+}
 
 /// seeded fake 仓库:目录按机构码返回 NRC/PRC/PRB 测试机构。
 Future<InstitutionRepository> _buildRepo({
@@ -133,6 +146,35 @@ void main() {
     ];
     final reordered = reorderGovernanceInstitutions(source, 0, 2);
     expect(reordered.map((i) => i.cidNumber), ['prc-b', 'prc-c', 'prc-a']);
+  });
+
+  testWidgets('目录未返回时直接显示治理结构且不使用整页转圈', (tester) async {
+    final repository = _PendingInstitutionRepository(
+      PublicInstitutionRepository(store: FakePublicInstitutionStore()),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 420,
+            height: 900,
+            child: GovernanceTab(repository: repository),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('治理机构'), findsOneWidget);
+    expect(find.text('正在读取治理机构'), findsOneWidget);
+    expect(find.text('国家储委会（0）'), findsOneWidget);
+    expect(find.text('省储委会（0）'), findsOneWidget);
+    expect(find.text('省储行（0）'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('governance-load-progress')),
+      findsOneWidget,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('省储委会和省储行默认折叠，国家储委会保持展示', (tester) async {

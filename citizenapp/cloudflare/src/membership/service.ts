@@ -1,6 +1,7 @@
 import type { Env, MembershipRow } from '../types';
 import { HttpError, jsonResponse, requireSession } from '../shared/http';
 import { membershipPlanList } from './plans';
+import { reconcileMembershipForCid } from './reconcile';
 import { nowMs } from '../shared/time';
 
 /// 会员状态读取 + 门禁（写入镜像见 `citizen_coin.ts`）。
@@ -56,12 +57,79 @@ export async function batchMemberships(
   return map;
 }
 
+export interface MembershipAuthorizationDeps {
+  reconcileMembershipForCid: typeof reconcileMembershipForCid;
+}
+
+const defaultAuthorizationDeps: MembershipAuthorizationDeps = {
+  reconcileMembershipForCid,
+};
+
+/**
+ * 授权读取先走 D1 快路径；只有当前结果即将拒绝时，才按会话绑定的 CID 在 finalized 链上
+ * 点查并重建镜像。App 会员自报绝不进入本函数，链服务异常也不得伪装成“没有会员”。
+ */
+export async function getMembershipForAuthorization(
+  env: Env,
+  cidNumber: string,
+  accountId: string,
+  deps: MembershipAuthorizationDeps = defaultAuthorizationDeps,
+): Promise<MembershipRow | null> {
+  const current = await getMembership(env, cidNumber);
+  if (current && subscriptionIsActive(current)) {
+    return current;
+  }
+  let chainConfirmedPotentiallyActive = false;
+  try {
+    const state = await deps.reconcileMembershipForCid(env, {
+      cidNumber,
+      accountId,
+    });
+    chainConfirmedPotentiallyActive =
+      state?.plan.kind === 'platform' &&
+      (state.status === 'active' || state.status === 'cancelled');
+  } catch (error) {
+    throw membershipVerificationUnavailable(error);
+  }
+  const refreshed = await getMembership(env, cidNumber);
+  // finalized 链确认仍可能有效，但较新并发写或未前进的链时钟使 D1 仍无法放行时，属于
+  // “暂时无法验证”而不是“没有会员”，继续 fail-closed 并允许客户端重试。
+  if (
+    chainConfirmedPotentiallyActive &&
+    (!refreshed || !subscriptionIsActive(refreshed))
+  ) {
+    throw membershipVerificationUnavailable(
+      new Error('finalized membership mirror remains unavailable'),
+    );
+  }
+  return refreshed;
+}
+
+function membershipVerificationUnavailable(error: unknown): HttpError {
+  console.error(JSON.stringify({
+    event: 'membership_authorization_reconcile_failed',
+    error: error instanceof Error ? error.message : String(error),
+  }));
+  return new HttpError(
+    503,
+    'membership_verification_unavailable',
+    '暂时无法验证会员状态，请稍后重试',
+  );
+}
+
 /// 发布闸门（门禁2）：只要求订阅当前有效；解耦后不再校验身份、不再冻结。
 export async function requireActiveMembership(
   env: Env,
-  cidNumber: string
+  cidNumber: string,
+  accountId: string,
+  deps: MembershipAuthorizationDeps = defaultAuthorizationDeps,
 ): Promise<MembershipRow> {
-  const membership = await getMembership(env, cidNumber);
+  const membership = await getMembershipForAuthorization(
+    env,
+    cidNumber,
+    accountId,
+    deps,
+  );
   if (!membership) {
     throw new HttpError(402, 'membership_required', '需要有效会员才能发布广场内容');
   }
@@ -74,7 +142,17 @@ export async function requireActiveMembership(
 
 export async function membershipRoute(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  const membership = await getMembership(env, session.cid_number);
+  // 普通头像/资料读取只查镜像；发布前显式要求 verify_on_deny 时才在拒绝路径点查链，
+  // 避免无会员用户每次打开页面都产生链 RPC。
+  const verifyOnDeny =
+    new URL(request.url).searchParams.get('verify_on_deny') === '1';
+  const membership = verifyOnDeny
+    ? await getMembershipForAuthorization(
+        env,
+        session.cid_number,
+        session.account_id,
+      )
+    : await getMembership(env, session.cid_number);
   const active = membership ? subscriptionIsActive(membership) : false;
   return jsonResponse({
     ok: true,

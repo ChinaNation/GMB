@@ -172,6 +172,7 @@ class ChainTxMonitor {
 
   Future<void> _connectSubscriptionOnce() async {
     final connected = await _subscription.connect();
+    AppLog.d('[TxMonitor-Diag] subscription.connect()=$connected');
     if (!_running) {
       _subscription.disconnect();
       return;
@@ -200,6 +201,7 @@ class ChainTxMonitor {
         // 业务数据来源；流水统一等 finalized 头驱动。
         break;
       case ChainEventType.newFinalizedBlock:
+        AppLog.d('[TxMonitor-Diag] onEvent newFinalizedBlock head=$blockNumber');
         // (ADR-018 卡⑤)：新 finalized 块=链上状态已更新,立即失效
         // ChainReadCache,让换块后的余额/storage 读取拿到最新 finalized 状态。
         ChainReadCache.instance.invalidate();
@@ -221,6 +223,8 @@ class ChainTxMonitor {
     if (_ss58AddressByAccountId.isEmpty) return;
     try {
       final finalized = await _chainRpc.fetchFinalizedBlock();
+      AppLog.d(
+          '[TxMonitor-Diag] syncToLatest fetchFinalizedBlock=${finalized.blockNumber}');
       await _syncThrough(
         finalized.blockNumber,
         missingCursorStartsAt: finalized.blockNumber,
@@ -264,39 +268,46 @@ class ChainTxMonitor {
     final startBlock = lastByPublicKey.values
             .fold<int>(targetBlock, (min, value) => value < min ? value : min) +
         1;
-    if (startBlock > targetBlock) return;
-
-    final endBlock = startBlock + _maxBlocksPerRun - 1 < targetBlock
-        ? startBlock + _maxBlocksPerRun - 1
-        : targetBlock;
-    for (var block = startBlock; block <= endBlock; block++) {
-      if (!_running || _ss58AddressByAccountId.isEmpty) return;
-      if (WalletIsar.instance.hasActiveOperation) {
-        // 交易流水同步是低优先级后台任务；前台钱包/治理读写繁忙时让路，
-        // 游标不推进，下一次新区块或启动补同步会继续补缺口。
-        _scheduleSyncRetry();
-        return;
-      }
-
-      final ok = await _processBlock(block);
-      if (!ok) {
-        _scheduleSyncRetry();
-        return;
-      }
-
-      for (final normalizedAccountId in _ss58AddressByAccountId.keys) {
-        final last =
-            lastByPublicKey[normalizedAccountId] ?? missingCursorStartsAt;
-        if (last < block) {
-          await LocalTxStore.markCursorSynced(
-            accountId: normalizedAccountId,
-            blockNumber: block,
-          );
-          lastByPublicKey[normalizedAccountId] = block;
+    AppLog.d('[TxMonitor-Diag] runSyncThrough target=$targetBlock '
+        'startBlock=$startBlock 游标=$lastByPublicKey');
+    if (startBlock <= targetBlock) {
+      final endBlock = startBlock + _maxBlocksPerRun - 1 < targetBlock
+          ? startBlock + _maxBlocksPerRun - 1
+          : targetBlock;
+      for (var block = startBlock; block <= endBlock; block++) {
+        if (!_running || _ss58AddressByAccountId.isEmpty) return;
+        if (WalletIsar.instance.hasActiveOperation) {
+          // 交易流水同步是低优先级后台任务；前台钱包/治理读写繁忙时让路，
+          // 游标不推进，下一次新区块或启动补同步会继续补缺口。
+          _scheduleSyncRetry();
+          return;
         }
+
+        final ok = await _processBlock(block);
+        if (!ok) {
+          _scheduleSyncRetry();
+          return;
+        }
+
+        for (final normalizedAccountId in _ss58AddressByAccountId.keys) {
+          final last =
+              lastByPublicKey[normalizedAccountId] ?? missingCursorStartsAt;
+          if (last < block) {
+            await LocalTxStore.markCursorSynced(
+              accountId: normalizedAccountId,
+              blockNumber: block,
+            );
+            lastByPublicKey[normalizedAccountId] = block;
+          }
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
       }
-      await Future<void>.delayed(const Duration(milliseconds: 20));
     }
+
+    // 游标只前进不回头；若某本机提交记录在"其所在块被扫过之后"才落库
+    //（提交竞态），前向扫描永远补不上它。这里按记录自带的 blockHash 直接
+    // 取该块回补确认，与游标解耦，兜住这条竞态。
+    await _reconcileOpenSubmitsByStoredBlock();
   }
 
   /// 处理一个 finalized 区块的 System.Events。
@@ -304,10 +315,15 @@ class ChainTxMonitor {
   /// 调用方保证 [blockNumber] ≤ finalized 高度，按块哈希钉块读取，
   /// 写入的流水状态恒为 finalized(已确认)。
   Future<bool> _processBlock(int blockNumber) async {
+    AppLog.d('[TxMonitor-Diag] processBlock($blockNumber) 开始');
     try {
       final blockHashHex =
           await SmoldotClientManager.instance.getBlockHash(blockNumber);
-      if (blockHashHex == null || blockHashHex.isEmpty) return false;
+      if (blockHashHex == null || blockHashHex.isEmpty) {
+        AppLog.d(
+            '[TxMonitor-Diag] processBlock($blockNumber) getBlockHash 空 → 失败');
+        return false;
+      }
 
       final keyHex = '0x${_hexEncode(_eventsStorageKey)}';
       final result = await SmoldotClientManager.instance.request(
@@ -353,15 +369,21 @@ class ChainTxMonitor {
     for (final accountId in _ss58AddressByAccountId.keys) {
       openRecords.addAll(await LocalTxStore.queryOpenLocalSubmit(accountId));
     }
+    AppLog.d(
+        '[TxMonitor-Diag] confirm block $blockNumber 待确认记录=${openRecords.length}');
     if (openRecords.isEmpty) return claimed;
 
     final List<String> extrinsics;
     try {
       extrinsics = await SmoldotClientManager.instance
-          .getFinalizedBlockExtrinsicsOnce(blockHashHex);
+          .getFinalizedBlockExtrinsicsOnce(blockHashHex)
+          .timeout(const Duration(seconds: 20));
     } catch (e) {
-      AppLog.d('[TxMonitor] 取块 $blockNumber extrinsics 失败，跳过 txHash 认领: $e');
-      return claimed;
+      // 有待确认记录却取不到块体(smoldot 丢 peer / 超时):绝不能吞掉当“跳过认领”，
+      // 否则 _processBlock 会带着未确认记录推进游标、永久漏确认。抛出 → _processBlock
+      // 判本块失败 → 不推进游标、稍后重试;peer 一回来即自动补确认,监视器不再冻死。
+      AppLog.d('[TxMonitor] 取块 $blockNumber extrinsics 失败(有待确认记录)，本块重试: $e');
+      rethrow;
     }
 
     for (final record in openRecords) {
@@ -394,6 +416,48 @@ class ChainTxMonitor {
       claimed.add('${record.accountId}#$idx');
     }
     return claimed;
+  }
+
+  /// 回补对账：对每条“未终态、但已带 blockHash”的本机提交记录，直接按其
+  /// blockHash 取块号、重扫该块 → 就地翻已确认/失败。与前向游标解耦，专治
+  /// “监视器扫过某块之后本地记录才诞生”的提交竞态；记录变 finalized 后即从
+  /// [LocalTxStore.queryOpenLocalSubmit] 移除，幂等自终止。
+  Future<void> _reconcileOpenSubmitsByStoredBlock() async {
+    if (!_running || _ss58AddressByAccountId.isEmpty) return;
+    final blockHashes = <String>{};
+    for (final accountId in _ss58AddressByAccountId.keys) {
+      for (final record in await LocalTxStore.queryOpenLocalSubmit(accountId)) {
+        final blockHash = record.blockHash;
+        if (blockHash != null && blockHash.isNotEmpty) {
+          blockHashes.add(blockHash);
+        }
+      }
+    }
+    if (blockHashes.isEmpty) return;
+    for (final blockHashHex in blockHashes) {
+      if (!_running) return;
+      final blockNumber = await _blockNumberByHash(blockHashHex);
+      if (blockNumber == null) continue;
+      await _processBlock(blockNumber);
+    }
+  }
+
+  /// 按块哈希取块号（`chain_getHeader.number`）。失败返回 null。
+  Future<int?> _blockNumberByHash(String blockHashHex) async {
+    try {
+      final header = await SmoldotClientManager.instance
+          .request('chain_getHeader', [blockHashHex]);
+      if (header is Map) {
+        final number = header['number'];
+        if (number is String && number.isNotEmpty) {
+          final hex = number.startsWith('0x') ? number.substring(2) : number;
+          return int.parse(hex, radix: 16);
+        }
+      }
+    } catch (e) {
+      AppLog.d('[TxMonitor] chain_getHeader($blockHashHex) 取块号失败: $e');
+    }
+    return null;
   }
 
   /// 解码 System.Events，优先提取 OnchainTransaction 转账事件。

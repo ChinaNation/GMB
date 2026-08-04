@@ -197,9 +197,7 @@ void main() {
       MaterialApp(
         theme: AppTheme.lightTheme,
         home: OnchainPaymentPanel(
-          title: '交易',
-          enableDelayedLocalRecordRefresh: false,
-          currentWalletLoader: () async => currentWallet,
+          title: '交易',          currentWalletLoader: () async => currentWallet,
           localRecordsLoader: (accountId, {limit = 100}) async {
             final normalizedAccountId =
                 LocalTxStore.requireAccountId(accountId);
@@ -245,9 +243,7 @@ void main() {
         theme: AppTheme.lightTheme,
         home: OnchainPaymentPanel(
           title: '交易',
-          initialToAddress: recipient,
-          enableDelayedLocalRecordRefresh: false,
-          currentWalletLoader: () async => payer,
+          initialToAddress: recipient,          currentWalletLoader: () async => payer,
           localRecordsLoader: (_, {limit = 100}) async => const [],
         ),
       ),
@@ -294,9 +290,7 @@ void main() {
       MaterialApp(
         theme: AppTheme.lightTheme,
         home: OnchainPaymentPanel(
-          title: '交易',
-          enableDelayedLocalRecordRefresh: false,
-          currentWalletLoader: () async {
+          title: '交易',          currentWalletLoader: () async {
             walletLoads++;
             return payer;
           },

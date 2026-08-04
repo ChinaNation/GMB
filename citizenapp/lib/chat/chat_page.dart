@@ -254,12 +254,18 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _syncOnOpen() async {
+    // 会话首帧先读取本地消息；网络重试随后进行，离线或慢网不得挡住聊天页面。
+    await _reloadMessages();
     final sync = widget.onSync;
     if (sync == null) {
-      await _reloadMessages();
       return;
     }
-    await _syncAndReload(silent: true);
+    if (mounted) setState(() => _syncing = true);
+    try {
+      await _syncAndReload(silent: true);
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
     if (mounted && widget.onSync != null) {
       final realtimeReady = await _startRealtime();
       if (!realtimeReady && mounted && widget.onSync != null) {
@@ -1164,8 +1170,11 @@ class _ChatPageState extends State<ChatPage> {
       ),
       body: Column(
         children: [
-          if (_attachmentBusy || _deleting)
-            const LinearProgressIndicator(minHeight: 2),
+          if (_loading || _syncing || _attachmentBusy || _deleting)
+            const LinearProgressIndicator(
+              key: ValueKey('chat-page-progress'),
+              minHeight: 2,
+            ),
           if (_error != null)
             Container(
               width: double.infinity,
@@ -1177,36 +1186,33 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : Chat(
-                    currentUserId: widget.ownerCidNumber,
-                    chatController: _chatController,
-                    onMessageSend: _handleSend,
-                    onAttachmentTap: _handleMediaTap,
-                    backgroundColor: AppTheme.scaffoldBg,
-                    builders: Builders(
-                      textMessageBuilder:
-                          widget.isGroup ? _buildGroupTextMessage : null,
-                      imageMessageBuilder: _buildImageMessage,
-                      videoMessageBuilder: _buildVideoMessage,
-                      fileMessageBuilder: _buildFileMessage,
-                      customMessageBuilder: _buildStickerMessage,
-                      composerBuilder: _buildComposer,
-                    ),
-                    resolveUser: (id) async {
-                      final isMe = id == widget.ownerCidNumber;
-                      return User(
-                        id: id,
-                        name: isMe
-                            ? '我'
-                            : widget.isGroup
-                                ? ProfilePresentation.forIdentityKey(id)
-                                    .fallbackName
-                                : peerName,
-                      );
-                    },
-                  ),
+            child: Chat(
+              currentUserId: widget.ownerCidNumber,
+              chatController: _chatController,
+              onMessageSend: _handleSend,
+              onAttachmentTap: _handleMediaTap,
+              backgroundColor: AppTheme.scaffoldBg,
+              builders: Builders(
+                textMessageBuilder:
+                    widget.isGroup ? _buildGroupTextMessage : null,
+                imageMessageBuilder: _buildImageMessage,
+                videoMessageBuilder: _buildVideoMessage,
+                fileMessageBuilder: _buildFileMessage,
+                customMessageBuilder: _buildStickerMessage,
+                composerBuilder: _buildComposer,
+              ),
+              resolveUser: (id) async {
+                final isMe = id == widget.ownerCidNumber;
+                return User(
+                  id: id,
+                  name: isMe
+                      ? '我'
+                      : widget.isGroup
+                          ? ProfilePresentation.forIdentityKey(id).fallbackName
+                          : peerName,
+                );
+              },
+            ),
           ),
         ],
       ),

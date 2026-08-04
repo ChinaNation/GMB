@@ -386,6 +386,26 @@ void main() {
     expect(find.text('公民CID号'), findsNothing);
   });
 
+  testWidgets('身份卡真实值统一左对齐并使用相同起始位置', (tester) async {
+    await pumpPage(tester, _votingState);
+
+    final votingCard = card(MyIdTier.voting);
+    final accountValue = find.descendant(
+      of: votingCard,
+      matching: find.text('w5BekTim…vMgf7o8E'),
+    );
+    final cidValue = find.descendant(
+      of: votingCard,
+      matching: find.text('CID-2026-0715'),
+    );
+    expect(tester.widget<Text>(accountValue).textAlign, TextAlign.left);
+    expect(tester.widget<Text>(cidValue).textAlign, TextAlign.left);
+    expect(
+      tester.getTopLeft(accountValue).dx,
+      closeTo(tester.getTopLeft(cidValue).dx, 0.1),
+    );
+  });
+
   testWidgets('身份页支持下拉刷新', (tester) async {
     await pumpPage(tester, const MyIdState(tier: MyIdTier.visitor));
     expect(find.byType(RefreshIndicator), findsOneWidget);

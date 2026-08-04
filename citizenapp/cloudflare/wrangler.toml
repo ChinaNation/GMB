@@ -6,6 +6,18 @@ preview_urls = false
 stream = { binding = "STREAM" }
 routes = [{ pattern = "www.crcfrcn.com/api/*", zone_name = "crcfrcn.com" }]
 
+# 候选版本验收必须从真实响应读取精确 Worker version id，禁止只凭 HTTP 200 切流。
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+# 正式部署由 CitizenConsole 一次性提交完整 Secret 集合；缺一项即由 Wrangler 拒绝上传。
+[secrets]
+required = [
+  "CF_ACCOUNT_ID", "CF_API_TOKEN", "CHAIN_ID", "CHAIN_SECRET", "CHAIN_URL",
+  "FCM_EMAIL", "FCM_KEY", "FCM_PROJECT", "HASH_KEY", "IMAGES_SIGNING_KEY",
+  "STREAM_HOOK_SECRET", "TURNSTILE_SECRET", "TOPUP_SETTLE_TOKEN", "TOPUP_INTENT_SECRET",
+]
+
 # CitizenApp Cloudflare 只保留唯一生产环境。API Token、Stream webhook Secret、
 # 链 RPC Access 凭据和充值令牌全部由 CitizenConsole 经 Touch ID 注入。
 

@@ -72,9 +72,9 @@ CitizenProfile sampleProfile({
     bannerObjectKey: bannerKey,
     cidNumber: certified ? 'CN001-CTZN-000000001-2026' : null,
     isCertified: certified,
-    // 认证真源=链上身份档位；默认认证=投票公民（蓝），未认证=访客（无徽章）。
+    // 认证真源=链上身份档位；默认认证=投票公民，未认证=访客。
     identityLevel: identityLevel ?? (certified ? 'voting' : 'visitor'),
-    // 会员默认未购买（徽章不带勾，显空心环）；传 membershipLevel 才可能带勾。
+    // 会员默认未购买；传合法 membershipLevel 才显示对应档位色与对勾。
     membershipLevel: membershipLevel,
     membershipActive: membershipActive ?? (membershipLevel != null),
     following: 2,
@@ -95,6 +95,7 @@ class FakeProfileApi extends CitizenProfileApi {
     this.throwOnFollow = false,
     this.throwOnProfile = false,
     this.throwOnAuthorPosts = false,
+    this.unauthorizedAuthorPosts = 0,
   }) : super();
 
   final CitizenProfile result;
@@ -104,11 +105,14 @@ class FakeProfileApi extends CitizenProfileApi {
   final bool throwOnFollow;
   final bool throwOnProfile;
   final bool throwOnAuthorPosts;
+  final int unauthorizedAuthorPosts;
   int calls = 0;
   int followCalls = 0;
   int unfollowCalls = 0;
   int notifyCalls = 0;
   int localPostCalls = 0;
+  int authorPostCalls = 0;
+  final List<SquareSession?> authorPostSessions = [];
   bool? lastNotifyEnabled;
   Map<String, String?>? lastUpdate;
 
@@ -133,6 +137,15 @@ class FakeProfileApi extends CitizenProfileApi {
     int? cursor,
     SquareSession? session,
   }) async {
+    authorPostCalls++;
+    authorPostSessions.add(session);
+    if (authorPostCalls <= unauthorizedAuthorPosts) {
+      throw const SquareApiException(
+        'session expired',
+        statusCode: 401,
+        errorCode: 'expired_session',
+      );
+    }
     if (throwOnAuthorPosts) {
       throw const SquareApiException('author posts failed');
     }

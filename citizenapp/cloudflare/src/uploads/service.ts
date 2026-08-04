@@ -110,7 +110,11 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
     assertIdentityCanPublishCategory(identity.identity_level, postCategory);
   }
   // 会员权益和统一资源表共同约束声明；客户端提供的数据只用于申请，不是最终凭据。
-  const membership = await requireActiveMembership(env, session.cid_number);
+  const membership = await requireActiveMembership(
+    env,
+    session.cid_number,
+    session.account_id,
+  );
   const membershipLevel = normalizeMembershipLevel(membership.membership_level);
   const plan = membershipPlan(membershipLevel);
   assertDeclaredContentQuota({
@@ -427,7 +431,11 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
   if (manifestObjectHash !== manifestHash) {
     throw new HttpError(409, 'manifest_object_hash_mismatch', 'R2 manifest 内容与 manifest_hash 不一致');
   }
-  const membership = await requireActiveMembership(env, upload.cid_number);
+  const membership = await requireActiveMembership(
+    env,
+    upload.cid_number,
+    session.account_id,
+  );
   const membershipLevel = normalizeMembershipLevel(membership.membership_level);
   await assertManifestQuota({
     membershipLevel,

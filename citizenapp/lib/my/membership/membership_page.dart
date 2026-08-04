@@ -10,7 +10,6 @@ import 'package:citizenapp/my/creator/creator_money.dart'
 import 'package:citizenapp/my/membership/membership_detail_page.dart';
 import 'package:citizenapp/my/membership/subscription_service.dart';
 import 'package:citizenapp/rpc/subscription_rpc.dart';
-import 'package:citizenapp/my/myid/widgets/identity_registration_gate.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 会员三档固定顺序（与价格升序一致，ADR-036，与身份彻底解耦）：
@@ -321,31 +320,23 @@ class _MembershipPageState extends State<MembershipPage>
 
   @override
   Widget build(BuildContext context) {
-    // 整个 Scaffold 交给 gate:未注册时 AppBar 的刷新入口也一并被挡(fail-closed);
-    // gate 未放行态自带标题栏 + 返回键。
-    return IdentityRegistrationGate(
-      featureLabel: '订阅',
-      scaffoldTitle: '会员｜订阅',
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('会员｜订阅'),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              tooltip: '刷新',
-              onPressed: _refreshing ? null : () => _load(forceRefresh: true),
-              icon: _refreshing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh),
-            ),
-          ],
-        ),
-        body: _buildBody(),
+    // 三张套餐卡是本地静态界面，页面查看本身不属于动权操作，不能被身份链读门禁替换成
+    // 全屏加载。会员、价格与钱包状态由 [_load] 在卡片已经出现后后台补齐；真正订阅、
+    // 换档或取消时仍由 [SubscriptionService] 重新核验热钱包、CID 与 finalized 链真值。
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('会员｜订阅'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: '刷新',
+            onPressed: _refreshing ? null : () => _load(forceRefresh: true),
+            // 自动刷新只临时禁用按钮，不用转圈替换页面或工具栏；三张卡始终保留。
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
+      body: _buildBody(),
     );
   }
 
@@ -392,8 +383,9 @@ class _MembershipPageState extends State<MembershipPage>
                         priceFen: data.prices[plans[index].membershipLevel],
                         canSubscribe:
                             data.accountId.isNotEmpty && data.subscriptionReady,
-                        unavailableLabel:
-                            data.accountId.isEmpty ? '请先创建热钱包' : '会员状态同步中',
+                        unavailableLabel: data.accountId.isEmpty && !_refreshing
+                            ? '请先创建热钱包'
+                            : '会员状态同步中',
                         cardWidth: cardWidth,
                         cardHeight: bandHeight,
                         peek: peek,

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/identity_gate_test_util.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -201,7 +200,6 @@ Finder _frontButton(String label) => find.descendant(
     );
 
 void main() {
-  useRegisteredIdentityGate();
   test('平台 finalized 镜像回执不再产生设备签名', () async {
     var deviceSignCount = 0;
     final api = SquareApiClient(
@@ -261,10 +259,12 @@ void main() {
     expect(find.text('自由会员'), findsOneWidget);
     expect(find.text('民主会员'), findsOneWidget);
     expect(find.text('薪火会员'), findsOneWidget);
-    expect(find.text('请先创建热钱包'), findsNWidgets(3));
+    expect(find.text('会员状态同步中'), findsNWidgets(3));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
 
     pendingSession.complete(null);
     await tester.pumpAndSettle();
+    expect(find.text('请先创建热钱包'), findsNWidgets(3));
   });
 
   testWidgets('有效缓存直接展示且不重复读取链上订阅和价格', (tester) async {

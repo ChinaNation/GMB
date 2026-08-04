@@ -9,8 +9,8 @@ import 'package:citizenapp/ui/identity_badge.dart';
 /// 本地头像 + 右下角扇贝身份徽章的统一头像组件。
 ///
 /// 头像图取本地文件 [path]（用户在「我的」里设置的头像，与用户主页同源）；未设或文件
-/// 失效时按 [seed]（默认钱包地址）稳定选默认头像资源。徽章信号：颜色=链上身份档、
-/// 勾=会员匹配身份档。「我的」tab 与广场顶部共用本组件，避免同一用户展示成两套视觉身份。
+/// 失效时按 [seed]（默认钱包地址）稳定选默认头像资源。徽章无有效会员时显示身份档，
+/// 有有效会员时显示会员档位。「我的」tab 与广场顶部共用本组件，避免同一用户展示成两套视觉身份。
 class LocalIdentityAvatar extends StatelessWidget {
   const LocalIdentityAvatar({
     super.key,
@@ -30,7 +30,7 @@ class LocalIdentityAvatar extends StatelessWidget {
   /// 未设头像时按账号稳定选默认头像的种子（默认钱包地址，与用户主页同源）。
   final String seed;
 
-  /// 徽章信号：颜色=链上身份档、勾=会员匹配身份档。
+  /// 徽章信号：无有效会员=身份档+小人，有有效会员=会员档位+对勾。
   final String? identityLevel;
   final String? membershipLevel;
   final bool membershipActive;
@@ -89,6 +89,7 @@ class LocalIdentityAvatar extends StatelessWidget {
                 size: badgeSize,
                 tooltip: identityBadgeLabel(
                   identityLevel: identityLevel,
+                  membershipLevel: membershipLevel,
                   checked: badgeStyle.checked,
                 ),
               ),

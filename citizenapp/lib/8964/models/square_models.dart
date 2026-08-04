@@ -86,10 +86,10 @@ class SquareAuthor {
   /// ProfileAvatar 优先按永久 CID 稳定选择本地默认照片；纯访客才按账户兜底。
   final String? avatarObjectKey;
 
-  /// 作者链上身份档（徽章颜色）：visitor/voting/candidate/null。
+  /// 作者链上身份档：visitor/voting/candidate/null；无有效会员时用于徽章颜色。
   final String? identityLevel;
 
-  /// 作者已购买会员档（徽章勾）：visitor/voting/candidate/null。
+  /// 作者已购买会员档：freedom/democracy/spark/null；会员有效时用于徽章颜色。
   final String? membershipLevel;
 
   /// 作者会员是否有效。

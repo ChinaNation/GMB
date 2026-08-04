@@ -295,6 +295,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 禁止在 UI 文案、技术说明正文或代码注释中把产品展示名写成 `citizenapp` / `citizenwallet`。只有当它们表示真实路径、package import、脚本名、文件名、环境变量、bundle id、MethodChannel、任务卡 slug 或模块 id 时才允许小写。
 
+CitizenConsole 内部 `mobile` 只是把 CitizenApp 与 CitizenWallet 合并管理的界面分组，首页与详情标题复用产品中文展示名“公民”。`mobile` 不是第三个产品，不得作为产品目录、package、bundle id 或动作脚本名。
+
 ## 5.4 废弃旧名映射
 
 以下旧名只允许出现在历史任务卡、历史 ADR、历史变更记录或明确说明“已废弃”的段落中，不得作为当前实现、当前文档路径、代码注释或新命名使用。

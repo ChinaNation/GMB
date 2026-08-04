@@ -58,6 +58,15 @@ jobs:
           targets: wasm32v1-none
           components: rust-src, clippy
 
+      - name: 安装 Node.js
+        # NodeGuard 行为探针编译完整 Node/Tauri 宿主；固定 Node.js 24 并复用锁文件缓存，
+        # 保证编译期读取的 frontendDist 来自真实前端构建，而不是占位目录或本机残留。
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: citizenchain/node/frontend/package-lock.json
+
       - name: 安装系统依赖
         # NodeGuard 行为探针会编译完整 node/Tauri 宿主；依赖必须与 Linux 节点 CI 对齐，
         # 否则 glib-sys 等桌面依赖会在探针真正执行前因缺少 pkg-config 元数据失败。
@@ -182,6 +191,13 @@ jobs:
               for filename, size, digest in rows:
                   out.write(f"| `{filename}` | {size} | `0x{digest}` |\n")
           PY
+
+      # tauri::generate_context! 在 node 测试编译期读取 frontendDist；必须使用锁文件构建
+      # 真实前端产物，不能提交 dist 或创建空占位文件绕过 Tauri 校验。
+      - name: 构建公民链节点前端
+        run: |
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
 
       - name: 校验候选 WASM 安全行为
         working-directory: citizenchain
