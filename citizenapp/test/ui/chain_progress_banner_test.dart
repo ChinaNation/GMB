@@ -34,7 +34,10 @@ void main() {
           body: ChainProgressBanner(
             showInlineStatus: true,
             pollInterval: const Duration(milliseconds: 10),
-            progressLoader: () async => snapshots.removeFirst(),
+            // 轮询常驻:队列耗尽后复用最后一份快照,模拟链稳定期。
+            progressLoader: () async => snapshots.length > 1
+                ? snapshots.removeFirst()
+                : snapshots.first,
           ),
         ),
       ),
@@ -111,7 +114,7 @@ void main() {
     expect(find.textContaining('最终区块'), findsNothing);
   });
 
-  testWidgets('不可见状态读取仍持续轮询直到 regular', (tester) async {
+  testWidgets('不可见状态读取常驻轮询,regular 后仍继续跟进链尖', (tester) async {
     final snapshots = Queue<LightClientStatusSnapshot>.from([
       _snapshot(
         isSyncing: false,
@@ -148,7 +151,10 @@ void main() {
             pollInterval: const Duration(milliseconds: 10),
             progressLoader: () async {
               loadCount += 1;
-              return snapshots.removeFirst();
+              // 队列耗尽后复用最后一份 regular 快照,模拟链稳定期持续轮询。
+              return snapshots.length > 1
+                  ? snapshots.removeFirst()
+                  : snapshots.first;
             },
           ),
         ),
@@ -167,9 +173,11 @@ void main() {
     expect(find.textContaining('轻节点'), findsNothing);
     expect(loadCount, 3);
 
-    // ready 快照不再继续轮询，避免稳定期制造后台开销。
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(loadCount, 3);
+    // 轮询常驻:regular(isUsable)后仍按 pollInterval 继续跟进,
+    // 顶部最终区块高度才能自动更新、不依赖下拉刷新。
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump();
+    expect(loadCount, greaterThan(3));
   });
 }
 

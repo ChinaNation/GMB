@@ -108,7 +108,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner>
       });
       widget.onProgressChanged?.call(progress);
       widget.onErrorChanged?.call(null);
-      _scheduleNextPoll(progress: progress);
+      _scheduleNextPoll();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -120,12 +120,12 @@ class _ChainProgressBannerState extends State<ChainProgressBanner>
     }
   }
 
-  void _scheduleNextPoll({LightClientStatusSnapshot? progress}) {
+  /// 轮询常驻、永不自停:最终区块高度随链持续推进,同步完成(isUsable)后也按
+  /// [ChainProgressBanner.pollInterval] 继续轮询,顶部高度才能自动跟上链尖。
+  /// fetchChainProgress 只读原生内存状态快照,不发网络请求、不依赖 peer,常驻
+  /// 轮询零负担;若同步完成即停(旧行为),高度会冻结在启动时的值、只能靠下拉刷新。
+  void _scheduleNextPoll() {
     if (_isFlutterTest) return;
-    final current = progress ?? _progress;
-    // runtime near-head 可能先于 warp 状态机收口；完整可用前必须持续轮询。
-    final shouldPoll = current == null || !current.isUsable || _error != null;
-    if (!shouldPoll) return;
     _pollTimer = Timer(widget.pollInterval, () {
       if (!mounted) return;
       unawaited(_loadProgress());

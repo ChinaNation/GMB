@@ -1,16 +1,15 @@
 name: CitizenChain WASM
 
+# 中文注释：只能由公民控制台「运行 WASM CI」按钮经 workflow_dispatch 发起。
+# 不设 push 触发——向 main 推代码是纯粹的推代码，绝不产生任何 WASM 运行记录。
+# 因此也不再需要按提交名分流：那套做法会让每一次普通 push 都留下一条 skipped 记录
+# 污染 Actions 列表，失败重试还只能靠造空提交换 SHA；dispatch 可以直接对同一 SHA 重跑。
+# 只有一种构建模式，故不设 inputs。
 on:
-  # 中文注释：CitizenConsole 把全部 Git 可见代码提交为这个固定消息并推送 main；
-  # 不设置 paths，保证同一代码树的空提交也能重试失败构建。非标记提交只产生 skipped 记录，
-  # 不分配 runner、不编译 WASM。
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  # 中文注释：普通 main push 虽然会产生 skipped 记录，但使用独立 run id，不能取消正在
-  # 编译的正式 WASM；只有两个固定标记构建之间允许新任务替代旧任务。
-  group: citizenchain-wasm-${{ github.event.head_commit.message == 'CitizenChain WASM' && github.ref || github.run_id }}
+  group: citizenchain-wasm-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -20,7 +19,6 @@ env:
 jobs:
   build-wasm:
     name: 编译 WASM
-    if: ${{ github.event.head_commit.message == 'CitizenChain WASM' }}
     runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码

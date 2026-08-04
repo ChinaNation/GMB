@@ -1,14 +1,8 @@
 name: CitizenWallet CI
 
+# 中文注释：不设 push 触发。向 main 推代码是纯粹的推代码，不启动任何 CI；
+# CI 只能由公民控制台「公民 → 公民钱包 → 运行 CI / 正式 Release」按钮经 workflow_dispatch 发起。
 on:
-  push:
-    branches: [main]
-    # 中文注释:按 ci-path-routing——runtime/** 改动只走 citizenchain-wasm.yml。
-    # 钱包 CI 只由钱包自身代码触发,不再监听 runtime 文件,做到 runtime 推送「只允许 WASM CI」。
-    paths:
-      - ".github/workflows/citizenwallet-ci.yml"
-      - ".fvm/fvm_config.json"
-      - "citizenwallet/**"
   workflow_dispatch:
     inputs:
       mode:
@@ -23,8 +17,7 @@ env:
   GMB_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
 
 concurrency:
-  # 中文注释：WASM 固定标记产生的 skipped 运行使用独立组，不能取消同分支正在执行的正常 CI。
-  group: citizenwallet-ci-${{ github.event_name == 'push' && github.event.head_commit.message == 'CitizenChain WASM' && github.run_id || github.ref }}
+  group: citizenwallet-ci-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -33,7 +26,6 @@ permissions:
 jobs:
   build-apk:
     name: 构建 公民钱包.apk
-    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -161,8 +153,8 @@ jobs:
         working-directory: citizenwallet
         run: flutter test
 
-      # 中文注释：push 自动 CI 只做工程构建检查，不读取正式签名 keystore。
-      - name: 构建 Debug APK（push 检查）
+      # 中文注释：非 release 的 CI 只做工程构建检查，不读取正式签名 keystore。
+      - name: 构建 Debug APK（CI 检查）
         if: ${{ env.GMB_RELEASE_MODE != 'true' }}
         working-directory: citizenwallet
         run: flutter build apk --debug

@@ -1,16 +1,10 @@
 name: CitizenChain
 
+# 中文注释：不设 push 触发。向 main 推代码是纯粹的推代码，不启动任何 CI；
+# CI 只能由公民控制台「运行节点 CI / 正式 Release」按钮经 workflow_dispatch 发起。
+# 这样每个软件的 CI 彼此彻底分开，也不会出现「推送触发一条、dispatch 再触发一条、
+# 后者用 concurrency 把前者掐掉」的空跑 runner 浪费。
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/citizenchain-ci.yml"
-      - ".github/scripts/**"
-      - "scripts/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "primitives/**"
-      - "citizenchain/**"
   # 中文注释：PR 不做路径过滤，确保原独立 AI Guardrails 的文档与残留门禁对每个 PR 生效。
   # 链工程验证和四平台打包由 changes job 按真实变更再收窄。
   pull_request:
@@ -31,8 +25,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # 中文注释：WASM 固定标记产生的 skipped 运行使用独立组，不能取消同分支正在执行的正常 CI。
-  group: citizenchain-${{ github.event_name == 'push' && github.event.head_commit.message == 'CitizenChain WASM' && github.run_id || github.ref }}
+  group: citizenchain-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -45,7 +38,6 @@ env:
 jobs:
   changes:
     name: 识别公民链变更范围
-    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     outputs:
       citizenchain: ${{ steps.scope.outputs.citizenchain }}
@@ -62,23 +54,18 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
-          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
+          # 本 workflow 只有两种触发：workflow_dispatch（控制台按钮）与 pull_request。
+          # 控制台按钮一律跑全量，不做范围收窄；PR 才按与基线分支的差异收窄。
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "citizenchain=true" >> "$GITHUB_OUTPUT"
             echo "desktop=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            diff_base="origin/${BASE_REF}"
-          elif [[ "$BEFORE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
-            diff_base="${GITHUB_SHA}^"
-          else
-            diff_base="$BEFORE_SHA"
-          fi
+          diff_base="origin/${BASE_REF}"
 
           citizenchain=false
           desktop=false
@@ -99,12 +86,10 @@ jobs:
           echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
 
   # 金标向量真源在本仓 citizenchain/runtime/primitives/tests/fixtures/。
-  # 独立成 job：guardrails 只在 PR 跑，而真源改动常直接推 main，挂在那里等于门禁失效。
-  # 唯一例外是 WASM 固定标记 push；该次整仓提交由专用 workflow 验证并在分配 runner 前跳过。
+  # 独立成 job 而不挂在 verify 下：它不受 changes 范围收窄影响，PR 与控制台按钮都必跑。
   # 本 job 是纯 Node 静态比对，秒级、无需工具链。
   golden-vectors:
     name: 校验金标向量跨端一致
-    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
@@ -115,7 +100,6 @@ jobs:
 
   guardrails:
     name: 文档、残留与 pallet 注册表门禁
-    if: ${{ github.event_name != 'push' || github.event.head_commit.message != 'CitizenChain WASM' }}
     runs-on: ubuntu-latest
     steps:
       - name: 拉取完整变更历史
@@ -127,13 +111,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_REF: ${{ github.base_ref }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
+          # 只剩 pull_request 与 workflow_dispatch 两种触发：PR 比基线分支，
+          # 控制台按钮比上一个提交。
           if [ "$EVENT_NAME" = "pull_request" ]; then
             base_ref="origin/${PR_BASE_REF}"
-          elif [ "$EVENT_NAME" = "push" ] && [[ "$PUSH_BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ ! "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
-            base_ref="$PUSH_BEFORE_SHA"
           else
             base_ref="HEAD^"
           fi
@@ -253,7 +236,7 @@ jobs:
             os: ubuntu-latest
             artifact: 公民链AMD
             installer_name: 公民链AMD.deb
-            push_bundle_targets: deb
+            ci_bundle_targets: deb
             manual_bundle_targets: deb,appimage
             updater_asset_name: citizenchain-updater-linux-amd.AppImage
             expected_runner_arch: X64
@@ -264,7 +247,7 @@ jobs:
             os: ubuntu-24.04-arm
             artifact: 公民链ARM
             installer_name: 公民链ARM.deb
-            push_bundle_targets: deb
+            ci_bundle_targets: deb
             manual_bundle_targets: deb,appimage
             updater_asset_name: citizenchain-updater-linux-arm.AppImage
             expected_runner_arch: ARM64
@@ -275,7 +258,7 @@ jobs:
             os: windows-latest
             artifact: 公民链Windows
             installer_name: 公民链.exe
-            push_bundle_targets: nsis
+            ci_bundle_targets: nsis
             manual_bundle_targets: nsis
             expected_runner_arch: X64
             cache_key: citizenchain-windows
@@ -284,7 +267,7 @@ jobs:
             os: macos-15
             artifact: 公民链macOS
             installer_name: 公民链.dmg
-            push_bundle_targets: dmg
+            ci_bundle_targets: dmg
             manual_bundle_targets: dmg
             updater_asset_name: citizenchain-updater-macos-apple.app.tar.gz
             expected_runner_arch: ARM64
@@ -318,7 +301,7 @@ jobs:
       - name: 同步桌面端版本
         shell: bash
         env:
-          CITIZENCHAIN_PUSH_BUNDLE_TARGETS: ${{ matrix.push_bundle_targets }}
+          CITIZENCHAIN_CI_BUNDLE_TARGETS: ${{ matrix.ci_bundle_targets }}
           CITIZENCHAIN_MANUAL_BUNDLE_TARGETS: ${{ matrix.manual_bundle_targets }}
         run: |
           set -euo pipefail
@@ -327,7 +310,7 @@ jobs:
           const isManualRelease = process.env.GMB_RELEASE_MODE === 'true';
           const targetSource = isManualRelease
             ? process.env.CITIZENCHAIN_MANUAL_BUNDLE_TARGETS
-            : process.env.CITIZENCHAIN_PUSH_BUNDLE_TARGETS;
+            : process.env.CITIZENCHAIN_CI_BUNDLE_TARGETS;
           const bundleTargets = (targetSource || '')
             .split(',')
             .map((target) => target.trim())
@@ -342,9 +325,9 @@ jobs:
           const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
           const version = tauri.version;
           tauri.bundle = tauri.bundle || {};
-          // 中文注释：push 只生成用户安装包；手动发布允许额外生成 updater 内部产物。
+          // 中文注释：非 release 的 CI 只生成用户安装包；正式发布允许额外生成 updater 内部产物。
           tauri.bundle.targets = bundleTargets;
-          // 中文注释：push 构建只做打包检查；手动发布的 updater 公钥和签名密钥由后续手动步骤注入。
+          // 中文注释：非 release 的 CI 只做打包检查；正式发布的 updater 公钥和签名密钥由后续步骤注入。
           delete tauri.bundle.createUpdaterArtifacts;
           fs.writeFileSync(tauriPath, `${JSON.stringify(tauri, null, 2)}\n`);
 
@@ -446,7 +429,7 @@ jobs:
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --locked
 
-      - name: Tauri 打包（push 检查）
+      - name: Tauri 打包（CI 检查）
         if: ${{ env.GMB_RELEASE_MODE != 'true' }}
         working-directory: citizenchain/node
         run: cargo tauri build --ci
