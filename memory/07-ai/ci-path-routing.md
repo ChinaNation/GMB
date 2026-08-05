@@ -47,8 +47,9 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
 - CitizenConsole 不再提供独立 GitHub 卡片；同一对 `SSH_KEY` + `GH_TOKEN` 归入 CitizenApp、
   CitizenChain、CitizenWallet 三张产品卡片，由各产品 CI、Release 和 CitizenChain WASM CI
   在一次 Touch ID 中一并读取。两把凭据各司其职、缺一不可：`SSH_KEY` 认证 git 协议（推代码），
-  `GH_TOKEN` 认证 GitHub REST API（`workflow_dispatch` 触发与运行状态查询）——SSH 私钥无法
-  认证 API，这是 GitHub 平台限制。`GH_TOKEN` 需 `repo` + `workflow` 权限，只存在本机 Keychain
+  `GH_TOKEN` 认证 GitHub REST API（`workflow_dispatch` 触发、运行状态查询，以及 `gh secret`
+  读写仓库 Secret）——SSH 私钥无法认证 API，这是 GitHub 平台限制。
+  `GH_TOKEN` 需 `repo` + `workflow` 权限，只存在本机 Keychain
   白名单内（`OperationCatalog.isAllowed` 的 `github` 环境恰好三项），注入时只进单次动作的
   子进程环境，不落盘、不写 `~/.config/gh`，因此永远不触发钥匙串登录弹窗。
   密钥只保存一份，不复制、不回显。版本校验后用 SSH 把全部 Git 可见代码提交到 `main`
@@ -56,7 +57,12 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
   不再承担路由职责**；推送本身不触发任何流水线，随后由 `run_workflow` 显式 dispatch
   `citizenchain-wasm.yml`。失败重试直接对同一 SHA 重新 dispatch，不再造空提交。
 - 控制台用 `gh run watch` 跟踪本次 dispatch 出来的运行；`gh` 的凭据是控制台注入的
-  `GH_TOKEN`，不依赖 `~/.config/gh` 登录态。
+  `GH_TOKEN`，不依赖 `~/.config/gh` 登录态（该文件已永久停用，它每次都触发钥匙串弹窗）。
+- 控制台自身调 `gh` 的三处同受此约束：`gh secret set` / `gh secret delete` 注入 `GH_TOKEN`
+  （读令牌本身即一次 Touch ID，就是本次写操作的授权，不再叠第二次指纹）；唯独
+  `gh secret list` 走状态轮询，每几秒一次，注入等于每次轮询弹指纹，因此**永不注入**。
+  它在未认证或离线时必然失败，失败只上报「未知」三态，绝不压成「未配置」——
+  否则 GitHub 上真实存在的 `GMB_TOP_KEY` 会在面板上显示成空缺，看着像签名私钥丢了。
 - **版本契约：每点一次 CI 都涨一版**，唯一例外是上一次运行失败——那是重跑同一份代码，
   沿用当前版本并调用 `gh run delete` 删掉那条失败记录，否则一次失败白吃一个版本号。
   判断由 `previous_failed_run <workflow>` 完成，且**必须严格早于 bump**：版本已经涨了

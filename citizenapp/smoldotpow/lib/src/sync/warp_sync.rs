@@ -1549,6 +1549,44 @@ mod citizenapp_warp_policy_tests {
             Phase::Idle
         );
     }
+
+    /// 回归守卫：构建步骤排队后被 `set_chain_information` 重置（本 fork
+    /// `warp_sync_minimum_gap = 0`，每来一个新 finalized 块都会重置），必须返回可恢复的
+    /// `StateReset` 而不是 panic。曾用 `unreachable!()`，在真机上表现为交易确认那一秒
+    /// 整个 App SIGABRT 闪退（`internal error: entered unreachable code`）。
+    #[test]
+    fn build_steps_after_state_reset_return_recoverable_error_not_panic() {
+        use super::{
+            BuildChainInformationError, BuildRuntimeError, CallProof, RuntimeDownload,
+        };
+
+        // 重置后的状态：runtime_download 回到 NotStarted、call proof 回到未下载。
+        let reset_runtime_download = RuntimeDownload::NotStarted {
+            hint_doesnt_match: false,
+        };
+        assert!(
+            !matches!(reset_runtime_download, RuntimeDownload::NotVerified { .. }),
+            "重置后不再是 NotVerified：build_runtime 必须走 StateReset 分支",
+        );
+        assert!(
+            !matches!(reset_runtime_download, RuntimeDownload::Verified { .. }),
+            "重置后不再是 Verified：build_chain_information 必须走 StateReset 分支",
+        );
+        assert!(
+            !matches!(CallProof::NotStarted, CallProof::Downloaded { .. }),
+            "重置后 call proof 未下载：build_chain_information 必须走 StateReset 分支",
+        );
+
+        // 两个错误类型都必须提供 StateReset 变体（供上层按良性重来处理、不记失败）。
+        assert!(matches!(
+            BuildRuntimeError::StateReset,
+            BuildRuntimeError::StateReset
+        ));
+        assert!(matches!(
+            BuildChainInformationError::StateReset,
+            BuildChainInformationError::StateReset
+        ));
+    }
 }
 
 impl<TSrc, TRq> ops::Index<SourceId> for WarpSync<TSrc, TRq> {
@@ -1993,6 +2031,12 @@ pub enum BuildRuntimeError {
     RuntimeBuild(executor::host::NewErr),
     /// Source that has sent a proof didn't behave properly.
     SourceMisbehavior(SourceMisbehavior),
+    /// warp 状态机在本步骤排队后、执行前被 [`WarpSync::set_chain_information`] 重置
+    /// （新的 finalized 块到达即重置，本 fork `warp_sync_minimum_gap = 0` 时每块都会发生）。
+    /// 本轮构建的输入已作废，放弃即可，warp 会以新 anchor 重新开始；**不是错误状态，更不
+    /// 允许 panic**（曾是 `unreachable!()`，在真机上表现为交易确认瞬间整个 App SIGABRT 闪退）。
+    #[display("Warp state machine was reset before this build step ran")]
+    StateReset,
 }
 
 /// Ready to build the runtime of the finalized chain.
@@ -2011,13 +2055,16 @@ impl<TSrc, TRq> BuildRuntime<TSrc, TRq> {
         exec_hint: ExecHint,
         allow_unresolved_imports: bool,
     ) -> (WarpSync<TSrc, TRq>, Result<(), BuildRuntimeError>) {
+        // 本步骤排队后可能被 set_chain_information 重置（新 finalized 块到达）。此时
+        // runtime_download 已回到 NotStarted，输入作废：放弃本轮、返回可恢复错误，
+        // 由上层按既有 warp 失败路径重来。绝不 panic —— 原 unreachable!() 会杀掉整个 App。
         let RuntimeDownload::NotVerified {
             downloaded_source,
             hint_doesnt_match,
             trie_proof,
         } = &mut self.inner.runtime_download
         else {
-            unreachable!()
+            return (self.inner, Err(BuildRuntimeError::StateReset));
         };
 
         let downloaded_runtime = mem::take(trie_proof);
@@ -2244,6 +2291,10 @@ pub enum BuildChainInformationError {
     ChainInformationBuild(chain_information::build::Error),
     /// Source that has sent a proof didn't behave properly.
     SourceMisbehavior(SourceMisbehavior),
+    /// 同 [`BuildRuntimeError::StateReset`]：本步骤排队后被 `set_chain_information` 重置，
+    /// 输入已作废，放弃本轮、等 warp 以新 anchor 重来；绝不 panic。
+    #[display("Warp state machine was reset before this build step ran")]
+    StateReset,
 }
 
 /// Ready to verify the parameters of the chain against the finalized block.
@@ -2281,9 +2332,13 @@ impl<TSrc, TRq> BuildChainInformation<TSrc, TRq> {
 
                 Some(body)
             }
-            _ => unreachable!(),
+            // body_download 被 set_chain_information 重置回 NotStarted（本步骤排队后、
+            // 执行前有新 finalized 块到达）：输入作废，放弃本轮，warp 以新 anchor 重来。
+            _ => return (self.inner, Err(BuildChainInformationError::StateReset)),
         };
 
+        // 同上：runtime_download 若已被重置，mem::replace 取出的就不是 Verified。
+        // 注意此处已用 NotStarted 换出旧值，状态保持一致，直接返回可恢复错误即可。
         let RuntimeDownload::Verified {
             mut chain_info_builder,
             downloaded_runtime,
@@ -2295,16 +2350,23 @@ impl<TSrc, TRq> BuildChainInformation<TSrc, TRq> {
             },
         )
         else {
-            unreachable!()
+            return (self.inner, Err(BuildChainInformationError::StateReset));
         };
 
         let runtime_calls = mem::take(&mut self.inner.runtime_calls);
 
-        debug_assert!(
-            runtime_calls
-                .values()
-                .all(|c| matches!(c, CallProof::Downloaded { .. }))
-        );
+        // 消费前先校验：本步骤排队后若被 set_chain_information 重置，runtime_calls 会被
+        // 换成一批未下载的默认项。此时把取走的内容原样放回、返回可恢复错误，保持状态机
+        // 一致（绝不留下半截空 map），warp 会以新 anchor 重新下载。
+        // 原为 debug_assert! + 下方 unreachable!()：release 下静默、debug 下 panic，
+        // 真机表现为交易确认瞬间整个 App SIGABRT 闪退。
+        if !runtime_calls
+            .values()
+            .all(|c| matches!(c, CallProof::Downloaded { .. }))
+        {
+            self.inner.runtime_calls = runtime_calls;
+            return (self.inner, Err(BuildChainInformationError::StateReset));
+        }
 
         // Decode all the Merkle proofs that have been received.
         let calls = {
@@ -2314,12 +2376,13 @@ impl<TSrc, TRq> BuildChainInformation<TSrc, TRq> {
             );
 
             for (call, proof) in runtime_calls {
+                // 上面已整体校验过全部为 Downloaded，这里不可能落到 else。
                 let CallProof::Downloaded {
                     proof,
                     downloaded_source,
                 } = proof
                 else {
-                    unreachable!()
+                    return (self.inner, Err(BuildChainInformationError::StateReset));
                 };
 
                 let decoded_proof =

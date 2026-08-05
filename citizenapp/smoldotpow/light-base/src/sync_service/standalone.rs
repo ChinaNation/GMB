@@ -264,6 +264,17 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                             duration = ?elapsed
                         );
                     }
+                    // StateReset 不是失败:本步骤排队后有新 finalized 块到达、warp 状态机
+                    // 被重置(本 fork warp_sync_minimum_gap = 0，每块都会发生)。放弃本轮
+                    // 即可，绝不记入 warp_last_failure，否则状态快照会把常态误报成故障。
+                    Err(all::WarpSyncBuildRuntimeError::StateReset) => {
+                        log!(
+                            &task.platform,
+                            Debug,
+                            &task.log_target,
+                            "warp-sync-runtime-build-reset"
+                        );
+                    }
                     Err(error) => {
                         task.warp_last_failure = Some(WarpFailure::RuntimeBuildFailed);
                         log!(
@@ -298,6 +309,15 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                             Debug,
                             &task.log_target,
                             "warp-sync-chain-information-build-success"
+                        );
+                    }
+                    // 同上:StateReset 是被新 finalized 块打断的良性重来，不计入失败。
+                    Err(all::WarpSyncBuildChainInformationError::StateReset) => {
+                        log!(
+                            &task.platform,
+                            Debug,
+                            &task.log_target,
+                            "warp-sync-chain-information-build-reset"
                         );
                     }
                     Err(error) => {
