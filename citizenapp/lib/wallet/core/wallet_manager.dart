@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:bip39/bip39.dart' as bip39;
@@ -9,6 +10,7 @@ import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/device_data_key_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
@@ -670,21 +672,26 @@ class WalletManager {
       throw const WalletAuthException('未找到指定账户');
     }
     final profile = await _requireHotWalletProfileByMasterId(account.masterId);
+    final vaultStart = DateTime.now();
     final childHex =
         await _readAccountKeyOrThrow(profile.walletIndex, accountId);
-    final childBytes = Uint8List.fromList(_hexToBytes(childHex));
-    try {
-      final pair = Keyring.sr25519.fromSeed(childBytes);
-      pair.ss58Format = profile.ss58;
-      final localAccountId =
-          _accountIdFromBytes(pair.bytes().toList(growable: false));
-      if (localAccountId != accountId) {
-        throw const WalletAuthException('本地签名密钥与账户不一致，请重新导入钱包');
-      }
-      return Uint8List.fromList(pair.sign(payload));
-    } finally {
-      childBytes.fillRange(0, childBytes.length, 0);
-    }
+    final vaultMs = DateTime.now().difference(vaultStart).inMilliseconds;
+
+    // 派生+签名的秒级纯 Dart CPU 统一进后台 isolate,不卡 UI 主线程(防 ANR)。
+    final cpuStart = DateTime.now();
+    final ss58 = profile.ss58;
+    final signature = await Isolate.run(
+      () => _deriveVerifyAndSign(
+        childHex: childHex,
+        ss58: ss58,
+        expectedAccountId: accountId,
+        payload: payload,
+        mismatchMessage: '本地签名密钥与账户不一致，请重新导入钱包',
+      ),
+    );
+    AppLog.d('[Sign-Diag] 金库读取+生物识别 ${vaultMs}ms, 派生+签名(后台isolate) '
+        '${DateTime.now().difference(cpuStart).inMilliseconds}ms');
+    return signature;
   }
 
   /// 删除单个账户。锚点守卫:账户0 且存在兄弟账户时禁止单删(须删整只钱包);
@@ -1202,15 +1209,63 @@ class WalletManager {
     int walletIndex,
     Uint8List payload,
   ) async {
-    final pair = await _loadSigningKey(walletIndex);
-    return Uint8List.fromList(pair.sign(payload));
+    final profile = await _requireHotWalletProfile(walletIndex);
+    final vaultStart = DateTime.now();
+    final childHex =
+        await _readAccountKeyOrThrow(walletIndex, profile.accountId);
+    final vaultMs = DateTime.now().difference(vaultStart).inMilliseconds;
+
+    final cpuStart = DateTime.now();
+    final ss58 = profile.ss58;
+    final accountId = profile.accountId;
+    final signature = await Isolate.run(
+      () => _deriveVerifyAndSign(
+        childHex: childHex,
+        ss58: ss58,
+        expectedAccountId: accountId,
+        payload: payload,
+        mismatchMessage: '本地签名密钥与当前钱包不一致，请重新导入钱包',
+      ),
+    );
+    AppLog.d('[Sign-Diag] 金库读取+生物识别 ${vaultMs}ms, 派生+签名(后台isolate) '
+        '${DateTime.now().difference(cpuStart).inMilliseconds}ms');
+    return signature;
   }
 
-  /// 校验用户身份（弹一次生物识别）并确认能解锁指定热钱包，供无签名负载、但属动权、
-  /// 需先验证的场景（如敏感设置前置校验）。验证失败上抛，成功即返回。
-  Future<void> verifyWalletAccess(int walletIndex) async {
-    // 读硬件金库 child 即触发一次生物识别；成功解锁即视为通过。
-    await _loadSigningKey(walletIndex);
+  /// (Isolate.run 入口)child hex → sr25519 派生 → 公钥校验 → 签名,全程纯 CPU。
+  ///
+  /// 纯 Dart sr25519(BigInt 运算)在真机上是**秒级** CPU:留在 UI isolate 会把
+  /// 主线程一次卡 5s+(超过 Android ANR 阈值 —— 发送必崩的根因,ANR 日志实证
+  /// 冻结窗口正落在"签名"步骤内)。生物识别与金库读取仍在主线程完成,拿到
+  /// child hex 后才进 isolate;出入参均为可跨 isolate 的纯数据,child 副本在
+  /// isolate 内用后清零(fromSeed 已展开为独立 SecretKey,不引用输入字节)。
+  static Uint8List _deriveVerifyAndSign({
+    required String childHex,
+    required int ss58,
+    required String expectedAccountId,
+    required Uint8List payload,
+    required String mismatchMessage,
+  }) {
+    final text = childHex.startsWith('0x') ? childHex.substring(2) : childHex;
+    final childBytes = Uint8List(text.length ~/ 2);
+    for (var i = 0; i < childBytes.length; i++) {
+      childBytes[i] = int.parse(text.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    try {
+      final pair = Keyring.sr25519.fromSeed(childBytes);
+      pair.ss58Format = ss58;
+      final publicKey = pair.bytes().toList(growable: false);
+      final buffer = StringBuffer('0x');
+      for (final byte in publicKey) {
+        buffer.write(byte.toRadixString(16).padLeft(2, '0'));
+      }
+      if (buffer.toString() != expectedAccountId) {
+        throw WalletAuthException(mismatchMessage);
+      }
+      return Uint8List.fromList(pair.sign(payload));
+    } finally {
+      childBytes.fillRange(0, childBytes.length, 0);
+    }
   }
 
   /// 静默读取当前 CID 的通讯录云端用途钥。
@@ -1765,13 +1820,6 @@ class WalletManager {
   }
 
   /// 读严档账户0 child → 派生并校验 sr25519 密钥对。
-  Future<KeyPair> _loadSigningKey(int walletIndex) async {
-    final profile = await _requireHotWalletProfile(walletIndex);
-    final childHex =
-        await _readAccountKeyOrThrow(walletIndex, profile.accountId);
-    return _keyPairFromChildHex(childHex, profile);
-  }
-
   /// 读严档 child（触发生物识别）；fail-closed（无根 = 无自愈）。
   ///
   /// - 用户取消 / 超时（[AuthCancelled]）、无锁屏（[NoDeviceCredential]）、金库
@@ -1793,25 +1841,6 @@ class WalletManager {
       return childHex;
     } on SeedKeyInvalidated {
       throw const WalletAuthException('设备安全存储中的账户私钥不可用');
-    }
-  }
-
-  /// child hex → sr25519 KeyPair，校验派生公钥与 profile 一致。
-  KeyPair _keyPairFromChildHex(String childHex, WalletProfile profile) {
-    final childBytes = Uint8List.fromList(_hexToBytes(childHex));
-    try {
-      // fromSeed 会把 child 展开成独立 SecretKey（不引用输入字节），因此派生后
-      // 立即把本地 child 副本清零，缩短明文私钥材料在内存中的存活窗口。
-      final pair = Keyring.sr25519.fromSeed(childBytes);
-      pair.ss58Format = profile.ss58;
-      final localAccountId =
-          _accountIdFromBytes(pair.bytes().toList(growable: false));
-      if (localAccountId != profile.accountId) {
-        throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
-      }
-      return pair;
-    } finally {
-      childBytes.fillRange(0, childBytes.length, 0);
     }
   }
 

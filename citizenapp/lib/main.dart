@@ -153,6 +153,7 @@ class _AppLockGateState extends State<_AppLockGate>
       final paused = _pausedAt;
       if (paused != null &&
           DateTime.now().difference(paused) > _sessionTimeout) {
+        AppLog.d('[AppLock] 后台超过 ${_sessionTimeout.inMinutes} 分钟,重锁入口');
         // 超时只重新锁定 App 入口（PIN/设备锁），不清会话签名密钥：
         // App 锁已拦住入口，会话密钥留到进程结束，避免每次重进都为发广场
         // 动态等低敏感操作重复生物识别。转账/投票/切换身份仍每次强制认证。
@@ -201,6 +202,8 @@ class _AppLockGateState extends State<_AppLockGate>
 
   Future<void> _showPinVerify() async {
     if (!mounted) return;
+    // 诊断:定位"签名后多弹一次输入框"到底是谁 —— 若是本页,日志会给出时点。
+    AppLog.d('[AppLock] 弹出 PIN 验证输入框');
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => const PinInputPage(mode: PinInputMode.verify),
@@ -213,6 +216,7 @@ class _AppLockGateState extends State<_AppLockGate>
   }
 
   Future<void> _authenticateDevice() async {
+    AppLog.d('[AppLock] 弹出设备锁验证');
     try {
       final success = await _localAuth.authenticate(
         localizedReason: '请验证身份以进入应用',

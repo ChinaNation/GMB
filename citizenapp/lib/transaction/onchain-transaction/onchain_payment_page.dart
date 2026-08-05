@@ -487,6 +487,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
       );
       return;
     }
+    // 收起焦点与软键盘:确认弹窗关闭时 Flutter 会把焦点还给之前的输入框、
+    // 误弹一次键盘(紧接着就是生物识别,键盘纯属多余)。进入确认流程即失焦,
+    // 弹窗关闭后无焦点可恢复,键盘不再弹。
+    FocusManager.instance.primaryFocus?.unfocus();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(

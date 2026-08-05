@@ -887,16 +887,6 @@ void main() {
       expect(fakeStore.readCount, 2);
     });
 
-    test('verifyWalletAccess 读一次 child 触发一次验证（切换身份用）', () async {
-      final manager = WalletManager();
-      await manager.importWallet(_mnemonicA);
-      fakeStore.readCount = 0;
-
-      await manager.verifyWalletAccess(1);
-
-      expect(fakeStore.readCount, 1);
-    });
-
     test('AuthCancelled 上抛，绝不吞没', () async {
       final manager = WalletManager();
       final imported = await manager.importWallet(_mnemonicA);
