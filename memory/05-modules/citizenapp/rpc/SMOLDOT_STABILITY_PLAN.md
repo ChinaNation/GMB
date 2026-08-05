@@ -120,6 +120,48 @@ GRANDPA warp 证明前进），于是**每来一个更新的 finalized 块就重
   `build_steps_after_state_reset_return_recoverable_error_not_panic`；
 - 真机：带符号 debug 包连发交易，不再闪退、交易照常确认、链状态照常自动更新。
 
+---
+
+## FIX-9 原生 SIGABRT 闪退（第二处）：交易校验遇链重组后 panic（2026-08-05）
+
+### 现象与定位
+
+FIX-8 之后仍在**交易最终确认那一秒**闪退。这次 APK 带符号，栈直接反解到函数：
+
+```
+tid: smoldot-light-3   Abort message: 'internal error: entered unreachable code'
+#12/#14  smoldot_light::transactions_service::background_task ...
+```
+
+日志同刻可见重组：`inBlock 0x08e1… → retracted → inBlock 0x38fd… → finalized`。
+
+### 根因
+
+`light-base/src/transactions_service.rs` 的校验 future（612 行 `async move` →
+`validate_transaction`）：校验对着某块启动时该块被 pin；随后链重组把该块挤掉、pin 被释放；
+future 才跑到 `pin_pinned_block_runtime`，拿到 `PinPinnedBlockRuntimeError::BlockNotPinned`
+→ 撞 `unreachable!()` → panic → abort。
+
+与 FIX-8 同类：**上游假设"不可能发生"的状态，在这条每块都可能重组的 PoW 链上是常态**。
+旁证：紧邻的 `ObsoleteSubscription` 分支本就是正常返回错误、1084 行"块已不在池中"本就是
+`continue`——"校验途中环境变了"本属预期，只是漏了 `BlockNotPinned` 这一种。
+
+### 修复（3 处 panic → 可恢复）
+
+| 位置 | 场景 | 改法 |
+|------|------|------|
+| `validate_transaction` 的 `BlockNotPinned` | 目标块被重组挤掉 | 返回新变体 `ValidationError::BlockObsolete`；上层只记 Debug、交易留池等下个块重新校验（**不重建通道、不判失败**） |
+| `Some(Err(_))`（校验被取消） | 理论上不发生 | 清 `validation_in_progress` + `continue` |
+| `transaction_user_data_mut(...).unwrap_or_else(\|\| unreachable!())` | 交易处理途中已被移出池 | `if let Some(tx)` 跳过状态更新 |
+
+`transactions_service.rs` 现已零 `unreachable!()`（仅注释里保留历史说明）。
+
+### 验证
+
+真机连发交易：不再闪退、交易正常最终性上链（块 #37）、签名 18 ms、无 ANR。
+
+---
+
 ### 配套：原生符号策略（便于下次反解）
 
 `rust/Cargo.toml` 与 `smoldotpow/Cargo.toml` 恒 `strip = false` + `debug = 1`，磁盘产物始终

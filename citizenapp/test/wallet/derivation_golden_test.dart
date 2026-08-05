@@ -14,8 +14,10 @@ import 'dart:typed_data';
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
+
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/wallet/core/native_sr25519.dart';
 
 /// 固定测试助记词(substrate dev 助记词,全网公开,仅测试用)。
 const String kDevPhrase =
@@ -57,15 +59,16 @@ Future<Uint8List> _miniSecret(String mnemonic) async {
 }
 
 /// 复现 WalletManager 的 child mini-secret 提取(金标据此校验)。
+///
+/// 与生产同一条原生路径([NativeSr25519])——金标因此是"生产实现 vs Substrate
+/// 官方权威向量"的直接对拍,而不是"两份 Dart 实现互相印证"。
 List<int> _childMiniSecret(List<int> seed, int index) {
   final junctions = SecretUri.fromStr('//$index').junctions;
-  var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
+  var current = List<int>.from(seed);
   late List<int> child;
   for (final j in junctions) {
-    final cc = j.junctionId.sublist(0, 32);
-    final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
-    child = derived.$1.encode();
-    rootSk = derived.$1.expandEd25519();
+    child = NativeSr25519.deriveHard(current, j.junctionId.sublist(0, 32));
+    current = List<int>.from(child);
   }
   return child;
 }
@@ -80,17 +83,21 @@ void main() {
   test('model B 核心:fromSeed(childMiniSecret) == <助记词>//index', () async {
     final ms = await _miniSecret(kDevPhrase);
     for (var index = 0; index < 3; index++) {
+      // 生产实现(原生)对拍 substrate 标准 URI 派生(polkadart 作外部参照)。
       final child = _childMiniSecret(ms, index);
-      final recon = Keyring.sr25519.fromSeed(Uint8List.fromList(child))
-        ..ss58Format = kSs58;
+      final reconPublic = NativeSr25519.publicKeyOf(child);
       final ref = await Keyring.sr25519.fromUri('$kDevPhrase//$index');
       ref.ss58Format = kSs58;
       expect(
-        _hex(recon.bytes().toList(growable: false)),
+        _hex(reconPublic),
         _hex(ref.bytes().toList(growable: false)),
         reason: '//$index 公钥不一致',
       );
-      expect(recon.address, ref.address, reason: '//$index ss58 不一致');
+      expect(
+        ss58FromAccountIdText('0x${_hex(reconPublic)}', ss58Prefix: kSs58),
+        ref.address,
+        reason: '//$index ss58 不一致',
+      );
     }
   });
 
@@ -98,15 +105,14 @@ void main() {
     final ms = await _miniSecret(kDevPhrase);
     for (var index = 0; index < kGoldenAccounts.length; index++) {
       final child = _childMiniSecret(ms, index);
-      final kp = Keyring.sr25519.fromSeed(Uint8List.fromList(child))
-        ..ss58Format = kSs58;
+      final accountId = '0x${_hex(NativeSr25519.publicKeyOf(child))}';
       final (expectedId, expectedSs58, expectedChild) = kGoldenAccounts[index];
+      expect(accountId, expectedId, reason: '//$index accountId 漂移');
       expect(
-        '0x${_hex(kp.bytes().toList(growable: false))}',
-        expectedId,
-        reason: '//$index accountId 漂移',
+        ss58FromAccountIdText(accountId, ss58Prefix: kSs58),
+        expectedSs58,
+        reason: '//$index ss58 漂移',
       );
-      expect(kp.address, expectedSs58, reason: '//$index ss58 漂移');
       expect('0x${_hex(child)}', expectedChild,
           reason: '//$index childMiniSecret 漂移');
     }

@@ -1,18 +1,19 @@
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:isar_community/isar.dart';
+// 仅用于 SS58 地址编解码(base58 + 校验和，非密码学)，与全 app 其它调用点一致；
+// sr25519 派生/签名/验签一律走原生 [NativeSr25519]，本文件零纯 Dart 密码学。
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/log/app_log.dart';
 import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/device_data_key_vault.dart';
+import 'package:citizenapp/wallet/core/native_sr25519.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
@@ -677,19 +678,15 @@ class WalletManager {
         await _readAccountKeyOrThrow(profile.walletIndex, accountId);
     final vaultMs = DateTime.now().difference(vaultStart).inMilliseconds;
 
-    // 派生+签名的秒级纯 Dart CPU 统一进后台 isolate,不卡 UI 主线程(防 ANR)。
+    // 派生+签名走原生 schnorrkel，毫秒级，直接在调用线程完成。
     final cpuStart = DateTime.now();
-    final ss58 = profile.ss58;
-    final signature = await Isolate.run(
-      () => _deriveVerifyAndSign(
-        childHex: childHex,
-        ss58: ss58,
-        expectedAccountId: accountId,
-        payload: payload,
-        mismatchMessage: '本地签名密钥与账户不一致，请重新导入钱包',
-      ),
+    final signature = _deriveVerifyAndSign(
+      childHex: childHex,
+      expectedAccountId: accountId,
+      payload: payload,
+      mismatchMessage: '本地签名密钥与账户不一致，请重新导入钱包',
     );
-    AppLog.d('[Sign-Diag] 金库读取+生物识别 ${vaultMs}ms, 派生+签名(后台isolate) '
+    AppLog.d('[Sign-Diag] 金库读取+生物识别 ${vaultMs}ms, 派生+签名(原生) '
         '${DateTime.now().difference(cpuStart).inMilliseconds}ms');
     return signature;
   }
@@ -880,10 +877,11 @@ class WalletManager {
     Uint8List? signature;
     try {
       signature = await signForAccountId(accountId, challenge);
-      final publicKey =
-          sr.PublicKey.newPublicKey(Uint8List.fromList(_hexToBytes(accountId)));
-      final proof = sr.Signature.fromBytes(signature);
-      final (verified, _) = sr.Sr25519.verify(publicKey, proof, challenge);
+      final verified = NativeSr25519.verify(
+        _hexToBytes(accountId),
+        signature,
+        challenge,
+      );
       if (!verified) {
         throw const WalletAuthException('删除钱包签名验证失败');
       }
@@ -1169,16 +1167,20 @@ class WalletManager {
 
   /// 从母种子硬派生 `//index` 子密钥的 child mini-secret（32B），逐字节对齐
   /// `derivation_golden_test.dart` 金标与 citizenwallet 冷端。
+  /// junction chaincode 的计算(SCALE 编码，非密码学、不慢)留在 Dart，慢的密码学
+  /// 部分交原生 schnorrkel：口径漂移面最小，且金标测试守着编码这一侧。
   List<int> _childMiniSecret(List<int> seed, int index) {
     final junctions = SecretUri.fromStr('//$index').junctions;
-    var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
+    var current = List<int>.from(seed);
     late List<int> child;
     for (final j in junctions) {
       final cc = j.junctionId.sublist(0, 32);
-      final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
-      child = derived.$1.encode();
-      rootSk = derived.$1.expandEd25519();
+      child = NativeSr25519.deriveHard(current, cc);
+      // 逐层派生：上一层输出即下一层输入；中间层用完立即清零。
+      current.fillRange(0, current.length, 0);
+      current = List<int>.from(child);
     }
+    current.fillRange(0, current.length, 0);
     return child;
   }
 
@@ -1188,13 +1190,12 @@ class WalletManager {
   /// `<助记词>//index`。账户0 的 accountId 即钱包身份（S7.1 interim identity）。
   _Account0 _deriveAccount(List<int> seed, int index) {
     final child = Uint8List.fromList(_childMiniSecret(seed, index));
-    final pair = Keyring.sr25519.fromSeed(child);
-    pair.ss58Format = kGmbSs58Prefix;
-    final publicKeyBytes = pair.bytes().toList(growable: false);
+    final publicKeyBytes = NativeSr25519.publicKeyOf(child);
+    final accountId = _accountIdFromBytes(publicKeyBytes);
     return _Account0(
       childMiniSecret: child,
-      accountId: _accountIdFromBytes(publicKeyBytes),
-      ss58Address: pair.address,
+      accountId: accountId,
+      ss58Address: ss58FromAccountIdText(accountId),
     );
   }
   // 签名（child mini-secret 绑定硬件，经 SecureSeedStore；私钥材料不出类）
@@ -1216,32 +1217,24 @@ class WalletManager {
     final vaultMs = DateTime.now().difference(vaultStart).inMilliseconds;
 
     final cpuStart = DateTime.now();
-    final ss58 = profile.ss58;
-    final accountId = profile.accountId;
-    final signature = await Isolate.run(
-      () => _deriveVerifyAndSign(
-        childHex: childHex,
-        ss58: ss58,
-        expectedAccountId: accountId,
-        payload: payload,
-        mismatchMessage: '本地签名密钥与当前钱包不一致，请重新导入钱包',
-      ),
+    final signature = _deriveVerifyAndSign(
+      childHex: childHex,
+      expectedAccountId: profile.accountId,
+      payload: payload,
+      mismatchMessage: '本地签名密钥与当前钱包不一致，请重新导入钱包',
     );
-    AppLog.d('[Sign-Diag] 金库读取+生物识别 ${vaultMs}ms, 派生+签名(后台isolate) '
+    AppLog.d('[Sign-Diag] 金库读取+生物识别 ${vaultMs}ms, 派生+签名(原生) '
         '${DateTime.now().difference(cpuStart).inMilliseconds}ms');
     return signature;
   }
 
-  /// (Isolate.run 入口)child hex → sr25519 派生 → 公钥校验 → 签名,全程纯 CPU。
+  /// child hex → 公钥校验 → 签名，走原生 schnorrkel（[NativeSr25519]）。
   ///
-  /// 纯 Dart sr25519(BigInt 运算)在真机上是**秒级** CPU:留在 UI isolate 会把
-  /// 主线程一次卡 5s+(超过 Android ANR 阈值 —— 发送必崩的根因,ANR 日志实证
-  /// 冻结窗口正落在"签名"步骤内)。生物识别与金库读取仍在主线程完成,拿到
-  /// child hex 后才进 isolate;出入参均为可跨 isolate 的纯数据,child 副本在
-  /// isolate 内用后清零(fromSeed 已展开为独立 SecretKey,不引用输入字节)。
+  /// 原生是毫秒级，直接在调用线程完成即可，**不需要 Isolate**（纯 Dart 实现曾是
+  /// 秒级 CPU，必须离开主线程才不触发 ANR；换原生后 isolate 只剩开销）。
+  /// child 明文副本在 finally 里清零，缩短其在堆上的存活窗口。
   static Uint8List _deriveVerifyAndSign({
     required String childHex,
-    required int ss58,
     required String expectedAccountId,
     required Uint8List payload,
     required String mismatchMessage,
@@ -1252,9 +1245,7 @@ class WalletManager {
       childBytes[i] = int.parse(text.substring(i * 2, i * 2 + 2), radix: 16);
     }
     try {
-      final pair = Keyring.sr25519.fromSeed(childBytes);
-      pair.ss58Format = ss58;
-      final publicKey = pair.bytes().toList(growable: false);
+      final publicKey = NativeSr25519.publicKeyOf(childBytes);
       final buffer = StringBuffer('0x');
       for (final byte in publicKey) {
         buffer.write(byte.toRadixString(16).padLeft(2, '0'));
@@ -1262,7 +1253,7 @@ class WalletManager {
       if (buffer.toString() != expectedAccountId) {
         throw WalletAuthException(mismatchMessage);
       }
-      return Uint8List.fromList(pair.sign(payload));
+      return NativeSr25519.sign(childBytes, payload);
     } finally {
       childBytes.fillRange(0, childBytes.length, 0);
     }
@@ -1509,10 +1500,8 @@ class WalletManager {
     final writtenBlobNames = <String>[];
     final derived = <Uint8List>[];
     try {
-      final pair = Keyring.sr25519.fromSeed(child);
-      pair.ss58Format = wallet.ss58;
       final localAccountId =
-          _accountIdFromBytes(pair.bytes().toList(growable: false));
+          _accountIdFromBytes(NativeSr25519.publicKeyOf(child));
       if (localAccountId != binding.accountId) {
         throw const WalletAuthException('本地签名密钥与 CID 当前绑定账户不一致');
       }
@@ -1600,10 +1589,8 @@ class WalletManager {
         await _readAccountKeyOrThrow(wallet.walletIndex, binding.accountId);
     final child = Uint8List.fromList(_hexToBytes(childHex));
     try {
-      final pair = Keyring.sr25519.fromSeed(child);
-      pair.ss58Format = wallet.ss58;
       final localAccountId =
-          _accountIdFromBytes(pair.bytes().toList(growable: false));
+          _accountIdFromBytes(NativeSr25519.publicKeyOf(child));
       if (localAccountId != binding.accountId) {
         throw const WalletAuthException('本地签名密钥与 CID 当前绑定账户不一致');
       }
@@ -1612,10 +1599,8 @@ class WalletManager {
         cidNumber: binding.cidNumber,
         bindingRevision: binding.bindingRevision,
         accountId: binding.accountId,
-        signBinding: (message) async {
-          final signature = pair.sign(message);
-          return '0x${_toHex(signature)}';
-        },
+        signBinding: (message) async =>
+            '0x${_toHex(NativeSr25519.sign(child, message))}',
       );
       await _contactKeyStore.write(markerName, '1');
       await _accountDataBindingStore.activate(binding);

@@ -1373,7 +1373,7 @@ packages:
     source: hosted
     version: "1.10.2"
   sr25519:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: sr25519
       sha256: "122c930a933da6af018ec4a2ccdb853a7d0eb1a0891bfb03467e366b56f86f12"

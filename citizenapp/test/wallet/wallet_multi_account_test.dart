@@ -2,13 +2,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/wallet/core/device_data_key_vault.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/wallet/core/native_sr25519.dart';
 
 import '../support/fake_secure_seed_store.dart';
 import '../support/isar_test_env.dart';
@@ -30,14 +30,13 @@ Future<Uint8List> _masterSeed(String mnemonic) async {
 
 /// 复现 WalletManager 的账户 child mini-secret 派生(金标同源)。
 List<int> _childMiniSecret(List<int> seed, int index) {
+  // 与生产同一条原生路径(NativeSr25519),测试不另立第二套实现。
   final junctions = SecretUri.fromStr('//$index').junctions;
-  var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
+  var current = List<int>.from(seed);
   late List<int> child;
   for (final j in junctions) {
-    final cc = j.junctionId.sublist(0, 32);
-    final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
-    child = derived.$1.encode();
-    rootSk = derived.$1.expandEd25519();
+    child = NativeSr25519.deriveHard(current, j.junctionId.sublist(0, 32));
+    current = List<int>.from(child);
   }
   return child;
 }

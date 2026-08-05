@@ -3154,10 +3154,12 @@ dependencies = [
  "openmls_traits",
  "oslog",
  "parking_lot",
+ "schnorrkel",
  "serde",
  "serde_json",
  "smoldot-light",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

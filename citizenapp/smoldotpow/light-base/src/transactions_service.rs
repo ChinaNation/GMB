@@ -388,6 +388,13 @@ enum InvalidOrError {
 enum ValidationError {
     InvalidOrError(InvalidOrError),
     ObsoleteSubscription,
+    /// 校验启动后、真正取 runtime 之前，目标块被链重组挤掉并解除 pin
+    /// （`PinPinnedBlockRuntimeError::BlockNotPinned`）。
+    ///
+    /// 本链每块都可能重组（日志可见 `inBlock → retracted → inBlock → finalized`），
+    /// 这是**常态而非异常**：本轮校验作废即可，交易留在池里等下一个块重新校验。
+    /// 曾是 `unreachable!()`，真机上表现为交易确认瞬间整个 App SIGABRT 闪退。
+    BlockObsolete,
 }
 
 /// Message sent from the foreground service to the background.
@@ -1052,8 +1059,14 @@ async fn background_task<TPlat: PlatformRef>(
                             .as_mut()
                             .and_then(|f| f.now_or_never())
                         {
-                            None => continue,               // Normal. `maybe_validated_tx_id` is just a hint.
-                            Some(Err(_)) => unreachable!(), // Validations are never interrupted.
+                            None => continue, // Normal. `maybe_validated_tx_id` is just a hint.
+                            // 校验 future 被取消（理论上不会发生）：清掉在途标记、跳过本轮，
+                            // 交易留在池里等下次重新校验。绝不 panic —— 原 `unreachable!()`
+                            // 会 abort 掉整个 App，代价与收益完全不成比例。
+                            Some(Err(_)) => {
+                                tx.validation_in_progress = None;
+                                continue;
+                            }
                             Some(Ok(result)) => {
                                 tx.validation_in_progress = None;
                                 result
@@ -1108,11 +1121,14 @@ async fn background_task<TPlat: PlatformRef>(
                                 )
                             );
 
-                            worker
+                            // 交易可能在本轮处理途中已被移出池（重组/最终化并发发生）：
+                            // 取不到就跳过状态更新，绝不 panic。
+                            if let Some(tx) = worker
                                 .pending_transactions
                                 .transaction_user_data_mut(maybe_validated_tx_id)
-                                .unwrap_or_else(|| unreachable!())
-                                .update_status(TransactionStatus::Validated);
+                            {
+                                tx.update_status(TransactionStatus::Validated);
+                            }
 
                             // Schedule this transaction for announcement.
                             worker
@@ -1125,6 +1141,20 @@ async fn background_task<TPlat: PlatformRef>(
                             // Runtime service subscription is obsolete. Throw away everything and
                             // rebuild it.
                             continue 'channels_rebuild;
+                        }
+                        Err(ValidationError::BlockObsolete) => {
+                            // 目标块被重组挤掉：本轮校验作废，交易留在池里等下个块重新
+                            // 校验（`validation_in_progress` 已在上面清空）。与 1084 行
+                            // “块已不在池中”同属常态，只记 Debug，不重建通道、不判失败。
+                            log!(
+                                &worker.platform,
+                                Debug,
+                                &config.log_target,
+                                "transaction-validation-block-obsolete",
+                                transaction = HashDisplay(&tx_hash),
+                                block = HashDisplay(&block_hash)
+                            );
+                            continue;
                         }
                         Err(ValidationError::InvalidOrError(InvalidOrError::Invalid(error))) => {
                             log!(
@@ -1490,7 +1520,11 @@ async fn validate_transaction<TPlat: PlatformRef>(
         Err(runtime_service::PinPinnedBlockRuntimeError::ObsoleteSubscription) => {
             return Err(ValidationError::ObsoleteSubscription);
         }
-        Err(runtime_service::PinPinnedBlockRuntimeError::BlockNotPinned) => unreachable!(),
+        // 目标块已被重组挤掉、pin 已释放：本轮校验作废，交给上层按常态处理，
+        // 绝不 panic（原 `unreachable!()` 会 abort 掉整个 App）。
+        Err(runtime_service::PinPinnedBlockRuntimeError::BlockNotPinned) => {
+            return Err(ValidationError::BlockObsolete);
+        }
     };
 
     let runtime_call_future = relay_chain_sync.runtime_call(

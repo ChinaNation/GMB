@@ -19,6 +19,7 @@ use std::sync::{mpsc, Arc};
 mod chat_mls;
 mod error;
 mod ffi_types;
+mod signer;
 
 use ffi_types::*;
 

@@ -4,12 +4,12 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
-import 'package:sr25519/sr25519.dart' as sr25519;
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/bodies/sign_response_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/signing.dart';
+import 'package:citizenapp/wallet/core/native_sr25519.dart';
 
 enum QrSignErrorCode {
   invalidFormat,
@@ -247,15 +247,15 @@ class QrSigner {
     required String signatureHex,
     required Uint8List message,
   }) {
+    // 全仓 sr25519 唯一实现：原生 schnorrkel（[NativeSr25519]）。
+    // 长度非法/公钥或签名格式错/验签不过一律返回 false（fail-closed）。
     try {
-      final pubBytes = Uint8List.fromList(_hexToBytes(signerPublicKeyHex));
-      final sigBytes = Uint8List.fromList(_hexToBytes(signatureHex));
-      final publicKey = sr25519.PublicKey.newPublicKey(pubBytes);
-      final signature = sr25519.Signature.fromBytes(sigBytes);
-      final (verified, _) =
-          sr25519.Sr25519.verify(publicKey, signature, message);
-      return verified;
-    } catch (_) {
+      return NativeSr25519.verify(
+        _hexToBytes(signerPublicKeyHex),
+        _hexToBytes(signatureHex),
+        message,
+      );
+    } on Object {
       return false;
     }
   }

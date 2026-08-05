@@ -34,7 +34,10 @@ dependencies:
   path_provider: ^2.1.4
   saver_gallery: ^4.1.0
   file_picker: ^8.0.0
-  sr25519: ^0.7.0
+  # sr25519 纯 Dart 实现已彻底移除(全仓唯一 sr25519 实现 = 原生 schnorrkel,
+  # 见 lib/wallet/core/native_sr25519.dart)。它仍作为 polkadart_keyring 的传递
+  # 依赖存在(仅供其 SS58 地址编解码),但**禁止再直接 import**,以免二次分叉出
+  # 第二套签名实现。
   substrate_bip39: ^0.7.0
   protobuf: ^6.0.0
   ffi: ^2.2.0
