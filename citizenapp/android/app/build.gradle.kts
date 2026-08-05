@@ -73,8 +73,22 @@ android {
     }
 
     buildTypes {
+        debug {
+            packaging {
+                jniLibs {
+                    // 开发期保留原生符号:smoldot 原生崩溃(SIGABRT/panic)的栈帧才能
+                    // 用 llvm-symbolizer 反解到 Rust 源码行,否则只有偏移量、无从定位。
+                    // 只作用于 debug 包(约 +55M);release 仍剥离,见下方说明。
+                    keepDebugSymbols.add("**/libsmoldot.so")
+                }
+            }
+        }
         release {
             signingConfig = signingConfigs.getByName("release")
+            // release 不加 keepDebugSymbols:APK 保持精简,且不把 2.4 万个内部函数名
+            // (含密码学/密钥存储符号)随包发出。线上崩溃的反解依赖构建时留档的未剥离
+            // 产物 android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so(Cargo 侧
+            // strip=false 保证它始终带符号),剥离只发生在打包阶段。
         }
     }
 

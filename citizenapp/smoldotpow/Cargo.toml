@@ -37,7 +37,9 @@ lto = true
 # https://doc.rust-lang.org/rustc/codegen-options/index.html#codegen-units
 codegen-units = 1
 incremental = false
-strip = "symbols"
+# 与 rust/Cargo.toml 同策:磁盘产物保留符号+行号供崩溃反解;release APK 由 AGP 剥离。
+strip = false
+debug = 1
 
 [profile.min-size-release]
 inherits = "release"

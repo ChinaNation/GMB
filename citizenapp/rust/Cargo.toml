@@ -47,7 +47,10 @@ oslog = "0.2"
 opt-level = "z"        # Optimize for size
 lto = true             # Link-time optimization
 codegen-units = 1      # Better optimization
-strip = true           # Strip symbols
+# 磁盘产物始终保留符号+行号,原生崩溃栈才能反解到 Rust 源码行(留档即符号服务器)。
+# APK 侧由 AGP 分档处理:debug 包保留、release 包打包时剥离,见 android/app/build.gradle.kts。
+strip = false
+debug = 1
 panic = "abort"        # Abort on panic (smaller binary)
 
 [profile.dev]
