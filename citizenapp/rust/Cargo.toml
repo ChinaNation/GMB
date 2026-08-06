@@ -35,22 +35,13 @@ openmls_memory_storage = { version = "0.5.0", features = ["persistence"] }
 # 用 RustCrypto 官方实现，禁止自造 AEAD。
 aes-gcm = "0.10"
 base64 = "0.22"
-# sr25519 原生签名(src/signer.rs)。版本与 smoldotpow/lib 一致，全仓单一实现，
-# 禁止再引第二个 sr25519 实现；App 端纯 Dart sr25519 待原生验收后彻底移除。
-schnorrkel = { version = "0.11.2", default-features = false, features = [
-    "preaudit_deprecated",
-    "alloc",
-    "getrandom",
-] }
-# 私钥材料作用域结束即擦除，禁止手写清零（会被编译器优化掉）。
-zeroize = "1"
+# sr25519 原生签名：全仓单一真源，与 CitizenWallet 冷端共用同一份源码。
+# 禁止在本 crate 内另写 sr25519 实现。
+citizen-signer = { path = "../../citizenchain/crates/citizen-signer" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 android_logger = "0.14"
-
-[target.'cfg(target_os = "ios")'.dependencies]
-oslog = "0.2"
 
 [profile.release]
 opt-level = "z"        # Optimize for size
@@ -60,7 +51,11 @@ codegen-units = 1      # Better optimization
 # APK 侧由 AGP 分档处理:debug 包保留、release 包打包时剥离,见 android/app/build.gradle.kts。
 strip = false
 debug = 1
-panic = "abort"        # Abort on panic (smaller binary)
+# 必须 unwind:citizen-signer 的 4 个 FFI 入口靠 `catch_unwind` 把内部 panic 兜成
+# 错误码;`panic = "abort"` 下 catch_unwind 形同虚设,panic 直接 abort 掉 App,
+# 「绝不 abort」的安全承诺就是假的。未包 catch_unwind 的 smoldot_* 入口不受影响:
+# Rust 对 `extern "C"` 边界自带 abort-on-unwind 兜底,行为与之前一致。
+panic = "unwind"
 
 [profile.dev]
 opt-level = 1          # Faster compilation in dev

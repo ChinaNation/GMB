@@ -74,6 +74,14 @@ flutter pub get
 echo "==> 生成 Isar 代码..."
 flutter pub run build_runner build --delete-conflicting-outputs
 
+# sr25519 原生签名库(schnorrkel)。签名、派生、验签全走它，缺库会在运行时才炸，
+# 所以必须先于 flutter build 产出；实现来自 citizenchain/crates/citizen-signer，
+# 与 CitizenApp 热端同一份源码。
+echo "==> 编译原生签名库..."
+# 必须用绝对路径 SCRIPT_DIR:上方已 cd 进 CITIZENWALLET_DIR,而控制台以相对路径
+# 调本脚本时 $0 是相对串,$(dirname "$0") 会拼在新 cwd 上多套一层目录。
+"$SCRIPT_DIR/build-signer-native.sh" android
+
 sync_android_artifact() {
   local source_apk="build/app/outputs/flutter-apk/app-debug.apk"
   if [[ -f "$source_apk" ]]; then

@@ -4,13 +4,19 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 import 'package:smoldot/smoldot.dart' show SmoldotPlatform;
 
-/// sr25519 原生签名（schnorrkel，`rust/src/signer.rs`）的 Dart 侧唯一入口。
+/// sr25519 原生签名（schnorrkel）的 Dart 侧唯一入口。
+///
+/// 实现来自 `citizenchain/crates/citizen-signer`，与 CitizenWallet 冷端**共用同一份
+/// 源码**（冷热派生口径一旦分叉，同一助记词会算出不同账户）。热端的 FFI 外壳由
+/// `rust/src/lib.rs` 里的 `citizen_signer::export_citizen_signer_ffi!()` 导出，与
+/// smoldot 同处 `libsmoldot` 一个库，因此这里复用 `SmoldotPlatform.loadLibrary()`
+/// 而不另开库句柄。
 ///
 /// **为什么必须原生**：纯 Dart `sr25519` 走 BigInt 软算标量乘，真机实测一次
 /// 「派生 + 签名」8.2 秒——用户按完指纹要干等，且曾把主线程拖到 Android ANR。
 /// schnorrkel 是 Substrate 官方实现，同样的活毫秒级。
 ///
-/// **口径**（错一处钱包就变成另一个账户，改动前先看 signer.rs 的同名说明）：
+/// **口径**（错一处钱包就变成另一个账户，改动前先看 citizen-signer 的同名说明）：
 /// 扩展模式恒 Ed25519、签名上下文恒 `substrate`、硬派生 chaincode 由调用方按
 /// junction 顺序逐层传入。由 `test/wallet/derivation_golden_test.dart` 逐字节钉死
 /// ——它拿本实现直接对拍 Substrate 官方权威向量（`//Alice`、`//0 //1 //2` 的
@@ -31,21 +37,21 @@ class NativeSr25519 {
   static final _deriveHard = _lib.lookupFunction<
       Int32 Function(Pointer<Uint8>, Pointer<Uint8>, Pointer<Uint8>),
       int Function(Pointer<Uint8>, Pointer<Uint8>,
-          Pointer<Uint8>)>('gmb_sr25519_derive_hard');
+          Pointer<Uint8>)>('citizen_sr25519_derive_hard');
 
   static final _publicKey = _lib.lookupFunction<
       Int32 Function(Pointer<Uint8>, Pointer<Uint8>),
-      int Function(Pointer<Uint8>, Pointer<Uint8>)>('gmb_sr25519_public_key');
+      int Function(Pointer<Uint8>, Pointer<Uint8>)>('citizen_sr25519_public_key');
 
   static final _sign = _lib.lookupFunction<
       Int32 Function(Pointer<Uint8>, Pointer<Uint8>, IntPtr, Pointer<Uint8>),
       int Function(Pointer<Uint8>, Pointer<Uint8>, int,
-          Pointer<Uint8>)>('gmb_sr25519_sign');
+          Pointer<Uint8>)>('citizen_sr25519_sign');
 
   static final _verify = _lib.lookupFunction<
       Int32 Function(Pointer<Uint8>, Pointer<Uint8>, Pointer<Uint8>, IntPtr),
       int Function(Pointer<Uint8>, Pointer<Uint8>, Pointer<Uint8>,
-          int)>('gmb_sr25519_verify');
+          int)>('citizen_sr25519_verify');
 
   /// 按 [chainCode] 硬派生一层 child mini-secret（32 字节）。
   ///

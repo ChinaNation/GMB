@@ -1315,7 +1315,7 @@ mod finalize_issuance_tests {
     }
 
     fn remark_extrinsic(genesis_hash: <Block as BlockT>::Hash) -> <Block as BlockT>::Extrinsic {
-        let hex = blockchain_test_harness::alice_system_remark_extrinsic_hex(
+        let hex = blockchain_harness::alice_system_remark_extrinsic_hex(
             &format!("{genesis_hash:?}"),
             0,
             citizenchain::VERSION.spec_version,
@@ -1638,7 +1638,7 @@ mod finalize_issuance_tests {
         let top = storage.top;
         let reference = cid_genesis_reference(&top);
 
-        for case in blockchain_test_harness::ImportedStateBadCaseKind::all() {
+        for case in blockchain_harness::ImportedStateBadCaseKind::all() {
             let inner = CountingImport::default();
             let params = import_params_with_state(0, imported_state_bad_case(*case, &top));
             assert!(
@@ -1996,7 +1996,7 @@ mod finalize_issuance_tests {
             cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| top.get(key).cloned())
                 .expect("build CID genesis reference");
 
-        for case in blockchain_test_harness::ImportedStateBadCaseKind::all() {
+        for case in blockchain_harness::ImportedStateBadCaseKind::all() {
             let bad_state = imported_state_bad_case(*case, &top);
             let err = verify_imported_policy_state(0, bad_state.iter(), &reference)
                 .expect_err(&format!("{} must fail", case.label()));
@@ -2014,43 +2014,43 @@ mod finalize_issuance_tests {
     /// 这里故意只放在 node 内部测试中：harness 负责枚举制度坏样本，node 测试负责
     /// 使用私有 storage key 精确改写真实创世态，避免生产守卫为了测试而扩大公开接口。
     fn imported_state_bad_case(
-        case: blockchain_test_harness::ImportedStateBadCaseKind,
+        case: blockchain_harness::ImportedStateBadCaseKind,
         top: &BTreeMap<Vec<u8>, Vec<u8>>,
     ) -> BTreeMap<Vec<u8>, Vec<u8>> {
         use codec::Encode;
 
         let mut bad_state = top.clone();
         match case {
-            blockchain_test_harness::ImportedStateBadCaseKind::MissingGovernanceAdmin => {
+            blockchain_harness::ImportedStateBadCaseKind::MissingGovernanceAdmin => {
                 let fixed = primitives::governance_skeleton::fixed_institutions()[0];
                 bad_state.remove(&governance_skeleton::storage_key::account_id(
                     fixed.cid_number.as_bytes(),
                 ));
             }
-            blockchain_test_harness::ImportedStateBadCaseKind::NonZeroFullnodeIssued => {
+            blockchain_harness::ImportedStateBadCaseKind::NonZeroFullnodeIssued => {
                 bad_state.insert(
                     fullnode_issuance::storage_key::rewarded_block_count(),
                     1u32.encode(),
                 );
             }
-            blockchain_test_harness::ImportedStateBadCaseKind::UnknownCitizenIssuanceKey => {
+            blockchain_harness::ImportedStateBadCaseKind::UnknownCitizenIssuanceKey => {
                 let mut unknown = citizen_issuance::storage_key::pallet_prefix().to_vec();
                 unknown.extend_from_slice(b"UnknownGuardState");
                 bad_state.insert(unknown, vec![1]);
             }
-            blockchain_test_harness::ImportedStateBadCaseKind::ChangedGenesisCitizenMax => {
+            blockchain_harness::ImportedStateBadCaseKind::ChangedGenesisCitizenMax => {
                 bad_state.insert(
                     genesis_pallet::storage_key::citizen_max(),
                     1_443_497_379u64.encode(),
                 );
             }
-            blockchain_test_harness::ImportedStateBadCaseKind::MissingProvincialBankStake => {
+            blockchain_harness::ImportedStateBadCaseKind::MissingProvincialBankStake => {
                 let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
                 bad_state.remove(&provincialbank_interest::storage_key::system_account(
                     &first_bank.stake_account,
                 ));
             }
-            blockchain_test_harness::ImportedStateBadCaseKind::UnknownProvincialBankStorage => {
+            blockchain_harness::ImportedStateBadCaseKind::UnknownProvincialBankStorage => {
                 let mut unknown_interest_key =
                     provincialbank_interest::storage_key::pallet_prefix().to_vec();
                 unknown_interest_key

@@ -1,0 +1,36 @@
+# 独立 workspace 边界：本 crate 只服务 CitizenWallet 冷端，不并入 citizenchain
+# 链端 workspace（避免继承其 SDK 依赖与 lint 配置，也避免链端构建牵连冷钱包）。
+[workspace]
+
+[package]
+name = "citizenwallet_signer"
+version = "1.0.0"
+edition = "2021"
+authors = ["voyager_rhett <chinanation@icloud.com>"]
+repository = "https://github.com/ChinaNation/GMB"
+license = "MIT"
+description = "CitizenWallet 冷钱包 sr25519 原生签名动态库（仅 FFI 外壳，实现在 citizen-signer）"
+
+[lib]
+# 冷钱包永久离线，只需签名，不需要链：产物是一个几百 KB 的纯签名库，
+# 绝不像热端那样把 58MB 的轻节点库塞进来。
+crate-type = ["cdylib", "staticlib"]
+name = "citizenwallet_signer"
+
+[dependencies]
+# sr25519 全端唯一真源，与 CitizenApp 热端共用同一份源码。
+# 本 crate 只写一行导出宏，**不得在此另写任何密码学实现**。
+citizen-signer = { path = "../../citizenchain/crates/citizen-signer" }
+
+[profile.release]
+opt-level = "z"        # 冷钱包体积优先
+lto = true
+codegen-units = 1
+# 必须 unwind：citizen-signer 的 4 个 FFI 入口靠 `catch_unwind` 把内部 panic 兜成
+# 错误码；`panic = "abort"` 下 catch_unwind 形同虚设，panic 直接 abort 掉 App，
+# 「绝不 abort」的安全承诺就是假的。体积略增，换真实的 panic 兜底。
+panic = "unwind"
+# 磁盘产物保留符号+行号，原生崩溃栈才能反解到 Rust 源码行（留档即符号服务器）。
+# APK/IPA 侧由各自打包配置分档剥离，策略与 CitizenApp 一致。
+strip = false
+debug = 1

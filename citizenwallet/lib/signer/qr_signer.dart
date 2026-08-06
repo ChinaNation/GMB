@@ -4,8 +4,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/digests/blake2b.dart';
-import 'package:sr25519/sr25519.dart' as sr25519;
 import 'package:citizenwallet/qr/qr_protocols.dart';
+import 'package:citizenwallet/wallet/native_sr25519.dart';
 import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/bodies/sign_request_body.dart';
 import 'package:citizenwallet/qr/bodies/sign_response_body.dart';
@@ -138,16 +138,15 @@ class QrSigner {
     required String signatureHex,
     required Uint8List message,
   }) {
+    // 全仓 sr25519 唯一实现：原生 schnorrkel（[NativeSr25519]，与 CitizenApp
+    // 热端同一份源码）。长度非法 / 公钥或签名格式错 / 验签不过一律 false（fail-closed）。
     try {
-      final signerPublicKeyBytes =
-          Uint8List.fromList(_hexToBytes(signerPublicKeyHex));
-      final sigBytes = Uint8List.fromList(_hexToBytes(signatureHex));
-      final publicKey = sr25519.PublicKey.newPublicKey(signerPublicKeyBytes);
-      final signature = sr25519.Signature.fromBytes(sigBytes);
-      final (verified, _) =
-          sr25519.Sr25519.verify(publicKey, signature, message);
-      return verified;
-    } catch (_) {
+      return NativeSr25519.verify(
+        _hexToBytes(signerPublicKeyHex),
+        _hexToBytes(signatureHex),
+        message,
+      );
+    } on Object {
       return false;
     }
   }

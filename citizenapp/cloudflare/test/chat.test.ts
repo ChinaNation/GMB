@@ -140,7 +140,7 @@ describe('device-only Chat transport', () => {
     expect(json.delivery_state).toBe('sent');
     expect(json.recipient_connections).toBe(1);
     expect(relayPayload).toMatchObject({
-      type: 'gmb_chat_envelope',
+      type: 'citizen_chat_envelope',
       sender_cid_number: SENDER_CID,
       recipient_cid_number: RECIPIENT_CID,
     });
@@ -167,7 +167,7 @@ describe('device-only Chat transport', () => {
       delivery_state: 'sent',
     });
     expect(relayPayload).toMatchObject({
-      type: 'gmb_chat_signal',
+      type: 'citizen_chat_signal',
       sender_cid_number: SENDER_CID,
       recipient_cid_number: RECIPIENT_CID,
       signal: { kind: 'offer' },
@@ -175,8 +175,8 @@ describe('device-only Chat transport', () => {
   });
 
   it('locks the unversioned WebSocket control message types', () => {
-    expect(CHAT_WS_READY_TYPE).toBe('gmb_chat_ws_ready');
-    expect(CHAT_WS_PONG_TYPE).toBe('gmb_chat_ws_pong');
+    expect(CHAT_WS_READY_TYPE).toBe('citizen_chat_ws_ready');
+    expect(CHAT_WS_PONG_TYPE).toBe('citizen_chat_ws_pong');
   });
 
   it('keeps delivery queued when the recipient device is unavailable', async () => {
@@ -221,7 +221,7 @@ describe('device-only Chat transport', () => {
       },
     } as unknown as DurableObjectNamespace;
     const sent = await relayChatPayload(env, {
-      type: 'gmb_chat_envelope',
+      type: 'citizen_chat_envelope',
       sender_cid_number: SENDER_CID,
       recipient_cid_number: RECIPIENT_CID,
       recipient_device_id: null,

@@ -562,7 +562,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - `POST /chat/keypackages/consume` 请求：Bearer `session_token`，`cid_number`（目标身份）、`key_package_id`。**不传领取方**——会话即领取者。
   - `POST /chat/envelopes`：`envelope_id`、`sender_device_id`、`recipient_cid_number`、`recipient_device_id`、`envelope`；仅在当前请求内转发。发件人身份由 session 派生，不传。
   - `POST /chat/signals`：`sender_device_id`、`recipient_cid_number`、`recipient_device_id`、`signal`；仅转发 SDP/ICE/设备就绪信令。
-  - `GET /chat/ws`：Bearer session + `x-chat-device`；Worker 内部按 session 派生身份并以 `x-chat-cid-number` 头转交 DO（**客户端不发该头**）。收到 `gmb_chat_envelope` 时客户端立即解密，收到 `gmb_chat_signal` 时交给 WebRTC。
+  - `GET /chat/ws`：Bearer session + `x-chat-device`；Worker 内部按 session 派生身份并以 `x-chat-cid-number` 头转交 DO（**客户端不发该头**）。收到 `citizen_chat_envelope` 时客户端立即解密，收到 `citizen_chat_signal` 时交给 WebRTC。
   - 推送唤醒载荷：`{kind:'chat_wake', sender_cid_number}`，只告知"哪个身份有待发送数据"，不含任何内容。
   - Durable Object binding：`CHAT_REALTIME`，class `ChatRealtimeObject`，对象名称固定为 `cid_number`。
 - D1 表字段：

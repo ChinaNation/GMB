@@ -499,14 +499,14 @@
 
 ### 区块链测试 harness crate（2026-07-12，已创建）
 
-- 按确认在 `citizenchain/crates/blockchain-test-harness/` 新增专用测试工具 crate，并加入
+- 按确认在 `citizenchain/crates/blockchain-harness/` 新增专用测试工具 crate，并加入
   `citizenchain/Cargo.toml` workspace；该 crate 只用于真实验收、导入路径验证和后续恶意候选块构造，
   不得被生产 node、runtime 或业务模块依赖。
 - 第一阶段沉淀已验证过的 Alice `System::remark` signed extrinsic 构造能力，后续三节点真实交易
   验收不再需要在 `/tmp` 反复生成一次性签名器。
 - 第二阶段新增 `export-blocks` JSON lines 摘要解析和基础 stateRoot 篡改样本生成；该能力仅用于证明
   `import-blocks` / import queue 基础坏文件拒绝，不代表 NodeGuard 永久规则坏块。
-- 使用 `/tmp/gmb-blockchain-test-harness-import/` 执行真实导入队列基线：合法 block#0 文件导入成功；
+- 使用 `/tmp/gmb-blockchain-harness-import/` 执行真实导入队列基线：合法 block#0 文件导入成功；
   篡改 stateRoot 后的 block#0 文件被 `import-blocks` 以退出码 1 拒绝，报错为 unknown parent（篡改
   header 后 genesis hash 改变）。临时目录已删除。
 - 新增 `src/bin/harness.rs` 命令行入口，支持生成 Alice remark extrinsic、摘要导出块文件和生成
@@ -536,7 +536,7 @@
   `build_network` 通过 P2P reserved peer 连接恶意节点，观察到恶意 peer 的 `best_hash/best_number`
   后仍保持 best=genesis，且本地数据库不存在坏块 header。该测试不新增生产伪造块接口。
 - crate 内已用中文注释标明边界：测试 harness 可以构造验收交易和未来坏块材料，但不能成为生产路径。
-- 验收：`cargo check -p blockchain-test-harness` 通过；`cargo test -p blockchain-test-harness` 6/6 通过；
+- 验收：`cargo check -p blockchain-harness` 通过；`cargo test -p blockchain-harness` 6/6 通过；
   `cargo test -p node node_guard` 81/81 通过；`WASM_BUILD_FROM_SOURCE=1 cargo test -p node
   precomputed_changes_must_match_reexecuted_normal_block -- --nocapture` 通过；`WASM_BUILD_FROM_SOURCE=1
   cargo test -p node self_consistent_bad_precomputed_block_is_known_bad_before_inner_import -- --nocapture` 通过；

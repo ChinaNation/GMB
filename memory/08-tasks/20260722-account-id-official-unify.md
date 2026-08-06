@@ -169,7 +169,7 @@ CidByAccountId[account_id] -> cid_number
   参数、JSON 字段和界面文案，不扩展到 OnChina 前端。
 - `citizenchain/crates/chain-signing/`：代码与测试；统一共享签名材料中的
   `signer_public_key` / `signer_account_id` 语义，不改变签名字节。
-- `citizenchain/crates/blockchain-test-harness/`：测试夹具；仅在坏块、状态或 RPC
+- `citizenchain/crates/blockchain-harness/`：测试夹具；仅在坏块、状态或 RPC
   fixture 直接引用旧 Node 账户字段时同步。
 - `memory/01-architecture/citizenchain/`：文档；记录 Node 最终账户边界、RPC 和桌面桥接。
 - `memory/04-decisions/`：文档与残留清理；仅同步 ADR-040 在 Node 层的实施状态。

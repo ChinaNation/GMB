@@ -5,7 +5,7 @@ import { resourceLimit } from '../limits/catalog';
 import { fetchChainIdentityStateByCid } from '../chain/identity';
 
 export interface ChatRelayPayload {
-  type: 'gmb_chat_envelope' | 'gmb_chat_signal';
+  type: 'citizen_chat_envelope' | 'citizen_chat_signal';
   sender_cid_number: string;
   recipient_cid_number: string;
   recipient_device_id: string | null;
@@ -18,8 +18,8 @@ export interface ChatRelayPayload {
 }
 
 // WebSocket 控制消息类型由 Worker 单源导出，测试锁定精确字面值，禁止另造版本后缀。
-export const CHAT_WS_READY_TYPE = 'gmb_chat_ws_ready' as const;
-export const CHAT_WS_PONG_TYPE = 'gmb_chat_ws_pong' as const;
+export const CHAT_WS_READY_TYPE = 'citizen_chat_ws_ready' as const;
+export const CHAT_WS_PONG_TYPE = 'citizen_chat_ws_pong' as const;
 
 interface ChatSocketAttachment {
   cid_number: string;

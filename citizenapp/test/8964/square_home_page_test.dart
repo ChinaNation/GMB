@@ -42,7 +42,7 @@ const _registeredWallet = WalletProfile(
   walletName: '测试钱包',
   walletIcon: '',
   balance: 0,
-  ss58Address: 'gmb_test_account_id',
+  ss58Address: 'citizen_test_account_id',
   accountId:
       '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   alg: 'sr25519',

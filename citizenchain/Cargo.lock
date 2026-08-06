@@ -1356,7 +1356,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "blockchain-test-harness"
+name = "blockchain-harness"
 version = "1.0.1"
 dependencies = [
  "chain-signing",
@@ -1786,6 +1786,14 @@ dependencies = [
  "scale-info",
  "sp-io",
  "sp-runtime",
+]
+
+[[package]]
+name = "citizen-signer"
+version = "1.0.1"
+dependencies = [
+ "schnorrkel",
+ "zeroize",
 ]
 
 [[package]]
@@ -7897,7 +7905,7 @@ dependencies = [
  "async-channel 1.9.0",
  "async-trait",
  "blake2b_simd",
- "blockchain-test-harness",
+ "blockchain-harness",
  "bs58",
  "chain-signing",
  "citizen-identity",

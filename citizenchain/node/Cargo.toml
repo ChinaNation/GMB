@@ -135,7 +135,7 @@ tauri-plugin-process = "2.3.1"
 
 [dev-dependencies]
 # 区块链测试 harness 只进 dev-dependencies，用于复用坏块/坏导入态验收矩阵。
-blockchain-test-harness = { path = "../crates/blockchain-test-harness" }
+blockchain-harness = { path = "../crates/blockchain-harness" }
 # 普通块坏注入验收专用：按真实 BlockBuilder 生成合法 proposal，再篡改预计算状态变更。
 sc-block-builder = { workspace = true, default-features = true }
 # P2P 坏块注入验收专用：读取真实同步服务连接数、请求数并主动广播测试坏块。

@@ -24,7 +24,7 @@ class DeviceDataKeyVaultBridge {
         private const val TAG_BITS = 128
         private const val IV_BYTES = 12
 
-        private fun aliasFor(walletIndex: Int) = "gmb_device_data_key_$walletIndex"
+        private fun aliasFor(walletIndex: Int) = "citizen_device_data_key_$walletIndex"
     }
 
     private fun keyStore() = KeyStore.getInstance(KEYSTORE).apply { load(null) }

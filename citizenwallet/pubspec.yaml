@@ -10,10 +10,14 @@ dependencies:
   flutter:
     sdk: flutter
   # 密钥派生 + 签名
+  # sr25519 派生/签名/验签走原生 schnorrkel(lib/wallet/native_sr25519.dart →
+  # citizenchain/crates/citizen-signer，与 CitizenApp 热端同一份源码)。
+  # polkadart_keyring 仅用于 SS58 地址编解码(base58 + 校验和，非密码学)。
   polkadart_keyring: ^0.7.2
   bip39_mnemonic: ^4.0.1
   substrate_bip39: ^0.7.2
-  sr25519: ^0.7.2
+  ffi: ^2.1.0
+  path: ^1.9.0
   # 哈希 + 加密
   crypto: ^3.0.3
   pointycastle: ^4.0.0

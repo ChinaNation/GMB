@@ -381,10 +381,10 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
   接口；CLI `export-blocks/import-blocks` 可走文件导入队列，但仅篡改 JSON 会退化为 header/root/编码错误，
   不能代表 NodeGuard 永久规则坏块。后续按方案 A 在测试/导入层补齐结构完整的预计算坏块 harness，
   不向生产节点开放伪造块接口。
-- 已在 `citizenchain/crates/blockchain-test-harness/` 创建专用区块链测试 harness crate，并加入 workspace。
+- 已在 `citizenchain/crates/blockchain-harness/` 创建专用区块链测试 harness crate，并加入 workspace。
   已提供 Alice `System::remark` signed extrinsic 构造、`export-blocks` JSON lines 摘要解析和基础
   stateRoot 篡改样本生成能力；后续坏块构造与导入验收应继续沉淀到该 crate，避免污染生产 node/runtime
-  路径。当前验收：`cargo check -p blockchain-test-harness` 通过，`cargo test -p blockchain-test-harness`
+  路径。当前验收：`cargo check -p blockchain-harness` 通过，`cargo test -p blockchain-harness`
   6/6 通过；真实 `import-blocks` 基线中，合法 block#0 文件可导入，篡改 stateRoot 后的 block#0 文件
   以 unknown parent 拒绝。该基线仍不等同于 NodeGuard 永久规则坏块。
 - 结构完整执行校验坏块基线：使用 harness CLI 产出真实 Alice remark 交易，双节点产出合法 block#1，
@@ -394,7 +394,7 @@ pallet、storage、hasher 和 key 编码。字段重排、storage 改名或 hash
   `bad block`。这证明导入队列对结构完整但执行根不一致的候选块会拒绝；它仍不是“执行后状态根合法、
   但违反 NodeGuard 永久规则”的最终坏块。
 - 完整导入态永久规则坏样本矩阵已沉淀到 harness：case 清单和期望拒绝前缀由
-  `blockchain-test-harness` 提供，node 内部测试使用真实创世 storage 构造坏状态并验证导入前拒绝。
+  `blockchain-harness` 提供，node 内部测试使用真实创世 storage 构造坏状态并验证导入前拒绝。
   覆盖固定治理骨架、全节点发行、公民认证发行、创世模块、省储行固定发行和 CID 生命周期；验证
   `cargo test -p node node_guard` 78/78 通过。
 - 导入层包装器验收已补齐：测试直接构造 `ApplyChanges(Import(...))` 的完整状态导入参数，坏状态在

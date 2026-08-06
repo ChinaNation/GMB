@@ -181,7 +181,7 @@ fn test_config(node_name: &str, tokio_handle: tokio::runtime::Handle) -> Configu
 }
 
 fn remark_extrinsic(genesis_hash: <Block as BlockT>::Hash) -> <Block as BlockT>::Extrinsic {
-    let hex = blockchain_test_harness::alice_system_remark_extrinsic_hex(
+    let hex = blockchain_harness::alice_system_remark_extrinsic_hex(
         &format!("{genesis_hash:?}"),
         0,
         citizenchain::VERSION.spec_version,

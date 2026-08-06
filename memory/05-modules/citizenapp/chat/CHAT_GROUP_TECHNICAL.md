@@ -42,11 +42,11 @@ sendGroupText
 
 ## 3. Rust FFI(`rust/src/chat_mls.rs` 扩展)
 
-沿用现有 `gmb_chat_mls_*` 的 `#[no_mangle] extern "C"` + JSON-in/JSON-out + `error_out` + `crate::{string_into_raw,set_error}` + `smoldot_free_string` 模式,复用 `load_provider`/`save_provider`/`ensure_device_signer`/`mls_group_config`/`group_id_from_conversation`。
+沿用现有 `citizen_chat_mls_*` 的 `#[no_mangle] extern "C"` + JSON-in/JSON-out + `error_out` + `crate::{string_into_raw,set_error}` + `smoldot_free_string` 模式,复用 `load_provider`/`save_provider`/`ensure_device_signer`/`mls_group_config`/`group_id_from_conversation`。
 
 对任务卡函数清单两处微调:①把 `process_commit`+`group_process` 合并为单 `group_process`(底层 `MlsGroup::process_message` 本就统一入口);②另加只读 `group_state`(名册对账 + Rust 侧 1989 硬拦)。
 
-| FFI `gmb_chat_mls_*` | Request | Response |
+| FFI `citizen_chat_mls_*` | Request | Response |
 |---|---|---|
 | `group_create` | `{state_store_dir, state_key_hex, cid_number, device_id, group_id}` | `{group_id, epoch}` |
 | `group_add_members` | `{…, group_id, key_packages_hex:[…]}` | `{group_id, epoch, commit_wire_hex, welcome_wire_hex, ratchet_tree_hex}` |
@@ -231,7 +231,7 @@ ChatConversationEntity 加 : conversationKind = "dm" | "group"
 
 **阶段1 群原语已完成并测试通过(2026-07-16):**
 
-- **Rust**(`rust/src/chat_mls.rs`):6 个群 FFI `gmb_chat_mls_group_{create,add_members,remove_members,create_message,process,state}_json` + 名册辅助;`MAX_GROUP_MEMBERS=1989` 硬拦。`cargo test chat_mls::` 3 绿,含群多方 round-trip(建群→加 2→发文本双端解密→删 1:被删者 `self_removed=true`、剩余名册对齐,后向保密)。
+- **Rust**(`rust/src/chat_mls.rs`):6 个群 FFI `citizen_chat_mls_group_{create,add_members,remove_members,create_message,process,state}_json` + 名册辅助;`MAX_GROUP_MEMBERS=1989` 硬拦。`cargo test chat_mls::` 3 绿,含群多方 round-trip(建群→加 2→发文本双端解密→删 1:被删者 `self_removed=true`、剩余名册对齐,后向保密)。
 - **Dart**:`crypto/mls_group_boundary.dart`(接口+边界类型)、`crypto/mls_native.dart`(6 绑定,`NativeMlsCrypto implements MlsGroupCrypto`)、`group/{group_model,chat_group_limits,group_fanout,group_membership,group_epoch,group_flow}`、3 个 Isar 实体(`ChatGroupEntity/ChatGroupMemberEntity/ChatGroupPendingCommitEntity`)+ `ChatConversationEntity.conversationKind`、`chat_store` 群方法、`chat_runtime` 接线(`createGroup/addGroupMembers/removeGroupMembers/leaveGroup/sendGroupText` + 入站按 `grp:` 前缀路由到群 flow)。
 - **测试**:`test/chat/group/` 共 8 绿——纯模块(fanout 单密文扇 N、membership 1989/权限、epoch 乱序缓冲+回放)+ flow 全链路(建群→发文本→收文本→删人,fake 密码学 + 真 Isar)+ 非 admin 加人被拒。`flutter analyze lib/chat lib/isar/app_isar.dart` 0 问题。
 

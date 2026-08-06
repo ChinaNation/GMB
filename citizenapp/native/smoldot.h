@@ -6,18 +6,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define SmoldotGMB_SIGNER_OK 0
-
-#define SmoldotGMB_SIGNER_ERR_NULL_ARG -1
-
-#define SmoldotGMB_SIGNER_ERR_BAD_KEY -2
-
-#define SmoldotGMB_SIGNER_ERR_BAD_SIGNATURE -3
-
-#define SmoldotGMB_SIGNER_ERR_VERIFY_FAILED -4
-
-#define SmoldotGMB_SIGNER_ERR_PANIC -5
-
 /**
  * Opaque handle to a smoldot client
  */
@@ -386,7 +374,7 @@ int smoldot_get_finalized_storage_values_async(SmoldotChainHandle chain_handle,
  * - `request_json` 必须是合法 UTF-8 C 字符串。
  * - 返回字符串必须由 `smoldot_free_string` 释放。
  */
-char *gmb_chat_mls_create_key_package_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_create_key_package_json(const char *request_json, char **error_out);
 
 /**
  * 执行真实 OpenMLS 双人组 round-trip smoke。
@@ -395,7 +383,7 @@ char *gmb_chat_mls_create_key_package_json(const char *request_json, char **erro
  * - `request_json` 必须是合法 UTF-8 C 字符串。
  * - 返回字符串必须由 `smoldot_free_string` 释放。
  */
-char *gmb_chat_mls_two_party_smoke_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_two_party_smoke_json(const char *request_json, char **error_out);
 
 /**
  * 使用持久化 MLS 会话加密 application message。
@@ -404,7 +392,7 @@ char *gmb_chat_mls_two_party_smoke_json(const char *request_json, char **error_o
  * - `request_json` 必须是合法 UTF-8 C 字符串。
  * - 返回字符串必须由 `smoldot_free_string` 释放。
  */
-char *gmb_chat_mls_encrypt_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_encrypt_json(const char *request_json, char **error_out);
 
 /**
  * 处理 Welcome 或解密 application message。
@@ -413,7 +401,7 @@ char *gmb_chat_mls_encrypt_json(const char *request_json, char **error_out);
  * - `request_json` 必须是合法 UTF-8 C 字符串。
  * - 返回字符串必须由 `smoldot_free_string` 释放。
  */
-char *gmb_chat_mls_decrypt_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_decrypt_json(const char *request_json, char **error_out);
 
 /**
  * 为 CID 钱包换绑暂存、提交或丢弃 MLS 状态的新账户密文。
@@ -425,108 +413,57 @@ char *gmb_chat_mls_decrypt_json(const char *request_json, char **error_out);
  * - `request_json` 必须是合法 UTF-8 C 字符串。
  * - 返回字符串必须由 `smoldot_free_string` 释放。
  */
-char *gmb_chat_mls_rekey_state_json(const char *request_json,
-                                    char **error_out);
+char *citizen_chat_mls_rekey_state_json(const char *request_json,
+                                        char **error_out);
 
 /**
  * 创建 MLS 群(创建者为唯一成员,epoch 0)。
  *
  * # Safety
- * 见 `gmb_chat_mls_create_key_package_json`。
+ * 见 `citizen_chat_mls_create_key_package_json`。
  */
-char *gmb_chat_mls_group_create_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_group_create_json(const char *request_json, char **error_out);
 
 /**
  * 批量加人:产 1 个 Commit(发给现有成员)+ 1 个 Welcome(发给全部新人)。
  *
  * # Safety
- * 见 `gmb_chat_mls_create_key_package_json`。
+ * 见 `citizen_chat_mls_create_key_package_json`。
  */
-char *gmb_chat_mls_group_add_members_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_group_add_members_json(const char *request_json, char **error_out);
 
 /**
  * 删人:产 Commit(发给剩余成员 + 被删者)。
  *
  * # Safety
- * 见 `gmb_chat_mls_create_key_package_json`。
+ * 见 `citizen_chat_mls_create_key_package_json`。
  */
-char *gmb_chat_mls_group_remove_members_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_group_remove_members_json(const char *request_json, char **error_out);
 
 /**
  * 群 application message:单次加密,Dart 侧按名册扇 N 信封。
  *
  * # Safety
- * 见 `gmb_chat_mls_create_key_package_json`。
+ * 见 `citizen_chat_mls_create_key_package_json`。
  */
-char *gmb_chat_mls_group_create_message_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_group_create_message_json(const char *request_json, char **error_out);
 
 /**
  * 处理入站群消息(Welcome / Commit / Application)。收端唯一入口,按 epoch 判定
  * applied / out_of_order / stale,乱序缓冲由 Dart 依此状态负责。
  *
  * # Safety
- * 见 `gmb_chat_mls_create_key_package_json`。
+ * 见 `citizen_chat_mls_create_key_package_json`。
  */
-char *gmb_chat_mls_group_process_json(const char *request_json, char **error_out);
+char *citizen_chat_mls_group_process_json(const char *request_json, char **error_out);
 
 /**
  * 只读群状态:当前 epoch + 成员名册(MLS 真源,供 Dart 镜像对账与上限守)。
  *
  * # Safety
- * 见 `gmb_chat_mls_create_key_package_json`。
+ * 见 `citizen_chat_mls_create_key_package_json`。
  */
-char *gmb_chat_mls_group_state_json(const char *request_json, char **error_out);
-
-/**
- * 从 32 字节母种子按 `chain_code` 硬派生一层 child mini-secret（32 字节）。
- *
- * 等价于 Dart 侧 `MiniSecretKey.fromRawKey(seed).expandEd25519()
- * .hardDeriveMiniSecretKey(const <int>[], cc)`；多层派生由调用方按 junction
- * 顺序逐层调用（每层的输入是上一层的输出），与 Dart 循环逐字节一致。
- *
- * # Safety
- * `seed`/`chain_code` 须各指向 32 字节可读内存，`out_child` 指向 32 字节可写内存。
- */
-int32_t gmb_sr25519_derive_hard(const uint8_t *seed,
-                                const uint8_t *chain_code,
-                                uint8_t *out_child);
-
-/**
- * child mini-secret（32 字节）→ 公钥（32 字节，即 AccountId32）。
- *
- * 等价于 Dart 侧 `Keyring.sr25519.fromSeed(child).bytes()`。
- *
- * # Safety
- * `child` 指向 32 字节可读内存，`out_public` 指向 32 字节可写内存。
- */
-int32_t gmb_sr25519_public_key(const uint8_t *child, uint8_t *out_public);
-
-/**
- * 用 child mini-secret 对 `message` 签名，输出 64 字节签名。
- *
- * 等价于 Dart 侧 `Keyring.sr25519.fromSeed(child).sign(message)`。sr25519 签名含
- * 随机数，**同一输入两次签名字节不同**（正常），只能靠验签比对，不能比字节。
- *
- * # Safety
- * `child` 指向 32 字节可读内存；`message` 指向 `message_len` 字节可读内存
- * （`message_len` 为 0 时允许空指针）；`out_signature` 指向 64 字节可写内存。
- */
-int32_t gmb_sr25519_sign(const uint8_t *child,
-                         const uint8_t *message,
-                         uintptr_t message_len,
-                         uint8_t *out_signature);
-
-/**
- * 验签：公钥（32B）+ 签名（64B）+ 消息。通过返回 [`GMB_SIGNER_OK`]。
- *
- * # Safety
- * `public`/`signature` 分别指向 32/64 字节可读内存；`message` 指向 `message_len`
- * 字节可读内存（`message_len` 为 0 时允许空指针）。
- */
-int32_t gmb_sr25519_verify(const uint8_t *public_,
-                           const uint8_t *signature,
-                           const uint8_t *message,
-                           uintptr_t message_len);
+char *citizen_chat_mls_group_state_json(const char *request_json, char **error_out);
 
 #ifdef __cplusplus
 }  // extern "C"

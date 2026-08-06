@@ -2,8 +2,8 @@ import 'dart:typed_data';
 
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenwallet/wallet/native_sr25519.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:sr25519/sr25519.dart' as sr25519;
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:citizenwallet/signer/offline_sign_service.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
@@ -440,16 +440,14 @@ bool _verifySr25519({
   required Uint8List message,
   required String signatureHex,
 }) {
+  // 与生产同一条原生路径（全仓 sr25519 唯一实现）。
   try {
-    final publicKey = sr25519.PublicKey.newPublicKey(
+    return NativeSr25519.verify(
       _hexToBytes(signerPublicKeyHex),
+      _hexToBytes(signatureHex),
+      message,
     );
-    final signature = sr25519.Signature.fromBytes(
-      Uint8List.fromList(_hexToBytes(signatureHex)),
-    );
-    final (verified, _) = sr25519.Sr25519.verify(publicKey, signature, message);
-    return verified;
-  } catch (_) {
+  } on Object {
     return false;
   }
 }

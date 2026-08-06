@@ -1,6 +1,8 @@
-# CitizenApp 原生 sr25519 签名（schnorrkel FFI）技术说明
+# CitizenApp / CitizenWallet 原生 sr25519 签名（schnorrkel FFI）技术说明
 
-> 全仓 sr25519 **唯一实现**。纯 Dart `package:sr25519` 已彻底移除，禁止再引入第二套。
+> 全仓 sr25519 **唯一实现** = `citizenchain/crates/citizen-signer`（热端 CitizenApp 与
+> 冷端 CitizenWallet 物理上共用这一份源码）。纯 Dart `package:sr25519` 已彻底移除，
+> 禁止再引入第二套。
 
 ## 1. 为什么必须原生
 
@@ -15,8 +17,9 @@
 | 生物识别（交互，不可省） | ~2.3 s | ~2.3 s |
 | **派生 + 签名** | **8220 ms** | **14~18 ms** |
 
-原生库无需新增：`smoldotpow/lib` 早已依赖 `schnorrkel 0.11.2`（其源码注释还留着
-`TODO: necessary for signing`），本次只是把它暴露给 Dart，**不新增 `.so`**。
+热端原生库无需新增：`smoldotpow/lib` 早已依赖 schnorrkel（其源码注释还留着
+`TODO: necessary for signing`），签名实现编进现成的 `libsmoldot`，**不新增第二个库**；
+冷端永久离线、不需要链，单独编一个几百 KB 的纯签名库 `libcitizenwallet_signer`。
 
 ## 2. 口径（错一处，同一助记词会派生出另一个账户）
 
@@ -31,22 +34,29 @@ junction 解析属 SCALE 编码而非密码学、不慢，且已被金标测试�
 
 ## 3. 接口
 
-`rust/src/signer.rs` 导出 4 个 C 函数，`lib/wallet/core/native_sr25519.dart` 一一绑定
-（复用现成的 `SmoldotPlatform.loadLibrary()`）：
+核心实现在 `citizenchain/crates/citizen-signer`（rlib，含全部逻辑与单测）；FFI 外壳由
+`export_citizen_signer_ffi!()` 宏在各消费方 cdylib **就地展开**——热端
+`citizenapp/rust/src/lib.rs` 一行宏并入 `libsmoldot`，冷端 `citizenwallet/rust/src/lib.rs`
+同一行宏出独立库。两端 Dart 绑定各自一份 `native_sr25519.dart`（热端复用
+`SmoldotPlatform.loadLibrary()`，冷端自带平台分支），符号一致：
 
 | 函数 | 语义 |
 |------|------|
-| `gmb_sr25519_derive_hard(seed32, cc32) → child32` | 一层硬派生；多层由调用方按 junction 顺序逐层调用 |
-| `gmb_sr25519_public_key(child32) → public32` | child mini-secret → 公钥（= AccountId32） |
-| `gmb_sr25519_sign(child32, msg) → sig64` | 签名 |
-| `gmb_sr25519_verify(public32, sig64, msg) → i32` | 验签 |
+| `citizen_sr25519_derive_hard(seed32, cc32) → child32` | 一层硬派生；多层由调用方按 junction 顺序逐层调用 |
+| `citizen_sr25519_public_key(child32) → public32` | child mini-secret → 公钥（= AccountId32） |
+| `citizen_sr25519_sign(child32, msg) → sig64` | 签名 |
+| `citizen_sr25519_verify(public32, sig64, msg) → i32` | 验签 |
 
 ## 4. 安全
 
 - **私钥材料**：Rust 侧一律 `Zeroizing`（作用域结束即擦除；禁止手写清零，会被优化掉）；
   Dart 侧出入参缓冲在 `finally` 里**先清零再释放**。
 - **绝不 panic 跨边界**：4 个入口全部 `catch_unwind`，内部异常只回错误码
-  （`GMB_SIGNER_ERR_*`）——原生 panic 会 `abort` 掉整个 App，代价与收益完全不成比例。
+  （`CITIZEN_SIGNER_ERR_*`）——原生 panic 会 `abort` 掉整个 App，代价与收益完全不成比例。
+  **前提是两端 `[profile.release]` 必须 `panic = "unwind"`**：曾配成 `abort`，
+  `catch_unwind` 在 release 下形同虚设、承诺落空，2026-08-05 已修正。未包
+  `catch_unwind` 的 `smoldot_*` 入口不受影响——Rust 对 `extern "C"` 边界自带
+  abort-on-unwind 兜底，行为与 `abort` 时代一致。
 - **fail-closed**：空指针、长度非法一律拒绝；Dart 侧错误码一律上抛，
   **绝不静默兜底成"空签名"或"验签通过"**。
 - **不改密钥来源**：仍从硬件金库 `readAccountKey` 取（生物识别、`biometricOnly` 不变）。
@@ -65,10 +75,38 @@ junction 解析属 SCALE 编码而非密码学、不慢，且已被金标测试�
 > 切换期间曾有一份 `native_sr25519_parity_test.dart` 做原生 ↔ 纯 Dart 对拍；原生真机
 > 验收通过、纯 Dart 移除后该文件一并删除（不保留两套实现）。
 
-## 6. 现存边界
+## 6. 冷端（CitizenWallet）实建
+
+第 2 步已完成：冷端切原生，与热端**共用 citizen-signer 同一份源码**。
+
+- **存储模型不同、密码学相同**（有意为之）：热端「无根」只存 child mini-secret；
+  冷端是持根方，只存母种子 + 助记词，签名时现场硬派生。crate 只提供密码学原语，
+  不介入任何一端的存储决策。
+- 冷热金标互等：两端 `derivation_golden_test.dart` 向量文件 md5 一致
+  （`5be6c3f0…54db`），同一助记词两端逐字节同账户。
+- 产物（`citizenwallet/scripts/build-signer-native.sh`，每次构建自动验 4 个符号）：
+
+| 平台 | 产物 | 接入方式 |
+|------|------|----------|
+| Android | `android/app/src/main/jniLibs/arm64-v8a/libcitizenwallet_signer.so`（~2.1 MB） | jniLibs 自动打包 |
+| iOS | `ios/signer/libcitizenwallet_signer.a`（~5.7 MB） | 本地 pod `citizenwallet_signer` 静态链入 |
+| macOS(host) | `rust/target/release/libcitizenwallet_signer.dylib` | 仅 `flutter test` dlopen |
+
+## 7. iOS 静态库三坑（冷热通用，热端 `ios/smoldot` 同方案）
+
+1. **Release `-dead_strip` 静默剔符号**：`-force_load` 整库进来了，没被引用的
+   `#[no_mangle]` 符号照样被剔——Debug 正常、Release 崩。必须**逐符号** `-Wl,-u,<符号>`
+   钉住;热端符号清单从 `.a` 实抽（`exported_symbols.txt`），绝不手维护。
+2. **CocoaPods 合并裸 `-u`**：写 `-u <符号>` 会被去重合并成 `-u a b c d`，
+   后面的被链接器当文件名（`No such file or directory`）。必须写 `-Wl,-u,<符号>`。
+3. **符号检查要查对文件**：Debug 查 `Runner.app/Runner.debug.dylib`（`Runner` 只是
+   ~70KB 启动壳），Release 查 `Runner.app/Runner`;Mach-O 用 `llvm-nm -g`（`-D` 是
+   ELF 专用，会误判成"没链接进去"）。
+
+## 8. 现存边界
 
 - `polkadart_keyring` 仍保留，**仅用于 SS58 地址编解码**（base58 + 校验和，非密码学），
   全 app 统一走它；`sr25519` 因此仍是它的传递依赖，但 `pubspec.yaml` 已移除直接依赖，
   **禁止再直接 import**。
-- **CitizenWallet（冷钱包）尚未原生化**：仍是纯 Dart `sr25519`，且该项目无原生层。
-  第 2 步计划复用本文的同一份 Rust 实现，统一冷热两端。
+- iOS 只出 device `arm64`（两端一致）；模拟器需 `aarch64-apple-ios-sim` 且同名架构
+  不能 lipo 合并、要上 XCFramework——未做，真机验收足够。

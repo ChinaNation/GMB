@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode, visibleForTesting;
 import 'package:isar_community/isar.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:sr25519/sr25519.dart' as sr;
+import 'package:citizenwallet/wallet/native_sr25519.dart';
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenwallet/chain/chain_constants.dart';
 import 'package:citizenwallet/isar/wallet_isar.dart';
@@ -517,18 +517,16 @@ class WalletManager {
     try {
       final child = _childMiniSecret(seed, acct.accountIndex);
       final childBytes = Uint8List.fromList(child);
-      final miniSecret = sr.MiniSecretKey.fromRawKey(childBytes);
-      final secretKey = miniSecret.expandEd25519();
       try {
-        final localAccountId = _accountIdFromBytes(secretKey.public().encode());
+        final localAccountId =
+            _accountIdFromBytes(NativeSr25519.publicKeyOf(childBytes));
         if (localAccountId != acct.accountId) {
           throw const WalletAuthException('本地签名密钥与账户不一致，请重新导入钱包');
         }
-        return sr.Sr25519.sign(secretKey, payload).encode();
+        return NativeSr25519.sign(childBytes, payload);
       } finally {
         childBytes.fillRange(0, childBytes.length, 0);
-        _zeroList(miniSecret.key);
-        _zeroSecretKey(secretKey);
+        _zeroList(child);
       }
     } finally {
       _zeroList(seed);
@@ -623,11 +621,15 @@ class WalletManager {
     }
     final childBytes = Uint8List.fromList(_childMiniSecret(seed, index));
     try {
-      final pair = Keyring.sr25519.fromSeed(childBytes);
-      pair.ss58Format = _ss58Prefix;
+      final accountId =
+          _accountIdFromBytes(NativeSr25519.publicKeyOf(childBytes));
       return _DerivedAccount(
-        accountId: _accountIdFromBytes(pair.bytes().toList(growable: false)),
-        ss58Address: pair.address,
+        accountId: accountId,
+        // SS58 编解码(base58 + 校验和)仍走 polkadart_keyring，非密码学。
+        ss58Address: Keyring().encodeAddress(
+          _hexToBytes(accountId),
+          _ss58Prefix,
+        ),
       );
     } finally {
       childBytes.fillRange(0, childBytes.length, 0);
@@ -644,7 +646,10 @@ class WalletManager {
     if (junctions.isEmpty) {
       throw StateError('派生路径 //$index 解析失败');
     }
-    var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
+    // 密码学走原生 schnorrkel（与 CitizenApp 热端同一份实现）；junction 解析属
+    // SCALE 编码而非密码学，留在 Dart，口径漂移面最小。逐层派生：上一层输出即
+    // 下一层输入，中间层用完立即清零。
+    var current = List<int>.from(seed);
     late List<int> childBytes;
     try {
       for (final j in junctions) {
@@ -652,16 +657,14 @@ class WalletManager {
           throw StateError('仅支持硬派生 //index');
         }
         final cc = j.junctionId.sublist(0, 32);
-        final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
-        childBytes = derived.$1.encode();
-        _zeroSecretKey(rootSk);
-        rootSk = derived.$1.expandEd25519();
-        _zeroList(derived.$1.key);
+        childBytes = NativeSr25519.deriveHard(current, cc);
+        _zeroList(current);
+        current = List<int>.from(childBytes);
         _zeroList(cc);
       }
       return childBytes;
     } finally {
-      _zeroSecretKey(rootSk);
+      _zeroList(current);
     }
   }
 
@@ -863,11 +866,6 @@ class WalletManager {
     for (var i = 0; i < bytes.length; i++) {
       bytes[i] = 0;
     }
-  }
-
-  static void _zeroSecretKey(sr.SecretKey secretKey) {
-    _zeroList(secretKey.key);
-    _zeroList(secretKey.nonce);
   }
 
   static bool _isValidMnemonic(String mnemonic) {

@@ -13,8 +13,8 @@ import 'dart:typed_data';
 
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenwallet/wallet/native_sr25519.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:sr25519/sr25519.dart' as sr;
 import 'package:substrate_bip39/substrate_bip39.dart';
 
 /// 固定测试助记词（substrate dev 助记词，全网公开，仅测试用）。
@@ -48,6 +48,11 @@ const List<(String, String, String)> kGoldenAccounts = [
   ),
 ];
 
+List<int> _hexToBytesForTest(String hex) {
+  final t = hex.startsWith('0x') ? hex.substring(2) : hex;
+  return [for (var i = 0; i < t.length; i += 2) int.parse(t.substring(i, i + 2), radix: 16)];
+}
+
 String _hex(List<int> b) =>
     b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 
@@ -58,15 +63,16 @@ Future<Uint8List> _miniSecret(String mnemonic) async {
 }
 
 /// 复现 WalletManager 的 child mini-secret 提取（金标据此校验）。
+///
+/// 与生产同一条原生路径（[NativeSr25519] → citizen-signer，与 CitizenApp 热端
+/// 同一份源码）——金标因此是"生产实现 vs Substrate 官方权威向量"的直接对拍。
 List<int> _childMiniSecret(List<int> seed, int index) {
   final junctions = SecretUri.fromStr('//$index').junctions;
-  var rootSk = sr.MiniSecretKey.fromRawKey(seed).expandEd25519();
+  var current = List<int>.from(seed);
   late List<int> child;
   for (final j in junctions) {
-    final cc = j.junctionId.sublist(0, 32);
-    final derived = rootSk.hardDeriveMiniSecretKey(const <int>[], cc);
-    child = derived.$1.encode();
-    rootSk = derived.$1.expandEd25519();
+    child = NativeSr25519.deriveHard(current, j.junctionId.sublist(0, 32));
+    current = List<int>.from(child);
   }
   return child;
 }
@@ -99,15 +105,14 @@ void main() {
     final ms = await _miniSecret(kDevPhrase);
     for (var index = 0; index < kGoldenAccounts.length; index++) {
       final child = _childMiniSecret(ms, index);
-      final kp = Keyring.sr25519.fromSeed(Uint8List.fromList(child))
-        ..ss58Format = kSs58;
+      final accountId = '0x${_hex(NativeSr25519.publicKeyOf(child))}';
       final (expectedId, expectedSs58, expectedChild) = kGoldenAccounts[index];
+      expect(accountId, expectedId, reason: '//$index accountId 漂移');
       expect(
-        '0x${_hex(kp.bytes().toList(growable: false))}',
-        expectedId,
-        reason: '//$index accountId 漂移',
+        Keyring().encodeAddress(_hexToBytesForTest(accountId), kSs58),
+        expectedSs58,
+        reason: '//$index ss58 漂移',
       );
-      expect(kp.address, expectedSs58, reason: '//$index ss58 漂移');
       expect('0x${_hex(child)}', expectedChild,
           reason: '//$index childMiniSecret 漂移');
     }

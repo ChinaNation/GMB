@@ -44,6 +44,13 @@ class SmoldotPlatform {
 
   /// Load library on macOS/iOS
   static DynamicLibrary _loadDarwin() {
+    if (Platform.isIOS) {
+      // iOS 上静态库 libsmoldot.a 经本地 pod(ios/smoldot)-force_load 链进
+      // Runner 主二进制,符号直接从当前进程取;沙盒里也不存在独立 .dylib
+      // 可 open,所以不做任何文件路径尝试(那只会白抛两层异常)。
+      return DynamicLibrary.process();
+    }
+
     // First try package-relative path
     final libraryPath = _getPackageLibraryPath('lib$_libraryName.dylib');
     if (libraryPath != null && File(libraryPath).existsSync()) {

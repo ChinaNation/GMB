@@ -300,6 +300,27 @@ Chat 与广场权限分离：
   不写入私人备注；`transfer`/`dispatch` 模式把 userContact 作为收款人进入转账。
   缺少 CID 的 userTransfer 收款码不得再兼作联系人码。**不新造带金额收款码**。
 - 聊天搜索页（2026-07-23，2026-08-02 设备数据钥订正）：一个输入框分会话、联系人、聊天记录三段结果。会话按标题/最近消息搜索；联系人只在本地匹配私人备注、CID 和 finalized 当前账户快照，打开私信时始终传联系人 CID。聊天记录由 `ChatStore.searchMessages({ownerCidNumber, currentAccountId, keyword, limit})` 查询：`ownerCidNumber` 是唯一数据分区与索引归属，`currentAccountId` 只用于校验精确绑定并从设备数据钥金库静默解封 Chat 与索引用途钥，禁止在搜索或页面进入时读取账户 child；候选消息解密后再以 `ChatPayloadCodec.decode(...).summary` 复验真实子串，避免截断 HMAC token 假阳性。点结果统一复用 `openGroupChat` / `openDirectChat`，聊天记录命中只打开所在会话，不另造账户身份路径。
+- OpenMLS FFI 设备公钥断链修复（2026-08-04）：Rust 侧发 `device_public_key_hex`，
+  Dart 侧 `mls_native.dart` 却读 `device_public_key`（全仓唯一漏 `_hex` 后缀处），
+  `?? ''` 把它静默压成空串。后果不止测试：`chat_runtime._buildAccountContext` 首次
+  进 Chat 必抛 `OpenMLS native 未返回 Chat 设备公钥，请先重编 native 库`（**全新
+  安装 Chat 起不来**，且这条文案把 Dart 读错键名误导成 native 库过期）；
+  `_ensureOwnKeyPackagePublished` 的公钥一致性守卫被 `isNotEmpty &&` 短路失效；
+  `publishKeyPackage` 会向 Worker 上传空 `device_public_key_hex`。修复=改 Dart 读侧
+  对齐 `_hex` 后缀约定（FFI 全部十六进制字段统一带该后缀），Rust 侧不动。
+  同时**把静默退化改成边界即炸**：`createKeyPackage` 的必填字段
+  （`device_public_key_hex` / `key_package_hex`）经 `_requireField` 缺失即抛，
+  可为空字段（无新会话时的 `welcome_wire_message_hex`、Welcome 的 `plaintext_hex`）
+  照旧。两侧各加一道断言钉住键名：Rust `creates_real_openmls_key_package`、
+  Dart `mls_native_test`。
+  **为何潜伏这么久**：`test/support/smoldot_native_probe.dart` 在无宿主
+  libsmoldot 时 skip 这些测试，而其文档注释误称构建脚本「只给 Android 交叉编译，
+  产不出宿主版 libsmoldot」——实际 `scripts/build-smoldot-native.sh macos` 一直支持
+  宿主构建，只是没人跑，于是 skip 变成了永久的。注释已订正并写明：改 FFI 任一侧后
+  必须先产宿主库再真跑，skip 只代表「这轮没验」。
+  同批订正 `mls_native_session_test` 的过时断言：落库 `plaintext` 自 2026-07-15
+  `ChatPayloadCodec` 落地起就是载荷 JSON 而非裸文本，断言改为解码后比对
+  `kind` + `text`（比原断言更强）。
 
 外部控制台待完成：
 

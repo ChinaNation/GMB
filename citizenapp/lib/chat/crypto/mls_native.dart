@@ -83,10 +83,9 @@ class NativeMlsCrypto implements MlsCrypto, MlsGroupCrypto {
     return MlsKeyPackage(
       cidNumber: identity.cidNumber,
       deviceId: identity.deviceId,
-      devicePublicKey: (response['device_public_key'] ?? '').toString(),
+      devicePublicKey: _requireField(response, 'device_public_key_hex'),
       keyPackageId: (response['key_package_id'] ?? '').toString(),
-      keyPackageBytes:
-          _hexToBytes((response['key_package_hex'] ?? '').toString()),
+      keyPackageBytes: _hexToBytes(_requireField(response, 'key_package_hex')),
       cipherSuite: (response['cipher_suite'] ?? '').toString(),
       createdAtMillis: (response['created_at_millis'] as num?)?.toInt() ?? 0,
       expiresAtMillis: (response['expires_at_millis'] as num?)?.toInt() ?? 0,
@@ -449,37 +448,37 @@ class MlsNativeBindings {
     final library = _loadSmoldotLibrary();
     return MlsNativeBindings._(
       createKeyPackage: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_create_key_package_json',
+        'citizen_chat_mls_create_key_package_json',
       ),
       twoPartySmoke: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_two_party_smoke_json',
+        'citizen_chat_mls_two_party_smoke_json',
       ),
       encrypt: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_encrypt_json',
+        'citizen_chat_mls_encrypt_json',
       ),
       decrypt: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_decrypt_json',
+        'citizen_chat_mls_decrypt_json',
       ),
       rekeyState: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_rekey_state_json',
+        'citizen_chat_mls_rekey_state_json',
       ),
       groupCreate: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_group_create_json',
+        'citizen_chat_mls_group_create_json',
       ),
       groupAddMembers: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_group_add_members_json',
+        'citizen_chat_mls_group_add_members_json',
       ),
       groupRemoveMembers: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_group_remove_members_json',
+        'citizen_chat_mls_group_remove_members_json',
       ),
       groupCreateMessage: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_group_create_message_json',
+        'citizen_chat_mls_group_create_message_json',
       ),
       groupProcess: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_group_process_json',
+        'citizen_chat_mls_group_process_json',
       ),
       groupState: library.lookupFunction<MlsJsonNative, MlsJsonDart>(
-        'gmb_chat_mls_group_state_json',
+        'citizen_chat_mls_group_state_json',
       ),
       freeString:
           library.lookupFunction<MlsFreeStringNative, MlsFreeStringDart>(
@@ -569,6 +568,23 @@ DynamicLibrary _loadSmoldotLibrary() {
     }
   }
   throw StateError('无法加载 libsmoldot native 库: $lastError');
+}
+
+/// 读 Rust 侧**必填**响应字段;缺字段或空值一律抛错,绝不静默退化成空串。
+///
+/// FFI 两侧字段名靠人工对齐,没有编译期约束:漏 `_hex` 后缀这类拼写漂移会让
+/// `?? ''` 一路把空串传到业务层,故障点离根因隔好几层(2026-08-04 的
+/// `device_public_key_hex` 断链即如此——设备公钥恒空,Chat 首启抛「请先重编
+/// native 库」,把 Dart 读错键名误导成 native 库过期)。在边界即炸。
+///
+/// 只用于**恒非空**的字段;可为空的响应字段(如无新会话时的
+/// `welcome_wire_message_hex`、Welcome 消息的 `plaintext_hex`)照旧走 `?? ''`。
+String _requireField(Map<String, dynamic> response, String key) {
+  final value = (response[key] ?? '').toString();
+  if (value.isEmpty) {
+    throw StateError('OpenMLS native 响应缺少必填字段 $key;请核对 Rust 侧 FFI 键名');
+  }
+  return value;
 }
 
 List<int> _hexToBytes(String value) {

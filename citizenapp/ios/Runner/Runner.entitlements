@@ -2,7 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>aps-environment</key>
-	<string>$(APS_ENVIRONMENT)</string>
+	<!-- aps-environment(推送)暂摘:个人开发者团队(7QJXLLBA6J)不支持 Push
+	     Notifications 权能,带着它整个 App 无法签名装机;且个人团队下 APNs token
+	     本来就永远拿不到,聊天推送在 iOS 依赖付费 Apple Developer Program。
+	     加入付费计划后恢复:
+	       <key>aps-environment</key>
+	       <string>$(APS_ENVIRONMENT)</string>
+	     (APS_ENVIRONMENT 变量仍在 pbxproj 各配置里,Debug=development,
+	      Release/Profile=production,未删。) -->
 </dict>
 </plist>

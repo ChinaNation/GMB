@@ -48,7 +48,7 @@ void main() {
               '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
           ..masterId =
               '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-          ..ss58Address = 'gmb_test_wallet'
+          ..ss58Address = 'citizen_test_wallet'
           ..alg = 'sr25519'
           ..ss58 = 2027
           ..createdAtMillis = 1

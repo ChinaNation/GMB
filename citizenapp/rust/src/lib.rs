@@ -19,7 +19,11 @@ use std::sync::{mpsc, Arc};
 mod chat_mls;
 mod error;
 mod ffi_types;
-mod signer;
+
+// sr25519 原生签名：逻辑与 FFI 外壳都在共享 crate `citizen-signer`（与 CitizenWallet
+// 冷端同一份源码）。这一行宏在本 cdylib 内就地生成 4 个 `#[no_mangle] extern "C"`
+// 导出入口，符号必被导出，且两端不会各抄一份 FFI 签名。
+citizen_signer::export_citizen_signer_ffi!();
 
 use ffi_types::*;
 

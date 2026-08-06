@@ -171,7 +171,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | Chat OpenMLS native 实现 | `NativeMlsCrypto` / `MlsNativeBindings` | `citizenapp/lib/chat/crypto/mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
 | Chat OpenMLS 会话模型 | `MlsWireMessage` / `MlsOutboundMessage` / `MlsInboundMessage` / `MlsMessageKind` | `citizenapp/lib/chat/crypto/mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
 | Chat OpenMLS 状态目录 | `MlsStateStore` | `citizenapp/lib/chat/crypto/mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
-| Chat OpenMLS Rust FFI | `gmb_chat_mls_create_key_package_json` / `gmb_chat_mls_two_party_smoke_json` / `gmb_chat_mls_encrypt_json` / `gmb_chat_mls_decrypt_json` | `citizenapp/rust/src/chat_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
+| Chat OpenMLS Rust FFI | `citizen_chat_mls_create_key_package_json` / `citizen_chat_mls_two_party_smoke_json` / `citizen_chat_mls_encrypt_json` / `citizen_chat_mls_decrypt_json` | `citizenapp/rust/src/chat_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
 | Chat 消息流状态机 | `ChatFlow` | `citizenapp/lib/chat/chat_flow.dart` | 瞬时互联网聊天和近场聊天的发送、接收、设备本地排队与重试编排 |
 | Chat 运行态编排 | `ChatRuntime` | `citizenapp/lib/chat/chat_runtime.dart` | Chat 默认运行态入口，连接 OpenMLS、本地 Isar、瞬时 WebSocket、通用推送唤醒和 WebRTC 附件传输 |
 | Chat Isar 消息库 | `ChatStore` / `ChatConversationEntity` / `ChatRouteCacheEntity` / `ChatMessageEntity` / `ChatOutboundQueueEntity` / `ChatPendingInboundEntity` | `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |

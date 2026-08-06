@@ -82,16 +82,42 @@ build_android() {
 
 build_ios() {
   echo ""
-  echo "=== 编译 iOS (arm64) ==="
+  echo "=== 编译 iOS (arm64, 静态库) ==="
   ensure_target aarch64-apple-ios
 
   cd "$RUST_DIR"
   cargo build --release --target aarch64-apple-ios
 
-  local dest="$CITIZENAPP_DIR/ios/Frameworks"
+  # iOS 走静态库直接链进 Runner 主二进制(本地 pod,见 ios/smoldot/smoldot_ffi.podspec):
+  # 裸 .dylib 需要嵌入 App 并单独代码签名,App Store 还要求动态库必须包成 .framework;
+  # 静态库没有这些坑。Dart 侧经 DynamicLibrary.process() 取符号,与冷端同一套做法。
+  local dest="$CITIZENAPP_DIR/ios/smoldot"
   mkdir -p "$dest"
-  cp target/aarch64-apple-ios/release/libsmoldot.dylib "$dest/"
-  echo "iOS arm64: $dest/libsmoldot.dylib ($(wc -c < "$dest/libsmoldot.dylib" | tr -d ' ') bytes)"
+  cp target/aarch64-apple-ios/release/libsmoldot.a "$dest/"
+
+  # 从 .a 实抽 FFI 导出符号清单,供 podspec 逐个生成 -Wl,-u,<符号>。
+  # 手写清单必然漂移:漏一个符号 = Release 被 -dead_strip 静默剔除(Debug 正常、
+  # Release 找不到符号),所以清单永远从产物现抽、绝不手维护。
+  # Mach-O 符号带下划线前缀;llvm-nm 查 Mach-O 用 -g(-D 是 ELF 专用)。
+  local nm
+  nm="$(xcrun --find llvm-nm)"
+  # llvm-nm 对 .a 里个别无符号表的对象会报警且以非零退出,但符号输出本身完整;
+  # 在 pipefail 下必须吞掉它的退出码,真正的完整性由下方三族计数把关。
+  ("$nm" -g --defined-only "$dest/libsmoldot.a" 2>/dev/null || true) \
+    | awk '$2 == "T" { print $3 }' \
+    | grep -E '^_(smoldot_|citizen_sr25519_|citizen_chat_mls_)' \
+    | sort -u > "$dest/exported_symbols.txt"
+
+  local n_smoldot n_signer n_mls
+  n_smoldot=$(grep -c '^_smoldot_' "$dest/exported_symbols.txt" || true)
+  n_signer=$(grep -c '^_citizen_sr25519_' "$dest/exported_symbols.txt" || true)
+  n_mls=$(grep -c '^_citizen_chat_mls_' "$dest/exported_symbols.txt" || true)
+  echo "iOS arm64: $dest/libsmoldot.a ($(wc -c < "$dest/libsmoldot.a" | tr -d ' ') bytes)"
+  echo "符号清单: smoldot_=$n_smoldot citizen_sr25519_=$n_signer citizen_chat_mls_=$n_mls"
+  if [ "$n_smoldot" -eq 0 ] || [ "$n_signer" -eq 0 ] || [ "$n_mls" -eq 0 ]; then
+    echo "错误: 符号清单整族缺失,检查 crate 导出(三族都必须非空)。"
+    return 1
+  fi
 }
 
 build_macos() {

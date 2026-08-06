@@ -5,7 +5,10 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var blurView: UIVisualEffectView?
   private var screenshotProtectionEnabled = false
-  private var eventSink: FlutterEventSink?
+  // fileprivate 而非 private：同文件内的 SecurityEventStreamHandler 需要读写它
+  // （onListen/onCancel 里挂载与清理）。private 在新版 Swift 编译器下会直接报
+  // "inaccessible due to 'private' protection level"，旧版仅是放行。仍不对外暴露。
+  fileprivate var eventSink: FlutterEventSink?
 
   override func application(
     _ application: UIApplication,

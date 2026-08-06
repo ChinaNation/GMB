@@ -30,6 +30,10 @@ target 'Runner' do
   # Swift 插件统一以 framework 集成，避免静态模块映射与 Objective-C 桥接头冲突。
   use_frameworks!
 
+  # 原生静态库(smoldot 轻节点 + sr25519 签名 + OpenMLS 聊天),由
+  # scripts/build-smoldot-native.sh ios 生成,符号清单从产物实抽,详见 podspec。
+  pod 'smoldot_ffi', :path => 'smoldot'
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths

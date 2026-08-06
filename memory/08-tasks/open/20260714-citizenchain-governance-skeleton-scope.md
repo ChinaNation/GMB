@@ -47,7 +47,7 @@
 - `cargo test -p citizenchain`：37/37 通过。
 - `cargo test -p node core::node_guard`：79/79 通过。
 - `cargo test -p node governance_skeleton`：9/9 通过。
-- 修改范围内 Rust 文件逐个 `rustfmt --check` 通过；全仓 `cargo fmt --all -- --check` 被既有无关文件 `citizenchain/crates/blockchain-test-harness/src/bin/harness.rs` 的格式差异阻断，本任务未改动该文件。
+- 修改范围内 Rust 文件逐个 `rustfmt --check` 通过；全仓 `cargo fmt --all -- --check` 被既有无关文件 `citizenchain/crates/blockchain-harness/src/bin/harness.rs` 的格式差异阻断，本任务未改动该文件。
 - `WASM_BUILD_FROM_SOURCE=1 cargo build -p node` 通过。
 - 使用 `citizenchain-fresh --tmp --pool-type single-state --mining-threads 0` 真实启动成功；RPC `chain_getBlockHash(0)` 返回 `0x362e8055636a014a0a51f563d6dadb139d430bd1a991ee6569c5d8148fdbd4b0`，`system_health.isSyncing=false`，验收后节点正常退出。
 - 用户当前桌面进程使用既有本地数据库真实启动成功并监听 `127.0.0.1:9944`；RPC `chain_getBlockHash(0)` 返回 `0x1f327586d8d3ffe02cc66f33097dfec5c037765e4ab66687e293abe21e7c1dee`，`system_health.isSyncing=false`，验证现有本地数据无需删除。

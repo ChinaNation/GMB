@@ -179,7 +179,7 @@ impl OpenMlsTraitsProvider for MlsProvider {
 /// - `request_json` 必须是合法 UTF-8 C 字符串。
 /// - 返回字符串必须由 `smoldot_free_string` 释放。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_create_key_package_json(
+pub unsafe extern "C" fn citizen_chat_mls_create_key_package_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -198,7 +198,7 @@ pub unsafe extern "C" fn gmb_chat_mls_create_key_package_json(
 /// - `request_json` 必须是合法 UTF-8 C 字符串。
 /// - 返回字符串必须由 `smoldot_free_string` 释放。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_two_party_smoke_json(
+pub unsafe extern "C" fn citizen_chat_mls_two_party_smoke_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -217,7 +217,7 @@ pub unsafe extern "C" fn gmb_chat_mls_two_party_smoke_json(
 /// - `request_json` 必须是合法 UTF-8 C 字符串。
 /// - 返回字符串必须由 `smoldot_free_string` 释放。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_encrypt_json(
+pub unsafe extern "C" fn citizen_chat_mls_encrypt_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -236,7 +236,7 @@ pub unsafe extern "C" fn gmb_chat_mls_encrypt_json(
 /// - `request_json` 必须是合法 UTF-8 C 字符串。
 /// - 返回字符串必须由 `smoldot_free_string` 释放。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_decrypt_json(
+pub unsafe extern "C" fn citizen_chat_mls_decrypt_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -258,7 +258,7 @@ pub unsafe extern "C" fn gmb_chat_mls_decrypt_json(
 /// - `request_json` 必须是合法 UTF-8 C 字符串。
 /// - 返回字符串必须由 `smoldot_free_string` 释放。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_rekey_state_json(
+pub unsafe extern "C" fn citizen_chat_mls_rekey_state_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -1048,9 +1048,9 @@ struct GroupStateRequest {
 /// 创建 MLS 群(创建者为唯一成员,epoch 0)。
 ///
 /// # Safety
-/// 见 `gmb_chat_mls_create_key_package_json`。
+/// 见 `citizen_chat_mls_create_key_package_json`。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_group_create_json(
+pub unsafe extern "C" fn citizen_chat_mls_group_create_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -1066,9 +1066,9 @@ pub unsafe extern "C" fn gmb_chat_mls_group_create_json(
 /// 批量加人:产 1 个 Commit(发给现有成员)+ 1 个 Welcome(发给全部新人)。
 ///
 /// # Safety
-/// 见 `gmb_chat_mls_create_key_package_json`。
+/// 见 `citizen_chat_mls_create_key_package_json`。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_group_add_members_json(
+pub unsafe extern "C" fn citizen_chat_mls_group_add_members_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -1084,9 +1084,9 @@ pub unsafe extern "C" fn gmb_chat_mls_group_add_members_json(
 /// 删人:产 Commit(发给剩余成员 + 被删者)。
 ///
 /// # Safety
-/// 见 `gmb_chat_mls_create_key_package_json`。
+/// 见 `citizen_chat_mls_create_key_package_json`。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_group_remove_members_json(
+pub unsafe extern "C" fn citizen_chat_mls_group_remove_members_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -1102,9 +1102,9 @@ pub unsafe extern "C" fn gmb_chat_mls_group_remove_members_json(
 /// 群 application message:单次加密,Dart 侧按名册扇 N 信封。
 ///
 /// # Safety
-/// 见 `gmb_chat_mls_create_key_package_json`。
+/// 见 `citizen_chat_mls_create_key_package_json`。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_group_create_message_json(
+pub unsafe extern "C" fn citizen_chat_mls_group_create_message_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -1121,9 +1121,9 @@ pub unsafe extern "C" fn gmb_chat_mls_group_create_message_json(
 /// applied / out_of_order / stale,乱序缓冲由 Dart 依此状态负责。
 ///
 /// # Safety
-/// 见 `gmb_chat_mls_create_key_package_json`。
+/// 见 `citizen_chat_mls_create_key_package_json`。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_group_process_json(
+pub unsafe extern "C" fn citizen_chat_mls_group_process_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -1139,9 +1139,9 @@ pub unsafe extern "C" fn gmb_chat_mls_group_process_json(
 /// 只读群状态:当前 epoch + 成员名册(MLS 真源,供 Dart 镜像对账与上限守)。
 ///
 /// # Safety
-/// 见 `gmb_chat_mls_create_key_package_json`。
+/// 见 `citizen_chat_mls_create_key_package_json`。
 #[no_mangle]
-pub unsafe extern "C" fn gmb_chat_mls_group_state_json(
+pub unsafe extern "C" fn citizen_chat_mls_group_state_json(
     request_json: *const c_char,
     error_out: *mut *mut c_char,
 ) -> *mut c_char {
@@ -1642,6 +1642,15 @@ mod tests {
             serde_json::from_str(&response).expect("response should be json");
         assert_eq!(json["cid_number"], "CID-ALICE");
         assert!(json["key_package_hex"].as_str().unwrap().len() > 100);
+        // 键名即跨语言契约:Dart 侧 `mls_native.dart` 按这些名字读,漏 `_hex`
+        // 后缀会让设备公钥恒空并卡死 Chat 首启(2026-08-04)。改名必须两侧同改。
+        let device_public_key_hex = json["device_public_key_hex"]
+            .as_str()
+            .expect("响应必须含 device_public_key_hex");
+        assert!(!device_public_key_hex.is_empty());
+        assert!(device_public_key_hex
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
     }
 
     #[test]
@@ -1663,7 +1672,7 @@ mod tests {
         use std::os::raw::c_char;
         use std::path::Path;
 
-        let base = std::env::temp_dir().join(format!("gmb_group_rt_{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("citizen_group_rt_{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         let dir_a = base.join("a");
         let dir_b = base.join("b");
@@ -1824,7 +1833,7 @@ mod tests {
 
     #[test]
     fn legacy_plaintext_state_is_purged() {
-        let dir = std::env::temp_dir().join(format!("gmb_mls_purge_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("citizen_mls_purge_{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         fs::write(dir.join("openmls_storage.json"), b"plain").expect("write legacy");
         fs::write(dir.join("device.json"), b"plain").expect("write legacy");
@@ -1836,7 +1845,7 @@ mod tests {
 
     #[test]
     fn atomic_write_replaces_without_leaving_temp() {
-        let dir = std::env::temp_dir().join(format!("gmb_mls_atomic_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("citizen_mls_atomic_{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         let target = dir.join("state.bin");
         atomic_write(&target, b"first").expect("first write");

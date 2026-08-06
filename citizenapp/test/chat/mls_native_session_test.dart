@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:citizenapp/chat/chat_flow.dart';
 import 'package:citizenapp/chat/chat_models.dart';
+import 'package:citizenapp/chat/chat_payload.dart';
 import 'package:citizenapp/chat/crypto/mls_boundary.dart';
 import 'package:citizenapp/chat/crypto/mls_native.dart';
 import 'package:citizenapp/chat/crypto/mls_state_store.dart';
@@ -164,7 +165,11 @@ void main() {
       currentAccountId: _bobAccountId,
       conversationId: 'conv-direct',
     );
-    expect(messages.single.plaintext, '瞬时直达');
+    // 落库 plaintext 是 ChatPayloadCodec 载荷 JSON(全仓消息类型单一真源),
+    // 不是裸文本;展示端一律解码后取值,断言与之对齐。
+    final content = ChatPayloadCodec.decode(messages.single.plaintext ?? '');
+    expect(content.kind, ChatMessageKind.text);
+    expect(content.text, '瞬时直达');
     expect(messages.single.direction, 'incoming');
   }, skip: skip);
 }
