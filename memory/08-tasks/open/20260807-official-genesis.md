@@ -73,3 +73,28 @@
    已改为只忽略 `xcuserdata/`，并补入 `contents.xcworkspacedata` 与
    `xcshareddata/{IDEWorkspaceChecks.plist,WorkspaceSettings.xcsettings}` 三个文件，
    与 CitizenWallet 结构对齐。
+
+## 节点与公民云部署（2026-08-07，完成）
+
+8. **三台节点清库重部署完成**，创世哈希全部为 `0x18847a5dfd263272…`，互联 peers=3、
+   isSyncing=false、每台单进程单服务。矿工账户（keystore `powr` 公钥推导，SS58 前缀 2027）：
+   - 国储会 `w5HCL4SgSNbCHxFMj3DFP9mryciFRin7DehYs99B3zg1Juknp`
+   - 中枢省 `w5DAjQckXraS6XUGyW1Uwz3YkLg8YVg1wxqCX48qjbB1HUBpz`
+   - 贵州省 `w5GshUYaTx3x5LnyG427b4uUKr1yCfm7mXAtV7Fsb98LjCRaM`
+9. **旧部署残留清除**：三台各有一套按域名命名的旧服务与数据目录
+   （`guo-node`+`/opt/guo` 1.2G、`prczss-node`+`/opt/prczss`、`prcgzs-node`+`/opt/prcgzs`），
+   与 deploy 脚本认的 `citizenchain-node` 并存，旧进程抢占 9944 导致验收读到旧链应答。
+   已全部停用、禁用、删单元文件并删数据目录。**cloudflared 与 nginx 是独立服务，未受影响**。
+10. **deploy 脚本两处修复**（`citizenconsole/` 不入库，仅记录于此）：
+    六个 `frozen_*` 冻结值更新到新创世（原值仍指旧链，会在校验处直接拒绝部署）；
+    新版节点首启要在 base-path 下自建 TLS 目录 `n/`，而脚本只把子目录设为 `citizenchain`
+    属主、base-path 仍是 root，导致 `创建 TLS 目录失败: Permission denied` 重启 37 次，
+    已补 base-path 与 chains 两级属主。
+11. **公民云按新创世重建**：`cloudflare.sh` 两个受审哈希更新（wrangler.toml 被 bake 改了
+    链身份两行、schema 改了 `creatorPaused→issuerPaused`）；D1 删表重建（26 张业务表，
+    另删一张 schema 已移除、代码零引用的残留表 `cid_data_roots`）；Worker 重新部署
+    （version `5710750d`）后 `/api/chain/bootstrap` 实测返回新 genesis_hash 与 state_root。
+    **vars 属于 wrangler.toml 而非 Secret，只重建 D1 不会更新它们，必须重新 deploy Worker**。
+12. **旧链交易归档**：清库前导出全链交易，见
+    `memory/05-modules/citizenchain/node/OLD_CHAIN_TRANSACTIONS_ARCHIVE.md`
+    （37 笔转账、合计 19,900,023,035.25 元，含备注原文）。旧链数据已清，此为唯一留存。
