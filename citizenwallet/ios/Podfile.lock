@@ -47,7 +47,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
 
 SPEC CHECKSUMS:
-  citizenwallet_signer: 603080dfbc8deba5c4b36d405950d12f6bc5ffe3
+  citizenwallet_signer: ac203f292b55b03eaca50004e3465906a37a82e4
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
