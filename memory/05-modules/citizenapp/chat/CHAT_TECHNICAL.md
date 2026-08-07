@@ -349,3 +349,17 @@ Chat 与广场权限分离：
 - `citizenapp/android/`、`citizenapp/ios/`：通知与后台能力；涉及平台配置。
 - `citizenapp/lib/8964/`：钱包 session、浏览额度显示和无会员发布拦截；涉及代码。
 - `memory/`：统一架构、协议、安全和任务记录；只涉及文档与旧口径清理。
+
+## 13. 未注册身份统一引导(2026-08-05)
+
+「已有钱包、未注册 CID」是合法状态,聊天 tab 对它的呈现是**统一注册引导**,不是报错:
+
+- `chat_tab._reload` 读到空 CID 即短路:不读加密会话存储(`readConversationPreviews`
+  第一行解析密钥绑定,对未注册身份必抛 `WalletAuthException`,会以错误横幅盖住引导)、
+  不起轮询/realtime。渲染层空 CID 分支显示 `IdentityRegisterGuide`(全 App 唯一
+  引导组件,`lib/ui/widgets/identity_register_guide.dart`)。
+- 加号菜单动作(私信/群聊/加好友)未注册时就地弹统一注册面板
+  (`startCidRegistrationFlow`,单源 `lib/my/myid/register_identity_flow.dart`),
+  不再打错误横幅;占号成功后 coordinator 回刷,原动作由用户重新触发。
+- 禁止另写注册链路或未注册提示;文案、面板、余额闸、缓存失效全在共享流程单源。
+- 任务卡:`memory/08-tasks/open/20260805-citizenapp-unregistered-guide-unify.md`

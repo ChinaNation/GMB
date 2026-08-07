@@ -292,9 +292,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
             decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
             child: Column(
               children: [
-                _infoTile('公钥（账户 ID）', account.accountId),
+                _infoTile('公钥', '（给电脑看的）', account.accountId),
                 const Divider(height: 1, indent: 16, endIndent: 16),
-                _infoTile('SS58 地址', account.ss58Address),
+                _infoTile('账户地址', '（给人看的）', account.ss58Address),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _buildPrivateKeyTile(),
               ],
@@ -402,17 +402,31 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     );
   }
 
-  Widget _infoTile(String label, String value) {
+  Widget _infoTile(String label, String subLabel, String value) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
+          // 主标签 + 括号副标签:副标签缩小减淡,与主标签形成差异。
+          Text.rich(
+            TextSpan(
+              text: label,
               style: const TextStyle(
                   fontSize: 12,
                   color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w500)),
+                  fontWeight: FontWeight.w500),
+              children: [
+                TextSpan(
+                  text: subLabel,
+                  style: const TextStyle(
+                      fontSize: 10,
+                      color: AppTheme.textTertiary,
+                      fontWeight: FontWeight.w400),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [

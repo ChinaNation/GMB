@@ -8,7 +8,9 @@ import 'package:citizenapp/my/creator/widgets/creator_gate_view.dart';
 import 'package:citizenapp/my/creator/widgets/creator_overview_card.dart';
 import 'package:citizenapp/my/creator/widgets/creator_tier_card.dart';
 import 'package:citizenapp/my/membership/membership_page.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/widgets/identity_register_guide.dart';
 
 /// 「我的 → 创作者」：管理自己的创作者会员（档位 / 收入概览）。
 ///
@@ -27,6 +29,7 @@ class _CreatorPageState extends State<CreatorPage> {
   late final CreatorService _service = widget._service ?? CreatorService();
   CreatorPageData? _data;
   bool _loading = true;
+  bool _unregistered = false;
   String? _error;
 
   @override
@@ -41,6 +44,20 @@ class _CreatorPageState extends State<CreatorPage> {
       _error = null;
     });
     try {
+      // 未注册 CID 是合法状态:先判定并显示统一注册引导,不把服务层 fail-closed
+      // 拦截当错误文本呈现。身份链读失败会从 resolve 抛出,落到下方错误分支,
+      // 绝不把「没读到链」冒充成「未注册」。
+      final identity = await IdentityAccountCache.instance.resolve();
+      if (!mounted) return;
+      if (identity == null || !identity.isRegistered) {
+        setState(() {
+          _unregistered = true;
+          _data = null;
+          _loading = false;
+        });
+        return;
+      }
+      if (_unregistered) setState(() => _unregistered = false);
       final data = await _service.load();
       if (!mounted) return;
       setState(() {
@@ -73,7 +90,16 @@ class _CreatorPageState extends State<CreatorPage> {
   Widget _body() {
     final data = _data;
     final Widget content;
-    if (data == null) {
+    if (_unregistered) {
+      content = IdentityRegisterGuide(
+        description: '注册后即可开通创作者会员。',
+        onRegistered: _load,
+      );
+    } else if (data == null && !_loading && _error != null) {
+      // 首载失败(会话/链不可用):必须给明确错误态。此前落回下方"同步中"骨架,
+      // 所有字段无限显示"同步中",用户会误以为一直在加载。
+      content = _loadFailed(_error!);
+    } else if (data == null) {
       // 首帧立即展示页面结构；未知状态下所有写入口禁用，后台完成后再替换真数据。
       content = _activeView(
         CreatorPlan.empty(''),
@@ -284,6 +310,16 @@ class _CreatorPageState extends State<CreatorPage> {
                 size: 20, color: AppTheme.textTertiary),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 首载失败整页态:复用 [_inlineError](含重试)居中呈现,不另造样式。
+  Widget _loadFailed(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: _inlineError(message),
       ),
     );
   }

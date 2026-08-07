@@ -10,6 +10,7 @@ import 'package:citizenwallet/wallet/native_sr25519.dart';
 import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenwallet/chain/chain_constants.dart';
 import 'package:citizenwallet/isar/wallet_isar.dart';
+import 'package:citizenwallet/ui/biometric_auth_text.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/security/secure_storage.dart';
 import 'package:citizenwallet/signer/qr_signer.dart';
@@ -772,7 +773,11 @@ class WalletManager {
     }
     try {
       final ok = await _localAuth.authenticate(
-        localizedReason: '请用生物识别验证身份以访问钱包密钥',
+        localizedReason: BiometricAuthText.pick(
+          zh: '请用生物识别验证身份以访问钱包密钥',
+          en: 'Verify with biometrics to access your wallet keys',
+        ),
+        authMessages: BiometricAuthText.messages(),
         biometricOnly: true,
         persistAcrossBackgrounding: true,
         sensitiveTransaction: true,

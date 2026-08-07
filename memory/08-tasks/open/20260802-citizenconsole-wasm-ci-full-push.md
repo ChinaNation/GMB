@@ -185,6 +185,8 @@
   分组，中文卡片固定显示“公民移动端”，但两个正式产品名、模块 id、目录和动作脚本保持不变。
   公民移动端详情固定两行，每行按“编译软件 / 运行 CI / 正式 Release”排列；两个产品共用的
   `GMB_APP_KEY` 与 `SSH_KEY` 在同一密钥列表中各显示一次。
+  （2026-08-05 起「编译软件」已按端拆成「编译iOS端 / 编译Android端」两个入口，每行四个动作，
+  见 20260805-mobile-dual-platform-build-and-ci.md；此处保留当时口径作为决策记录。）
 - 2026-08-03：用户确认 `GMB_APP_KEY` 改由 CitizenConsole 的 macOS Keychain 保存生产真源，
   GitHub Secret 只保留为正式 Release 前覆盖同步的流水线投影。`GMB_APP_KEY` 与 `SSH_KEY`
   仅允许逐次 Touch ID 后短时查看，关闭或按 Esc 必须清空页面明文；禁止写入文件、日志或

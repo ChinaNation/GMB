@@ -214,3 +214,25 @@ Worker 不持有任何用户私有数据密钥，也不接受未生效账户预�
 
 - `image_picker`、`qr_flutter`、`shared_preferences`、`isar_community`、`cryptography`、`flutter_secure_storage`
 - 协作：`WalletManager`、`lib/my/myid/MyIdPage`
+
+## 7. 未注册身份统一引导(2026-08-05)
+
+- 通讯录「扫码加好友」与「我的→个人资料」对未注册身份不再弹文字 SnackBar,而是
+  就地弹统一注册面板;身份判定与面板全走单源 `lib/my/myid/register_identity_flow.dart`
+  (`ensureCidRegisteredOrPrompt` / `startCidRegistrationFlow`),会员订阅同规。
+- 注册身份底部面板(`showRegisterIdentitySheet`)全仓唯一;身份页右上「注册」与
+  各页引导按钮走同一条流程(面板→余额闸→占号→身份缓存失效→成败提示)。
+- 任务卡:`memory/08-tasks/open/20260805-citizenapp-unregistered-guide-unify.md`
+
+## 8. 通讯录未注册引导(2026-08-06)
+
+通讯录属主 = CID,**没有 CID 就不该读通讯录**:
+
+- `ContactBookPage._load()` 先判身份缓存,未注册 → 置 `_unregistered` 并**直接 return**,
+  `getContacts()` **一次都不调**;整页显示 `IdentityRegisterGuide`。
+- 为什么必须短路:`getContacts()` 第一步 `_requireIdentityOwner()` 对未注册身份**必抛**
+  `WalletAuthException('请先注册 CID 身份')`,页面 catch 后 `_contacts` 保持空,渲染会落到
+  `_EmptyContacts` —— 把「你没注册」显示成「你没有联系人」,与广场当初把权限态伪装成
+  「加载失败」是同一类错误。
+- 链读异常**不吞**:`resolve` 抛错走原有故障路径,绝不把「没读到链」冒充成「没注册」。
+- 测试钉死:未注册 → 引导 + `getContactsCalls == 0`;已注册 → 正常列表且计数 > 0。

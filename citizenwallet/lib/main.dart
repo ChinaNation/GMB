@@ -6,6 +6,7 @@ import 'security/app_lock_service.dart';
 import 'security/pin_input_page.dart';
 import 'security/secure_storage.dart';
 import 'ui/app_theme.dart';
+import 'ui/biometric_auth_text.dart';
 import 'ui/home_page.dart';
 import 'wallet/secret_cipher.dart';
 
@@ -140,7 +141,11 @@ class _AppLockGateState extends State<_AppLockGate>
   Future<void> _authenticateDevice() async {
     try {
       final success = await _localAuth.authenticate(
-        localizedReason: '请用生物识别验证身份以进入应用',
+        localizedReason: BiometricAuthText.pick(
+          zh: '请用生物识别验证身份以进入应用',
+          en: 'Verify with biometrics to open Citizen Wallet',
+        ),
+        authMessages: BiometricAuthText.messages(),
         biometricOnly: true,
         persistAcrossBackgrounding: true,
         sensitiveTransaction: true,

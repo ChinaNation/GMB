@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:citizenwallet/isar/wallet_isar.dart';
 import 'package:citizenwallet/ui/wallet_detail_page.dart';
 import 'package:citizenwallet/wallet/wallet_manager.dart';
@@ -56,7 +57,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('点击查看助记词'), findsOneWidget);
-    expect(find.textContaining('钱包备份'), findsOneWidget);
+    expect(find.textContaining('钱包唯一备份'), findsOneWidget);
     expect(find.byTooltip('扫码签名'), findsOneWidget);
 
     await tester.tap(find.text('点击查看助记词'));
@@ -111,7 +112,8 @@ void main() {
     });
     await tester.pump();
 
-    // 二维码入口在每个账户行上，与右箭头并存。
+    // 列表标题为「账户列表」;二维码入口在每个账户行上，与右箭头并存。
+    expect(find.text('账户列表'), findsOneWidget);
     final qrEntry = find.byTooltip('显示钱包码');
     expect(qrEntry, findsWidgets);
     expect(find.byIcon(Icons.chevron_right), findsWidgets);
@@ -119,13 +121,39 @@ void main() {
     await tester.tap(qrEntry.first);
     await tester.pumpAndSettle();
 
-    // 弹出的是钱包码（与账户详情里同一份文案），且没有跳进账户详情。
-    expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
+    // 弹出的是钱包码（与账户详情共用同一份弹窗），且没有跳进账户详情。
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text('复制'), findsOneWidget);
     expect(find.text('账户详情'), findsNothing);
+    expect(find.textContaining('扫码登录'), findsNothing);
     expect(find.textContaining('分钟内有效'), findsNothing);
 
     await tester.tap(find.text('关闭'));
     await tester.pumpAndSettle();
-    expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsNothing);
+    expect(find.byType(QrImageView), findsNothing);
+  });
+
+  testWidgets('账户序号三位数起 # 挪到左上角、数字另起一行', (tester) async {
+    // 真实导入钱包(账户0)+ 指定序号添加 //100,列表同时出现两种徽章形态。
+    late Wallet wallet;
+    await tester.runAsync(() async {
+      final created = await WalletManager().importWallet(kDevPhrase);
+      wallet = created.wallet;
+      await WalletManager().addAccount(wallet.masterId, index: 100);
+    });
+
+    await tester.runAsync(() async {
+      await tester
+          .pumpWidget(MaterialApp(home: WalletDetailPage(wallet: wallet)));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    // 账户0:两位数以内保持 `#xx` 单行整串。
+    expect(find.text('#0'), findsOneWidget);
+    // 账户100:整串 `#100` 不复存在,# 与数字拆分各自成行。
+    expect(find.text('#100'), findsNothing);
+    expect(find.text('#'), findsOneWidget);
+    expect(find.text('100'), findsOneWidget);
   });
 }

@@ -6,9 +6,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../8964/profile/widgets/local_identity_avatar.dart';
 import '../my/myid/identity_account_cache.dart';
+import '../my/myid/register_identity_flow.dart';
 import '../my/user/contact_book_page.dart';
 import '../qr/scan_dispatch_flow.dart';
 import '../ui/app_theme.dart';
+import '../ui/widgets/identity_register_guide.dart';
 import '../wallet/core/wallet_manager.dart';
 import '../wallet/pages/wallet_qr_page.dart';
 import 'chat_page.dart';
@@ -242,6 +244,14 @@ class _ChatTabState extends State<ChatTab> {
         _cidNumber = ownerCidNumber;
         _accountId = activeWallet;
       });
+      if (ownerCidNumber.isEmpty) {
+        // 未注册 CID(合法状态,resolver 对其回退账户0,accountId 非空):必须在此
+        // 短路。会话存储读取第一步就要解析密钥绑定,对未注册身份必抛
+        // WalletAuthException,catch 成 _error 横幅后会盖住注册引导;轮询/realtime
+        // 同样是注定失败的空转。渲染层 `_cidNumber.isEmpty` 分支显示统一注册引导。
+        _pauseSync();
+        return;
+      }
       _configurePolling(activeWallet);
       // 首先只读本地会话并立即渲染；发送队列重试与网络同步不得挡住聊天首帧。
       var conversations = await widget.store.readConversationPreviews(
@@ -528,10 +538,15 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   /// 页面浏览直接开放；私信、群聊、加好友等动作发生时再严格要求热钱包与 CID。
+  ///
+  /// 未注册不再打错误横幅,而是就地弹全 App 统一注册面板;占号成功后
+  /// coordinator 回刷进正常聊天,原动作由用户重新触发(不自动续跑)。
   bool _requireChatIdentity() {
     if (!_requireAccount()) return false;
     if (_cidNumber.isEmpty) {
-      setState(() => _error = '请先在「我的 → 身份」注册身份');
+      unawaited(startCidRegistrationFlow(context).then((registered) {
+        if (registered && mounted) _requestCoordinate();
+      }));
       return false;
     }
     return true;
@@ -763,9 +778,12 @@ class _ChatTabState extends State<ChatTab> {
                   child: _NoAccount(),
                 )
               else if (_cidNumber.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
-                  child: _NoIdentity(),
+                  child: IdentityRegisterGuide(
+                    description: '注册后即可使用聊天与通讯录。',
+                    onRegistered: _requestCoordinate,
+                  ),
                 )
               else if (_conversations.isNotEmpty)
                 SliverList.builder(
@@ -1374,28 +1392,6 @@ class _ChatSyncNotice extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(32, 32, 32, 80),
         child: Text(
           '正在读取本地会话',
-          style: TextStyle(
-            color: AppTheme.textSecondary,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NoIdentity extends StatelessWidget {
-  const _NoIdentity();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(32, 32, 32, 80),
-        child: Text(
-          '请先在「我的 → 身份」注册身份',
-          textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 15,

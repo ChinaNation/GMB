@@ -44,7 +44,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('SS58 地址'), findsOneWidget);
+    expect(find.text('账户地址'), findsOneWidget);
     expect(find.textContaining('备份地址不能恢复钱包'), findsOneWidget);
     expect(find.text('必须\n保密'), findsNWidgets(3));
     expect(find.text('可以\n公开'), findsNWidgets(2));

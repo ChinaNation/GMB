@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:citizenapp/my/creator/creator_page.dart';
 import 'package:citizenapp/my/creator/creator_service.dart';
 import 'package:citizenapp/my/creator/models/creator_overview.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,7 +18,49 @@ class _PendingCreatorService extends CreatorService {
   Future<CreatorPageData> load() => completer.future;
 }
 
+/// 首载抛错(会话/链不可用),重试后成功:验证错误态与恢复路径。
+class _FailThenOkCreatorService extends CreatorService {
+  int loadCalls = 0;
+
+  @override
+  Future<CreatorPageData> load() async {
+    loadCalls++;
+    if (loadCalls == 1) {
+      throw Exception('设备子钥签名校验失败');
+    }
+    return CreatorPageData.active(
+      plan: CreatorPlan.empty('CN220-CTZN2-100000001-2026'),
+      overview: CreatorOverview.zero,
+    );
+  }
+}
+
+/// 已注册身份 fake:创作者页先过统一注册门,再进业务加载;
+/// 不注 fake 会打到真单例(真链读/真 Isar,hermetic 违规)。
+class _RegisteredIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      ResolvedIdentity(
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        ss58Address: 'ss58-demo',
+        accountIndex: 0,
+        snapshot: CitizenIdentityChainSnapshot(
+          cidNumber: 'CN220-CTZN2-100000001-2026',
+          accountId: Uint8List(32),
+          bindingRevision: 1,
+          votingIdentity: null,
+        ),
+      );
+}
+
 void main() {
+  setUp(() {
+    IdentityAccountCache.debugInstance = _RegisteredIdentityCache();
+  });
+
+  tearDown(IdentityAccountCache.resetDebugInstance);
+
   testWidgets('创作者状态未返回时直接显示安全页面结构且不使用整页转圈', (tester) async {
     final service = _PendingCreatorService();
     await tester.pumpWidget(
@@ -97,5 +143,25 @@ void main() {
       expect(plan.isEmpty, isTrue);
       expect(CreatorPlan.maxTiers, 10);
     });
+  });
+
+  testWidgets('首载失败显示明确错误态而非无限"同步中",重试可恢复', (tester) async {
+    final service = _FailThenOkCreatorService();
+    await tester.pumpWidget(
+      MaterialApp(home: CreatorPage(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    // 错误态可见(含重试),不得停留在"同步中"占位骨架。
+    expect(find.text('重试'), findsOneWidget);
+    expect(find.textContaining('设备子钥签名校验失败'), findsOneWidget);
+    expect(find.text('同步中'), findsNothing);
+
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(service.loadCalls, 2);
+    expect(find.text('重试'), findsNothing);
+    expect(find.text('已开通'), findsOneWidget);
   });
 }

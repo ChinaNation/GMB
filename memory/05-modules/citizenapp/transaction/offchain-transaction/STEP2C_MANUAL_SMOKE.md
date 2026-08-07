@@ -59,12 +59,15 @@ cargo build --release --bin citizenchain
 
 ---
 
-## 2. 启动 CitizenApp
+## 2. 编译安装 CitizenApp
+
+目标平台是必填参数;脚本编译后把**可直接使用**的 App 装进设备(iOS=release、
+Android=debug),装完在设备桌面点开。
 
 ```bash
 cd /Users/rhett/GMB/citizenapp
 
-./scripts/citizenapp-run.sh
+./scripts/citizenapp-run.sh android   # 或 ios
 ```
 
 ### 期望

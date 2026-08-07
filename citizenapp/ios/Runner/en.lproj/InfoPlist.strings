@@ -1,0 +1,15 @@
+/* English system-dialog strings for CitizenApp.
+ *
+ * Shown only on devices whose system language is English; every other language
+ * falls back to zh-Hans.lproj (the project's development region). Keep the key
+ * set here byte-identical to zh-Hans.lproj/InfoPlist.strings.
+ */
+
+"CFBundleDisplayName" = "Citizen";
+"CFBundleName" = "Citizen";
+
+"NSCameraUsageDescription" = "Citizen uses the camera to scan QR codes for sign-in and transfers.";
+"NSFaceIDUsageDescription" = "Citizen uses Face ID to confirm reading your wallet private key from this device's secure vault.";
+"NSMicrophoneUsageDescription" = "Citizen uses the microphone to record audio for videos sent in chat.";
+"NSPhotoLibraryAddUsageDescription" = "Citizen saves QR codes and avatars to your photo library.";
+"NSPhotoLibraryUsageDescription" = "Citizen accesses your photo library so you can set a profile picture.";

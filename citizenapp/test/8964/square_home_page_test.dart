@@ -117,6 +117,42 @@ class _FakeSquareApiClient extends SquareApiClient {
   }
 }
 
+/// 未注册:身份缓存命中且快照为空(最近一次链读结论=全账户未占号,回退账户0)。
+class _UnregisteredIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      const ResolvedIdentity(
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        ss58Address: 'ss58-demo',
+        accountIndex: 0,
+        snapshot: null,
+      );
+}
+
+/// 断言"未注册本地短路"生效:一旦发起会话立即失败。
+class _MustNotLoginSessionProvider extends SquareSessionProvider {
+  int calls = 0;
+
+  @override
+  Future<SquareSession?> ensureSession() async {
+    calls++;
+    throw StateError('未注册时不得发起登录挑战');
+  }
+}
+
+/// Worker 真源判定:登录挑战对未绑定账户回 403 cid_not_bound。
+class _CidNotBoundSessionProvider extends SquareSessionProvider {
+  @override
+  Future<SquareSession?> ensureSession() async {
+    throw const SquareApiException(
+      '该钱包账户未绑定 CID,无法登录',
+      statusCode: 403,
+      errorCode: 'cid_not_bound',
+    );
+  }
+}
+
 /// 记录最近一次请求的分类，用于断言分类切换真的按 feedKind 重新拉流。
 class _RecordingFeedSource implements SquareFeedSource {
   SquareFeedKind? lastFeedKind;
@@ -499,5 +535,54 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(tester.takeException(), isNull);
+
+    // 会话失败属通用故障(非未注册),维持原故障文案,不得误入注册引导。
+    expect(find.text('广场内容加载失败'), findsOneWidget);
+    expect(find.text('尚未注册'), findsNothing);
+  });
+
+  testWidgets('未注册(缓存命中) → 显示统一注册引导且不发登录挑战', (tester) async {
+    IdentityAccountCache.debugInstance = _UnregisteredIdentityCache();
+    final sessionProvider = _MustNotLoginSessionProvider();
+
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: SquareIdentityService(
+          walletManager: _FakeWalletManager(null),
+        ),
+        feedSource: _FakeSquareApiClient(),
+        sessionProvider: sessionProvider,
+        membershipLoader: () async => null,
+      )),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 引导态呈现,假故障文案禁止出现。
+    expect(find.text('尚未注册'), findsOneWidget);
+    expect(find.text('注册'), findsOneWidget);
+    expect(find.text('广场内容加载失败'), findsNothing);
+    // 本地短路铁证:注定 403 cid_not_bound 的登录挑战一次都不发。
+    expect(sessionProvider.calls, 0);
+  });
+
+  testWidgets('未注册(缓存未命中,Worker 判定 cid_not_bound) → 同一注册引导', (tester) async {
+    // 默认 _NullIdentityCache = 缓存未命中,本地不武断,由 Worker 真源判定。
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: SquareIdentityService(
+          walletManager: _FakeWalletManager(null),
+        ),
+        feedSource: _FakeSquareApiClient(),
+        sessionProvider: _CidNotBoundSessionProvider(),
+        membershipLoader: () async => null,
+      )),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('尚未注册'), findsOneWidget);
+    expect(find.text('注册'), findsOneWidget);
+    expect(find.text('广场内容加载失败'), findsNothing);
   });
 }

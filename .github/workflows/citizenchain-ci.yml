@@ -38,7 +38,7 @@ env:
 jobs:
   changes:
     name: 识别公民链变更范围
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       citizenchain: ${{ steps.scope.outputs.citizenchain }}
       desktop: ${{ steps.scope.outputs.desktop }}
@@ -90,7 +90,7 @@ jobs:
   # 本 job 是纯 Node 静态比对，秒级、无需工具链。
   golden-vectors:
     name: 校验金标向量跨端一致
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
@@ -100,7 +100,7 @@ jobs:
 
   guardrails:
     name: 文档、残留与 pallet 注册表门禁
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 拉取完整变更历史
         uses: actions/checkout@v5
@@ -233,7 +233,7 @@ jobs:
         include:
           - platform: linux
             name: Linux amd
-            os: ubuntu-latest
+            os: ubuntu-24.04
             artifact: 公民链AMD
             installer_name: 公民链AMD.deb
             ci_bundle_targets: deb
@@ -255,7 +255,7 @@ jobs:
             cache_key: citizenchain-linux-arm
           - platform: windows
             name: Windows
-            os: windows-latest
+            os: windows-2025
             artifact: 公民链Windows
             installer_name: 公民链.exe
             ci_bundle_targets: nsis
@@ -555,7 +555,7 @@ jobs:
     name: 发布桌面端 GitHub Release
     needs: build-desktop
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

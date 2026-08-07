@@ -21,6 +21,10 @@ dependencies:
   qr_flutter: ^4.1.0
   flutter_svg: ^2.0.10+1
   local_auth: ^2.3.0
+  # 生物识别对话框文案本地化需要直接引用消息类(local_auth 不再导出它们)。
+  # 版本跟随 local_auth 的传递依赖,不单独升级。
+  local_auth_android: ^1.0.0
+  local_auth_darwin: ^1.4.0
   flutter_secure_storage: ^10.3.1
   image_picker: ^1.1.2
   crypto: ^3.0.3

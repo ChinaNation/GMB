@@ -31,6 +31,10 @@ dependencies:
   path_provider: ^2.1.6
   # 生物识别
   local_auth: ^3.0.2
+  # 生物识别对话框文案本地化需要直接引用消息类(local_auth 不再导出它们)。
+  # 版本跟随 local_auth 的传递依赖,不单独升级。
+  local_auth_android: ^2.0.0
+  local_auth_darwin: ^2.0.0
   # 二维码
   mobile_scanner: ^7.1.4
   qr_flutter: ^4.1.0

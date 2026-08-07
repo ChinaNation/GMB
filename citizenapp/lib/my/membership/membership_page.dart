@@ -9,6 +9,8 @@ import 'package:citizenapp/my/creator/creator_money.dart'
     show fenToYuanMoneyLabel;
 import 'package:citizenapp/my/membership/membership_detail_page.dart';
 import 'package:citizenapp/my/membership/subscription_service.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/register_identity_flow.dart';
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
@@ -56,6 +58,16 @@ class _MembershipPageState extends State<MembershipPage>
   /// 首屏永远使用 App 内置三档静态定义立即渲染；联网只在后台替换动态字段。
   bool _refreshing = false;
 
+  /// 首载失败说明(仅页面尚无可展示数据、且**确属真故障**时置位):三张静态卡按本页
+  /// 设计永远保留,失败原因用顶部横幅补充,绝不整页替换成错误页。
+  ///
+  /// **未注册不走这里**——它是合法状态不是故障,见 [_unregistered]。
+  String? _loadFailure;
+
+  /// 当前钱包未注册 CID。三张会员卡照常完整显示(价格是链上公开数据),
+  /// 只把订阅按钮换成「注册用户」引导注册;**不显示任何失败/重试横幅**。
+  bool _unregistered = false;
+
   /// 订阅 / 取消上链进行中：期间禁用按钮、显示按钮内进度圈。
   bool _busy = false;
   _MembershipViewData _data = const _MembershipViewData(
@@ -89,17 +101,59 @@ class _MembershipPageState extends State<MembershipPage>
     super.dispose();
   }
 
+  /// 进入「未注册」呈现:置标志 + 独立补一次价格。
+  ///
+  /// 价格是 `PlatformPrice` 链上存储的**公开数据,与身份、会话完全无关**,而正常路径
+  /// 的价格拉取挂在会话之后(要按 CID 读展示快照),未注册用户根本走不到那里。
+  /// 未注册用户同样有权看到真实价格再决定要不要注册,所以这里单独补一次。
+  ///
+  /// **只在未注册分支调用**:正常路径的价格仍走 `_pricesCacheTtl`(30 分钟)缓存,
+  /// 无条件前置会绕过 TTL,让每次进页都打一次链。
+  /// 失败静默——价格缺失时卡片自己显示占位,不该为此弹故障横幅。
+  Future<void> _enterUnregistered({required bool forceRefresh}) async {
+    if (mounted) setState(() => _unregistered = true);
+    try {
+      final prices =
+          await _chainService.fetchAllPlatformPrices(forceFresh: forceRefresh);
+      if (!mounted || prices.isEmpty) return;
+      setState(() => _data = _data.copyWithPrices(prices));
+    } on Object {
+      // 链暂时读不到价格不影响页面可用性;下次进入或下拉刷新继续尝试。
+    }
+  }
+
+  /// 会员卡「注册用户」按钮:弹全 App 唯一注册面板([startCidRegistrationFlow]),
+  /// 占号成功后回刷本页即进正常订阅流程(订阅动作由用户重新发起,不自动续跑)。
+  Future<void> _onRegisterFromCard() async {
+    final registered = await startCidRegistrationFlow(context);
+    if (registered && mounted) await _load(forceRefresh: true);
+  }
+
   Future<void> _load({bool forceRefresh = false}) async {
     if (_refreshing) return;
     setState(() {
       _refreshing = true;
+      _loadFailure = null;
     });
     Object? refreshError;
     try {
-      final session = await _sessionProvider.ensureSession();
-      if (session == null) {
+      // 未注册 CID 是合法状态,不是故障:本地身份缓存命中未注册即直接判定,
+      // 连注定 403 的登录挑战都不发(与广场 feed 同款短路)。缓存未命中不在本地
+      // 武断,照常建会话,由 Worker 真源回 cid_not_bound 后落到下方同一分支。
+      final identity =
+          await IdentityAccountCache.instance.resolve(allowChainRead: false);
+      if (identity != null && !identity.isRegistered) {
+        await _enterUnregistered(forceRefresh: forceRefresh);
         return;
       }
+
+      final session = await _sessionProvider.ensureSession();
+      if (session == null) {
+        // 无热钱包才会拿不到 provider(非异常);三卡照常展示,横幅说明原因。
+        _loadFailure = '请先在「我的 → 我的钱包」创建热钱包';
+        return;
+      }
+      if (_unregistered && mounted) setState(() => _unregistered = false);
 
       final accountId = session.accountId;
       final cidNumber = session.cidNumber;
@@ -192,8 +246,21 @@ class _MembershipPageState extends State<MembershipPage>
           subscriptionReady: updated.subscriptionFetchedAtMs > 0,
         ),
       );
+    } on SquareApiException catch (error) {
+      refreshError = error;
+      // 未注册(Worker 真源判定)绝不是故障:不给失败横幅、不给重试——没注册,
+      // 重试一万次也是同一结果。改为整页按「未注册」呈现:三卡照常 + 按钮引导注册。
+      if (error.errorCode == 'cid_not_bound') {
+        await _enterUnregistered(forceRefresh: forceRefresh);
+      } else if (_data.accountId.isEmpty) {
+        // 真故障且页面还没有可展示数据时才给可见解释 + 重试。
+        _loadFailure = '会员数据加载失败，请点右上刷新重试';
+      }
     } on Object catch (error) {
       refreshError = error;
+      if (_data.accountId.isEmpty) {
+        _loadFailure = '会员数据加载失败，请点右上刷新重试';
+      }
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
@@ -228,6 +295,9 @@ class _MembershipPageState extends State<MembershipPage>
       );
       return;
     }
+    // 未注册 CID:就地弹全 App 统一注册面板;占号成功后订阅由用户重新发起。
+    if (!await ensureCidRegisteredOrPrompt(context)) return;
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
       // 动权前绕过展示缓存，重新核验 finalized 订阅态和链上价格。
@@ -360,6 +430,16 @@ class _MembershipPageState extends State<MembershipPage>
 
     return Column(
       children: [
+        // 未注册时**绝不出现**失败/重试横幅:没注册不是加载失败,重试也不会变。
+        if (!_unregistered &&
+            _loadFailure != null &&
+            data.accountId.isEmpty &&
+            !_refreshing)
+          _LoadFailureBanner(
+            key: const ValueKey('membership-load-failure-banner'),
+            message: _loadFailure!,
+            onRetry: () => _load(forceRefresh: true),
+          ),
         if (state.hasSubscriptionWindow) _ActiveMembershipBanner(state: state),
         Expanded(
           child: GestureDetector(
@@ -381,11 +461,15 @@ class _MembershipPageState extends State<MembershipPage>
                         plan: plans[index],
                         state: state,
                         priceFen: data.prices[plans[index].membershipLevel],
-                        canSubscribe:
-                            data.accountId.isNotEmpty && data.subscriptionReady,
+                        // 未注册者按钮永远可点(点了弹注册面板),不受订阅态就绪影响。
+                        canSubscribe: _unregistered ||
+                            (data.accountId.isNotEmpty &&
+                                data.subscriptionReady),
                         unavailableLabel: data.accountId.isEmpty && !_refreshing
                             ? '请先创建热钱包'
                             : '会员状态同步中',
+                        // 未注册:按钮文案换成「注册用户」,点击弹全 App 同一注册面板。
+                        registerInsteadOfSubscribe: _unregistered,
                         cardWidth: cardWidth,
                         cardHeight: bandHeight,
                         peek: peek,
@@ -418,6 +502,7 @@ class _MembershipPageState extends State<MembershipPage>
     required int? priceFen,
     required bool canSubscribe,
     required String unavailableLabel,
+    required bool registerInsteadOfSubscribe,
     required double cardWidth,
     required double cardHeight,
     required double peek,
@@ -443,8 +528,11 @@ class _MembershipPageState extends State<MembershipPage>
               priceFen: priceFen,
               canSubscribe: canSubscribe,
               unavailableLabel: unavailableLabel,
+              registerInsteadOfSubscribe: registerInsteadOfSubscribe,
               busy: _busy,
-              onTapAction: () => _handleAction(plan.membershipLevel),
+              onTapAction: registerInsteadOfSubscribe
+                  ? _onRegisterFromCard
+                  : () => _handleAction(plan.membershipLevel),
               onViewDetail: () => _openDetail(plan, priceFen, state),
               elevated: isFront,
             ),
@@ -489,6 +577,18 @@ class _MembershipViewData {
 
   /// 至少成功读取过一次 finalized 订阅态；未就绪时只展示卡片，禁止动权入口。
   final bool subscriptionReady;
+
+  /// 只替换价格,保留其余字段。价格由不依赖会话的独立链读通道刷新
+  /// ([_MembershipPageState._enterUnregistered]),不能反过来覆盖
+  /// 会话侧已取得的订阅态。
+  _MembershipViewData copyWithPrices(Map<String, int> prices) =>
+      _MembershipViewData(
+        accountId: accountId,
+        cidNumber: cidNumber,
+        state: state,
+        prices: prices,
+        subscriptionReady: subscriptionReady,
+      );
 }
 
 /// 单张会员档卡（ADR-036）：一张卡 = 一个订阅档（自由/民主/薪火）。档色顶带 + 大字档名
@@ -500,6 +600,7 @@ class _MembershipTierCard extends StatelessWidget {
     required this.priceFen,
     required this.canSubscribe,
     required this.unavailableLabel,
+    required this.registerInsteadOfSubscribe,
     required this.busy,
     required this.onTapAction,
     required this.onViewDetail,
@@ -516,6 +617,10 @@ class _MembershipTierCard extends StatelessWidget {
   final bool canSubscribe;
 
   final String unavailableLabel;
+
+  /// 当前钱包未注册 CID：按钮文案换成「注册用户」并直接引导注册。
+  /// 没注册就该引导注册,不能显示「会员状态同步中」之类的假故障文案。
+  final bool registerInsteadOfSubscribe;
 
   /// 订阅 / 取消上链进行中：禁用按钮并显示进度圈。
   final bool busy;
@@ -537,11 +642,15 @@ class _MembershipTierCard extends StatelessWidget {
     final isCurrentTier =
         state.subscriptionActive && state.membershipLevel == level;
     final action = _actionFor(state, level);
-    final actionLabel = !canSubscribe
-        ? unavailableLabel
-        : action != _SubscribeAction.cancel && priceFen == null
-            ? '链上价格未就绪'
-            : _actionLabel(action);
+    // 未注册优先:文案恒为「注册用户」,不受订阅态/价格就绪影响——没注册时
+    // 谈"同步中"或"价格未就绪"都是答非所问。
+    final actionLabel = registerInsteadOfSubscribe
+        ? '注册用户'
+        : !canSubscribe
+            ? unavailableLabel
+            : action != _SubscribeAction.cancel && priceFen == null
+                ? '链上价格未就绪'
+                : _actionLabel(action);
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -656,9 +765,11 @@ class _MembershipTierCard extends StatelessWidget {
                       color: tierColor,
                       busy: busy,
                       action: action,
-                      enabled: canSubscribe &&
-                          (action == _SubscribeAction.cancel ||
-                              priceFen != null),
+                      // 未注册者按钮必须可点(点了弹注册面板),不受价格就绪限制。
+                      enabled: registerInsteadOfSubscribe ||
+                          (canSubscribe &&
+                              (action == _SubscribeAction.cancel ||
+                                  priceFen != null)),
                       onTap: onTapAction,
                     ),
                   ),
@@ -988,6 +1099,43 @@ class _PageDots extends StatelessWidget {
 
 /// 订阅起止横幅（ADR-034 段4）：展示当前有效会员的档位、续费态与订阅起止日期。
 /// 会员操作（订阅 / 取消）已在 App 内卡片按钮完成，横幅只读展示。
+/// 首载失败横幅:与 [_ActiveMembershipBanner] 同款卡式,不遮挡三张静态卡。
+class _LoadFailureBanner extends StatelessWidget {
+  const _LoadFailureBanner({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      decoration: AppTheme.bannerDecoration(AppTheme.warning),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 18, color: AppTheme.warning),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('重试')),
+        ],
+      ),
+    );
+  }
+}
+
 class _ActiveMembershipBanner extends StatelessWidget {
   const _ActiveMembershipBanner({required this.state});
 

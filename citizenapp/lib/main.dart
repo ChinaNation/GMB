@@ -26,6 +26,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/wallet_gate.dart';
 
 import 'ui/app_theme.dart';
+import 'ui/biometric_auth_text.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -219,7 +220,11 @@ class _AppLockGateState extends State<_AppLockGate>
     AppLog.d('[AppLock] 弹出设备锁验证');
     try {
       final success = await _localAuth.authenticate(
-        localizedReason: '请验证身份以进入应用',
+        localizedReason: BiometricAuthText.pick(
+          zh: '请验证身份以进入应用',
+          en: 'Verify your identity to open Citizen',
+        ),
+        authMessages: BiometricAuthText.messages(),
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: false,

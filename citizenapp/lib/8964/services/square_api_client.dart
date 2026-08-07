@@ -512,8 +512,16 @@ class SquareApiClient
     try {
       return await _establishSession(accountId, signLoginPayload);
     } on SquareApiException catch (e) {
-      // Worker 确认设备子钥未登记时，才交给前台真实业务初始化一次并重试。
-      if (e.errorCode != 'device_not_registered' ||
+      // 可自愈的两类 401,都交给前台真实业务初始化一次**本机**子钥并重试:
+      // - device_not_registered:库里没有该身份的任何设备行;
+      // - invalid_signature:库里有行但都不是本机钥(换新手机/重装/钱包重建后
+      //   walletIndex 换新,硬件 P-256 子钥随之换新)。只认前者会死锁:行存在
+      //   → 挑战能发;钥不配 → 完成必败;而登记永远不被触发。
+      // 安全性由注册端点兜底:按链上 finalized 绑定 + 钱包主钥 sr25519 签名 +
+      // Turnstile 重新自证,每设备一行(device_id = P-256 公钥哈希),多设备
+      // 并存不覆盖别机;无种子者伪造不出绑定签名。其余错误原样上抛。
+      const recoverable = {'device_not_registered', 'invalid_signature'};
+      if (!recoverable.contains(e.errorCode) ||
           onDeviceNotRegistered == null) {
         rethrow;
       }

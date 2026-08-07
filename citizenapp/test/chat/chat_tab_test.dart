@@ -53,6 +53,35 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('未注册身份显示统一注册引导,不读加密存储不报底层异常', (tester) async {
+    final store = _FakeChatStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatTab(
+            store: store,
+            cidNumber: '',
+            accountId:
+                '0x1111111111111111111111111111111111111111111111111111111111111111',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    // 统一引导态(标题 + 注册按钮),不是错误横幅。
+    expect(find.text('尚未注册'), findsOneWidget);
+    expect(find.text('注册'), findsOneWidget);
+    expect(find.textContaining('尚未激活'), findsNothing);
+    // 短路铁证:加密会话存储一次都不读——其密钥绑定解析对未注册身份必抛
+    // WalletAuthException,读了就会以错误横幅盖住引导。
+    expect(store.readPreviewCount, 0);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('聊天记录未返回时直接显示会话页和输入区域', (tester) async {
     final store = _PendingMessagesStore();
     await tester.pumpWidget(

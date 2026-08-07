@@ -196,3 +196,14 @@ citizenapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/0
 - **code 当前态唯一**:省 code 固定在 primitives；市/镇 code 按当前创世基线确定。地址库不保留旧数据、旧表、墓碑或变更日志。改名只改 `province_name/city_name/town_name` 不改 code。
 - **校验**:`cid/china/store.rs::load_provinces` 加载即断言 SQLite 省表与 primitives 一致、省名和市名全国唯一、(省,市,镇) code 无重复；CI `citizenchain/onchina/src/cid/china/check_code_immutable.py` 检查活跃 code 无重复且旧地址表/墓碑表/变更日志表不存在。
 - **红线**:市镇地址开发库变更不直接修改 `citizenchain/runtime/`。地址变更需要同步全网时只走 `AddressRegistry` 单条变更事实；国家码、省级行政区码、机构码和 `runtime/primitives/cid/china/` 保护机构常量需要变更时,必须走 runtime 升级二次确认。
+
+## 死规则:iOS 与 Android 两端必须同步一致(2026-08-05 用户钦定)
+
+- **同任务同交付**:任何功能、修复、UI、协议或行为改动,必须在**同一个任务内同时落地
+  iOS 与 Android 两端**。禁止只改一端、禁止"另一端以后补"、禁止双轨表现。
+- **共享层天然一致,平台层成对交付**:Flutter/Dart 共享代码改动天然覆盖双端;凡涉及
+  平台层——原生桥(MethodChannel 两侧实现)、原生库(.so/.a 与符号保活)、构建脚本、
+  图标资源、权限清单、entitlements、推送配置——必须**成对**修改,缺一端即任务未完成。
+- **验收必须双端**:真机/模拟验收清单一律覆盖 iOS 与 Android;只验一端不得声明完成。
+- **发现即修**:任何时候发现两端行为、文案、UI 或能力不一致,按缺陷处理,统一到
+  同一实现,不留平台特例(平台系统能力客观差异除外,且必须在文档中显式登记)。

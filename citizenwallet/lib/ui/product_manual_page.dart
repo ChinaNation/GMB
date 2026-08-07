@@ -131,7 +131,7 @@ class _KeyMap extends StatelessWidget {
       left: false,
     ),
     _KeyStep(
-      title: 'SS58 地址',
+      title: '账户地址',
       subtitle: '展示与扫码编码',
       icon: Icons.qr_code_2_rounded,
       secret: false,

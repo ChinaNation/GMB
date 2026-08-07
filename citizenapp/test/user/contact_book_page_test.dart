@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
@@ -56,11 +58,18 @@ class _FakeContacts extends UserContactService {
 
   List<UserContact> contacts = <UserContact>[_contact];
 
+  /// `getContacts` 调用次数。未注册时必须为 0——通讯录属主就是 CID,
+  /// 没有 CID 连读都不该读(读了必抛 WalletAuthException 并落成假的「空通讯录」)。
+  int getContactsCalls = 0;
+
   @override
   Future<String> getAccountId() async => _accountId;
 
   @override
-  Future<List<UserContact>> getContacts() async => contacts;
+  Future<List<UserContact>> getContacts() async {
+    getContactsCalls++;
+    return contacts;
+  }
 
   @override
   Future<List<UserContact>> refreshContactBindings() async => contacts;
@@ -150,18 +159,43 @@ Widget _page({
       ),
     );
 
-/// 身份账户缓存 fake：resolve/accountId 返回 null，让点开他人主页时 _resolveOwnAccount
-/// 回退成「非本人」（行为与迁移前一致）；避免 instance 触发真链读/真 Isar。
-class _NullIdentityCache extends IdentityAccountCache {
+/// 身份账户缓存 fake:**已注册**。通讯录属主 = CID,页面对未注册身份整页显示注册
+/// 引导,因此常规用例必须注入已注册身份,否则测的全是引导态。
+/// `accountId` 仍返回 null,让点开他人主页时 `_resolveOwnAccount` 回退成「非本人」
+/// (行为与迁移前一致);避免 instance 触发真链读/真 Isar。
+class _RegisteredIdentityCache extends IdentityAccountCache {
   @override
-  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async => null;
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      ResolvedIdentity(
+        accountId: _accountId,
+        ss58Address: 'ss58-owner',
+        accountIndex: 0,
+        snapshot: CitizenIdentityChainSnapshot(
+          cidNumber: 'CN220-CTZN2-100000009-2026',
+          accountId: Uint8List(32),
+          bindingRevision: 1,
+          votingIdentity: null,
+        ),
+      );
   @override
   Future<String?> accountId({bool allowChainRead = true}) async => null;
 }
 
+/// 未注册:resolve 命中缓存但快照为空(链读结论=全账户未占号,回退账户0)。
+class _UnregisteredIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      const ResolvedIdentity(
+        accountId: _accountId,
+        ss58Address: 'ss58-owner',
+        accountIndex: 0,
+        snapshot: null,
+      );
+}
+
 void main() {
   setUp(() {
-    IdentityAccountCache.debugInstance = _NullIdentityCache();
+    IdentityAccountCache.debugInstance = _RegisteredIdentityCache();
   });
 
   tearDown(IdentityAccountCache.resetDebugInstance);
@@ -364,5 +398,31 @@ void main() {
 
     expect(openedPeerCidNumber, _contactCidNumber);
     expect(openedTitle, 'Rhett');
+  });
+
+  testWidgets('未注册身份显示统一注册引导,且不读通讯录', (tester) async {
+    IdentityAccountCache.debugInstance = _UnregisteredIdentityCache();
+    final service = _FakeContacts();
+    await tester.pumpWidget(_page(service: service));
+    await tester.pumpAndSettle();
+
+    // 整页统一引导,不再是假的「空通讯录」。
+    expect(find.text('尚未注册'), findsOneWidget);
+    expect(find.text('注册'), findsOneWidget);
+    expect(find.text('还没有联系人'), findsNothing);
+    expect(find.byKey(const ValueKey('contact-search')), findsNothing);
+
+    // 短路铁证:通讯录一次都没读。
+    expect(service.getContactsCalls, 0);
+  });
+
+  testWidgets('已注册身份正常展示通讯录(引导不误伤)', (tester) async {
+    final service = _FakeContacts();
+    await tester.pumpWidget(_page(service: service));
+    await tester.pumpAndSettle();
+
+    expect(find.text('尚未注册'), findsNothing);
+    expect(find.byKey(const ValueKey('contact-search')), findsOneWidget);
+    expect(service.getContactsCalls, greaterThan(0));
   });
 }

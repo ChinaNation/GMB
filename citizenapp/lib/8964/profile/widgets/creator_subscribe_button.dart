@@ -5,6 +5,7 @@ import 'package:citizenapp/8964/subscribe/creator_subscribe_service.dart';
 import 'package:citizenapp/my/creator/creator_api.dart';
 import 'package:citizenapp/my/creator/creator_money.dart';
 import 'package:citizenapp/my/creator/models/creator_plan.dart';
+import 'package:citizenapp/my/myid/register_identity_flow.dart';
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
@@ -137,6 +138,10 @@ class _CreatorSubscribeButtonState extends State<CreatorSubscribeButton> {
   }
 
   Future<void> _openPicker() async {
+    // 未注册 CID:先于选档就地弹全 App 统一注册面板,不让用户选完档才被拦;
+    // 占号成功后订阅由用户重新发起。取消订阅无需此门(未注册者不可能有订阅)。
+    if (!await ensureCidRegisteredOrPrompt(context)) return;
+    if (!mounted) return;
     final selection = await showModalBottomSheet<_TierPeriodSelection>(
       context: context,
       isScrollControlled: true,

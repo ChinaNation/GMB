@@ -12,11 +12,13 @@ import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
-import 'package:citizenapp/my/myid/identity_account_resolver.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/register_identity_flow.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/widgets/identity_register_guide.dart';
 
 /// 通讯录页使用模式。
 enum ContactPickMode {
@@ -84,6 +86,10 @@ class _ContactBookPageState extends State<ContactBookPage> {
   ContactSyncState _syncState =
       const ContactSyncState(phase: ContactSyncPhase.idle);
   bool _loading = true;
+
+  /// 当前钱包未注册 CID(合法状态,非故障)。置真时整页显示统一注册引导,
+  /// 且**不读通讯录**——通讯录属主就是 CID,没有 CID 连读都不该读。
+  bool _unregistered = false;
   String _query = '';
 
   @override
@@ -107,6 +113,23 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Future<void> _load() async {
     try {
+      // 未注册 CID 必须在此短路:通讯录属主 = CID,`getContacts()` 第一步
+      // `_requireIdentityOwner()` 对未注册身份必抛 WalletAuthException,catch 后
+      // `_contacts` 保持空,渲染会落到「空通讯录」——把"你没注册"显示成"你没有联系人",
+      // 与广场当初把权限态伪装成"加载失败"是同一类错误。
+      // 链读异常不在此吞:resolve 抛错走下方 catch 的故障路径,绝不把"没读到链"
+      // 冒充成"没注册"。
+      final identity = await IdentityAccountCache.instance.resolve();
+      if (!mounted) return;
+      if (identity == null || !identity.isRegistered) {
+        setState(() {
+          _unregistered = true;
+          _contacts = const <UserContact>[];
+          _loading = false;
+        });
+        return;
+      }
+      if (_unregistered) setState(() => _unregistered = false);
       final contacts = await _service.getContacts();
       final syncState = await _service.readSyncState();
       if (!mounted) return;
@@ -371,7 +394,19 @@ class _ContactBookPageState extends State<ContactBookPage> {
             ),
         ],
       ),
-      body: RefreshIndicator(
+      // 未注册 = 合法状态,整页给统一注册引导(与广场/聊天/创作者同规),
+      // 不显示搜索框和假的「空通讯录」。
+      body: _unregistered
+          ? IdentityRegisterGuide(
+              description: '注册后即可使用通讯录。',
+              onRegistered: () => unawaited(_load()),
+            )
+          : _buildContactList(visible),
+    );
+  }
+
+  Widget _buildContactList(List<UserContact> visible) {
+    return RefreshIndicator(
         onRefresh: _sync,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -443,8 +478,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
               ],
           ],
         ),
-      ),
-    );
+      );
   }
 
   String? _avatarUrl(CitizenProfile? profile) {
@@ -723,28 +757,10 @@ class _EmptyContacts extends StatelessWidget {
 /// (写库与「已加入/已更新通讯录」提示均在扫码页内完成)。调用方返回后自行刷新列表。
 Future<void> scanAndAddContact(BuildContext context) async {
   // 通讯录浏览直接开放；扫码写入关系前才执行真实链身份校验，禁止未注册身份写库。
-  try {
-    final identity = await IdentityAccountResolver().resolve();
-    if (!context.mounted) return;
-    if (identity == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
-      );
-      return;
-    }
-    if (!identity.isRegistered) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在「我的 → 身份」注册身份')),
-      );
-      return;
-    }
-  } on Exception {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('暂时无法验证身份，请稍后重试')),
-    );
-    return;
-  }
+  // 未注册不再只弹文字提示,而是就地弹全 App 统一注册面板;占号成功后由用户
+  // 重新点「扫码加好友」(不自动续跑)。钱包缺失/链读失败的提示在助手内统一。
+  if (!await ensureCidRegisteredOrPrompt(context)) return;
+  if (!context.mounted) return;
   await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (_) => const QrScanPage(mode: QrScanMode.contact),

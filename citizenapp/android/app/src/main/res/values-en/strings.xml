@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  English strings for CitizenApp, used only when the device language is English.
+  Every other language falls back to values/strings.xml (Chinese, the default).
+  Keep the name set identical to values/strings.xml.
+-->
+<resources>
+    <string name="app_name">Citizen</string>
+</resources>

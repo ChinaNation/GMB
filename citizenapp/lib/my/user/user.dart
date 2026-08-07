@@ -15,10 +15,12 @@ import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/widgets/local_identity_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/my/creator/creator_page.dart';
 import 'package:citizenapp/my/membership/membership_page.dart';
 import 'package:citizenapp/my/myid/myid_page.dart';
+import 'package:citizenapp/my/myid/register_identity_flow.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/security/app_lock_service.dart';
@@ -27,6 +29,7 @@ import 'package:citizenapp/security/secure_storage.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/biometric_auth_text.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -352,13 +355,25 @@ class _ProfilePageState extends State<MyTab> {
       return;
     }
     // 资料页身份主键 = CID 号（cid_number）：按 cid 寻址（换绑不变）。自己的 cid
-    // 从身份服务取；未占号（纯访客，无 cid）无法拥有广场资料，提示先注册身份。
-    final cidNumber = (await _myIdService.getState()).cidNumber?.trim() ?? '';
-    if (!mounted) return;
-    if (cidNumber.isEmpty) {
+    // 从身份账户单源缓存取:命中零等待(此前每次点击都同步做一次 finalized 链读,
+    // 进主页前的可感停顿即由它造成);缓存未命中(冷启动)才落一次链读。链读失败
+    // fail-closed 提示重试,绝不把"没读到链"当成"未注册"。
+    final ResolvedIdentity? identity;
+    try {
+      identity = await IdentityAccountCache.instance.resolve();
+    } on Exception {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先完成身份注册再查看个人资料')),
+        const SnackBar(content: Text('暂时无法验证身份，请稍后重试')),
       );
+      return;
+    }
+    if (!mounted) return;
+    final cidNumber = identity?.snapshot?.cidNumber.trim() ?? '';
+    if (cidNumber.isEmpty) {
+      // 未注册:就地弹全 App 统一注册面板;占号成功后回刷本页,资料由用户重新点开。
+      final registered = await startCidRegistrationFlow(context);
+      if (registered && mounted) await _loadState();
       return;
     }
     await Navigator.of(context).push<void>(
@@ -895,7 +910,11 @@ class _SettingsPageState extends State<_SettingsPage> {
 
       try {
         final authenticated = await _localAuth.authenticate(
-          localizedReason: '验证身份以开启设备锁',
+          localizedReason: BiometricAuthText.pick(
+            zh: '验证身份以开启设备锁',
+            en: 'Verify your identity to enable the device lock',
+          ),
+          authMessages: BiometricAuthText.messages(),
           options: const AuthenticationOptions(
             stickyAuth: true,
             biometricOnly: false,

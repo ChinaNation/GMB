@@ -369,7 +369,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('助记词（钱包备份，一句恢复全部账户）',
+        const Text('助记词（钱包唯一备份，请绝对保密）',
             style: TextStyle(
                 fontSize: 12,
                 color: AppTheme.textSecondary,
@@ -457,7 +457,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             padding: const EdgeInsets.fromLTRB(16, 5, 8, 6),
             child: Row(
               children: [
-                const Text('账户',
+                const Text('账户列表',
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -489,6 +489,46 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     );
   }
 
+  /// 序号徽章:两位数以内 `#xx` 单行居中;三位数起 `#` 缩小减淡挪到方框左上角,
+  /// 数字另起一行居中并按位数自动缩小(序号上限 //1989,整串单行会撑满方框)。
+  Widget _buildIndexBadge(int index) {
+    const numberStyle = TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppTheme.primaryLight);
+    if (index < 100) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text('#$index', style: numberStyle),
+      );
+    }
+    return SizedBox.expand(
+      child: Stack(
+        children: [
+          const Positioned(
+            top: 3,
+            left: 5,
+            child: Text('#',
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textTertiary)),
+          ),
+          Positioned.fill(
+            top: 12,
+            left: 3,
+            right: 3,
+            bottom: 3,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text('$index', style: numberStyle),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAccountRow(Account account) {
     return Material(
       color: Colors.transparent,
@@ -506,11 +546,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                 ),
                 alignment: Alignment.center,
-                child: Text('#${account.accountIndex}',
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.primaryLight)),
+                child: _buildIndexBadge(account.accountIndex),
               ),
               const SizedBox(width: 12),
               Expanded(

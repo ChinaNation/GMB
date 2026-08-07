@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  公民钱包的 Android 默认(中文)字符串资源。
+
+  无后缀的 values/ 是 Android 的默认回落目录:系统语言不是英文时(中文、日文、
+  法文…)一律取本文件,因此中文即默认语言。英文手机取 values-en/strings.xml。
+  两文件的 name 集合必须完全一致,改动须成对进行。
+
+  注意:Android 运行时权限弹窗(相机等)的正文由系统渲染并跟随手机系统语言,
+  App 无权干预;这里能控制的是弹窗中显示的 App 名。
+-->
+<resources>
+    <string name="app_name">公民钱包</string>
+</resources>

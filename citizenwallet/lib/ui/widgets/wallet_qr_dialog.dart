@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../qr/bodies/wallet_code_body.dart';
@@ -47,8 +48,8 @@ Future<void> showWalletQrDialog(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(accountName,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600)),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -72,14 +73,6 @@ Future<void> showWalletQrDialog(
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              '钱包码：扫描可向本账户转账，或用于扫码登录',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
             SelectableText(
               ss58Address,
               style: const TextStyle(
@@ -89,12 +82,30 @@ Future<void> showWalletQrDialog(
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('关闭'),
-              ),
+            // 关闭|复制 左右对称;复制账户地址后不关弹窗,方便继续展示二维码。
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('关闭'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: ss58Address));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('账户地址已复制'),
+                            duration: Duration(seconds: 1)),
+                      );
+                    },
+                    child: const Text('复制'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

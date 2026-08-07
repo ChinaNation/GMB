@@ -18,8 +18,10 @@ import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/register_identity_flow.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/widgets/identity_register_guide.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 typedef SquareMembershipLoader = Future<SquareMembershipState?> Function();
@@ -135,6 +137,11 @@ class _SquareHomePageState extends State<SquareHomePage> {
 
   Future<SquareSession?> _notifySession() async {
     try {
+      // 未注册 CID(身份缓存命中):与 feed 同理短路,红点轮询不发注定
+      // 403 cid_not_bound 的登录挑战。
+      final identity =
+          await IdentityAccountCache.instance.resolve(allowChainRead: false);
+      if (identity != null && !identity.isRegistered) return null;
       return await _sessionProvider.ensureSession();
     } on Object {
       // 后台通知由 unawaited 启动，任何会话失败都只能降级为不刷新红点，
@@ -287,9 +294,9 @@ class _SquareHomePageState extends State<SquareHomePage> {
       return;
     }
     if (!identity.isCertified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在「我的 → 身份」注册身份')),
-      );
+      // 未注册:就地弹统一注册面板;占号成功后回刷身份与 feed,发布由用户重新发起。
+      final registered = await startCidRegistrationFlow(context);
+      if (registered) _onRegisteredFromGuide();
       return;
     }
     final SquareMembershipState? membership;
@@ -446,11 +453,22 @@ class _SquareHomePageState extends State<SquareHomePage> {
                   FutureBuilder<List<SquarePost>>(
                     future: _feedFuture,
                     builder: (context, snapshot) {
+                      final error = snapshot.error;
+                      // 未注册 CID:fail-closed 拦截是对的,但呈现必须是注册引导,
+                      // 不是假故障文案。本地缓存短路与 Worker 403 cid_not_bound
+                      // (真源)都落到这同一个分支。
+                      if (error is SquareApiException &&
+                          error.errorCode == 'cid_not_bound') {
+                        return IdentityRegisterGuide(
+                          description: '注册后即可浏览广场、发布动态。',
+                          onRegistered: _onRegisteredFromGuide,
+                        );
+                      }
                       final posts = _composeFeed(
                         snapshot.data ?? const <SquarePost>[],
                       );
-                      // Session 已不再以链上账户或余额作门禁；广场加载失败统一按当前
-                      // 接口语义处理，不保留已删除门禁的专用错误分支。
+                      // Session 已不再以链上账户或余额作门禁；其余加载失败统一按当前
+                      // 接口语义处理。
                       final errorMessage =
                           snapshot.hasError ? '广场内容加载失败' : null;
                       return Stack(
@@ -500,6 +518,18 @@ class _SquareHomePageState extends State<SquareHomePage> {
   ) async {
     SquareSession? session;
     if (_feedSource is SquareApiClient) {
+      // 未注册 CID(身份缓存命中的链读结论)直接短路:Worker 登录挑战对未绑定账户
+      // 必回 403 cid_not_bound,这笔注定失败的请求不再发。缓存未命中(冷启动)不在
+      // 本地武断,照常发起会话,由 Worker 真源判定后走同一 cid_not_bound 呈现分支。
+      final identity =
+          await IdentityAccountCache.instance.resolve(allowChainRead: false);
+      if (identity != null && !identity.isRegistered) {
+        throw const SquareApiException(
+          '该钱包账户未绑定 CID,无法登录',
+          statusCode: 403,
+          errorCode: 'cid_not_bound',
+        );
+      }
       session = await _sessionProvider.ensureSession();
       if (session == null) {
         throw const SquareApiException('需要钱包账户才能浏览广场');
@@ -564,6 +594,16 @@ class _SquareHomePageState extends State<SquareHomePage> {
     final next = _beginFeedLoad();
     setState(() => _feedFuture = next);
     await next;
+  }
+
+  /// 引导内占号成功后的就地回刷:占号不改钱包列表(walletsRevision 不动),必须
+  /// 显式重载身份与 feed;共享注册流程已失效身份缓存,这里重读即得新身份。
+  void _onRegisteredFromGuide() {
+    if (!mounted) return;
+    setState(() {
+      _identityFuture = _loadIdentity(readLiveChain: false);
+      _feedFuture = _beginFeedLoad();
+    });
   }
 
   /// 按当前 feed 组装最终列表。[serverPosts] 是 `_loadFeed` 已按所选 feed 从

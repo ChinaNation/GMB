@@ -13,10 +13,31 @@
 
 约束：钱包相关代码只应从 `wallet/...` 引用。
 
-本地 Android 启动产物约定：`citizenapp/scripts/citizenapp-run.sh` 运行后把 APK 复制到
-`citizenapp/target/公民.apk`；`citizenwallet/scripts/citizenwallet-run.sh` 运行后把冷钱包 APK 复制到
-`citizenwallet/target/公民钱包.apk`。该本地产物只用于开发启动；正式分发包以手动
-`citizenapp-ci.yml` 注入 release keystore 后生成的正式签名 `公民.apk` 为准。
+本地编译安装约定：`citizenapp/scripts/citizenapp-run.sh` 与 `citizenwallet/scripts/citizenwallet-run.sh`
+都收一个必填的目标平台参数（`ios` 或 `android`），编译后把**可直接使用**的 App 安装到该平台设备上，
+**不产出任何留存产物**——`<product>/target/` 沉淀已整体删除（曾各积压 181MB / 98MB）。
+编译产物只在 GitHub：CI 出未签名产物，Release 出正式签名产物。
+
+「编译」的语义是**把能用的软件装进设备**，与 CI / 正式 Release 是三条互不相干的通路，因此
+两脚本一律 `flutter build` + 安装，**不再用 `flutter run`**（那只是把 App 挂在调试器上跑）：
+
+- **iOS 必须 release**，安装走 `flutter install --release -d <flutter 设备 id>`。iOS 14+ 禁止
+  Flutter debug 版脱离 flutter tooling / Xcode 启动，debug 版装进手机后从桌面点图标必然起不来
+  （系统提示 `Cannot create a FlutterEngine instance in debug mode`，随后 signal 11）——表现
+  就是「一点就闪退」。**不能用 `xcrun devicectl` 安装**：flutter 报的 iOS 设备 id 是硬件 UDID
+  （`00008140-…`），devicectl 用的是另一套内部标识（`9B0DA677-…`），两者不通用。
+- **Android 用 debug**：安卓 debug 版从桌面就能直接使用，且保留 `AppLog` 落盘诊断
+  （release 下 `kReleaseMode` 使其为空操作），排障成本低得多；安装走
+  `adb -s <id> install -r`（flutter 的安卓设备 id 即 adb serial）。
+
+两端构建模式不同是 iOS 系统能力的客观差异，按「iOS/Android 两端必须一致」铁律在此显式登记：
+**两端交付物都是可直接使用的 App**，这一条完全一致。要把 Android 也统一成 release，改 android
+分支的 `--debug` 为 `--release` 并换 APK 路径即可（代价：丢失落盘诊断日志）。
+
+目标平台不做自动探测：探测总要在失败时选一个回落，而回落的那一端会被当成用户想编的那一端
+（旧实现的 `except: print('android')` 正是「以为编了 iOS、实际编的 Android」的来源）。
+控制台「公民」详情页的「编译iOS端 / 编译Android端」两个按钮各自把平台传死。
+探测不到目标平台的设备就报错退出，绝不改编另一端。
 
 ## 2. 目录结构
 
@@ -512,3 +533,45 @@ mnemonic
 - **安全**:`account_seed`/PQC 私钥不出本机;CID 不托管。
 
 > 实现以本节 + ADR-022 为准,旧路线不再适用。
+
+## 系统弹窗本地化(2026-08-06,双端对称)
+
+口径:**默认中文;仅当手机系统语言是英文时显示英文;其余语言(日/法/德…)一律回落中文。**
+公民与公民钱包、iOS 与 Android 四条线完全同规则。
+
+iOS(两端各一份,缺一不可):
+
+- 工程 `developmentRegion = zh-Hans` —— **这一条就是「其它语言回落中文」的开关**;
+  `knownRegions` 含 `zh-Hans`,`Info.plist` 显式 `CFBundleLocalizations = ["zh-Hans","en"]`。
+- `Runner/zh-Hans.lproj/InfoPlist.strings`(中文)与 `Runner/en.lproj/InfoPlist.strings`
+  (英文)。两文件**键集必须完全一致**,改动成对进行。
+- **`.lproj` 必须登记进 Xcode 工程**:pbxproj 不做通配,要有 `PBXFileReference` ×2 +
+  `PBXVariantGroup` + `PBXBuildFile` + 挂进 Resources 构建阶段,否则文件躺在磁盘上
+  却不进 `.app`,弹窗照旧英文。验证方式:`ls build/ios/iphoneos/Runner.app/*.lproj`
+  必须出现 `zh-Hans.lproj` 与 `en.lproj`。
+- 系统权限弹窗的**框架句式**(`…would like to send you notifications`)由 iOS 按 App
+  声明的本地化语言生成,不是 App 文案;`NS*UsageDescription` 才是弹窗里那句解释。
+
+Android(两端各一份):
+
+- `res/values/strings.xml` 中文 = 默认(无限定符目录是 Android 的回落目标,
+  非英文语言全部取它);`res/values-en/strings.xml` 英文。
+- `AndroidManifest` 的 `android:label` 必须是 `@string/app_name`,不得写死中文,
+  否则本地化不生效。验证方式:`aapt2 dump resources <apk> | grep -A2 app_name`
+  应同时出现 `()` 与 `(en)` 两条。
+- **平台事实**:Android 运行时权限弹窗正文由系统渲染、跟随手机系统语言,App 无权干预;
+  App 能控的只有弹窗里显示的 App 名与生物识别对话框文案。
+
+生物识别对话框(两端各 `lib/ui/biometric_auth_text.dart`,文案单源):
+
+- `localizedReason` 只是中间那句解释,**标题/提示/取消按钮由 local_auth 插件提供、
+  默认英文硬编码串** —— 必须同时传 `authMessages`,否则中英混排。
+- 两端 `local_auth` 版本不同(热端 2.3.0 字段多,冷端 3.0.2 已精简),各自适配字段集。
+- **冷钱包刻意不设 `IOSAuthMessages.localizedFallbackTitle`**:给值 iOS 会渲染
+  「使用密码」回退按钮,直接违反 `biometricOnly` 死规则。已由测试钉死。
+- 语言来源留 `debugLocale` 注入接缝:生产直读 `PlatformDispatcher.instance` 时
+  `TestPlatformDispatcher.localeTestValue` 覆写的是测试包装器、影响不到真单例,
+  不留接缝这段逻辑完全不可测。
+
+App 界面文案(4300+ 条)的全量国际化不在本节范围,见任务卡
+`memory/08-tasks/open/20260806-citizenapp-citizenwallet-full-i18n.md`。

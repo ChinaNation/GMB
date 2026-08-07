@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +13,9 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/membership/membership_page.dart';
 import 'package:citizenapp/my/membership/subscription_service.dart';
+import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
+import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart' show TxPoolWatchCallback;
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -29,6 +33,44 @@ class _FakeSessionProvider extends SquareSessionProvider {
         accountId: _owner,
         expiresAt: DateTime.now().millisecondsSinceEpoch + 600000,
       );
+}
+
+/// 未注册:身份缓存命中但快照为空(链读结论=全账户未占号,回退账户0)。
+class _UnregisteredIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      const ResolvedIdentity(
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        ss58Address: 'ss58-demo',
+        accountIndex: 0,
+        snapshot: null,
+      );
+}
+
+/// 断言未注册时**不发登录挑战**:一旦发起立即失败。
+class _MustNotLoginSessionProvider extends SquareSessionProvider {
+  int calls = 0;
+
+  @override
+  Future<SquareSession?> ensureSession() async {
+    calls++;
+    throw StateError('未注册时不得发起登录挑战');
+  }
+}
+
+/// 会话建立即失败(如设备子钥校验失败/网络故障):页面须给可见解释,不得留残缺骨架。
+class _ThrowingSessionProvider extends SquareSessionProvider {
+  _ThrowingSessionProvider() : super();
+
+  @override
+  Future<SquareSession?> ensureSession() async {
+    throw const SquareApiException(
+      '设备子钥签名校验失败',
+      statusCode: 401,
+      errorCode: 'invalid_signature',
+    );
+  }
 }
 
 class _PendingSessionProvider extends SquareSessionProvider {
@@ -199,7 +241,32 @@ Finder _frontButton(String label) => find.descendant(
       matching: find.widgetWithText(FilledButton, label),
     );
 
+/// 已注册身份 fake:订阅动作先过统一注册门([ensureCidRegisteredOrPrompt]),
+/// 不注 fake 会打到真单例(真链读/真 Isar,hermetic 违规)。
+class _RegisteredIdentityCache extends IdentityAccountCache {
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      ResolvedIdentity(
+        accountId:
+            '0x1111111111111111111111111111111111111111111111111111111111111111',
+        ss58Address: 'ss58-demo',
+        accountIndex: 0,
+        snapshot: CitizenIdentityChainSnapshot(
+          cidNumber: 'CN220-CTZN2-100000001-2026',
+          accountId: Uint8List(32),
+          bindingRevision: 1,
+          votingIdentity: null,
+        ),
+      );
+}
+
 void main() {
+  setUp(() {
+    IdentityAccountCache.debugInstance = _RegisteredIdentityCache();
+  });
+
+  tearDown(IdentityAccountCache.resetDebugInstance);
+
   test('平台 finalized 镜像回执不再产生设备签名', () async {
     var deviceSignCount = 0;
     final api = SquareApiClient(
@@ -554,6 +621,23 @@ void main() {
     expect(find.textContaining('订阅 '), findsOneWidget);
   });
 
+  testWidgets('会话建立失败且无可展示数据 → 顶部失败横幅 + 三卡保留', (tester) async {
+    await _pump(
+      tester,
+      _state(active: false),
+      sessionProvider: _ThrowingSessionProvider(),
+    );
+
+    // 失败必须有可见解释与重试入口;三张静态卡按本页设计不得被整页错误替换。
+    expect(
+      find.byKey(const ValueKey('membership-load-failure-banner')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('会员数据加载失败'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+    expect(find.byKey(const ValueKey('membership-front-card')), findsOneWidget);
+  });
+
   testWidgets('已取消订阅 → 横幅标签「到期终止」且不再续费', (tester) async {
     await _pump(
       tester,
@@ -616,5 +700,43 @@ void main() {
     expect(restored.prices['spark'], 199900);
     expect(restored.subscriptionFetchedAtMs, 3000);
     expect(restored.pricesFetchedAtMs, 4000);
+  });
+
+  testWidgets('未注册 → 无失败横幅、三卡在、按钮「注册用户」、不发登录挑战', (tester) async {
+    IdentityAccountCache.debugInstance = _UnregisteredIdentityCache();
+    final sessionProvider = _MustNotLoginSessionProvider();
+    await _pump(
+      tester,
+      _state(active: false),
+      prices: const {'freedom': 299, 'democracy': 999, 'spark': 9999},
+      sessionProvider: sessionProvider,
+    );
+
+    // 没注册不是加载失败,重试也不会变——横幅必须完全消失。
+    expect(
+      find.byKey(const ValueKey('membership-load-failure-banner')),
+      findsNothing,
+    );
+    expect(find.textContaining('会员数据加载失败'), findsNothing);
+    expect(find.text('重试'), findsNothing);
+    // 三张卡照常在,按钮引导注册,且不再显示「会员状态同步中」这类假故障文案。
+    expect(find.byKey(const ValueKey('membership-front-card')), findsOneWidget);
+    expect(find.text('注册用户'), findsWidgets);
+    expect(find.text('会员状态同步中'), findsNothing);
+    // 未注册时连注定 403 的登录挑战都不发。
+    expect(sessionProvider.calls, 0);
+  });
+
+  testWidgets('未注册 → 价格仍显示(价格是链上公开读,不依赖会话)', (tester) async {
+    IdentityAccountCache.debugInstance = _UnregisteredIdentityCache();
+    await _pump(
+      tester,
+      _state(active: false),
+      prices: const {'freedom': 299, 'democracy': 999, 'spark': 9999},
+      sessionProvider: _MustNotLoginSessionProvider(),
+    );
+
+    // 价格排在会话之后时未注册用户看不到价;前置后必须能看到真实价格。
+    expect(find.textContaining('2.99'), findsWidgets);
   });
 }

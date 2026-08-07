@@ -26,7 +26,7 @@ permissions:
 jobs:
   build-apk:
     name: 构建 公民钱包.apk
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
@@ -52,45 +52,33 @@ jobs:
         with:
           flutter-version: ${{ steps.flutter-version.outputs.version }}
 
+      # 索引同步的唯一实现在 citizenwallet/scripts/sync-pallet-registry.sh。
+      # 此前 CI 与 citizenwallet-run.sh 各持一份、且覆盖范围不同（CI 只同步 3 个 pallet，
+      # 本地同步 20 个），加 iOS job 会变成三份，故收敛到脚本，三处共用同一个全集。
       - name: 同步 runtime pallet/call 索引
-        run: |
-          set -euo pipefail
-
-          RUNTIME_LIB=citizenchain/runtime/src/lib.rs
-          REGISTRY=citizenwallet/lib/signer/pallet_registry.dart
-          TRANSFER_PALLET=citizenchain/runtime/transaction/multisig/src/lib.rs
-          JOINT_VOTE_PALLET=citizenchain/runtime/votingengine/joint-vote/src/lib.rs
-
-          ONCHAIN_TRANSACTION_IDX=$(grep -B1 'pub type OnchainTransaction' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
-          MULTISIG_IDX=$(grep -B1 'pub type MultisigTransfer' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
-          VOTING_IDX=$(grep -B1 'pub type VotingEngine' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
-
-          PROPOSE_CALL=$(grep -B2 'fn propose_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
-          # 联合投票内部投票阶段:JointVote::cast_admin
-          JOINT_CALL=$(grep -B2 'fn cast_admin' "$JOINT_VOTE_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
-          # 联合公投阶段:JointVote::cast_referendum
-          REFERENDUM_CALL=$(grep -B2 'fn cast_referendum' "$JOINT_VOTE_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
-
-          test -n "$ONCHAIN_TRANSACTION_IDX" || { echo "::error::未找到 OnchainTransaction pallet_index"; exit 1; }
-          test -n "$MULTISIG_IDX" || { echo "::error::未找到 MultisigTransfer pallet_index"; exit 1; }
-          test -n "$VOTING_IDX" || { echo "::error::未找到 VotingEngine pallet_index"; exit 1; }
-          test -n "$PROPOSE_CALL" || { echo "::error::未找到 MultisigTransfer::propose_transfer call_index"; exit 1; }
-          test -n "$JOINT_CALL" || { echo "::error::未找到 JointVote::cast_admin call_index"; exit 1; }
-          test -n "$REFERENDUM_CALL" || { echo "::error::未找到 JointVote::cast_referendum call_index"; exit 1; }
-
-          sed -i "s/onchainTransactionPallet = [0-9]*/onchainTransactionPallet = $ONCHAIN_TRANSACTION_IDX/" "$REGISTRY"
-          sed -i "s/multisigTransferPallet = [0-9]*/multisigTransferPallet = $MULTISIG_IDX/" "$REGISTRY"
-          sed -i "s/votingEnginePallet = [0-9]*/votingEnginePallet = $VOTING_IDX/" "$REGISTRY"
-          sed -i "s/proposeTransferCall = [0-9]*/proposeTransferCall = $PROPOSE_CALL/" "$REGISTRY"
-          sed -i "s/jointVoteCall = [0-9]*/jointVoteCall = $JOINT_CALL/" "$REGISTRY"
-          sed -i "s/castReferendumCall = [0-9]*/castReferendumCall = $REFERENDUM_CALL/" "$REGISTRY"
-
-          echo "OnchainTransaction=$ONCHAIN_TRANSACTION_IDX MultisigTransfer=$MULTISIG_IDX VotingEngine=$VOTING_IDX"
-          echo "propose=$PROPOSE_CALL joint=$JOINT_CALL referendum=$REFERENDUM_CALL"
+        run: ./citizenwallet/scripts/sync-pallet-registry.sh
 
       - name: 安装依赖
         working-directory: citizenwallet
         run: flutter pub get
+
+      # 原生签名库(schnorrkel)从源码重建，不信任入库的 .so。
+      # 四端统一口径：产物一律由 CI 从源码构建——入库二进制与源码脱节时不会有任何报错，
+      # 只会在装机后签名失败，那时已经晚了。公民端一直如此，本端此前是唯一例外。
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: 编译原生签名库 (Android ARM)
+        working-directory: citizenwallet
+        run: ./scripts/build-signer-native.sh android
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenwallet-rust-android"
+          workspaces: citizenwallet/rust -> target
 
       - name: 写入 Android release keystore
         if: ${{ env.GMB_RELEASE_MODE == 'true' }}
@@ -159,6 +147,22 @@ jobs:
         working-directory: citizenwallet
         run: flutter build apk --debug
 
+      # 与公民同口径：CI 模式也上传不签名产物，补齐四端共用契约。
+      # Debug APK 用调试密钥签名、同样能装机，故名字与正式包严格区分。
+      - name: 重命名为公民钱包-未签名.apk
+        if: ${{ env.GMB_RELEASE_MODE != 'true' }}
+        run: cp citizenwallet/build/app/outputs/flutter-apk/app-debug.apk citizenwallet/build/app/outputs/flutter-apk/公民钱包-未签名.apk
+
+      - name: 上传 公民钱包-未签名.apk
+        if: ${{ env.GMB_RELEASE_MODE != 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: 公民钱包-未签名.apk
+          path: citizenwallet/build/app/outputs/flutter-apk/公民钱包-未签名.apk
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
+
       - name: 构建正式 APK
         if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         working-directory: citizenwallet
@@ -203,3 +207,112 @@ jobs:
           fi
 
           gh release upload "$tag" "$apk_path" --clobber
+
+  # ── iOS（未签名） ──
+  #
+  # 与 build-apk 并列、互不阻塞；runner 与公民 iOS、公民链桌面 macOS 同为 macos-15。
+  #
+  # continue-on-error 的存在条件：付费 Apple Developer Program 尚未到位，只有
+  # Apple Development 证书、没有分发证书，iOS 只能产出未签名、不可安装的产物。
+  # 本 job 一旦出现真签名步骤(codesign / CODE_SIGN_IDENTITY / exportArchive)，
+  # 必须同时删掉 continue-on-error。该约束由 production-security 测试反向钉住。
+  ios:
+    name: 构建 公民钱包 iOS（未签名）
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+
+      - name: 校验金标向量跨端一致
+        run: node .github/scripts/check-golden-vectors-sync.mjs
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: aarch64-apple-ios
+
+      - name: 读取 Flutter 版本
+        id: flutter-version
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          version = json.loads(Path(".fvm/fvm_config.json").read_text(encoding="utf-8"))["flutterSdkVersion"]
+          print(f"version={version}")
+          PY
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.flutter-version.outputs.version }}
+
+      # 与 build-apk 调同一个脚本：冷钱包离线签名，索引与链端脱节没有任何编译期信号。
+      - name: 同步 runtime pallet/call 索引
+        run: ./citizenwallet/scripts/sync-pallet-registry.sh
+
+      # ↓↓ 以下三步顺序是硬约束，颠倒会崩在很难读的 CocoaPods 报错里 ↓↓
+      # 1) flutter pub get 生成 ios/Flutter/Generated.xcconfig —— Podfile 必须读它定位 FLUTTER_ROOT
+      # 2) build-signer-native.sh ios 产出 libcitizenwallet_signer.a
+      #    —— citizenwallet_signer.podspec 依赖它，冷端只有 4 个导出符号，
+      #    正是 release 的 -dead_strip 最容易整组剔干净的规模
+      # 3) flutter build ios 内部自带 pod install（且自带正确的 LANG；手动跑才需要
+      #    LANG=en_US.UTF-8，否则 CocoaPods 编码崩溃）
+      - name: 安装依赖
+        working-directory: citizenwallet
+        run: flutter pub get
+
+      - name: 编译原生签名库 (iOS arm64)
+        working-directory: citizenwallet
+        run: ./scripts/build-signer-native.sh ios
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenwallet-rust-ios"
+          workspaces: citizenwallet/rust -> target
+
+      - name: 构建未签名 iOS 产物
+        working-directory: citizenwallet
+        run: flutter build ios --release --no-codesign
+
+      - name: 打包 公民钱包-iOS-未签名.app.zip
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent \
+            citizenwallet/build/ios/iphoneos/Runner.app \
+            citizenwallet/build/ios/公民钱包-iOS-未签名.app.zip
+
+      - name: 上传 公民钱包-iOS-未签名.app.zip
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: 公民钱包-iOS-未签名.app.zip
+          path: citizenwallet/build/ios/公民钱包-iOS-未签名.app.zip
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
+
+      # 资产名必须让人一眼看出装不上：这是公开 Release，任何人点进去就能下载。
+      # 官网在拿到真 .ipa 之前不加任何 iOS 下载链接——固定资产名规则下必然 404。
+      - name: 发布 iOS 产物到滚动 Release
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="release"
+          asset="citizenwallet/build/ios/公民钱包-iOS-未签名-仅供验证.app.zip"
+          cp citizenwallet/build/ios/公民钱包-iOS-未签名.app.zip "$asset"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest >/dev/null
+          else
+            gh release create "$tag" \
+              --title 'GMB 正式版' \
+              --notes 'GMB 各产品最新正式版(滚动发布,始终 Latest)。' \
+              --latest --target "$GITHUB_SHA"
+          fi
+
+          gh release upload "$tag" "$asset" --clobber

@@ -38,7 +38,7 @@ jobs:
   # ── 代码检查 ──
   check:
     name: Flutter 代码检查
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
@@ -89,7 +89,7 @@ jobs:
   # ── Cloudflare Worker 与公民属于同一产品 CI，不拆分第五条流水线 ──
   cloudflare:
     name: Cloudflare 代码与 D1 结构检查
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
@@ -124,7 +124,7 @@ jobs:
   # ── Android APK 打包 ──
   android:
     name: 打包公民.apk
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [check, cloudflare]
     steps:
       - name: 拉取代码
@@ -258,6 +258,24 @@ jobs:
         working-directory: citizenapp
         run: flutter build apk --debug --target-platform android-arm,android-arm64
 
+      # CI 模式也必须留下产物：`mode=ci → 构建不签名产物 → 上传 artifact` 是四端共用契约，
+      # 公民链与 WASM 一直如此，两个移动端此前是仅有的例外(只在 Release 上传)。
+      # 名字与正式包严格区分：Debug APK 用调试密钥签名、同样能装机，
+      # 混用同一个名字迟早会有人把它当正式版侧载。
+      - name: 重命名为公民-未签名.apk
+        if: ${{ env.GMB_RELEASE_MODE != 'true' }}
+        run: cp citizenapp/build/app/outputs/flutter-apk/app-debug.apk citizenapp/build/app/outputs/flutter-apk/公民-未签名.apk
+
+      - name: 上传公民-未签名.apk
+        if: ${{ env.GMB_RELEASE_MODE != 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: 公民-未签名.apk
+          path: citizenapp/build/app/outputs/flutter-apk/公民-未签名.apk
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
+
       - name: 打包正式签名 APK
         if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         working-directory: citizenapp
@@ -347,3 +365,119 @@ jobs:
           name: citizenapp-android-update.json
           path: citizenapp/build/app/outputs/flutter-apk/citizenapp-android-update.json
           retention-days: 30
+
+  # ── iOS（未签名） ──
+  #
+  # 与 android job 并列、互不阻塞。runner 钉 macos-15，与公民链桌面 macOS 同一个标签。
+  #
+  # continue-on-error 的存在条件：付费 Apple Developer Program 尚未到位，本机与 CI 都只有
+  # Apple Development 证书、没有分发证书，iOS 只能产出未签名、不可安装的产物。让一个发不
+  # 出去的平台阻断整个 run，等于用它挡住 Android 真正能发的正式版。
+  # 本 job 一旦出现真签名步骤(codesign / CODE_SIGN_IDENTITY / exportArchive)，
+  # 必须同时删掉 continue-on-error —— 那时 iOS 能发布了，再放行失败就是发坏包。
+  # 该约束由 citizenconsole 的 production-security 测试反向钉住。
+  ios:
+    name: 打包公民 iOS（未签名）
+    runs-on: macos-15
+    needs: [check, cloudflare]
+    continue-on-error: true
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: aarch64-apple-ios
+
+      - name: 读取 Flutter 版本
+        id: flutter-version
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          version = json.loads(Path(".fvm/fvm_config.json").read_text(encoding="utf-8"))["flutterSdkVersion"]
+          print(f"version={version}")
+          PY
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.flutter-version.outputs.version }}
+
+      # 与 android job 同一道门禁：chainspec 是轻节点创世真源，两端都不得绕过。
+      - name: 再次校验 chainspec.json 冻结
+        run: |
+          if [ "${GMB_RELEASE_MODE}" = "true" ]; then
+            export CITIZENAPP_REQUIRE_STATE_ROOT=1
+          fi
+          bash citizenapp/scripts/check-chainspec-frozen.sh
+
+      # ↓↓ 以下三步顺序是硬约束，颠倒会崩在很难读的 CocoaPods 报错里 ↓↓
+      # 1) flutter pub get 生成 ios/Flutter/Generated.xcconfig —— Podfile 必须读它定位 FLUTTER_ROOT
+      # 2) build-smoldot-native.sh ios 产出 libsmoldot.a 并从中实抽 exported_symbols.txt
+      #    —— smoldot_ffi.podspec 读该清单生成 -Wl,-u，缺它则 release 的 -dead_strip 会
+      #    静默剔掉全部导出符号，装机后才在运行时炸
+      # 3) flutter build ios 内部自带 pod install（且自带正确的 LANG；手动跑才需要
+      #    LANG=en_US.UTF-8，否则 CocoaPods 编码崩溃）
+      - name: 安装 Flutter 依赖
+        working-directory: citizenapp
+        run: flutter pub get
+
+      - name: 编译 smoldot native library (iOS arm64)
+        working-directory: citizenapp
+        run: ./scripts/build-smoldot-native.sh ios
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "citizenapp-rust-ios"
+          workspaces: citizenapp/rust -> target
+
+      - name: 构建未签名 iOS 产物
+        working-directory: citizenapp
+        run: flutter build ios --release --no-codesign
+
+      - name: 打包 公民-iOS-未签名.app.zip
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent \
+            citizenapp/build/ios/iphoneos/Runner.app \
+            citizenapp/build/ios/公民-iOS-未签名.app.zip
+
+      - name: 上传 公民-iOS-未签名.app.zip
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: 公民-iOS-未签名.app.zip
+          path: citizenapp/build/ios/公民-iOS-未签名.app.zip
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
+
+      # 正式发布时同样挂上 iOS 产物。资产名必须让人一眼看出装不上：这是公开 Release，
+      # 任何人点进去就能下载，叫「公民.ipa」会被当成能装的正式版。
+      # 官网在拿到真 .ipa 之前不加任何 iOS 下载链接——固定资产名规则下必然 404。
+      - name: 发布 iOS 产物到滚动 Release
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="release"
+          asset="citizenapp/build/ios/公民-iOS-未签名-仅供验证.app.zip"
+          cp citizenapp/build/ios/公民-iOS-未签名.app.zip "$asset"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest >/dev/null
+          else
+            gh release create "$tag" \
+              --title 'GMB 正式版' \
+              --notes 'GMB 各产品最新正式版(滚动发布,始终 Latest)。' \
+              --latest --target "$GITHUB_SHA"
+          fi
+
+          gh release upload "$tag" "$asset" --clobber

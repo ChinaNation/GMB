@@ -166,3 +166,41 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - 任务卡：`memory/08-tasks/open/20260706-citizenapp-user-profile-homepage.md`
 - 默认资料统一：`memory/08-tasks/open/20260715-citizenapp-profile-fallback-unification.md`
 - 广场总卡：`memory/08-tasks/open/20260705-citizenapp-square-r2-worker.md`
+
+## 未注册身份统一引导(2026-08-05)
+
+- 广场 feed 对未注册用户显示 `IdentityRegisterGuide`(尚未注册 + 注册按钮),不再显示
+  「广场内容加载失败」假故障。两条判定汇入同一分支:本地身份缓存命中未注册 → 不发
+  注定失败的登录挑战(feed 与红点轮询 `_notifySession` 双短路);缓存未命中 → 照发,
+  由 Worker 真源回 `403 cid_not_bound` 后映射到引导。其余错误维持原故障文案。
+- 发布入口、创作者订阅按钮(`_openPicker`)未注册时就地弹统一注册面板
+  (`startCidRegistrationFlow` / `ensureCidRegisteredOrPrompt`,单源
+  `lib/my/myid/register_identity_flow.dart`);占号成功后回刷身份与 feed。
+- 任务卡:`memory/08-tasks/open/20260805-citizenapp-unregistered-guide-unify.md`
+
+## 广场会话自愈(2026-08-06)
+
+登录完成阶段的两类 401 都会触发**一次**本机子钥登记并重试(`_establishSessionWithRetry`):
+`device_not_registered`(库无行)与 `invalid_signature`(库有行但都不是本机钥——换新
+手机/重装/钱包重建后 walletIndex 换新,硬件 P-256 子钥随之换新)。只认前者会死锁:
+行存在→挑战能发,钥不配→完成必败,登记永不触发。安全兜底在注册端点(链上 finalized
+绑定 + 钱包主钥绑定签名 + Turnstile;`device_id`=公钥哈希,每设备一行多设备并存)。
+其余错误码零登记原样上抛;自愈只重试一次。测试:`test/8964/square_session_selfheal_test.dart`。
+任务卡:`memory/08-tasks/open/20260806-square-session-selfheal-and-page-fixes.md`
+
+## 会员页未注册呈现(2026-08-06)
+
+**未注册 ≠ 故障,不给「加载失败/重试」**(此前的失败横幅由 2026-08-06 上一轮改动误引入,
+未注册用户的 401 落进兜底 catch 被显示成「会员数据加载失败,请点右上刷新重试」——
+没注册,重试一万次也是同一结果):
+
+- 未注册判定两路汇一:本地身份缓存命中未注册 → 直接判定且**不发**注定 403 的登录挑战;
+  缓存未命中 → 由 Worker 真源 `errorCode == 'cid_not_bound'` 判定。
+- 未注册呈现:**无任何失败/重试横幅**;三张会员卡照常完整显示;卡片按钮文案
+  「注册用户」,点击弹全 App 唯一注册面板(`startCidRegistrationFlow`),占号成功回刷本页。
+- 价格独立补取:`fetchAllPlatformPrices` 是**纯链上公开读、与会话无关**,正常路径挂在
+  会话之后(要按 CID 读展示快照),未注册用户走不到。故 `_enterUnregistered()` 单独补一次,
+  让未注册用户也看到真实价格再决定要不要注册。
+  **只在未注册分支调用**——无条件前置会绕过 `_pricesCacheTtl`(30 分钟)缓存,
+  让已注册用户每次进页都打一次链(实施中一度写成无条件前置,被既有缓存用例逮住)。
+- 真故障不受影响:已注册用户遇网络/链异常时,失败横幅 + 重试照旧。

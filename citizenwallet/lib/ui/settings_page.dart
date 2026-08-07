@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../security/app_lock_service.dart';
+import 'biometric_auth_text.dart';
 import '../security/pin_input_page.dart';
 import '../security/secure_storage.dart';
 import 'app_theme.dart';
@@ -55,7 +56,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
       try {
         final authenticated = await _localAuth.authenticate(
-          localizedReason: '用生物识别验证身份以开启设备锁',
+          localizedReason: BiometricAuthText.pick(
+            zh: '用生物识别验证身份以开启设备锁',
+            en: 'Verify with biometrics to enable the device lock',
+          ),
+          authMessages: BiometricAuthText.messages(),
           biometricOnly: true,
           persistAcrossBackgrounding: true,
           sensitiveTransaction: true,

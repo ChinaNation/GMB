@@ -16,6 +16,21 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
   - `mode=ci` → 涨版本 → 构建**不签名**产物 → 上传 artifact
   - `mode=release` → 校验代码已通过 CI → 涨版本 → **在同一份代码上重新构建并正式签名** → 发布 GitHub Release
   - 代码相同、流程相同、版本规则相同、失败重跑规则相同，唯一区别就是产物签不签名
+  - **2026-08-05 已把两个移动端补齐到这条契约**：此前公民与公民钱包的全部 upload 步骤
+    都带 `GMB_RELEASE_MODE == 'true'` 守卫，`mode=ci` 跑完什么都不留，是四端仅有的例外。
+    现在 CI 模式同样上传不签名产物，且**名字与正式包严格区分**（`公民-未签名.apk`、
+    `公民钱包-未签名.apk`）——Debug APK 用调试密钥签名、同样能装机，混用同名迟早被当正式版侧载。
+  - CI 模式的 artifact 是该次运行**唯一**产出，故 `if-no-files-found: error`：
+    静默上传 0 个文件会让一次什么都没产出的运行显示为绿色。Release 模式的 artifact 只是
+    Release 资产的 30 天便利副本，故保留 `continue-on-error`——副本没传上不该让已发布的
+    Release 整体判失败。两者的宽严不同是有意的，不是漏改。
+- **runner 标签一律钉死，禁止 `-latest`**：`ubuntu-24.04` / `windows-2025` / `macos-15`。
+  `-latest` 是移动标签，镜像换代会让构建毫无征兆地红，而这些 job 产出的是要分发给用户的
+  安装包。2026-08-05 已把四端 10 处移动标签全部钉死（钉的就是当时的解析结果，行为不变）。
+  架构守卫读的是 `RUNNER_ARCH`，不受标签版本影响。
+- **原生库一律由 CI 从源码重建，不信任入库二进制**：入库的 `.so` / `.a` 与源码脱节时
+  没有任何编译期信号，只会在装机后签名失败或连不上链。公民端一直如此；公民钱包此前
+  整条流水线连 Rust 工具链都没有，直接吃入库的 `.so`，2026-08-05 已补齐。
 - `pull_request` 与 `mode=ci` 的 dispatch 只允许执行校验、编译、测试和检查构建,不得访问服务器、不得发布 GitHub Release、不得部署、不得读取部署 SSH 密钥或正式签名密钥
 - 只有 `mode=release` 的 dispatch(控制台「正式 Release」按钮)才允许进入正式发布链路,包括 `GMB_APP_KEY`、`GMB_TOP_KEY / GMB_TOP_PUBKEY`、GitHub Release 发布、正式安装包上传和旧发布产物清理
 - **Release 必须建立在已通过 CI 的提交上**：`require_ci_verified_head <workflow>` 取该
@@ -143,15 +158,64 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
   - 归属公民链产品 CI 边界，不得恢复独立 旧独立身份系统 CI
   - `pull_request` 与 `mode=ci`:只允许执行 OnChina 后端编译、后端测试、前端依赖安装和前端构建
   - 正式发布跟随公民链发布边界，不构建独立身份系统安装包
+- 两个移动产品共同的**本地编译**口径（与 CI/Release 无关）：各有「编译iOS端」「编译Android端」
+  两个按钮，平台由按钮传死，透传给 `<product>/scripts/<product>-run.sh` 的必填参数
+  （`ios` / `android`），控制台层与脚本层各校验一次白名单。**不做运行时探测**——探测总要在
+  失败时选一个回落，而回落的那一端会被当成用户想编的那一端；探测不到目标平台的设备就报错
+  退出，绝不改编另一端。安装命令必须带显式设备 id：不带时同时连着两台设备 flutter 无从
+  决定，而控制台日志面板没有输入框，它的选择提示回答不了。
+  「编译」的语义 = **把能直接使用的软件装进设备**，因此两脚本一律 `flutter build` + 安装，
+  **不用 `flutter run`**（那只是挂调试器跑，iOS debug 版装完从桌面点图标必然起不来）：
+  iOS 走 `flutter build ios --release` + `flutter install --release -d <flutter id>`；
+  Android 走 `flutter build apk --debug` + `adb -s <id> install -r`（安卓 debug 版可直接
+  使用且保留落盘诊断）。两端交付物都是可直接使用的 App。详见
+  `memory/05-modules/citizenapp/wallet/WALLET_TECHNICAL.md`「本地编译安装约定」。
+  本地编译**不产出留存产物**，`<product>/target/` 沉淀已整体删除，产物只在 GitHub。
+  **同一产品的两端互斥，跨产品并发**：两个编译端抢的是同一份 Flutter 工程目录——
+  `.dart_tool/`、`build/`、`rust/target/`、原生库产物、`ios/Pods/` 都只有一份，
+  并发的后果不是变慢而是互相打断（一个的 `flutter clean` 会删掉另一个刚 `pub get`
+  出来的 `.dart_tool`，受害方报「package_config.json does not exist」，
+  跟真正的依赖问题长得一模一样）。跨产品不受限：两个产品各自独立 workspace 与 target，
+  共用的 `citizen-signer` 是只读 path 依赖。
+  互斥判据**只看实时 run 状态**（`running` / `starting`），`finishRun` 在成功、失败、
+  被手动停止、子进程报错四条路径上都会改写 state，因此另一端一结束就立刻放行——
+  不落锁文件、不留粘滞标记，崩溃或强杀也不会留下解不开的锁。
+  被拒绝时**当场弹窗**并点名是哪一端在占用，同时写入系统日志留痕；
+  只写日志不够——「点了按钮没反应」用户不会去翻日志标签。
+  **编译脚本内禁止机器级进程强杀**：`pkill -9 -f flutter_tools.snapshot` 之类的写法
+  `-f` 匹配全命令行，会连带打死其它产品正在跑的编译、乃至用户自己在终端敲的 flutter
+  （现象是 `Killed: 9`）。残留进程由控制台的独立进程组 + 按组终止承接。
+- 两个移动端的 **iOS job**（2026-08-05 新增，两端同构）
+  - `runs-on: macos-15`，与公民链桌面 macOS 同一标签；与 Android job 并列，互不阻塞
+  - 三步顺序是硬约束，颠倒会崩在很难读的 CocoaPods 报错里：
+    `flutter pub get`（生成 Podfile 要读的 `Generated.xcconfig`）→
+    `build-{smoldot,signer}-native.sh ios`（产出 podspec 要读的静态库与实抽符号清单）→
+    `flutter build ios --release --no-codesign`（内部自带 `pod install`，且自带正确的
+    `LANG`；只有手动跑 `pod install` 才需要 `LANG=en_US.UTF-8`，否则 CocoaPods 编码崩溃）
+  - **iOS job 不读任何 secret**：它不签名，就没有任何理由接触 `GMB_APP_KEY`
+  - **`continue-on-error: true` 及其唯一存在条件**：付费 Apple Developer Program 尚未到位，
+    只有 Apple Development 证书、没有分发证书（本机实测：分发证书 0 个、描述文件 0 个，
+    团队 `7QJXLLBA6J` 是免费个人团队），iOS 只能产出未签名、不可安装的 `Runner.app`。
+    让一个发不出去的平台阻断整个 run，等于用它挡住 Android 真正能发的正式版。
+    **本 job 一旦出现真签名步骤（`codesign` / `CODE_SIGN_IDENTITY` / `exportArchive`），
+    必须同时删掉 `continue-on-error`**——那时 iOS 能发布了，再放行失败就是发坏包。
+    该互斥由 citizenconsole 的 production-security 测试反向钉住。
+  - Release 模式下 iOS 产物同样挂到滚动 Release，资产名带「未签名-仅供验证」；
+    **官网在拿到真 `.ipa` 之前不加任何 iOS 下载链接**——固定资产名规则下必然 404。
+    iOS 不生成更新清单（走 App Store，无侧载路径）
 - `citizenapp`
   - CI：`.github/workflows/citizenapp-ci.yml`
-  - `pull_request` 与 `mode=ci`:同时执行 Flutter analyze/test、Cloudflare 类型与测试、全新本地 D1 schema 和 Debug APK 检查，不读取 release keystore
+  - `pull_request` 与 `mode=ci`:同时执行 Flutter analyze/test、Cloudflare 类型与测试、全新本地 D1 schema、Android Debug APK 与 iOS 未签名构建检查，不读取 release keystore
   - Cloudflare 属于 CitizenApp 同一条 CI，禁止新建独立 workflow
   - `mode=release`:读取 `GMB_APP_KEY`,构建正式签名 `公民.apk`,发布 Android 更新 Release
 - `citizenwallet`
   - CI：`.github/workflows/citizenwallet-ci.yml`
-  - `mode=ci`:只做 Flutter analyze/test 与 Debug APK 检查构建,不读取 release keystore
+  - `mode=ci`:Flutter analyze/test + Android Debug APK 与 iOS 未签名构建检查,不读取 release keystore
   - `mode=release`:读取同一个 `GMB_APP_KEY`,构建并上传正式 `公民钱包.apk`
+  - **pallet/call 索引同步的唯一实现是 `citizenwallet/scripts/sync-pallet-registry.sh`**，
+    由 CI 的两个 job 与 `citizenwallet-run.sh` 三处共用。此前 CI 与本地各持一份副本、
+    且覆盖范围不同（CI 只同步 3 个 pallet、本地同步 20 个），加 iOS job 会变成三份。
+    冷钱包离线签名，索引与链端脱节没有任何编译期信号，只会签出被链上按另一个 pallet 解码的交易
 - `citizenweb`
   - 当前暂无专用 GitHub Actions，发布前在本地执行构建并部署静态产物
 

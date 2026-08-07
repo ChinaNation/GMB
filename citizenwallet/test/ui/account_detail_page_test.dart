@@ -2,6 +2,7 @@
 // model B 后 C-1 反转:每账户私钥独立隔离,展示单账户私钥安全(默认隐藏,验证后显示)。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:citizenwallet/qr/bodies/wallet_code_body.dart';
 import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
@@ -27,9 +28,9 @@ void main() {
     ));
     await tester.pump();
 
-    // 公开信息在。
-    expect(find.text('公钥（账户 ID）'), findsOneWidget);
-    expect(find.text('SS58 地址'), findsOneWidget);
+    // 公开信息在(主标签+括号副标签合成一个 Text.rich,按整串纯文本匹配)。
+    expect(find.text('公钥（给电脑看的）'), findsOneWidget);
+    expect(find.text('账户地址（给人看的）'), findsOneWidget);
 
     // 需求1:账户详情不再显示派生路径。
     expect(find.text('派生路径'), findsNothing);
@@ -64,7 +65,7 @@ void main() {
     expect(find.text('点击查看私钥'), findsOneWidget);
   });
 
-  testWidgets('账户详情出固定钱包码，不出现任何时效文案', (tester) async {
+  testWidgets('账户详情出固定钱包码，关闭|复制对称，不出现任何时效文案', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: AccountDetailPage(account: account, walletName: '钱包1'),
     ));
@@ -73,8 +74,18 @@ void main() {
     await tester.tap(find.byTooltip('显示钱包码'));
     await tester.pumpAndSettle();
 
-    expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
+    // 弹窗:二维码 + 关闭/复制双按钮;说明文案已删,无任何时效文案。
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text('关闭'), findsOneWidget);
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.textContaining('扫码登录'), findsNothing);
     expect(find.textContaining('分钟内有效'), findsNothing);
+
+    // 复制账户地址后弹窗保持打开(方便继续展示二维码)。
+    await tester.tap(find.text('复制'));
+    await tester.pump();
+    expect(find.text('账户地址已复制'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
   });
 
   test('钱包码载荷严格为固定 k=5，只含 account_id', () {
