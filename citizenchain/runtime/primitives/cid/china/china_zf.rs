@@ -323,7 +323,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国总统府",
         cid_short_name: "总统府",
-        cid_full_name_en: "Presidential Office of the Federal Republic of the China Nation",
+        cid_full_name_en: "Presidential Office of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Presidential Office",
         cid_number: "ZS001-PRS0W-803866330-2026",
         main_account: hex!("637fc60122bfd1b486079084b6319975f193d81bb56ca89fb9dd1bfd0fc58b49"),
@@ -377,7 +377,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国外事交流部",
         cid_short_name: "外交部",
-        cid_full_name_en: "Ministry of Foreign Affairs and Exchange of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Foreign Affairs and Exchange of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Foreign Affairs",
         cid_number: "ZS001-MFA0T-974986545-2026",
         main_account: hex!("65b8848cbd844b133740858f2cffcc02e36e82fde579606a4a8605f4498581ae"),
@@ -386,7 +386,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国国家防务部",
         cid_short_name: "国防部",
-        cid_full_name_en: "Ministry of National Defense of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of National Defense of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of National Defense",
         cid_number: "ZS001-MDF0L-798223120-2026",
         main_account: hex!("0be1f8bf05cc6a9fcd24b48a02698848f5d53e3b43f15444e8a41c3debfd782e"),
@@ -441,7 +441,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国陆军司令部",
         cid_short_name: "陆军司令部",
-        cid_full_name_en: "Army Command of the Federal Republic of the China Nation",
+        cid_full_name_en: "Army Command of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Army Command",
         cid_number: "ZS001-ARC0H-293320362-2026",
         main_account: hex!("a0e82dbfa20aa8ba9b21d5840ec84ffd38b8a1b4ba078aa1391a523ec04f7028"),
@@ -450,7 +450,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国海军司令部",
         cid_short_name: "海军司令部",
-        cid_full_name_en: "Navy Command of the Federal Republic of the China Nation",
+        cid_full_name_en: "Navy Command of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Navy Command",
         cid_number: "ZS001-NVC09-047088443-2026",
         main_account: hex!("95e06b2b69d3fd61c9cfe9e8351bb69c5b55c0a4387d8033609942fdcaa74dc5"),
@@ -459,7 +459,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国空军司令部",
         cid_short_name: "空军司令部",
-        cid_full_name_en: "Air Force Command of the Federal Republic of the China Nation",
+        cid_full_name_en: "Air Force Command of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Air Force Command",
         cid_number: "ZS001-AFC0B-028182033-2026",
         main_account: hex!("df07c94c765ba5683b3a398319f6b303a868ef149175055fe1c853a8252bd120"),
@@ -468,7 +468,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国天军司令部",
         cid_short_name: "天军司令部",
-        cid_full_name_en: "Space Force Command of the Federal Republic of the China Nation",
+        cid_full_name_en: "Space Force Command of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Space Force Command",
         cid_number: "ZS001-SFC0Z-300683894-2026",
         main_account: hex!("c3e53e36897572c3e2f48406121d76d170f89225d54e0716507895fcc4dcf8d2"),
@@ -477,7 +477,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国国土安全部",
         cid_short_name: "国安部",
-        cid_full_name_en: "Ministry of Homeland Security of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Homeland Security of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Homeland Security",
         cid_number: "ZS001-MHS0G-999724831-2026",
         main_account: hex!("6e787de009b7db25ac49241ecfd2218df974c4349111cc49a623ccde2e75230b"),
@@ -496,7 +496,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国国民警卫队司令部",
         cid_short_name: "国民警卫队司令部",
-        cid_full_name_en: "National Guard Command of the Federal Republic of the China Nation",
+        cid_full_name_en: "National Guard Command of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "National Guard Command",
         cid_number: "ZS001-NGC0G-106199864-2026",
         main_account: hex!("b40df6b7ccc02546c51a8b27ee11edbcabf205d03ccd64217e40bd6e4ac436ab"),
@@ -505,7 +505,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国公民生活保障部",
         cid_short_name: "民生部",
-        cid_full_name_en: "Ministry of Citizen Welfare of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Citizen Welfare of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Citizen Welfare",
         cid_number: "ZS001-MCW0D-975651211-2026",
         main_account: hex!("0fa03ca91455ae1dca6dac42dc946537afbfa7fd2850e941a0fa2f73febcf640"),
@@ -523,7 +523,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国住房与城镇建设部",
         cid_short_name: "住建部",
-        cid_full_name_en: "Ministry of Housing and Urban Development of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Housing and Urban Development of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Housing and Urban Development",
         cid_number: "ZS001-MHU05-337634138-2026",
         main_account: hex!("e6a87b1fdb508b5b31b5838b36ba3f0c628dad0b5bc871123e8b6c4e03a7ff67"),
@@ -532,7 +532,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国农业与农村发展部",
         cid_short_name: "农业部",
-        cid_full_name_en: "Ministry of Agriculture and Rural Development of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Agriculture and Rural Development of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Agriculture",
         cid_number: "ZS001-MAG0K-934240310-2026",
         main_account: hex!("91ed1c782c9510b7d15849bdd11916d6b19101ab64979ec0903f2277039c03e4"),
@@ -541,7 +541,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国商务与市场贸易部",
         cid_short_name: "商贸部",
-        cid_full_name_en: "Ministry of Commerce and Market Trade of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Commerce and Market Trade of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Commerce",
         cid_number: "ZS001-MCM0F-827406215-2026",
         main_account: hex!("17ff03f2ec22c03c94d3e88e8c9df17d43ea37cce68c278564e323e6196c1ad0"),
@@ -550,7 +550,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国财政与税务部",
         cid_short_name: "财税部",
-        cid_full_name_en: "Ministry of Finance and Taxation of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Finance and Taxation of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Finance and Taxation",
         cid_number: "ZS001-MFT0E-379453513-2026",
         main_account: hex!("47cfaf174f79f523f96f04ab157a85c5adcd1e42ca1b2851a61687614b838bc5"),
@@ -559,7 +559,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国能源与环保发展部",
         cid_short_name: "能源部",
-        cid_full_name_en: "Ministry of Energy and Environmental Development of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Energy and Environmental Development of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Energy",
         cid_number: "ZS001-MEN04-104369164-2026",
         main_account: hex!("51e23d2d0c81d97b2886b3fd58e22e6cd20ddfdbca357fe7b0bd4b83e52d566f"),
@@ -568,7 +568,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
     ChinaZf {
         cid_full_name: "中华民族联邦共和国交通运输部",
         cid_short_name: "交通部",
-        cid_full_name_en: "Ministry of Transport of the Federal Republic of the China Nation",
+        cid_full_name_en: "Ministry of Transport of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Ministry of Transport",
         cid_number: "ZS001-MTR0Z-951285962-2026",
         main_account: hex!("81bf20d291970e29cb3d75a46df8c3f89a60a44944960690a4aa5e448ae41d62"),

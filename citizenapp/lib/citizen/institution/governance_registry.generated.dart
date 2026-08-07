@@ -9,7 +9,7 @@ const List<InstitutionInfo> kNrc = [
     cidFullName: '中华民族联邦共和国公民储备委员会',
     cidShortName: '国家储委会',
     cidFullNameEn:
-        'Citizen Reserve Committee of the Federal Republic of the China Nation',
+        'Citizen Reserve Committee of the Federal Republic of the Chinese Nation',
     cidShortNameEn: 'National Reserve Committee',
     cidNumber: 'LN001-NRC0G-944805165-2026',
     orgType: OrgType.nrc,
@@ -1344,7 +1344,8 @@ const List<InstitutionInfo> kFixedGovernanceInstitutions = [
   InstitutionInfo(
     cidFullName: '中华民族联邦共和国司法院',
     cidShortName: '国家司法院',
-    cidFullNameEn: 'Judicial Yuan of the Federal Republic of the China Nation',
+    cidFullNameEn:
+        'Judicial Yuan of the Federal Republic of the Chinese Nation',
     cidShortNameEn: 'National Judicial Yuan',
     cidNumber: 'ZS001-NJD0T-052283563-2026',
     orgType: OrgType.institution,

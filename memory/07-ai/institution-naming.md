@@ -50,40 +50,40 @@
 
 | 中文全称 | 中文简称 | 英文全称 | 英文简称 |
 |---|---|---|---|
-| 中华民族联邦共和国总统府 | 总统府 | Presidential Office of the Federal Republic of the China Nation | Presidential Office |
+| 中华民族联邦共和国总统府 | 总统府 | Presidential Office of the Federal Republic of the Chinese Nation | Presidential Office |
 | 总统府联邦安全局 | 联邦安全局 | Federal Security Bureau of the Presidential Office | Federal Security Bureau |
 | 总统府联邦情报局 | 联邦情报局 | Federal Intelligence Bureau of the Presidential Office | Federal Intelligence Bureau |
 | 总统府联邦特勤局 | 联邦特勤局 | Federal Secret Service Bureau of the Presidential Office | Federal Secret Service Bureau |
 | 总统府联邦人事局 | 联邦人事局 | Federal Personnel Bureau of the Presidential Office | Federal Personnel Bureau |
 | 总统府联邦注册局 | 联邦注册局 | Federal Registry Bureau of the Presidential Office | Federal Registry Bureau |
-| 中华民族联邦共和国立法院 | 国家立法院 | Legislative Yuan of the Federal Republic of the China Nation | National Legislative Yuan |
-| 中华民族联邦共和国司法院 | 国家司法院 | Judicial Yuan of the Federal Republic of the China Nation | National Judicial Yuan |
-| 中华民族联邦共和国监察院 | 国家监察院 | Control Yuan of the Federal Republic of the China Nation | National Control Yuan |
-| 中华民族联邦共和国公民教育委员会 | 国家教委会 | Citizen Education Committee of the Federal Republic of the China Nation | National Education Committee |
-| 中华民族联邦共和国公民储备委员会 | 国家储委会 | Citizen Reserve Committee of the Federal Republic of the China Nation | National Reserve Committee |
+| 中华民族联邦共和国立法院 | 国家立法院 | Legislative Yuan of the Federal Republic of the Chinese Nation | National Legislative Yuan |
+| 中华民族联邦共和国司法院 | 国家司法院 | Judicial Yuan of the Federal Republic of the Chinese Nation | National Judicial Yuan |
+| 中华民族联邦共和国监察院 | 国家监察院 | Control Yuan of the Federal Republic of the Chinese Nation | National Control Yuan |
+| 中华民族联邦共和国公民教育委员会 | 国家教委会 | Citizen Education Committee of the Federal Republic of the Chinese Nation | National Education Committee |
+| 中华民族联邦共和国公民储备委员会 | 国家储委会 | Citizen Reserve Committee of the Federal Republic of the Chinese Nation | National Reserve Committee |
 
 ### 4.2 部委
 
 | 中文全称 | 中文简称 | 英文全称 | 英文简称 |
 |---|---|---|---|
-| 中华民族联邦共和国外事交流部 | 外交部 | Ministry of Foreign Affairs and Exchange of the Federal Republic of the China Nation | Ministry of Foreign Affairs |
-| 中华民族联邦共和国国家防务部 | 国防部 | Ministry of National Defense of the Federal Republic of the China Nation | Ministry of National Defense |
-| 中华民族联邦共和国国土安全部 | 国安部 | Ministry of Homeland Security of the Federal Republic of the China Nation | Ministry of Homeland Security |
-| 中华民族联邦共和国公民生活保障部 | 民生部 | Ministry of Citizen Welfare of the Federal Republic of the China Nation | Ministry of Citizen Welfare |
-| 中华民族联邦共和国住房与城镇建设部 | 住建部 | Ministry of Housing and Urban Development of the Federal Republic of the China Nation | Ministry of Housing and Urban Development |
-| 中华民族联邦共和国农业与农村发展部 | 农业部 | Ministry of Agriculture and Rural Development of the Federal Republic of the China Nation | Ministry of Agriculture |
-| 中华民族联邦共和国商务与市场贸易部 | 商贸部 | Ministry of Commerce and Market Trade of the Federal Republic of the China Nation | Ministry of Commerce |
-| 中华民族联邦共和国财政与税务部 | 财税部 | Ministry of Finance and Taxation of the Federal Republic of the China Nation | Ministry of Finance and Taxation |
-| 中华民族联邦共和国能源与环保发展部 | 能源部 | Ministry of Energy and Environmental Development of the Federal Republic of the China Nation | Ministry of Energy |
-| 中华民族联邦共和国交通运输部 | 交通部 | Ministry of Transport of the Federal Republic of the China Nation | Ministry of Transport |
+| 中华民族联邦共和国外事交流部 | 外交部 | Ministry of Foreign Affairs and Exchange of the Federal Republic of the Chinese Nation | Ministry of Foreign Affairs |
+| 中华民族联邦共和国国家防务部 | 国防部 | Ministry of National Defense of the Federal Republic of the Chinese Nation | Ministry of National Defense |
+| 中华民族联邦共和国国土安全部 | 国安部 | Ministry of Homeland Security of the Federal Republic of the Chinese Nation | Ministry of Homeland Security |
+| 中华民族联邦共和国公民生活保障部 | 民生部 | Ministry of Citizen Welfare of the Federal Republic of the Chinese Nation | Ministry of Citizen Welfare |
+| 中华民族联邦共和国住房与城镇建设部 | 住建部 | Ministry of Housing and Urban Development of the Federal Republic of the Chinese Nation | Ministry of Housing and Urban Development |
+| 中华民族联邦共和国农业与农村发展部 | 农业部 | Ministry of Agriculture and Rural Development of the Federal Republic of the Chinese Nation | Ministry of Agriculture |
+| 中华民族联邦共和国商务与市场贸易部 | 商贸部 | Ministry of Commerce and Market Trade of the Federal Republic of the Chinese Nation | Ministry of Commerce |
+| 中华民族联邦共和国财政与税务部 | 财税部 | Ministry of Finance and Taxation of the Federal Republic of the Chinese Nation | Ministry of Finance and Taxation |
+| 中华民族联邦共和国能源与环保发展部 | 能源部 | Ministry of Energy and Environmental Development of the Federal Republic of the Chinese Nation | Ministry of Energy |
+| 中华民族联邦共和国交通运输部 | 交通部 | Ministry of Transport of the Federal Republic of the Chinese Nation | Ministry of Transport |
 
 ### 4.3 监察机构
 
 | 中文全称 | 中文简称 | 英文全称 | 英文简称 |
 |---|---|---|---|
-| 中华民族联邦共和国监察院联邦廉政署 | 联邦廉政署 | Federal Integrity Agency of the Control Yuan of the Federal Republic of the China Nation | Federal Integrity Agency |
-| 中华民族联邦共和国监察院联邦审计署 | 联邦审计署 | Federal Audit Agency of the Control Yuan of the Federal Republic of the China Nation | Federal Audit Agency |
-| 中华民族联邦共和国监察院联邦调查署 | 联邦调查署 | Federal Investigation Agency of the Control Yuan of the Federal Republic of the China Nation | Federal Investigation Agency |
+| 中华民族联邦共和国监察院联邦廉政署 | 联邦廉政署 | Federal Integrity Agency of the Control Yuan of the Federal Republic of the Chinese Nation | Federal Integrity Agency |
+| 中华民族联邦共和国监察院联邦审计署 | 联邦审计署 | Federal Audit Agency of the Control Yuan of the Federal Republic of the Chinese Nation | Federal Audit Agency |
+| 中华民族联邦共和国监察院联邦调查署 | 联邦调查署 | Federal Investigation Agency of the Control Yuan of the Federal Republic of the Chinese Nation | Federal Investigation Agency |
 
 ### 4.4 省级模板
 
@@ -164,8 +164,8 @@
 
 | 机构码 | province_code | city_code | town_code | 中文全称 | 中文简称 | 英文全称规范 | 英文简称规范 |
 |---|---|---|---|---|---|---|---|
-| NSN | ZS | 001 | 空 | 中华民族联邦共和国立法院参议会 | 国家参议会 | Senate of the Legislative Yuan of the Federal Republic of the China Nation | National Senate |
-| NRP | ZS | 001 | 空 | 中华民族联邦共和国立法院众议会 | 国家众议会 | House of Representatives of the Legislative Yuan of the Federal Republic of the China Nation | National House of Representatives |
+| NSN | ZS | 001 | 空 | 中华民族联邦共和国立法院参议会 | 国家参议会 | Senate of the Legislative Yuan of the Federal Republic of the Chinese Nation | National Senate |
+| NRP | ZS | 001 | 空 | 中华民族联邦共和国立法院众议会 | 国家众议会 | House of Representatives of the Legislative Yuan of the Federal Republic of the Chinese Nation | National House of Representatives |
 | FDA | ZS | 001 | 空 | 公民生活保障部食品药品监督管理局 | 食品药品监管局 | Food and Drug Administration of the Ministry of Citizen Welfare | Food and Drug Administration |
 | NGB | ZS | 001 | 空 | 国土安全部国民警卫局 | 国民警卫局 | National Guard Bureau of the Ministry of Homeland Security | National Guard Bureau |
 | ARM | ZS | 001 | 空 | 国家防务部陆军部 | 陆军部 | Department of the Army of the Ministry of National Defense | Department of the Army |
@@ -173,11 +173,11 @@
 | AIR | ZS | 001 | 空 | 国家防务部空军部 | 空军部 | Department of the Air Force of the Ministry of National Defense | Department of the Air Force |
 | SPF | ZS | 001 | 空 | 国家防务部天军部 | 天军部 | Department of the Space Force of the Ministry of National Defense | Department of the Space Force |
 | JOS | ZS | 001 | 空 | 国家防务部联合作战参谋部 | 联合作战参谋部 | Joint Operations Staff of the Ministry of National Defense | Joint Operations Staff |
-| ARC | ZS | 001 | 空 | 中华民族联邦共和国陆军司令部 | 陆军司令部 | Army Command of the Federal Republic of the China Nation | Army Command |
-| NVC | ZS | 001 | 空 | 中华民族联邦共和国海军司令部 | 海军司令部 | Navy Command of the Federal Republic of the China Nation | Navy Command |
-| AFC | ZS | 001 | 空 | 中华民族联邦共和国空军司令部 | 空军司令部 | Air Force Command of the Federal Republic of the China Nation | Air Force Command |
-| SFC | ZS | 001 | 空 | 中华民族联邦共和国天军司令部 | 天军司令部 | Space Force Command of the Federal Republic of the China Nation | Space Force Command |
-| NGC | ZS | 001 | 空 | 中华民族联邦共和国国民警卫队司令部 | 国民警卫队司令部 | National Guard Command of the Federal Republic of the China Nation | National Guard Command |
+| ARC | ZS | 001 | 空 | 中华民族联邦共和国陆军司令部 | 陆军司令部 | Army Command of the Federal Republic of the Chinese Nation | Army Command |
+| NVC | ZS | 001 | 空 | 中华民族联邦共和国海军司令部 | 海军司令部 | Navy Command of the Federal Republic of the Chinese Nation | Navy Command |
+| AFC | ZS | 001 | 空 | 中华民族联邦共和国空军司令部 | 空军司令部 | Air Force Command of the Federal Republic of the Chinese Nation | Air Force Command |
+| SFC | ZS | 001 | 空 | 中华民族联邦共和国天军司令部 | 天军司令部 | Space Force Command of the Federal Republic of the Chinese Nation | Space Force Command |
+| NGC | ZS | 001 | 空 | 中华民族联邦共和国国民警卫队司令部 | 国民警卫队司令部 | National Guard Command of the Federal Republic of the Chinese Nation | National Guard Command |
 
 ### 5.2 省级非常量机构
 

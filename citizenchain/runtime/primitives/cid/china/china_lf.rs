@@ -17,7 +17,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         cid_full_name: "中华民族联邦共和国立法院",
         cid_short_name: "国家立法院",
-        cid_full_name_en: "Legislative Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Legislative Yuan of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "National Legislative Yuan",
         cid_number: "ZS001-NLG0H-084852748-2026",
         main_account: hex!("d60e9160bf500880ed25e0f51b4e2a7e9063cdabb19100d5aca65384ff4e9086"),
@@ -26,7 +26,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
         cid_full_name: "中华民族联邦共和国立法院参议会",
         cid_short_name: "国家参议会",
-        cid_full_name_en: "Senate of the Legislative Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Senate of the Legislative Yuan of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "National Senate",
         cid_number: "ZS001-NSN06-733750940-2026",
         main_account: hex!("727b280db6e8318744539f56bd6404eddf24c6f00a7857e535ba3ba68467f2c4"),
@@ -36,7 +36,7 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_full_name: "中华民族联邦共和国立法院众议会",
         cid_short_name: "国家众议会",
         cid_full_name_en:
-            "House of Representatives of the Legislative Yuan of the Federal Republic of the China Nation",
+            "House of Representatives of the Legislative Yuan of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "National House of Representatives",
         cid_number: "ZS001-NRP05-206540498-2026",
         main_account: hex!("43c91136193acecfffd8e89ba6f9837799867f4156c59f1ec3144e4d3aada624"),

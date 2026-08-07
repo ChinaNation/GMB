@@ -137,7 +137,7 @@
 ## 4. cid/code.rs 代码常量规则
 
 - `cid/code.rs` 是国家码、省级行政区码和 CID 机构码的全仓唯一真源。
-- 国家码使用 `CountryCode = [u8; 2]`,当前 `COUNTRY_CN = CN`,并携带 `country_full_name / country_short_name`。
+- 国家码是两字节值 `CN`,类型 `CountryCode = [u8; 2]`,由常量 `COUNTRY_CN` 承载(常量名不是国家码);元数据携带 `country_full_name / country_full_name_en / country_short_name / country_short_name_en`(中华民族联邦共和国 / Federal Republic of the Chinese Nation / 中华联邦 / Chinese Federation)。
 - 省级行政区码使用 `ProvinceCode = [u8; 2]`,当前 43 省来自 `citizenchain/onchina/src/cid/china/china.sqlite` 的抽离结果;OnChina 加载 `china.sqlite` 时必须断言 SQLite 省表与 `PROVINCE_CODE_INFOS` 一致。
 - 市、镇和镇下完整地址代码不进入 runtime primitives;它们继续由 OnChina `china.sqlite` 按省管理。
 - 机构码使用 `InstitutionCode = [u8; 4]`,3 字符码右补 `0`;全部 104 个机构码在 `INSTITUTION_CODE_INFOS` 中维护,分组只用 A-I 注释表达,不得增加第二套 group/kind/admin_level 数据字段。

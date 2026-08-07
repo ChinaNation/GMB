@@ -28,7 +28,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     ChinaCb {
         cid_full_name: "中华民族联邦共和国公民储备委员会",
         cid_short_name: "国家储委会",
-        cid_full_name_en: "Citizen Reserve Committee of the Federal Republic of the China Nation",
+        cid_full_name_en: "Citizen Reserve Committee of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "National Reserve Committee",
         cid_number: "LN001-NRC0G-944805165-2026",
         main_account: hex!("7c0c099ee4df10c5bd3f618ddf132b6d15390fa27d2c1369f70aeb6b5f3907e5"),

@@ -28,7 +28,9 @@ function extractStructs(source, structName) {
   while ((match = pattern.exec(source)) !== null) {
     blocks.push(match[1]);
   }
-  return blocks;
+  // 数据块必含带引号的 cid_number；懒惰正则会把 struct 定义体与后续
+  // 非数据常量(如 FscGenesisAssignment)误捕成块,在此过滤。
+  return blocks.filter((block) => /cid_number:\s*"/.test(block));
 }
 
 function dartString(value) {

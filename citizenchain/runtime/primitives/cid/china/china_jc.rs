@@ -17,7 +17,7 @@ pub const CHINA_JC: &[ChinaJc] = &[
     ChinaJc {
         cid_full_name: "中华民族联邦共和国监察院",
         cid_short_name: "国家监察院",
-        cid_full_name_en: "Control Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Control Yuan of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "National Control Yuan",
         cid_number: "ZS001-NSP0F-545692179-2026",
         main_account: hex!("0f36e6b227e533e6c5893d4573e5060d609fa82b6777f964727fd43ad4f6b7fb"),
@@ -26,7 +26,7 @@ pub const CHINA_JC: &[ChinaJc] = &[
     ChinaJc {
         cid_full_name: "中华民族联邦共和国监察院联邦廉政署",
         cid_short_name: "联邦廉政署",
-        cid_full_name_en: "Federal Integrity Agency of the Control Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Federal Integrity Agency of the Control Yuan of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Federal Integrity Agency",
         cid_number: "ZS001-FAC0I-000239513-2026",
         main_account: hex!("d93c9b0db5a68ae6e6013c5da0ef0e44f31fd6914f4388ad7f60b3dcccfa7a8e"),
@@ -35,7 +35,7 @@ pub const CHINA_JC: &[ChinaJc] = &[
     ChinaJc {
         cid_full_name: "中华民族联邦共和国监察院联邦审计署",
         cid_short_name: "联邦审计署",
-        cid_full_name_en: "Federal Audit Agency of the Control Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Federal Audit Agency of the Control Yuan of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Federal Audit Agency",
         cid_number: "ZS001-FAU0W-535248451-2026",
         main_account: hex!("3f42863801c4c61fb89bdae34cbbc9b0a5d29ebbb345093d34bb6a69e69ba6cb"),
@@ -44,7 +44,7 @@ pub const CHINA_JC: &[ChinaJc] = &[
     ChinaJc {
         cid_full_name: "中华民族联邦共和国监察院联邦调查署",
         cid_short_name: "联邦调查署",
-        cid_full_name_en: "Federal Investigation Agency of the Control Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Federal Investigation Agency of the Control Yuan of the Federal Republic of the Chinese Nation",
         cid_short_name_en: "Federal Investigation Agency",
         cid_number: "ZS001-FIV0U-103804644-2026",
         main_account: hex!("1d0720a1e48c46041108cc1d3eb8673ad359fab395c582a9ad4387e1b6513278"),

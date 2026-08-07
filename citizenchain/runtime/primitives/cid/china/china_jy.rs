@@ -16,7 +16,7 @@ pub struct ChinaJy {
 pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
     cid_full_name: "中华民族联邦共和国公民教育委员会",
     cid_short_name: "国家教委会",
-    cid_full_name_en: "Citizen Education Committee of the Federal Republic of the China Nation",
+    cid_full_name_en: "Citizen Education Committee of the Federal Republic of the Chinese Nation",
     cid_short_name_en: "National Education Committee",
     cid_number: "BP001-NED0H-689724263-2026",
     main_account: hex!("506ac991dcbcaa7e09bece1696b425e0c4e73e0e0610b270a4343f8a99dd1bc1"),

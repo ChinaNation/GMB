@@ -372,6 +372,19 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 规范 manifest 原始字节 | `manifest_bytes_base64` / `manifest_bytes` / `manifestBytes` | HTTP JSON / Isar / Dart 字段 | HTTP JSON 仅以 base64 无损承载，Isar/Dart 保存解码后的原始 UTF-8 JSON 字节；三者均指参与 `content_hash` 计算的同一原始字节，禁止解码重编码后替换 |
 | 广场发布状态 | `post_state` / `postState` | API/D1/Isar 字段 / Dart 字段 | 与 `square_posts.post_state` 同义，本地副本当前只允许 `published`；不得另造泛化 `status` |
 
+## 5.7 国名四项定稿（2026-08-06）
+
+| 项 | 定稿 | 载体 |
+|---|---|---|
+| 国家码 | CN | 两字节码值,常量 `COUNTRY_CN` 承载（真源 `primitives/cid/code.rs`;常量名不是国家码） |
+| 中文全称 | 中华民族联邦共和国 | `COUNTRY_CN_INFO.country_full_name` |
+| 英文全称 | Federal Republic of the Chinese Nation | `COUNTRY_CN_INFO.country_full_name_en` |
+| 中文简称 | 中华联邦 | `COUNTRY_CN_INFO.country_short_name` |
+| 英文简称 | Chinese Federation | `COUNTRY_CN_INFO.country_short_name_en` |
+
+- 旧英文形态 `Federal Republic of the China Nation` / `the China Nation` / `China Federation` 已于 2026-08-06 全仓清除（constitution.scale、cid 码表、白皮书、宪法外壳、生成物、文档），禁止回流。
+- 机构英文全称后缀统一 `of the Federal Republic of the Chinese Nation`；缩写 FRCN 与域名 `crcfrcn.com` 不变。
+
 ## 6. 新命名登记模板
 
 新增命名时，按这个模板登记：

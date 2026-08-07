@@ -15,7 +15,9 @@ pub type InstitutionCode = [u8; 4];
 pub struct CountryCodeInfo {
     pub country_code: CountryCode,
     pub country_full_name: &'static str,
+    pub country_full_name_en: &'static str,
     pub country_short_name: &'static str,
+    pub country_short_name_en: &'static str,
 }
 
 /// 省行政区代码元数据。
@@ -66,7 +68,9 @@ pub const COUNTRY_CN: CountryCode = *b"CN";
 pub const COUNTRY_CN_INFO: CountryCodeInfo = CountryCodeInfo {
     country_code: COUNTRY_CN,
     country_full_name: "中华民族联邦共和国",
+    country_full_name_en: "Federal Republic of the Chinese Nation",
     country_short_name: "中华联邦",
+    country_short_name_en: "Chinese Federation",
 };
 
 /// 从文本机构码构造链上字节表示。
@@ -1064,7 +1068,12 @@ mod tests {
     fn country_code_uses_constitution_name() {
         assert_eq!(country_code_text(&COUNTRY_CN), Some("CN"));
         assert_eq!(COUNTRY_CN_INFO.country_full_name, "中华民族联邦共和国");
+        assert_eq!(
+            COUNTRY_CN_INFO.country_full_name_en,
+            "Federal Republic of the Chinese Nation"
+        );
         assert_eq!(COUNTRY_CN_INFO.country_short_name, "中华联邦");
+        assert_eq!(COUNTRY_CN_INFO.country_short_name_en, "Chinese Federation");
     }
 
     #[test]

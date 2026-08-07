@@ -11,11 +11,11 @@
    - 国家防务部空军部 / 空军部 / Department of the Air Force of the Ministry of National Defense / Department of the Air Force / `AIR`
    - 国家防务部天军部 / 天军部 / Department of the Space Force of the Ministry of National Defense / Department of the Space Force / `SPF`
    - 国家防务部联合作战参谋部 / 联合作战参谋部 / Joint Operations Staff of the Ministry of National Defense / Joint Operations Staff / `JOS`
-   - 中华民族联邦共和国陆军司令部 / 陆军司令部 / Army Command of the Federal Republic of the China Nation / Army Command / `ARC`
-   - 中华民族联邦共和国海军司令部 / 海军司令部 / Navy Command of the Federal Republic of the China Nation / Navy Command / `NVC`
-   - 中华民族联邦共和国空军司令部 / 空军司令部 / Air Force Command of the Federal Republic of the China Nation / Air Force Command / `AFC`
-   - 中华民族联邦共和国天军司令部 / 天军司令部 / Space Force Command of the Federal Republic of the China Nation / Space Force Command / `SFC`
-   - 中华民族联邦共和国国民警卫队司令部 / 国民警卫队司令部 / National Guard Command of the Federal Republic of the China Nation / National Guard Command / `NGC`
+   - 中华民族联邦共和国陆军司令部 / 陆军司令部 / Army Command of the Federal Republic of the Chinese Nation / Army Command / `ARC`
+   - 中华民族联邦共和国海军司令部 / 海军司令部 / Navy Command of the Federal Republic of the Chinese Nation / Navy Command / `NVC`
+   - 中华民族联邦共和国空军司令部 / 空军司令部 / Air Force Command of the Federal Republic of the Chinese Nation / Air Force Command / `AFC`
+   - 中华民族联邦共和国天军司令部 / 天军司令部 / Space Force Command of the Federal Republic of the Chinese Nation / Space Force Command / `SFC`
+   - 中华民族联邦共和国国民警卫队司令部 / 国民警卫队司令部 / National Guard Command of the Federal Republic of the Chinese Nation / National Guard Command / `NGC`
 
 ## 范围
 
