@@ -353,7 +353,7 @@ check_repository_version_tags() {
     # 中文注释：状态中已删除的旧路径不是仓库目标态；Android ABI 与资源限定符属于官方目录语法。
     [[ -e "$file" ]] || continue
     case "$file" in
-      citizenapp/smoldotpow/*|citizenapp/cloudflare/worker-configuration.d.ts|citizenapp/assets/topup/walletconnect.bundle.js|citizenchain/onchina/frontend/dist/*|citizenchain/node/frontend/dist/*|*/target/*|*/build/*|*/android/app/src/main/jniLibs/arm64-v8a/*|*/android/app/src/main/res/*-v[0-9]*/*|.github/scripts/check-ai-guardrails.sh) continue ;;
+      citizenapp/smoldotpow/*|citizenapp/cloudflare/worker-configuration.d.ts|citizenapp/assets/topup/walletconnect.bundle.js|citizenchain/onchina/frontend/dist/*|citizenchain/node/frontend/dist/*|*/target/*|*/build/*|citizenchain/node/chainspecs/*|citizenapp/assets/chainspec.json|citizenapp/assets/light_sync_state.json|citizenapp/assets/public_institutions/*|*/android/app/src/main/jniLibs/arm64-v8a/*|*/android/app/src/main/res/*-v[0-9]*/*|.github/scripts/check-ai-guardrails.sh) continue ;;
     esac
     if printf '%s\n' "$file" | grep -Eq '(^|/)[^/]*[._-]v[0-9]+([^0-9]|$)'; then
       version_tag_hits+=("${file}: 文件路径含非 QR_V1 的版本后缀")

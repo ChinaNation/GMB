@@ -173,15 +173,14 @@
 - 创世配置：正式安装包只内置冻结 plain chainspec，不携带 RocksDB。首启必须从该
   chainspec 本地物化块 0，并在进入运行态前核验创世哈希；preview 或 release
   `genesis-state` 都不得进入四平台安装包。release 状态包只作为正式创世审计制品保留。
-- 当前唯一正式创世锚点（2026-08-01，runtime 源提交
-  `9c2ec97b91b3236c6268ddd3057a4700a4591cd2`，冻结资产提交
-  `7cea3885783064b5c02850e23d48e41e1fce7065`，GitHub
-  `CitizenChain WASM` run `30721127038`）：
-  `genesis_hash=0x157558224b682de0384fd50dea0735aff55795f6d145993233c901cf1258671d`、
-  `state_root=0x363d9c4836875a1a8270940caef743524350a6341199ec75966c3b25065bbe80`、
-  `runtime_wasm_hash=2b329862be596f8844457452c37f0beac89c80fec22b101132b35e1b04324a36`、
-  `chainspec_hash=b239671c5ed930d39ed69aea9fcc09bfaacc299f3456d19af0a3ed61ab2f3e9c`、
-  `light_sync_state_hash=aa24f11ef550951971bfee279c50f8d7180cb32c6556455b0b07fc45a7a4defe`、
+- 当前唯一正式创世锚点（2026-08-07，`spec_version=0`，runtime 源提交
+  `a00f19f09c91b6f22a2b01cc1a48bb82b76ca4eb`，冻结资产提交
+  `937889e86`，GitHub `CitizenChain WASM` run `31157796731`、artifact id `8986853331`）：
+  `genesis_hash=0x18847a5dfd263272f2e7727836fe6582f8c4463ff48609df7b96d5e4d9dd24dd`、
+  `state_root=0x1f74a2ca094fc3ebb2143f504d807a6b4f4f9b0a3d13ac808ae84efc7cb12111`、
+  `runtime_wasm_hash=3d17b089dd8051be3aee9cd53d50fe7a67f81ba3c9027c37cc066e5836f60257`、
+  `chainspec_hash=312a64a1b4b8abda6b688a8d127c14abe4ef410c74623fc524f9b710b1e234ab`、
+  `light_sync_state_hash=014802836a0f6e01a9f1bf7173b8e04c9df8fc3f057565f855abdccdc7361ab6`、
   `public_institution_root=c21f99f5bd40bc3c9fcee9439de9f6902c98212b2510dd7440c9630284ab939f`。
 - 同一次正式 bake 已通过公民宪法和 CI `:code` 校验并在 131 秒完成真实块 0 物化；RPC
   返回上述 block#0/state root，随后生成并交叉校验 App/checkpoint/43 省分片/Cloudflare
