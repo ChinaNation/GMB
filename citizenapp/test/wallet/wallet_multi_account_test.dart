@@ -12,6 +12,7 @@ import 'package:citizenapp/wallet/core/native_sr25519.dart';
 
 import '../support/fake_secure_seed_store.dart';
 import '../support/isar_test_env.dart';
+import '../support/smoldot_native_probe.dart';
 
 const _mnemonicA =
     'legal winner thank year wave sausage worth useful legal winner thank yellow';
@@ -303,5 +304,5 @@ void main() {
       expect((await manager.getAccounts(masterId)).length, 2);
       expect(fakeStore.accountKeys.length, 2);
     });
-  });
+  }, skip: smoldotNativeSkipReason());
 }

@@ -19,6 +19,8 @@ import 'package:substrate_bip39/substrate_bip39.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/wallet/core/native_sr25519.dart';
 
+import '../support/smoldot_native_probe.dart';
+
 /// 固定测试助记词(substrate dev 助记词,全网公开,仅测试用)。
 const String kDevPhrase =
     'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
@@ -74,11 +76,14 @@ List<int> _childMiniSecret(List<int> seed, int index) {
 }
 
 void main() {
+  // 全部用例走原生派生，CI 宿主无 libsmoldot 时统一跳过（真机/APK 构建照跑）。
+  final skipNative = smoldotNativeSkipReason();
+
   test('junction 硬派生对齐 substrate 权威 Alice', () async {
     final alice = await Keyring.sr25519.fromUri('$kDevPhrase//Alice');
     alice.ss58Format = kSs58;
     expect(_hex(alice.bytes().toList(growable: false)), kAlicePub);
-  });
+  }, skip: skipNative);
 
   test('model B 核心:fromSeed(childMiniSecret) == <助记词>//index', () async {
     final ms = await _miniSecret(kDevPhrase);
@@ -99,7 +104,7 @@ void main() {
         reason: '//$index ss58 不一致',
       );
     }
-  });
+  }, skip: skipNative);
 
   test('//0 //1 //2 金标逐字节钉死(accountId / ss58 / childMiniSecret)', () async {
     final ms = await _miniSecret(kDevPhrase);
@@ -116,5 +121,5 @@ void main() {
       expect('0x${_hex(child)}', expectedChild,
           reason: '//$index childMiniSecret 漂移');
     }
-  });
+  }, skip: skipNative);
 }

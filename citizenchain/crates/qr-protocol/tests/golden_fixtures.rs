@@ -13,6 +13,9 @@
 //! - `account_id`(`n`)必须是小写 `0x` + 64 hex
 //! - 签名请求的动作码必须在 registry 在册(否则签名端按铁律必须拒签)
 
+// 金标夹具读取失败必须立即中止测试，断言式解包仅限本测试目标。
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::fs;

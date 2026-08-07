@@ -124,3 +124,17 @@ junction 解析属 SCALE 编码而非密码学、不慢，且已被金标测试�
 - CitizenWallet 走的是另一条路径：它有独立的 `libcitizenwallet_signer`，CI 在
   `flutter test` 前用 `./scripts/build-signer-native.sh host` 真编宿主库，金标派生测试
   不 skip、每轮真跑。两个产品的原生库互不共用，不要互相套用结论。
+
+### skip 守卫的覆盖范围
+
+`test/wallet/` 下依赖原生派生的用例已全部接入守卫：
+
+- `derivation_golden_test.dart`：`main()` 内所有用例统一取一次 `smoldotNativeSkipReason()`
+  并逐个传 `skip:`（该文件没有 group 层）
+- `wallet_multi_account_test.dart`：`WalletManager 多账户` group
+- `wallet_manager_test.dart`：热钱包创建/导入/删除、实际缺钥一次生成、统一签名、
+  设备私钥失效 fail-closed 四个 group
+
+**验证方式**：本地临时移走 `citizenapp/rust/target/release/libsmoldot.dylib` 跑一遍
+（等价 CI 宿主环境），确认全绿；再放回去跑一遍，确认用例真跑而不是被 skip 掩盖。
+两种环境都过才算验完。

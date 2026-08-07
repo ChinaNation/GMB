@@ -24,3 +24,17 @@
 `qr-protocol/tests/golden_fixtures.rs` 与 `repo_guard.rs` 是 QR 协议的跨端锁步夹具；
 改动 QR 协议字段序时，它们与四端（onchina、citizenapp、citizenwallet、node）必须同改，
 另有 `.github/scripts/check-golden-vectors-sync.mjs` 在 CI 侧校验真源与各端镜像一致。
+
+## 测试文件的 clippy 豁免
+
+CI 用 `cargo clippy --workspace --all-targets --locked -- -D warnings`，`expect_used` /
+`unwrap_used` 在测试目标里同样是 error。测试中断言式解包是合理的（读夹具失败必须立即中止），
+因此各测试文件顶部统一声明豁免：
+
+```rust
+// <读取失败必须立即中止测试的理由>
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+```
+
+`repo_guard.rs` 一直有这行，`golden_fixtures.rs` 漏了导致 CI clippy 失败；本地不带
+`-D warnings` 跑 clippy 不会暴露该问题，验证时必须用与 CI 完全相同的命令。

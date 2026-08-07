@@ -38,3 +38,31 @@
 - 三端 CI 全绿并产出可部署安装包
 - 44 节点创世哈希与上述锚点一致
 - 全网从块 0 正常出块
+
+## 三端 CI 修复记录（2026-08-07）
+
+创世资产推送后三端 CI 全部失败，逐轮定位并修复：
+
+1. **文档门禁两级规则**：先查"有无文档更新"，再查"每个改动文件有无对应模块回写"
+   （`.github/workflows/*` → `memory/07-ai/`、`citizenapp/**` → `memory/05-modules/citizenapp/`、
+   `citizenchain/**` → `memory/05-modules/citizenchain/`）；改守卫脚本等真实开发变更还要求任务卡。
+   创世冻结产物（chainspec、light_sync_state、公权机构缓存）已加入豁免——它们是 bake 生成物，
+   与 `dist/`、`target/` 同类，此前每次创世都被误判为"代码变更缺文档"。
+2. **Rust 格式**：`cargo fmt --all` 必须全 workspace 跑；只格式化本次改动会把既有偏差留到下次。
+3. **clippy `-D warnings`**：`qr-protocol/tests/golden_fixtures.rs` 缺
+   `#![allow(clippy::expect_used, clippy::unwrap_used)]`（`repo_guard.rs` 一直有）。
+   本地不带 `-D warnings` 跑不暴露，必须用 CI 同款命令验证。
+4. **CitizenWallet 宿主原生库**：`native_sr25519.dart` 的 host 路径硬编码 `.dylib`，
+   Linux CI 产出 `.so` 永远找不到；且 CI 只编 Android ARM、没编宿主库。
+   已改为按平台取扩展名，`build-signer-native.sh` 的 `macos` 目标泛化为 `host`，
+   workflow 在 `flutter test` 前编宿主库。金标派生测试真跑不 skip。
+5. **CitizenApp native skip 守卫**：`test/wallet/` 下 4 个 group + 金标测试全部用例接入
+   `smoldotNativeSkipReason()`。验证用「移走 libsmoldot 跑一遍 + 放回去跑一遍」双环境确认。
+6. **Worker 类型定义**：`wrangler.toml` 被 bake 改动后 `worker-configuration.d.ts` 过期，
+   需 `npm run generate:types` 重新生成。
+
+**验证纪律**：推 CI 前必须用与 CI 完全相同的命令本地跑通
+（`BASE_REF=HEAD^ ./.github/scripts/check-ai-guardrails.sh`、
+`cargo clippy --workspace --all-targets --locked -- -D warnings`、
+`cargo fmt --all -- --check`、各端 `flutter test` 全量、`npm run types:check`），
+禁止拿 CI 当试错场。

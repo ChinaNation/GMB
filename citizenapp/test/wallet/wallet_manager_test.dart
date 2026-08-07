@@ -543,7 +543,7 @@ void main() {
       expect(await manager.getWallets(), isEmpty);
       expect(fakeStore.accountKeys, isEmpty);
     });
-  });
+  }, skip: smoldotNativeSkipReason());
 
   group('实际缺钥一次生成：页面门禁不参与', () {
     tearDown(() => WalletManager.subkeyRegistrar = null);
