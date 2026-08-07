@@ -138,3 +138,13 @@ junction 解析属 SCALE 编码而非密码学、不慢，且已被金标测试�
 **验证方式**：本地临时移走 `citizenapp/rust/target/release/libsmoldot.dylib` 跑一遍
 （等价 CI 宿主环境），确认全绿；再放回去跑一遍，确认用例真跑而不是被 skip 掩盖。
 两种环境都过才算验完。
+
+### iOS workspace 必须入库
+
+`ios/Runner.xcworkspace/` 的 **本体必须进版本库**：`contents.xcworkspacedata` 与
+`xcshareddata/{IDEWorkspaceChecks.plist,WorkspaceSettings.xcsettings}` 三个文件，
+与 CitizenWallet 保持同一结构。
+
+此前 `citizenapp/.gitignore` 整目录忽略了 `ios/Runner.xcworkspace/`，CI 检出后没有
+workspace，`flutter build ios` 直接报 `Xcode workspace not found`（CitizenWallet 未忽略，
+所以它的 iOS job 一直是绿的）。`.gitignore` 现只忽略各人本机的 `xcuserdata/`。

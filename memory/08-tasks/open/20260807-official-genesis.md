@@ -66,3 +66,10 @@
 `cargo clippy --workspace --all-targets --locked -- -D warnings`、
 `cargo fmt --all -- --check`、各端 `flutter test` 全量、`npm run types:check`），
 禁止拿 CI 当试错场。
+
+7. **CitizenApp iOS workspace 未入库**：`citizenapp/.gitignore` 整目录忽略了
+   `ios/Runner.xcworkspace/`，CI 检出后无 workspace，`flutter build ios` 报
+   `Xcode workspace not found`。CitizenWallet 未忽略该目录，所以它的 iOS job 一直是绿的。
+   已改为只忽略 `xcuserdata/`，并补入 `contents.xcworkspacedata` 与
+   `xcshareddata/{IDEWorkspaceChecks.plist,WorkspaceSettings.xcsettings}` 三个文件，
+   与 CitizenWallet 结构对齐。

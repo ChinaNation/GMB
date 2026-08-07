@@ -14,7 +14,10 @@ build/
 
 # iOS
 ios/Pods/
-ios/Runner.xcworkspace/
+# Runner.xcworkspace 本体必须入库：flutter build ios 要用它，整目录忽略会让 CI
+# 检出后报 “Xcode workspace not found”。只忽略各人本机的用户态数据。
+ios/Runner.xcworkspace/xcuserdata/
+ios/Runner.xcodeproj/xcuserdata/
 
 # Android
 android/.gradle/
