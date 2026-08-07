@@ -169,8 +169,9 @@ class PayloadDecoder {
     [..._gmbPrefix, _opSignDecrypt],
   );
   // 'onchina_admin_governance' 是链上中国平台管理员 payload 的业务域(JSON
-  // envelope 的 domain 字段值),不是 signing_message 的哈希签名域 —— 整段 JSON
-  // 字节由 sr25519 直接签名,故不并入 op_tag 注册表。
+  // envelope 的 domain 字段值),只用于**识别与展示**;签名字节另由 qr_signer 走
+  // signing_message(OP_SIGN_ONCHINA_ADMIN=0x20, 整段 JSON UTF-8) 构造。
+  // 2026-08-06 之前这段 JSON 是裸文本直签,域分离只靠本字符串字段 —— 已收敛。
   static const String _onchinaAdminActionDomain = 'onchina_admin_governance';
 
   static DecodedPayload? decode(String payloadHex) {

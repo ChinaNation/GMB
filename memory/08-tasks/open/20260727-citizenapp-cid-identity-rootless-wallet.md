@@ -447,12 +447,13 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
 - **UI 口径**：通讯录卡片公开昵称为主标题；`备注：`、`CID：`、`SS58：` 分行展示；修改动作只编辑私人备注。资料页和公开资料缓存直接按联系人 CID 寻址，不再对已有联系人重复做 account→CID 链读。
 
 ## 待办 / 未决
-- **S5 创世协同**：程伟永久 CID
+- **S5 创世协同**：S5-A 已用提交
+  `3ae8f521461280eb6215646f8b7b146aac1d0449` 完成 CI WASM 冻结。程伟永久 CID
   `CN220-CTZN2-198805200-2026` 已作为身份主键固定保留，不再按当前授权账户重派；
   `citizen-identity` 创世配置现已原子写入 Active 登记、CID→AccountId 与
-  AccountId→CID 三项闭环。剩余的是使用同一份 CI WASM 重生正式 chainspec、
+  AccountId→CID 三项闭环。剩余 S5-B 必须使用该 CI artifact 重生正式 chainspec、
   CitizenApp 轻链资产、公权机构快照与 Cloudflare 创世哈希；禁止各端自行生成不同
-  创世锚点。
+  创世锚点或改用本地重编 WASM。
 - **后置测试**：正式资产重生后再执行自助占号、finalized 换绑接管、五大功能门控和真实管理员
   QR 会话闭环；当前不以本地 fresh 链结果冒充正式发布验收。
 - **独立任务**：联系人、聊天正文、MLS 密钥和附件的本地静止态加密归
@@ -480,6 +481,23 @@ S7.1(无根派生+存储 biometricOnly)+ S7.2(多账户批量+单钱包)+ S7.3(�
   `commitment=blake2_256(account_id)`、居住省市为空且无吊销。
 - fresh 链进程已停止，RPC 19944 已关闭；临时链目录从 `/tmp` 移入 macOS 废纸篓，
   源路径不存在且仍可恢复。
+
+## S5-A CI WASM 基线冻结（2026-07-29，完成）
+
+- 已建立并推送分支 `codex/citizen-identity-genesis-s5`；分支基线和已确认提交均为
+  `3ae8f521461280eb6215646f8b7b146aac1d0449`。
+- GitHub Actions `CitizenChain WASM` 由 `workflow_dispatch` 触发，run
+  `30469300661`、job `90635077369` 均以 `success` 完成；源码版本校验、全量旧
+  编译产物清理、WASM 编译和 artifact 上传均通过。
+- 唯一 artifact 为 `citizenchain-wasm`，artifact id `8731202299`，归档大小
+  `5,057,224` 字节，归档摘要
+  `sha256:bac5bebd97740075ed1313938b8103179cc3021d9fd7669e0c65e32ded578b71`，
+  当前未过期，计划于 `2026-08-28T16:17:25Z` 到期。
+- S5-A 未下载 artifact、未生成或覆盖正式 chainspec、轻链状态、公权机构快照和
+  Cloudflare 配置；这些写入仅在 S5-B 方案单独确认后执行。
+- workflow 有一条非阻断告警：`actions/upload-artifact@v4` 声明的 Node.js 20
+  运行时已由 GitHub runner 强制使用 Node.js 24。该告警不影响本次 artifact，
+  但应作为独立工作流维护项处理，不夹带进 S5-B 创世资产重生。
 
 ## S6 奖励、投票、候选人与竞选发布安全收口（2026-07-30，完成）
 

@@ -1150,16 +1150,35 @@ where
         residence_city_code: b"ZS01".to_vec().try_into().map_err(|_| "市码超长")?,
         residence_town_code: b"ZS01001".to_vec().try_into().map_err(|_| "镇码超长")?,
     };
+    // 防重放三件套:公民签的是**完整授权**而不是裸 payload,与 pallet 的
+    // `citizen_identity_authorization` 逐字节同构(genesis_hash ++ payload ++ 版本 ++ 过期)。
+    // 签死裸 payload 会让本探针的 "valid" 用例反被判 InvalidCitizenSignature,
+    // 从而把守卫变成永远报 KnownBad 的假阳性。
+    //
+    // 版本取 0:`seed_occupied_citizen_cid` 只种占号绑定,新 CID 的
+    // `VotingEligibilityVersionCount` 保持默认 0,必须与链端读到的值相等才过
+    // `ensure_expected_identity_version`(它在验签**之前**执行,填错会拿到
+    // IdentityVersionMismatch 而非签名错误,伪造用例的断言就会失真)。
+    let voting_identity_version = 0u64;
+    let voting_authorization = citizen_identity::CitizenIdentityAuthorization {
+        genesis_hash,
+        payload: voting_payload.clone(),
+        expected_identity_version: voting_identity_version,
+        expires_at,
+    }
+    .encode();
     let valid_citizen_signature = candidate_citizen_signature(
         &citizen_pair,
         primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
-        &voting_payload.encode(),
+        &voting_authorization,
     )?;
     let voting_call = |citizen_signature| {
         RuntimeCall::CitizenIdentity(citizen_identity::pallet::Call::register_voting_identity {
             actor_cid_number: actor_cid_number.clone(),
             actor_role_code: actor_role_code.clone(),
             payload: voting_payload.clone(),
+            expected_identity_version: voting_identity_version,
+            expires_at,
             citizen_signature,
         })
     };

@@ -105,7 +105,7 @@ AccountId 同时命中链上同一条 Active 管理员记录，再生成 `k=1,a=
 | action | domain / 前缀 | 必须展示 |
 |---:|---|---|
 | 2 | `VotingIdentityPayload` SCALE bytes | 身份CID、钱包地址、年龄、有效期、公民状态、居住地 |
-| 3 | `onchina_admin_governance` | 动作类型、注册局、省份、操作者/目标账户 |
+| 3 | `onchina_admin_governance`（哈希域 `OP_SIGN_ONCHINA_ADMIN=0x20`） | 动作类型、注册局、省份、操作者/目标账户 |
 
 文本载荷内部的 `payload_hash` 只用于生成方本地 session 或 API 防重放,不进入 QR 签名响应。
 

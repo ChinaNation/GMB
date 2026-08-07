@@ -85,6 +85,12 @@
       "name": "cid_admin_rebind",
       "op_tag": "0x1f",
       "scale_payload_hex": "c0ffee00c0ffee11"
+    },
+    {
+      "message_hex": "466ec54a3b9e92db537733a0ee4c386c8968d8b4d54ac7ae2b18bdb192028c6b",
+      "name": "OP_SIGN_ONCHINA_ADMIN",
+      "op_tag": "0x20",
+      "scale_payload_hex": "0102030405060708"
     }
   ]
 }

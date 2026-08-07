@@ -265,6 +265,9 @@
 
 - 本卡公开昵称、通讯录、用户主页、QR_V1 四端切换和创世管理员身份闭环的功能开发
   已全部完成，当前没有遗留业务代码开发项。
-- S5 正式 chainspec、CitizenApp 轻链资产、公权机构快照和 Cloudflare 创世哈希重生
-  属发布资产生成，不得用本地 fresh 链验收冒充正式冻结。
+- S5-A 已由 GitHub Actions run `30469300661` 基于提交
+  `3ae8f521461280eb6215646f8b7b146aac1d0449` 成功冻结唯一 CI WASM artifact；
+  S5-B 正式 chainspec、CitizenApp 轻链资产、公权机构快照和 Cloudflare 创世哈希
+  重生仍属待执行的发布资产生成，不得改用本地重编 WASM，也不得用本地 fresh 链
+  验收冒充正式冻结。
 - 真实管理员正向会话闭环属于后置测试；在 S5 完成前不启动该测试。

@@ -268,9 +268,8 @@ pub(crate) fn parse_account_id_code(raw: &str) -> Result<String, QrParseError> {
         return Err(QrParseError::BadKind(envelope.kind.to_string()));
     }
     let account_id = envelope.body.account_id.as_str();
-    let normalized = crate::crypto::pubkey::normalize_account_id(account_id).ok_or_else(|| {
-        QrParseError::BadField("b.n 必须为小写 0x 加 64 位十六进制".into())
-    })?;
+    let normalized = crate::crypto::pubkey::normalize_account_id(account_id)
+        .ok_or_else(|| QrParseError::BadField("b.n 必须为小写 0x 加 64 位十六进制".into()))?;
     if normalized != account_id {
         return Err(QrParseError::BadField(
             "b.n 必须为小写 0x 加 64 位十六进制".into(),
@@ -387,8 +386,7 @@ mod tests {
 
     #[test]
     fn account_id_code_parser_returns_canonical_account_id() {
-        let account_id =
-            parse_account_id_code(&account_id_code_json()).expect("完整账户码应通过");
+        let account_id = parse_account_id_code(&account_id_code_json()).expect("完整账户码应通过");
         assert_eq!(account_id, ACCOUNT_ID);
     }
 

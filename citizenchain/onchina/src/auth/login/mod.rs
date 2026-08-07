@@ -25,5 +25,5 @@ pub(crate) use onchain_gate::revoke_stale_admin_sessions_loop;
 pub(crate) use qr_login::{
     admin_auth_qr_complete, admin_auth_qr_result, admin_auth_qr_sign_request,
 };
-pub(crate) use signature::verify_admin_signature;
+pub(crate) use signature::verify_admin_signature_bytes;
 pub(crate) use signature::{admin_person_names, parse_account_id_bytes};

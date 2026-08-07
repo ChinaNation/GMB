@@ -1,8 +1,10 @@
 # CitizenApp Signer 技术说明
 
-- 更新日期:2026-07-28
+- 更新日期:2026-08-06
 - 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
 - Action 注册表:`memory/01-architecture/qr/qr-action-registry.md`
+- 签名域注册表:`citizenchain/runtime/primitives/src/sign.rs`(权威源)
+  与 [ADR-026](../../../04-decisions/ADR-026-unified-signing-protocol.md)
 
 ## 1. 模块职责
 
@@ -64,7 +66,35 @@ CitizenApp 不在 QR 内写入展示摘要,也不接收 QR 内的 payload hash�
 - 链交易:CitizenApp 生成交易 payload 签名请求,扫描签名响应后广播交易。
 - 管理员登录:不属于 CitizenApp,由 CitizenWallet 公民钱包处理。
 
-## 5. 测试
+## 5. 金标向量镜像(安全关键)
+
+`citizenapp/test/signer/fixtures/signing_domain_vectors.json` 是**镜像**，真源在
+`citizenchain/runtime/primitives/tests/fixtures/`。跨端门禁
+`.github/scripts/check-golden-vectors-sync.mjs` 对签名域组设了 `requireAll: true`：
+
+> **本镜像必须完整覆盖真源全部签名域，缺一条直接失败**，即使该域 CitizenApp 本身不签。
+
+这条是刻意的：镜像只允许是真源子集的规则对签名域**不适用**，因为「本端不签这个域」
+今天成立不代表明天成立，缺条目会让新增域在本端悄悄没有任何字节约束。冷钱包不设镜像
+文件、直读真源，所以只有本端会被这条门禁挡住 —— 2026-08-06 新增
+`OP_SIGN_ONCHINA_ADMIN=0x20` 时正是漏了本端镜像才触发。
+
+改真源后必须同步本文件并跑 `node .github/scripts/check-golden-vectors-sync.mjs`。
+
+## 6. 公民身份授权载荷的防重放三件套
+
+`VotingIdentityConsentPayload.decode` 接收的是**完整授权字节**，不是内层载荷：
+
+```
+genesis_hash(32) ++ VotingIdentityPayload ++ expected_identity_version(8) ++ expires_at(8)
+```
+
+唯一写入端是 `citizenchain/onchina/src/domains/citizens/chain_identity.rs`
+的 `build_citizen_identity_authorization_bytes`。只喂内层载荷一律解不出 → 按
+「无法独立验证」拒签。**测试夹具必须照写入端真实字节形态构造**：本端夹具曾只造内层载荷，
+在防重放三件套落地后长期红着，而「解码通过」在那种夹具下证明不了任何跨端一致性。
+
+## 7. 测试
 
 必须覆盖:
 
@@ -74,3 +104,6 @@ CitizenApp 不在 QR 内写入展示摘要,也不接收 QR 内的 payload hash�
 4. 未登记 action 或旧字段进入解析器时拒绝。
 5. 公民签名与广场动作入口对 action 不符、载荷不可完整展示、账户不在本机或卡片账户
    不匹配全部拒绝，并断言实际调用 `signForAccountId()` 的账户正是目标 `account_id`。
+6. 公民身份授权载荷缺防重放三件套(只给内层载荷)必须拒签；解码成功时必须断言
+   `genesisHashHex` / `expectedIdentityVersion` / `authorizationExpiresAt` 三个字段
+   原样解出，而不只是"跳过了外层字节"。

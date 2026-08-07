@@ -310,6 +310,23 @@ fn valid_signature() -> citizen_identity::pallet::SignatureOf<Test> {
     b"valid".to_vec().try_into().expect("signature should fit")
 }
 
+/// 防重放三件套之一:授权过期时间。与 `occupy_tag` 同口径,落在 600 秒窗口内。
+fn authorization_expires_at() -> u64 {
+    <FixedTime as frame_support::traits::UnixTime>::now()
+        .as_secs()
+        .saturating_add(300)
+}
+
+/// 防重放三件套之一:授权版本必须**等于**链上当前值。
+///
+/// 版本随每次身份写入单调 +1,所以「先登记投票身份、再升级竞选身份」这类顺序用例里
+/// 第二笔的期望版本已经不是 0。一律实时读取而不是写死常量 —— 写死会让顺序用例拿到
+/// `IdentityVersionMismatch`,而那正是本文件要断言的成功路径。
+fn identity_version(cid_number: &[u8]) -> u64 {
+    let bound = CidNumberBound::try_from(cid_number.to_vec()).expect("cid number should fit");
+    citizen_identity::VotingEligibilityVersionCount::<Test>::get(bound)
+}
+
 #[test]
 fn register_voting_identity_triggers_reward_issuance() {
     new_test_ext().execute_with(|| {
@@ -325,6 +342,8 @@ fn register_voting_identity_triggers_reward_issuance() {
             registrar_cid_number(),
             registrar_role_code(),
             payload(1, &cid_number),
+            identity_version(&cid_number),
+            authorization_expires_at(),
             valid_signature(),
         ));
 
@@ -355,6 +374,8 @@ fn candidate_first_onchain_triggers_reward_issuance() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &cid_number),
+            identity_version(&cid_number),
+            authorization_expires_at(),
             valid_signature(),
         ));
 
@@ -382,6 +403,8 @@ fn voting_first_then_candidate_upgrade_does_not_double_issue() {
             registrar_cid_number(),
             registrar_role_code(),
             payload(1, &citizen_cid_number("0001")),
+            identity_version(&citizen_cid_number("0001")),
+            authorization_expires_at(),
             valid_signature(),
         ));
         CitizenIssuance::on_finalize(System::block_number());
@@ -393,6 +416,9 @@ fn voting_first_then_candidate_upgrade_does_not_double_issue() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &citizen_cid_number("0001")),
+            // 上一笔投票身份写入已把版本推进,这里必须实时读取而非沿用 0。
+            identity_version(&citizen_cid_number("0001")),
+            authorization_expires_at(),
             valid_signature(),
         ));
         assert_eq!(citizen_issuance::PendingRewardCount::<Test>::get(), 0);
@@ -414,6 +440,8 @@ fn updating_existing_identity_does_not_issue_second_reward() {
             registrar_cid_number(),
             registrar_role_code(),
             payload(1, &citizen_cid_number("0001")),
+            identity_version(&citizen_cid_number("0001")),
+            authorization_expires_at(),
             valid_signature(),
         ));
         CitizenIssuance::on_finalize(System::block_number());
@@ -424,6 +452,9 @@ fn updating_existing_identity_does_not_issue_second_reward() {
             registrar_cid_number(),
             registrar_role_code(),
             updated,
+            // 更新走的是同一套防重放前置;此时版本已被上一笔登记推进。
+            identity_version(&citizen_cid_number("0001")),
+            authorization_expires_at(),
             valid_signature(),
         ));
         CitizenIssuance::on_finalize(System::block_number());
@@ -452,6 +483,8 @@ fn max_reward_cap_is_applied_from_identity_callback() {
             registrar_cid_number(),
             registrar_role_code(),
             payload(1, &citizen_cid_number("CAP")),
+            identity_version(&citizen_cid_number("CAP")),
+            authorization_expires_at(),
             valid_signature(),
         ));
 

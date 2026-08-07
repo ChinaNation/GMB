@@ -73,7 +73,14 @@ pub(crate) fn verify_account_signature(
             "payload hash mismatch",
         ));
     }
-    if !crate::auth::login::verify_admin_signature(account_id, payload_text, signature) {
+    // 治理动作走统一哈希域:signing_message(OP_SIGN_ONCHINA_ADMIN, payload)
+    // = blake2_256(GMB || 0x20 || payload)。此前对裸 JSON 文本直签,无 GMB 前缀、
+    // 无 op_tag、不进 SIGN_OP_TAGS,域分离只靠 JSON 里一个 domain 字符串字段。
+    let signing_bytes = primitives::sign::signing_message(
+        primitives::sign::OP_SIGN_ONCHINA_ADMIN,
+        payload_text.as_bytes(),
+    );
+    if !crate::auth::login::verify_admin_signature_bytes(account_id, &signing_bytes, signature) {
         return Err(api_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             2004,

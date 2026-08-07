@@ -43,6 +43,8 @@ class QrSigner {
   static const int _opSignCitizenIdentity = 0x10;
   static const int _opSignCidOccupy = 0x12;
   static const int _opSignCidAdminRebind = 0x1F;
+  /// 链上中国平台管理员治理动作;与 primitives::sign::OP_SIGN_ONCHINA_ADMIN 同值。
+  static const int _opSignOnchinaAdmin = 0x20;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
   /// 请求 ID 合法性(共享单源:登录/离线签名同一规则,防两处漂移)。
@@ -174,6 +176,10 @@ class QrSigner {
           ? _opSignCidOccupy
           : _opSignCidAdminRebind;
       return _gmbSigningMessage(opTag, exactPayload);
+    }
+    // 链上中国治理动作:走统一哈希域,不再对裸 JSON 文本直签。
+    if (body.action == QrActions.onchinaAdmin) {
+      return _gmbSigningMessage(_opSignOnchinaAdmin, payload);
     }
     // 广场账户动作只属于 CitizenApp 热钱包(它有会话与在线上下文)。冷钱包扫到
     // 必须**显式**拒绝:此前没有这一支,直接落到末尾 `return payload` 原始字节直签,

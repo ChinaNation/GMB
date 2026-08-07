@@ -41,13 +41,16 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 保留名 `"主账户"` / `"费用账户"` 不允许作为 `Role::Named` 的自定义参数（链端返回 `ReservedAccountName` 错误）。这样保证同一角色在"宪法机构"和"CID 登记机构"之间**派生公式完全一致**。
 
-### 签名 payload（0x10 - 0x1F）
+### 签名 payload（0x10 起）
+
+签名 op_tag 全表**不在本文档**：唯一真源是 `primitives::sign`，摘要见
+[ADR-026](../../../../04-decisions/ADR-026-unified-signing-protocol.md)。本节只保留与地址派生
+对照用的几条，**新增签名域禁止往这里补表**（第二真源会漂移：本表曾长期漏掉
+0x11/0x12/0x18-0x20 共 11 个域）。
 
 | op_tag | 常量名 | 用途 |
 |---|---|---|
 | `0x10` | `OP_SIGN_CITIZEN_IDENTITY` | 公民身份上链确认签名 |
-| `0x13` | `OP_SIGN_INST` | 机构登记签名 |
-| `0x14` | `OP_SIGN_DEREGISTER` | 机构/账户注销凭证签名 |
 | `0x15` | `OP_SIGN_L3_PAY` | L3 支付签名 |
 | `0x16` | `OP_SIGN_OFFCHAIN_BATCH` | 链下批次结算签名 |
 | `0x17` | `OP_SIGN_L2_ACK` | L2 确认签名 |
@@ -56,7 +59,7 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 **统一域**：密码学上 `GMB || op_tag` 等价于 N 个独立 domain（BLAKE2 扩散性保证无碰撞），但代码层只维护一个 domain 常量，减少出错面。
 
-**op_tag 分段**：低半段（0x00-0x0F）留给账户派生，高半段（0x10-0x1F）留给签名 payload，易读易审。
+**op_tag 分段**：低段（0x00-0x0F）留给账户派生，签名 payload 从 0x10 起往上顺延（0x10-0x1F 已排满，现续用 0x20+），易读易审。
 
 **链域隔离**：`SS58_PREFIX_LE` 参与 preimage，保证不同链（不同 SS58 format）派生出不同地址。
 

@@ -8,22 +8,27 @@ use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr
 
 use crate::*;
 
+/// 校验管理员签名钱包对**规范文本**的 sr25519 签名。
+///
+/// 只接受一种编码。此前还额外接受 `<Bytes>{message}</Bytes>` 包裹形式,
+/// 即同一条逻辑消息有两种合法字节 —— 而全仓**没有任何一端产生**这种包裹
+/// (那是 polkadot.js 签任意文本的约定,本项目冷端签的是裸字节)。
+/// 纯粹是白白扩大的攻击面,已删除。
 pub(crate) fn verify_admin_signature(
     account_id: &str,
     message: &str,
     signature_text: &str,
 ) -> bool {
-    if verify_admin_signature_bytes(account_id, message.as_bytes(), signature_text) {
-        return true;
-    }
-    let wrapped = format!("<Bytes>{}</Bytes>", message);
-    verify_admin_signature_bytes(account_id, wrapped.as_bytes(), signature_text)
+    verify_admin_signature_bytes(account_id, message.as_bytes(), signature_text)
 }
 
 /// 校验管理员使用的签名钱包对原始字节的 sr25519 签名。
 ///
-/// 链上中国治理 JSON 统一走 `verify_admin_signature`；本函数只作为内部底层验签工具，
-/// 不再承载机构创建内层凭证入口。
+/// 两个调用方,两种消息,共用这一个底层验签:
+/// - 扫码登录:`verify_admin_signature` 传管道分隔的登录原文
+///   (`QR_V1|k|id|system|expires|principal`,与冷端 `signature_message.dart` 同源);
+/// - 治理动作:`action_sign::verify_account_signature` 传
+///   `signing_message(OP_SIGN_ONCHINA_ADMIN, payload)` 的 32 字节摘要。
 pub(crate) fn verify_admin_signature_bytes(
     account_id: &str,
     message: &[u8],

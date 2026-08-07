@@ -47,6 +47,10 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 //   `SIGN_OP_TAGS`。仅链下(Cloudflare Worker + App)验签,链上 pallet 不引用,
 //   故新增它们不触发 runtime 变更/创世,只维护本单源与金标。
 // - 0x1E:GRANDPA 验证密钥更换证明哈希域，由旧、新 ed25519 私钥签同一摘要。
+// - 0x1F:注册局代办换绑哈希域,与首次占号(0x12)域分离。
+// - 0x20:OnChina 管理员治理哈希域(链下 onchina 验签)。0x10-0x1F 十六格已排满,
+//   本域起签名段续用 0x20+;账户派生段仍是 0x00-0x0F(现用到 0x08),两段永不相交。
+//   新增签名 op_tag 一律往上顺延,禁止回填 0x00-0x0F 或复用已删域的旧值。
 
 /// 公民档案上链确认。
 pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
@@ -90,6 +94,13 @@ pub const OP_SIGN_GRANDPA_KEY_CHANGE: u8 = 0x1E;
 /// 注册局代匿名或实名 CID 换绑：新账户签署 `CidRebindAuthorization` 控制证明。
 /// 与首次占号域分离，且载荷自带创世哈希、当前 revision 与过期时间。
 pub const OP_SIGN_CID_ADMIN_REBIND: u8 = 0x1F;
+/// 链上中国平台管理员治理动作(增删管理员、机构创建/更新、账户增删、文档、
+/// Passkey 更新、电子护照绑定确认等)的冷签授权。
+///
+/// 此前这条链路对**裸 JSON 文本直签**:无 `GMB` 前缀、无 op_tag、不进本表,
+/// 域分离只靠 JSON 里一个 `domain` 字符串字段 —— 结构性违反「签名唯一入口」死规则,
+/// 新增其它 JSON 直签域时没有任何编译期或金标机制能挡住结构碰撞。已收敛到本域。
+pub const OP_SIGN_ONCHINA_ADMIN: u8 = 0x20;
 
 /// 二进制前缀域(0x18/0x19)统一前缀长度:`GMB`(3B) + op_tag(1B) = 4 字节。
 pub const BINARY_PREFIX_LEN: usize = 4;
@@ -165,7 +176,7 @@ pub fn decrypt_admin_payload(
 }
 
 /// 全部哈希域签名 op_tag。新增哈希域 op_tag 必须同步追加并刷新金标。
-pub const SIGN_OP_TAGS: [u8; 14] = [
+pub const SIGN_OP_TAGS: [u8; 15] = [
     OP_SIGN_CITIZEN_IDENTITY,
     OP_SIGN_CID_REBIND,
     OP_SIGN_CID_OCCUPY,
@@ -180,6 +191,7 @@ pub const SIGN_OP_TAGS: [u8; 14] = [
     OP_SIGN_SQUARE_ACTION,
     OP_SIGN_GRANDPA_KEY_CHANGE,
     OP_SIGN_CID_ADMIN_REBIND,
+    OP_SIGN_ONCHINA_ADMIN,
 ];
 
 /// 构造哈希域签名消息:`BLAKE2-256(GMB || op_tag || scale_payload)`。

@@ -104,7 +104,7 @@
 | 公民链上身份确认 | `a = 2` | `d` 必须是 `VotingIdentityPayload` SCALE bytes,签 `blake2_256(GMB || 0x10 || d)` |
 | 注册局首次绑定 | `a = 10 citizen_occupy` | `d = genesis_hash + bounded cid + 32B 零 account_id 槽 + revision=0(u64 LE) + expires_at(u64 LE)`；钱包严格解码且确认无尾字节后原位填入账户，签 `blake2_256(GMB || 0x12 || 完整授权)` |
 | 注册局换绑 | `a = 11 citizen_rebind` | `d = genesis_hash + bounded cid + current_account_id + 32B 零 new_account_id 槽 + nonzero revision(u64 LE) + expires_at(u64 LE)`；钱包拒绝当前账户与新账户相同，原位填入新账户后签 `blake2_256(GMB || 0x1f || 完整授权)` |
-| OnChina 管理员治理文本载荷 | `a = 3` | 签 payload 原文 |
+| OnChina 管理员治理文本载荷 | `a = 3` | `d` 是 `onchina_admin_governance` canonical JSON 的 UTF-8 字节,签 `blake2_256(GMB || 0x20 || d)` |
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
 | Runtime 升级哈希签名 | `a = 7` 或已登记 RuntimeUpgrade hash-only action | `d` 允许是 32B signing bytes,签该 32B;这是 QR_V1 唯一 hash-only 例外 |
 

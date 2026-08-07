@@ -485,4 +485,34 @@ void main() {
       );
     });
   });
+
+  _onchinaAdminSigningDomain();
+}
+
+/// 链上中国治理动作签名域(op_tag 0x20)与链端金标逐字节对拍。
+///
+/// 该域此前对**裸 JSON 文本直签**(无 GMB 前缀、无 op_tag、不进 SIGN_OP_TAGS),
+/// 2026-08-06 审计后收敛到统一哈希域。金标真源:
+/// `citizenchain/runtime/primitives/tests/fixtures/signing_domain_vectors.json`
+void _onchinaAdminSigningDomain() {
+  test('onchina 治理动作签 signing_message(0x20),与链端金标逐字节相同', () {
+    // 金标向量:op_tag=0x20, scale_payload=0102030405060708
+    final payload = Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]);
+    final body = SignRequestBody(
+      action: QrActions.onchinaAdmin,
+      alg: 1,
+      signerPublicKey: base64Url.encode(Uint8List(32)).replaceAll('=', ''),
+      payload: base64Url.encode(payload).replaceAll('=', ''),
+    );
+
+    final bytes = QrSigner.signingBytesFor(body);
+    final hex =
+        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+    expect(
+      hex,
+      '466ec54a3b9e92db537733a0ee4c386c8968d8b4d54ac7ae2b18bdb192028c6b',
+      reason: '与 signing_domain_vectors.json 的 0x20 向量不一致 = 冷端与链端签名域漂移',
+    );
+  });
 }

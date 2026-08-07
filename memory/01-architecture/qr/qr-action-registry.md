@@ -56,7 +56,7 @@ CitizenApp / CitizenWallet 已按本规则接入生成产物:`citizenapp/lib/qr/
 |---:|---|---|---|---|---|---|
 | 1 | `login` | UTF-8 `onchina` | `QR_V1|2|i|onchina|e|target_signer_public_key_without_0x` | OnChina | CitizenWallet | 先扫描 `k=5 account_id_code`（公民钱包账户详情出示），取 `b.account_id` 单向反查链上 Active 管理员记录后，再生成非空 `b.u` 的定向登录请求 |
 | 2 | `citizen_identity` | `VotingIdentityPayload` SCALE bytes | `blake2_256(GMB || 0x10 || payload)` | OnChina | CitizenWallet / CitizenApp(电子护照扫码签名页) | 公民本人确认链上投票身份载荷;CitizenApp 侧解码器在 `my/myid/voting_identity_payload.dart` |
-| 3 | `onchina_admin_action` | `onchina_admin_governance` canonical JSON UTF-8 | 原文 | OnChina | CitizenWallet | 链上中国平台管理员治理冷钱包确认 |
+| 3 | `onchina_admin_action` | `onchina_admin_governance` canonical JSON UTF-8 | `blake2_256(GMB || 0x20 || canonical JSON UTF-8)` | OnChina | CitizenWallet | 链上中国平台管理员治理冷钱包确认；2026-08-06 由裸文本直签收敛到统一哈希域 `OP_SIGN_ONCHINA_ADMIN` |
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |

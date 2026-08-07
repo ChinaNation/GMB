@@ -29,7 +29,11 @@
 | Chat 节点配对 body schema | Chat 节点配对 | node + dart（2） |
 | 旧聊天设备绑定字符串域 | Chat 设备绑定 | 已由 `OP_SIGN_CHAT_DEVICE_BIND` 取代 |
 
-另：冷钱包 `'onchina_admin_governance'` 是链上中国平台管理员 QR 治理域,不属于 `GMB_` 格式签名域,由 QR 协议文档单独约束。
+另：冷钱包 `'onchina_admin_governance'` 是链上中国平台管理员 QR 治理域。**2026-08-06 已收敛进本 ADR**：
+此前它对 canonical JSON **裸文本直签**，无 `GMB` 前缀、无 op_tag、不进 `SIGN_OP_TAGS`，域分离全靠
+JSON 里一个 `domain` 字符串字段 —— 再加一个 JSON 直签域就没有任何编译期或金标机制能挡住结构碰撞。
+现统一为 `signing_message(OP_SIGN_ONCHINA_ADMIN=0x20, canonical_json_utf8)`；同批删除验签侧
+`<Bytes>{message}</Bytes>` 双编码兼容分支（全仓从无任何一端产出过该形态）。
 
 病根同 isForbidden 漂移：同域多份 copy，改一处忘改另一处 = 创世后**验签静默失败**。
 
@@ -52,16 +56,22 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
 - 治理 5 个（0x10-0x14）改调 `signing_message(OP_SIGN_X, (fields).encode())`：**逐字节不变 → 签名不变**。
 - 历史字符串域全部改为 op_tag：例如 L3 支付统一为 `signing_message(OP_SIGN_L3_PAY, SCALE)`，结构归一。
 
-### op_tag 注册表（签名段 0x10-0x1F，单一真源 `primitives::sign`）
+### op_tag 注册表（签名段 0x10 起，单一真源 `primitives::sign`）
 0x10 CITIZEN_IDENTITY / 0x11 CID_REBIND / 0x12 CID_OCCUPY / 0x13 INST / 0x14 DEREGISTER
 0x15 L3_PAY / 0x16 OFFCHAIN_BATCH / 0x17 L2_ACK / 0x18 ACTIVATE_ADMIN / 0x19 DECRYPT / 0x1A CHAT_DEVICE_BIND
 0x1B SQUARE_LOGIN / 0x1C SQUARE_DEVICE_BIND / 0x1D SQUARE_ACTION / 0x1E GRANDPA_KEY_CHANGE / 0x1F CID_ADMIN_REBIND
+0x20 ONCHINA_ADMIN
+
+0x10-0x1F 十六格已排满，签名段自 `0x20` 起续用；账户派生段固定 0x00-0x0F（现用到 0x08），
+两段永不相交。新增签名 op_tag 一律往上顺延，禁止回填低段或复用已删域的旧值。
 
 ### 单源纪律
 - `primitives::sign` 持 `signing_message` + 全部 `OP_SIGN_*`；Chat 设备绑定只保留 `OP_SIGN_CHAT_DEVICE_BIND`，不得恢复 QR 动作或钱包主私钥验签。
 - runtime/node/backend 全 import 调用；删本地 concat。
 - Dart（citizenapp + citizenwallet）手写镜像，靠**金标向量**（signing_message(op_tag,payload)→hash）逐字节断言对齐，CI sync 防漂移（类比 account_derive 金标）。
-- 冷钱包 `onchina_admin_governance` QR 域已正名为链上中国平台管理员治理域,保持 QR 协议文档单源。
+- 冷钱包 `onchina_admin_governance` QR 域已正名为链上中国平台管理员治理域,并于 2026-08-06 收敛到
+  `signing_message(0x20)`;冷端字节由 `citizenwallet/test/signer/qr_signer_test.dart` 对齐链端金标向量,
+  与 onchina 验签端逐字节一致。
 
 ## 范围 / 破坏性
 - 破坏式：7 协议签名字节变 → runtime 验签 + node 签/验 + backend + 热钱包(L3_PAY) + 冷钱包(ACTIVATE_ADMIN/DECRYPT) 必须**锁步**。
