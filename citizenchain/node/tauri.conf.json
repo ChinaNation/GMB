@@ -62,7 +62,7 @@
     "updater": {
       "pubkey": "CITIZENCHAIN_TAURI_UPDATER_PUBKEY_NOT_CONFIGURED",
       "endpoints": [
-        "https://github.com/ChinaNation/GMB/releases/latest/download/citizenchain-latest.json"
+        "https://github.com/ChineseFederation/GMB/releases/latest/download/citizenchain-latest.json"
       ],
       "windows": {
         "installMode": "passive"

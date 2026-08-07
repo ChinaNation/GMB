@@ -119,7 +119,7 @@ citizenapp/
 
 规则：
 
-- 目录以 Git submodule 方式引用 `https://github.com/ChinaNation/smoldotpow.git`
+- 目录以 Git submodule 方式引用 `https://github.com/ChineseFederation/smoldotpow.git`
 - `citizenapp/rust/Cargo.toml` 仅依赖这个 submodule 路径
 - 主仓库通过 `.gitmodules` 和 submodule commit 显式锁定版本，不能偷偷漂移
 - `UPSTREAM.md` 继续保留在 `smoldotpow` 仓库内，用于记录上游基线与 PoW 改动来源
@@ -305,7 +305,7 @@ PoW 路线必须作为 fork 的一等特性维护，不能只停留在“能编�
 
 当前仓库治理状态补充：
 
-- `https://github.com/ChinaNation/smoldotpow` 已作为 PoW fork 发布
+- `https://github.com/ChineseFederation/smoldotpow` 已作为 PoW fork 发布
 - `citizenapp/third_party/smoldotpow` 已切换为 submodule 引用该仓库
 
 ## 11. 发布门槛

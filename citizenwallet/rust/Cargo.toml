@@ -7,7 +7,7 @@ name = "citizenwallet_signer"
 version = "1.0.0"
 edition = "2021"
 authors = ["voyager_rhett <chinanation@icloud.com>"]
-repository = "https://github.com/ChinaNation/GMB"
+repository = "https://github.com/ChineseFederation/GMB"
 license = "MIT"
 description = "CitizenWallet 冷钱包 sr25519 原生签名动态库（仅 FFI 外壳，实现在 citizen-signer）"
 

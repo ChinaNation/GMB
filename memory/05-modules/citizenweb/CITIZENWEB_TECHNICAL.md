@@ -61,7 +61,7 @@ npm run build
 ## 3.4. 产品页下载按钮（GitHub releases 直下）
 
 - 产品页（`pages/Ecosystem.tsx`）三卡右上角各有醒目「下载」按钮（金色 `text-gold-400`、`text-xl`、加粗），点击弹出平台下拉（`components/DownloadButton.tsx`，自带点击外部关闭）。
-- 直下走 **`https://github.com/ChinaNation/GMB/releases/latest/download/<固定资产名>`**（基址常量在 `DownloadButton.tsx`）：只要每次发版都用相同固定名，链接永远指向最新版对应资产。
+- 直下走 **`https://github.com/ChineseFederation/GMB/releases/latest/download/<固定资产名>`**（基址常量在 `DownloadButton.tsx`）：只要每次发版都用相同固定名，链接永远指向最新版对应资产。
 - 各卡选项与资产：
   - 公民 CitizenApp：iOS（弹提示去 App Store，无直链）/ Android → `citizenapp-android.apk`
   - 公民钱包 CitizenWallet：iOS（弹提示）/ Android → `citizenwallet-android.apk`

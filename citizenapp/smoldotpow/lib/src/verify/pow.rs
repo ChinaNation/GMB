@@ -1,5 +1,5 @@
 // Smoldot
-// Copyright (C) 2024 ChinaNation Contributors
+// Copyright (C) 2024 ChineseFederation Contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 //! PoW（工作量证明）区块头验证。

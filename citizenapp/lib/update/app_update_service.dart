@@ -23,7 +23,7 @@ class AppUpdateService {
         _client = client ?? http.Client();
 
   static final Uri _releasesUri =
-      Uri.parse('https://api.github.com/repos/ChinaNation/GMB/releases');
+      Uri.parse('https://api.github.com/repos/ChineseFederation/GMB/releases');
   static const String _manifestAssetName = 'citizenapp-android-update.json';
 
   final AppUpdateInstaller _installer;

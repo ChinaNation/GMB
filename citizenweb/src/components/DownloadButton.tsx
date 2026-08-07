@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 /// GitHub 最新发布直下基址：`releases/latest/download/<固定资产名>` 永远指向最新版对应资产，
 /// 前提是每次发版都用相同的固定资产名（见下方 asset 命名）。
-const RELEASE_BASE = 'https://github.com/ChinaNation/GMB/releases/latest/download'
+const RELEASE_BASE = 'https://github.com/ChineseFederation/GMB/releases/latest/download'
 
 /** 一个平台下载项：'store' 弹提示文案（如 iOS 去 App Store），'file' 直下 GitHub 最新资产。 */
 export type DownloadOption =

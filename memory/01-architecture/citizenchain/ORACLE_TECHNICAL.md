@@ -125,7 +125,7 @@ cd GMB/citizenchain
 ```
 
 ### 7.3 源码依赖说明
-- 当前工作区依赖 `https://github.com/ChinaNation/polkadot-sdk.git`
+- 当前工作区依赖 `https://github.com/ChineseFederation/polkadot-sdk.git`
 - 依赖分支为 `ss58-2027-fix`
 - 因此服务器必须具备访问 GitHub 的能力，否则 `cargo build` 无法完成依赖拉取
 

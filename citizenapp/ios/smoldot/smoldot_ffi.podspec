@@ -32,7 +32,7 @@ Pod::Spec.new do |s|
 CitizenApp 热端原生库:smoldot 轻节点、sr25519 原生签名(与 CitizenWallet 冷端
 共用 citizenchain/crates/citizen-signer 同一份源码)、OpenMLS 端到端加密聊天。
                        DESC
-  s.homepage         = 'https://github.com/ChinaNation/GMB'
+  s.homepage         = 'https://github.com/ChineseFederation/GMB'
   s.license          = { :type => 'Apache-2.0' }
   s.author           = { 'voyager_rhett' => 'chinanation@icloud.com' }
   s.source           = { :path => '.' }

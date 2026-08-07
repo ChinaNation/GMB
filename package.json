@@ -12,14 +12,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ChinaNation/GMB.git"
+    "url": "git+https://github.com/ChineseFederation/GMB.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/ChinaNation/GMB/issues"
+    "url": "https://github.com/ChineseFederation/GMB/issues"
   },
-  "homepage": "https://github.com/ChinaNation/GMB#readme"
+  "homepage": "https://github.com/ChineseFederation/GMB#readme"
 }

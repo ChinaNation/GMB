@@ -85,7 +85,7 @@
 - 已执行 `npm --prefix citizenapp/cloudflare install` 恢复本地 Wrangler 运行依赖；该依赖仅用于当前审计，验收清理时删除。
 - 已执行 `npx wrangler whoami`：返回 `You are not authenticated. Please run wrangler login.`，当前本机无 Cloudflare 登录态。
 - 已执行 `npx wrangler d1 list`、`npx wrangler r2 bucket list`、`npx wrangler kv namespace list`：均因非交互环境缺少 `CLOUDFLARE_API_TOKEN` 而失败。
-- 2026-07-05 后续复查：用户完成 `wrangler login` 后，`npx wrangler whoami` 已成功识别 Cloudflare 账号 `ChinaNation`，本机 OAuth 登录态可用。
+- 2026-07-05 后续复查：用户完成 `wrangler login` 后，`npx wrangler whoami` 已成功识别 Cloudflare 账号 `ChineseFederation`，本机 OAuth 登录态可用。
 - 2026-07-05 后续复查：`npx wrangler d1 list` 成功执行，当前未列出已有 D1 数据库；`npx wrangler kv namespace list` 成功执行，当前返回空列表。
 - 2026-07-05 后续复查：`npx wrangler r2 bucket list` 失败，Cloudflare API 返回 `Please enable R2 through the Cloudflare Dashboard. [code: 10042]`，说明当前账号尚未启用 R2。
 - 2026-07-05 后续复查：用户启用 R2 后，`npx wrangler r2 bucket list` 已成功执行，R2 阻塞解除。

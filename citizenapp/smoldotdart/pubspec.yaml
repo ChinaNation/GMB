@@ -1,7 +1,7 @@
 name: smoldot
 description: A Dart wrapper for smoldot-light, providing a lightweight Polkadot/Substrate client implementation via Rust FFI bindings
 version: 0.1.1
-repository: https://github.com/ChinaNation/GMB
+repository: https://github.com/ChineseFederation/GMB
 
 environment:
   sdk: ^3.8.0
