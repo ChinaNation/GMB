@@ -2665,8 +2665,7 @@ fn cid_count_decrements_on_revoke_identity() {
 
 // ───────────────── 身份写入防重放：版本 / 时间窗 ─────────────────
 
-/// 历史载荷重放必须被拒：公民迁居并换发护照后，原辖区注册局不得用旧签名把
-/// 居住地与护照窗口回滚。身份版本每次写入 +1，旧载荷携带的版本必然落后。
+/// 历史载荷重放被拒：迁居换照后，旧签名不得把居住地与护照窗口回滚。
 #[test]
 fn replaying_an_old_voting_payload_is_rejected_by_identity_version() {
     new_test_ext().execute_with(|| {
@@ -2752,7 +2751,7 @@ fn replaying_an_old_candidate_payload_is_rejected_by_identity_version() {
     });
 }
 
-/// 超前版本号同样拒绝：版本必须精确等于链上当前值，不接受任意未来值。
+/// 版本必须精确等于链上当前值，超前同样被拒。
 #[test]
 fn future_identity_version_is_rejected() {
     new_test_ext().execute_with(|| {
@@ -2773,7 +2772,7 @@ fn future_identity_version_is_rejected() {
     });
 }
 
-/// 公民签发后长期悬空的授权不得日后取用：过期即拒。
+/// 过期授权被拒。
 #[test]
 fn expired_identity_authorization_is_rejected() {
     new_test_ext().execute_with(|| {
@@ -2794,7 +2793,7 @@ fn expired_identity_authorization_is_rejected() {
     });
 }
 
-/// 授权有效期不得超过 600 秒上限，避免签一次长期可用。
+/// 授权有效期超过 600 秒上限被拒。
 #[test]
 fn overlong_identity_authorization_lifetime_is_rejected() {
     new_test_ext().execute_with(|| {
@@ -2815,8 +2814,7 @@ fn overlong_identity_authorization_lifetime_is_rejected() {
     });
 }
 
-/// 授权载荷的 SCALE 契约：创世哈希在前、载荷居中、版本与过期时间在后。
-/// 四端按此顺序构造待签字节，任一端字段序变化都会导致验签失败。
+/// 授权载荷 SCALE 字段序：创世哈希、载荷、版本、过期时间；四端按此构造待签字节。
 #[test]
 fn citizen_identity_authorization_scale_contract_is_stable() {
     new_test_ext().execute_with(|| {

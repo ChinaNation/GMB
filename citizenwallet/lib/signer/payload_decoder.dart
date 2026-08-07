@@ -2446,14 +2446,13 @@ class PayloadDecoder {
     );
   }
 
-  // CitizenIdentity 公民同意授权（公民钱包实际签名覆盖的完整字节）。
+  // CitizenIdentity 公民同意授权，即钱包签名覆盖的完整字节。
   // SCALE: CitizenIdentityAuthorization {
   //   genesis_hash: [u8; 32],
   //   payload: VotingIdentityPayload | CandidateIdentityPayload,
   //   expected_identity_version: u64,
   //   expires_at: u64
   // }
-  // 三层分别锁链身份、锁身份版本（防历史载荷回滚重放）、锁授权时间窗。
   static DecodedPayload? _decodeCitizenIdentityPayload(Uint8List bytes) {
     const genesisHashLen = 32;
     const trailerLen = 16; // expected_identity_version(8) + expires_at(8)
@@ -3331,7 +3330,7 @@ class PayloadDecoder {
     return '0x${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
   }
 
-  /// 授权失效时刻按本机时区展示，签名人据此判断该授权的可用窗口。
+  /// Unix 秒 → 本机时区 `YYYY-MM-DD HH:mm`。
   static String _formatUnixSeconds(int seconds) {
     final local =
         DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true)

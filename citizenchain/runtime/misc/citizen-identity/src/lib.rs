@@ -307,14 +307,9 @@ pub struct CandidateIdentityPayload<AccountId> {
 
 /// 公民对本次身份写入的同意授权；四端共用，字段声明顺序即 SCALE 协议顺序。
 ///
-/// 与 [`CidRebindAuthorization`]、[`CidOccupyAuthorization`] 同构，三层各锁一类重放：
-/// `genesis_hash` 锁链身份，禁止把测试网签名搬到正式链；
-/// `expected_identity_version` 锁该 CID 当前身份版本（每次身份写入单调 +1），
-/// 旧签名的版本号必然落后，因而无法用历史载荷覆盖新状态（防回滚）；
-/// `expires_at` 锁授权时间窗，禁止公民签发后长期悬空的载荷被日后取用。
-///
-/// 三者缺一都留缺口：只有版本号则跨链可搬运，只有过期时间则窗口内仍可回滚。
-/// `genesis_hash` 由链上注入而非调用方传入，调用方无从伪造。
+/// `genesis_hash` 由链上注入，锁定授权只对本链有效；
+/// `expected_identity_version` 必须等于该 CID 当前身份版本，锁死历史载荷回滚；
+/// `expires_at` 为 Unix 秒，上限 [`MAX_CID_AUTHORIZATION_LIFETIME_SECS`]。
 #[derive(
     Clone,
     Encode,
@@ -1857,9 +1852,6 @@ pub mod pallet {
         }
 
         /// 校验注册局对该居住地、该身份档次的管辖权。
-        ///
-        /// 只取居住省市码而非整个载荷：吊销路径没有入参载荷，传码可避免为过权限校验
-        /// 而拼装一个不参与签名的假载荷。
         fn ensure_authorized(
             registrar: &T::AccountId,
             actor_cid_number: &[u8],
@@ -1886,8 +1878,7 @@ pub mod pallet {
 
         /// 校验调用声明的身份版本等于该 CID 链上当前身份版本。
         ///
-        /// 版本由 [`VotingEligibilityVersionCount`] 承载，每次身份写入单调 +1、永不回退；
-        /// 尚无身份的 CID 为 0。旧签名携带的版本必然落后于当前值，重放与回滚在此拒死。
+        /// 版本由 [`VotingEligibilityVersionCount`] 承载，每次身份写入单调 +1，尚无身份时为 0。
         fn ensure_expected_identity_version(
             cid_number: &CidNumberBound,
             expected_identity_version: u64,
@@ -1913,9 +1904,7 @@ pub mod pallet {
             }
         }
 
-        /// 身份写入四入口共用的防重放前置：时间窗 + 身份版本，通过后才做验签。
-        ///
-        /// 必须在验签之前调用：先拒掉过期与版本不符的调用，签名验证只在授权仍然有效时进行。
+        /// 身份写入四入口共用的防重放前置；必须在验签之前调用。
         fn ensure_identity_authorization(
             cid_number: &CidNumberBound,
             expected_identity_version: u64,

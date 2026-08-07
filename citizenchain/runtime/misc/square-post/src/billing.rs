@@ -199,9 +199,7 @@ impl<T: Config> Pallet<T> {
                 );
                 return;
             }
-            // 签发方暂时不具备收款条件：创作者掉平台会员，或平台价未播种/收款账户暂不可解析。
-            // 订阅者无过错，暂停扣费但保留订阅关系，仍留调度、下周期重试，签发方恢复即自动续。
-            // 平台侧配置问题绝不能要求全体订阅者重新签名，更不能永久终止。
+            // 签发方暂时不具备收款条件 → 暂停扣费，保留调度下周期重试，恢复即自动续。
             Err(e)
                 if e == Error::<T>::CreatorNotPlatformMember.into()
                     || e == Error::<T>::PlatformPriceNotSet.into()
@@ -248,8 +246,7 @@ impl<T: Config> Pallet<T> {
                 );
                 return;
             }
-            // 兜底只保守挂起，绝不终止：终止会作废剩余已付时长且需全额重订，
-            // 未知错误一律倒向可恢复的一侧。真正不可恢复的公历溢出在下方独立分支处理。
+            // 兜底一律挂起，不得终止；只有公历溢出（下方独立分支）才终止。
             Err(_) => {
                 Self::suspend_subscription(
                     &key,
@@ -408,8 +405,6 @@ impl<T: Config> Pallet<T> {
                     state.subscription_status,
                     SubscriptionStatus::Active | SubscriptionStatus::Cancelled
                 ) {
-                // 折算基准必须是本期实收价：创作者涨价后订阅者到期前再签名时，
-                // authorized_price_fen 已是新价而本期实收仍是旧价，用前者会多折信用。
                 Self::remaining_credit(
                     state.last_charged_price_fen,
                     state.last_charged_at,
@@ -468,8 +463,8 @@ impl<T: Config> Pallet<T> {
 
     /// 剩余权益折算：本期实收价 × 剩余时长 ÷ 本期总时长（按毫秒，向下取整）。
     ///
-    /// 只接受 `last_charged_price_fen`。`authorized_price_fen` 是「订阅者已同意的下期价」，
-    /// 仅用于判断是否需要再签名，永不参与任何金额计算。
+    /// 基准价只接受 `last_charged_price_fen`；`authorized_price_fen` 是已同意的下期价，
+    /// 只用于判断是否需要再签名，不参与金额计算。
     fn remaining_credit(
         last_charged_price_fen: u128,
         last_charged_at: u64,

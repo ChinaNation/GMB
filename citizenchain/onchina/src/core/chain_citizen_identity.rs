@@ -62,8 +62,7 @@ pub(crate) struct FinalizedCitizenIdentity {
     pub(crate) residence_city_code: Vec<u8>,
     pub(crate) account_id: Option<[u8; 32]>,
     pub(crate) binding_revision: Option<u64>,
-    /// 该 CID 当前身份版本；身份写入授权必须声明该值，链上比对后才放行。
-    /// 每次身份写入单调 +1，尚无身份时为 0，用旧值提交即被判为重放。
+    /// 该 CID 当前身份版本；每次身份写入单调 +1，尚无身份时为 0。
     pub(crate) identity_version: u64,
     pub(crate) voting: Option<FinalizedVotingIdentity>,
     pub(crate) candidate: Option<FinalizedCandidateIdentity>,

@@ -1115,8 +1115,7 @@ fn propose_platform_price_rejects_non_foundation_institution() {
     });
 }
 
-/// 平台侧价格暂时缺失不得永久终止订阅：订阅者无过错，应暂停并自动重试，
-/// 平台恢复后无需订阅者重新签名即自动续费。
+/// 平台侧价格暂时缺失只暂停不终止，平台恢复后自动续费，不需订阅者重新签名。
 #[test]
 fn missing_platform_price_pauses_instead_of_terminating() {
     new_test_ext().execute_with(|| {
@@ -1149,10 +1148,7 @@ fn missing_platform_price_pauses_instead_of_terminating() {
     });
 }
 
-/// 换档折算必须按本期实收价，不得按尚未收款的已授权价。
-///
-/// 创作者涨价后订阅者在到期前再签名，此时 authorized_price_fen 已是新价、
-/// 本期实收仍是旧价；若用前者折算会多给信用，升档少收差额。
+/// 换档折算按本期实收价，不按已授权价：创作者涨价 + 到期前再签名的窗口内两者不等。
 #[test]
 fn plan_change_credit_uses_last_charged_price_not_authorized_price() {
     new_test_ext().execute_with(|| {
