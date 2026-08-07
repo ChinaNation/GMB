@@ -15,6 +15,7 @@ import 'package:citizenapp/wallet/core/native_sr25519.dart';
 
 import '../support/fake_secure_seed_store.dart';
 import '../support/isar_test_env.dart';
+import '../support/smoldot_native_probe.dart';
 
 const _mnemonicA =
     'legal winner thank year wave sausage worth useful legal winner thank yellow';
@@ -868,7 +869,7 @@ void main() {
       expect(fakeStore.readCount, 2, reason: '两次远端登记尝试各鉴权一次');
       expect(deviceDataKeyVault.sealCount, 7, reason: '登记失败与重试不得碰数据钥');
     });
-  });
+  }, skip: smoldotNativeSkipReason());
 
   group('WalletManager — 统一签名', () {
     final payload = Uint8List.fromList(List<int>.generate(32, (i) => i));
@@ -899,7 +900,7 @@ void main() {
       // 无根 = 无自愈重写。
       expect(fakeStore.putCount, 0);
     });
-  });
+  }, skip: smoldotNativeSkipReason());
 
   group('WalletManager — 设备私钥失效 fail-closed', () {
     final payload = Uint8List.fromList(List<int>.generate(32, (_) => 7));
@@ -948,7 +949,7 @@ void main() {
       expect(key, isNotNull);
       await _expectChildStoredNotSeed(_mnemonicB, key!);
     });
-  });
+  }, skip: smoldotNativeSkipReason());
 
   group('WalletManager — 冷钱包', () {
     test('importColdWallet 只存公开账户资料，child 金库无条目', () async {

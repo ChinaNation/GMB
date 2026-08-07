@@ -137,6 +137,12 @@ jobs:
         working-directory: citizenwallet
         run: flutter analyze --no-fatal-infos
 
+      # flutter test 在 runner 宿主上跑，Dart FFI 要 dlopen 宿主平台动态库；
+      # 上面编译的是 Android ARM 产物，宿主库必须单独编一次，否则金标签名测试全数失败。
+      - name: 编译原生签名库（宿主，flutter test 用）
+        working-directory: citizenwallet
+        run: ./scripts/build-signer-native.sh host
+
       - name: 运行测试
         working-directory: citizenwallet
         run: flutter test

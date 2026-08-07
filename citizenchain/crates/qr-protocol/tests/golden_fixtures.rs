@@ -47,8 +47,7 @@ fn expect_keys(value: &Value, expected: &[&str], what: &str) {
     let actual = keys(value);
     let want: BTreeSet<String> = expected.iter().map(|s| (*s).to_string()).collect();
     assert_eq!(
-        actual,
-        want,
+        actual, want,
         "{what} 键集不符;实际 {actual:?},期望 {want:?}"
     );
 }
@@ -56,11 +55,19 @@ fn expect_keys(value: &Value, expected: &[&str], what: &str) {
 const ACCOUNT_ID_LEN: usize = 66; // "0x" + 64 hex
 
 fn expect_account_id(body: &Value, key: &str, what: &str) {
-    let v = body[key].as_str().unwrap_or_else(|| panic!("{what}.{key} 必须是字符串"));
-    assert_eq!(v.len(), ACCOUNT_ID_LEN, "{what}.{key} 必须是 0x + 64 hex,实际 {v}");
+    let v = body[key]
+        .as_str()
+        .unwrap_or_else(|| panic!("{what}.{key} 必须是字符串"));
+    assert_eq!(
+        v.len(),
+        ACCOUNT_ID_LEN,
+        "{what}.{key} 必须是 0x + 64 hex,实际 {v}"
+    );
     assert!(v.starts_with("0x"), "{what}.{key} 必须以小写 0x 开头:{v}");
     assert!(
-        v[2..].chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+        v[2..]
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
         "{what}.{key} 只允许小写十六进制:{v}"
     );
 }
@@ -88,7 +95,11 @@ fn fixture_envelopes_respect_fixed_and_temporary_shape() {
     for name in ["user_contact.json", "account_id_code.json"] {
         expect_keys(&load(name), &["p", "k", "b"], name);
     }
-    for name in ["sign_request.json", "sign_response.json", "user_transfer.json"] {
+    for name in [
+        "sign_request.json",
+        "sign_response.json",
+        "user_transfer.json",
+    ] {
         expect_keys(&load(name), &["p", "k", "i", "e", "b"], name);
     }
 }
@@ -96,15 +107,31 @@ fn fixture_envelopes_respect_fixed_and_temporary_shape() {
 /// body 键集必须精确等于 spec 规定的单字母集合。
 #[test]
 fn fixture_bodies_use_exact_single_letter_keys() {
-    expect_keys(&load("sign_request.json")["b"], &["a", "g", "u", "d"], "sign_request.b");
-    expect_keys(&load("sign_response.json")["b"], &["u", "s"], "sign_response.b");
-    expect_keys(&load("user_contact.json")["b"], &["c", "n"], "user_contact.b");
+    expect_keys(
+        &load("sign_request.json")["b"],
+        &["a", "g", "u", "d"],
+        "sign_request.b",
+    );
+    expect_keys(
+        &load("sign_response.json")["b"],
+        &["u", "s"],
+        "sign_response.b",
+    );
+    expect_keys(
+        &load("user_contact.json")["b"],
+        &["c", "n"],
+        "user_contact.b",
+    );
     expect_keys(
         &load("user_transfer.json")["b"],
         &["n", "v", "t", "m", "l"],
         "user_transfer.b",
     );
-    expect_keys(&load("account_id_code.json")["b"], &["n"], "account_id_code.b");
+    expect_keys(
+        &load("account_id_code.json")["b"],
+        &["n"],
+        "account_id_code.b",
+    );
 }
 
 /// 旧长字段一律不得复活(spec 铁律:遇旧字段必须报错)。
@@ -138,7 +165,11 @@ fn fixtures_contain_no_legacy_long_field_names() {
 /// 所有携带 `n` 的码型,其 `account_id` 必须是规范小写 `0x` + 64 hex。
 #[test]
 fn fixture_account_ids_are_canonical() {
-    for name in ["user_contact.json", "user_transfer.json", "account_id_code.json"] {
+    for name in [
+        "user_contact.json",
+        "user_transfer.json",
+        "account_id_code.json",
+    ] {
         expect_account_id(&load(name)["b"], "n", name);
     }
 }

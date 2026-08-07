@@ -122,26 +122,33 @@ build_ios() {
   verify_symbols "$dest/$LIB_NAME.a" ""
 }
 
-build_macos() {
+build_host() {
   echo ""
-  echo "=== 编译 macOS (arm64，flutter test 用) ==="
+  echo "=== 编译宿主平台动态库 (flutter test 用) ==="
   cd "$RUST_DIR"
   # host 调试库给 Dart FFI / flutter test 直接 dlopen；release profile 已设
   # strip=false，本机 dyld 不会报 LINKEDIT 对齐错误。
   cargo build --release
 
-  echo "macOS arm64: $RUST_DIR/target/release/$LIB_NAME.dylib ($(wc -c < "$RUST_DIR/target/release/$LIB_NAME.dylib" | tr -d ' ') bytes)"
-  verify_symbols "$RUST_DIR/target/release/$LIB_NAME.dylib" -g
+  # 宿主扩展名：macOS 产 .dylib，Linux 产 .so；Dart 侧 native_sr25519.dart 按同一规则取。
+  local host_ext
+  case "$(uname -s)" in
+    Darwin) host_ext=dylib ;;
+    *)      host_ext=so ;;
+  esac
+  local host_lib="$RUST_DIR/target/release/$LIB_NAME.$host_ext"
+  echo "宿主库: $host_lib ($(wc -c < "$host_lib" | tr -d ' ') bytes)"
+  verify_symbols "$host_lib" -g
 }
 
 case "$TARGET" in
   android) build_android ;;
   ios)     build_ios ;;
-  macos)   build_macos ;;
+  host|macos|linux) build_host ;;
   all)
     build_android
     build_ios
-    build_macos
+    build_host
     ;;
   *)
     echo "用法: $0 [android|ios|macos|all]"

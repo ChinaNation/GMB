@@ -90,10 +90,7 @@ pub unsafe fn citizen_sr25519_derive_hard(
 ///
 /// # Safety
 /// `child` 指向 32 字节可读内存，`out_public` 指向 32 字节可写内存。
-pub unsafe fn citizen_sr25519_public_key(
-    child: *const u8,
-    out_public: *mut u8,
-) -> i32 {
+pub unsafe fn citizen_sr25519_public_key(child: *const u8, out_public: *mut u8) -> i32 {
     if child.is_null() || out_public.is_null() {
         return CITIZEN_SIGNER_ERR_NULL_ARG;
     }

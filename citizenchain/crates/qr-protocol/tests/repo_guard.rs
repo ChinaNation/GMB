@@ -47,13 +47,14 @@ fn web_frontend_qr_modules_are_byte_identical() {
     let node = repo_root.join("citizenchain/node/frontend/shared/qr/citizenQr.ts");
     let onchina = repo_root.join("citizenchain/onchina/frontend/core/citizenQr.ts");
 
-    let node_text = fs::read_to_string(&node)
-        .unwrap_or_else(|e| panic!("读取 {} 失败: {e}", node.display()));
+    let node_text =
+        fs::read_to_string(&node).unwrap_or_else(|e| panic!("读取 {} 失败: {e}", node.display()));
     let onchina_text = fs::read_to_string(&onchina)
         .unwrap_or_else(|e| panic!("读取 {} 失败: {e}", onchina.display()));
 
     assert_eq!(
-        node_text, onchina_text,
+        node_text,
+        onchina_text,
         "两个 Web 前端的 citizenQr.ts 必须逐字节相同;改一份必须同步另一份\n  {}\n  {}",
         node.display(),
         onchina.display()

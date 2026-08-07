@@ -37,17 +37,19 @@ class NativeSr25519 {
   /// - iOS：静态库 `.a` 经 podspec 的 `-force_load` 直接链进 App 二进制，符号就在
   ///   本进程里，用 [DynamicLibrary.process] 取（iOS 不用 dylib：裸 dylib 要嵌入
   ///   加签名，且 App Store 要求动态库必须包在 .framework 里）；
-  /// - macOS（`flutter test` 宿主）：找 `rust/target/release` 下的构建产物，
-  ///   由 `scripts/build-signer-native.sh macos` 产出。
+  /// - macOS / Linux（`flutter test` 宿主）：找 `rust/target/release` 下的构建产物，
+  ///   由 `scripts/build-signer-native.sh host` 产出；扩展名按宿主平台取
+  ///   （macOS `.dylib`、Linux `.so`），CI 在 Linux runner 上跑测试同样要能加载。
   static DynamicLibrary _open() {
     if (Platform.isAndroid) return DynamicLibrary.open('$_libBase.so');
     if (Platform.isIOS) return DynamicLibrary.process();
+    final hostExt = Platform.isMacOS ? 'dylib' : 'so';
     final hostPath = p.join(
       Directory.current.path,
       'rust',
       'target',
       'release',
-      '$_libBase.dylib',
+      '$_libBase.$hostExt',
     );
     if (File(hostPath).existsSync()) return DynamicLibrary.open(hostPath);
     throw StateError(
