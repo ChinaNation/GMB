@@ -216,6 +216,12 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
     由 CI 的两个 job 与 `citizenwallet-run.sh` 三处共用。此前 CI 与本地各持一份副本、
     且覆盖范围不同（CI 只同步 3 个 pallet、本地同步 20 个），加 iOS job 会变成三份。
     冷钱包离线签名，索引与链端脱节没有任何编译期信号，只会签出被链上按另一个 pallet 解码的交易
+  - **`flutter test` 前必须先编宿主原生签名库**：`./scripts/build-signer-native.sh host`。
+    Android job 里编的是 `aarch64-linux-android` 产物，而 `flutter test` 跑在 runner 宿主
+    （Linux x86_64）上，Dart FFI 要 dlopen 宿主平台动态库，两者不通用。宿主库缺失时
+    `NativeSr25519` 直接抛 `未找到原生签名库`，金标派生测试全数失败。
+    脚本的 `host` 目标按 `uname -s` 产出 macOS `.dylib` / Linux `.so`，
+    `native_sr25519.dart` 按同一规则取扩展名，两侧必须同改
 - `citizenweb`
   - 当前暂无专用 GitHub Actions，发布前在本地执行构建并部署静态产物
 

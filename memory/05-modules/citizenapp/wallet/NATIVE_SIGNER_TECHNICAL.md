@@ -110,3 +110,17 @@ junction 解析属 SCALE 编码而非密码学、不慢，且已被金标测试�
   **禁止再直接 import**。
 - iOS 只出 device `arm64`（两端一致）；模拟器需 `aarch64-apple-ios-sim` 且同名架构
   不能 lipo 合并、要上 XCFramework——未做，真机验收足够。
+
+## CI 宿主库与 skip 守卫
+
+`flutter test` 跑在 CI runner 宿主上，Dart FFI 要 dlopen 宿主平台动态库；CitizenApp 的
+`NativeSr25519` 经 smoldot 加载同一份 native 库，宿主无 `libsmoldot` 时整组用例必挂。
+
+- 依赖原生签名的用例统一挂 `skip: smoldotNativeSkipReason()`（`test/support/smoldot_native_probe.dart`），
+  库不可用时带原因跳过，可用时照常全跑；`test/wallet/wallet_manager_test.dart` 的
+  「实际缺钥一次生成」「统一签名」「设备私钥失效 fail-closed」三组已按此接入。
+- **skip 只代表这轮没验，不代表验过**：改动 FFI 两侧任一端后，必须先产宿主库
+  （`./scripts/build-smoldot-native.sh macos`）再真跑，否则跨语言字段漂移会被静默掩盖。
+- CitizenWallet 走的是另一条路径：它有独立的 `libcitizenwallet_signer`，CI 在
+  `flutter test` 前用 `./scripts/build-signer-native.sh host` 真编宿主库，金标派生测试
+  不 skip、每轮真跑。两个产品的原生库互不共用，不要互相套用结论。
