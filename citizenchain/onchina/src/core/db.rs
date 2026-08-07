@@ -107,6 +107,8 @@ impl Db {
                     CHECK (citizen_account_id ~ '^0x[0-9a-f]{64}$'),
                 identity_level TEXT NOT NULL,
                 payload_hex TEXT NOT NULL,
+                expected_identity_version BIGINT NOT NULL,
+                authorization_expires_at BIGINT NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 citizen_signed_at TIMESTAMPTZ
              );

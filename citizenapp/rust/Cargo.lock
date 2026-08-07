@@ -519,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "citizen-signer"
-version = "1.0.1"
+version = "1.0.0"
 dependencies = [
  "schnorrkel",
  "zeroize",

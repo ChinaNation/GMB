@@ -1,11 +1,11 @@
-// 通用“扫码识别账户”弹窗。这里要的是「一个账户」，因此只接受 QR_V1 `k=5` 钱包码，
+// 通用“扫码识别账户”弹窗。这里要的是「一个账户」，因此只接受 QR_V1 `k=5` 账户码，
 // 其 body.account_id 本身就是规范 account_id，直接回填给业务表单。
 // 用户码(k=3)表达「人」、收款码(k=4)表达「一笔收款请求」，都不是账户声明，一律拒绝。
 // 使用统一的 BarcodeDetector 方案(cameraScanner.ts),与登录和扫码签名场景一致。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Modal, Typography } from 'antd';
-import { parseQrEnvelope, QrParseError, type WalletCodeBody } from './citizenQr';
+import { parseQrEnvelope, QrParseError, type AccountIdCodeBody } from './citizenQr';
 import { startCameraScanner } from '../utils/cameraScanner';
 import { CID_MODAL_Z_INDEX } from './modalStack';
 
@@ -41,11 +41,11 @@ export function ScanAccountModal(props: {
       (raw) => {
         try {
           const env = parseQrEnvelope(raw);
-          if (env.kind !== 'wallet_code') {
-            setError('请扫描钱包码（钱包 → 账户详情右上角二维码）');
+          if (env.kind !== 'account_id_code') {
+            setError('请扫描账户码（钱包 → 账户详情右上角二维码）');
             return;
           }
-          const account_id = (env.body as WalletCodeBody).account_id;
+          const account_id = (env.body as AccountIdCodeBody).account_id;
           // 识别成功,停止扫描
           if (cleanupRef.current) {
             cleanupRef.current();
@@ -79,7 +79,7 @@ export function ScanAccountModal(props: {
 
   return (
     <Modal
-      title={<div style={{ textAlign: 'center', width: '100%' }}>扫描钱包码</div>}
+      title={<div style={{ textAlign: 'center', width: '100%' }}>扫描账户码</div>}
       open={props.open}
       onCancel={props.onClose}
       footer={[

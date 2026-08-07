@@ -14,19 +14,48 @@ class QrProtocol {
 }
 
 /// 统一扫码流向枚举。线上只序列化为数字 `k`。
+///
+/// ## body 单字母键全局注册表(一字母 = 一含义,跨所有码型唯一)
+///
+/// 信封层:`p` 协议 / `k` 码型 / `i` 临时码 id / `e` 过期毫秒 / `b` body。
+///
+/// | 键 | 含义 | 编码 | 出现于 |
+/// |---|---|---|---|
+/// | `a` | 业务动作码 | int | k=1 |
+/// | `g` | 签名算法(1=sr25519) | int | k=1 |
+/// | `u` | 签名者公钥 | base64url | k=1, k=2 |
+/// | `d` | 审阅载荷 | base64url | k=1 |
+/// | `s` | 签名 | base64url | k=2 |
+/// | `o` | 换绑时当前账户 | base64url | k=2 |
+/// | `r` | 换绑时当前账户签名 | base64url | k=2 |
+/// | `c` | cid_number 身份主键 | 文本 | k=3 |
+/// | `n` | account_id 账户标识 | `0x` 小写 64 hex | k=3, k=4, k=5 |
+/// | `v` | 金额 | 文本 | k=4 |
+/// | `t` | 币种 | 文本 | k=4 |
+/// | `m` | 备注 | 文本 | k=4 |
+/// | `l` | 收款方清算行 CID | 文本 | k=4 |
+///
+/// `u` 与 `n` 都是 32 字节公钥却用两个字母:编码不同(`u` base64url 压体积、
+/// `n` `0x` 小写 hex 走 `isAccountIdText` 单源校验)。同一字母两种编码会让解析器
+/// 按码型猜格式,是明确埋雷,故分开。
+///
+/// 新增字段必须先在本表登记,禁止就地取一个没登记过的字母。
 enum QrKind {
   signRequest(1, temporary: true),
   signResponse(2, temporary: true),
 
   /// 用户码 = 人(永久 CID);唯一入口用户主页,唯一能写入通讯录的码。
+  /// body:`c` cid_number + `n` account_id。
   userContact(3, temporary: false),
 
   /// 收款码 = 一笔收款请求;唯一入口聊天-加号-收付款。
+  /// body:`n` account_id + `v` 金额 + `t` 币种 + `m` 备注 + `l` 清算行 CID。
   /// 当前预留:生成方待实现,见任务卡 20260729-qr-three-code-classification。
   userTransfer(4, temporary: true),
 
-  /// 钱包码 = 账户;唯一入口钱包-账户详情,冷热两端都能生成,固定码。
-  walletCode(5, temporary: false);
+  /// 账户码 = 账户;唯一入口钱包-账户详情,冷热两端都能生成,固定码。
+  /// **钱包没有码,账户才有码** —— 一个钱包由多个账户组成。body 只有 `n` account_id。
+  accountIdCode(5, temporary: false);
 
   const QrKind(this.code, {required this.temporary});
 
@@ -40,7 +69,12 @@ enum QrKind {
   bool get fixed => !temporary;
 
   static QrKind fromWire(Object? wire) {
-    final code = wire is int ? wire : int.tryParse(wire?.toString() ?? '');
+    // k 必须是整数。曾用 int.tryParse 兜底,导致 "1"/" 1"/"+1"/"0x1" 全被当合法 k,
+    // 而冷端与 Rust 侧只接受整数 —— 同一张码此端过、彼端拒。
+    if (wire is! int) {
+      throw FormatException('k 必须为整数,实际: $wire');
+    }
+    final code = wire;
     for (final k in QrKind.values) {
       if (k.code == code) return k;
     }

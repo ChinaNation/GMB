@@ -9,11 +9,16 @@ fn qr_signing_protocol_has_no_second_registry_or_third_state() {
     let repo_root = repo_root();
     let mut violations = Vec::new();
 
+    // 扫描根必须覆盖**全部**参与 QR/签名协议的端。漏一个端 = 守卫报绿而该端悄悄漂移:
+    // 2026-08-06 的单字母键统一就因为这里缺了两个 `frontend/`,导致桌面矿工端
+    // 「扫码识别账户」链路断掉而守卫毫无反应。新增任何端必须同步加进本列表。
     for root in [
         "citizenapp/lib",
         "citizenwallet/lib",
         "citizenchain/onchina/src",
+        "citizenchain/onchina/frontend",
         "citizenchain/node/src",
+        "citizenchain/node/frontend",
         "citizenchain/crates",
     ] {
         collect_files(&repo_root.join(root), &mut |path| {
@@ -27,6 +32,31 @@ fn qr_signing_protocol_has_no_second_registry_or_third_state() {
         violations.is_empty(),
         "QR 签名协议 guard 发现第二真源或第三状态残留:\n{}",
         violations.join("\n")
+    );
+}
+
+/// 两个 Web 前端各持一份 `citizenQr.ts`,必须**逐字节相同**。
+///
+/// 它们分属两个独立 Vite 应用、无法共享同一物理文件,只能靠本守卫钉死
+/// (与 `qr_action_registry.g.dart` 两端各一份、逐字节相同同一范式)。
+/// 两份曾各自演化:字段名一样但 SS58 依赖路径不同(`../ss58` vs `../utils/ss58`),
+/// 同一处 bug 要修两遍、改一份忘另一份不会有任何提示。
+#[test]
+fn web_frontend_qr_modules_are_byte_identical() {
+    let repo_root = repo_root();
+    let node = repo_root.join("citizenchain/node/frontend/shared/qr/citizenQr.ts");
+    let onchina = repo_root.join("citizenchain/onchina/frontend/core/citizenQr.ts");
+
+    let node_text = fs::read_to_string(&node)
+        .unwrap_or_else(|e| panic!("读取 {} 失败: {e}", node.display()));
+    let onchina_text = fs::read_to_string(&onchina)
+        .unwrap_or_else(|e| panic!("读取 {} 失败: {e}", onchina.display()));
+
+    assert_eq!(
+        node_text, onchina_text,
+        "两个 Web 前端的 citizenQr.ts 必须逐字节相同;改一份必须同步另一份\n  {}\n  {}",
+        node.display(),
+        onchina.display()
     );
 }
 

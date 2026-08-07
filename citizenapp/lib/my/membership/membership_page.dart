@@ -1150,7 +1150,7 @@ class _ActiveMembershipBanner extends StatelessWidget {
       'cancelled' => '已取消 · 到期终止',
       'terminated' => '扣款失败 · 订阅已终止',
       'suspended' => '已挂起 · 待重新签名或充值',
-      'creatorPaused' => '创作者暂停 · 恢复后自动续',
+      'issuerPaused' => '创作者暂停 · 恢复后自动续',
       _ => '链上到期自动续费',
     };
     final window =

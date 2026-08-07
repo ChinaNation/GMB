@@ -8,8 +8,8 @@ import 'package:citizenapp/qr/widgets/qr_display_scaffold.dart';
 
 /// 用户码展示页(`QR_V1 k=3 user_contact`,固定码)。
 ///
-/// 用户码表达「人」——永久 CID、CID 当前绑定账户、公开昵称。**唯一入口是用户主页**,
-/// 只有链上 CID↔AccountId 闭环命中的身份账户才能出这张码。账户维度的展示走钱包码
+/// 用户码表达「人」——永久 CID 与其当前绑定账户(码内不含昵称)。**唯一入口是用户主页**,
+/// 只有链上 CID↔AccountId 闭环命中的身份账户才能出这张码。账户维度的展示走账户码
 /// (`lib/wallet/pages/wallet_qr_page.dart`),一笔收款请求走收款码;三者按入口分类,
 /// 本页不做任何「该出哪种码」的运行时判断。
 ///
@@ -40,11 +40,9 @@ class UserQrPage extends StatelessWidget {
       id: null,
       issuedAt: null,
       expiresAt: null,
-      body: UserContactBody(
-        cidNumber: cidNumber,
-        ss58Address: _ss58Address,
-        displayName: displayName,
-      ),
+      // 码内只放身份主键与账户标识:昵称由扫码端按 CID 从服务端拉取(本机昵称
+      // 可随意改写,进码即冒名风险);SS58 是展示形态,扫码端自行派生。
+      body: UserContactBody(cidNumber: cidNumber, accountId: accountId),
     ).toRawJson();
   }
 

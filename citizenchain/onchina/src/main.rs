@@ -2771,7 +2771,7 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         _ if message.starts_with("insert qr sign request failed") => {
             "ONCHINA_LOGIN_CHALLENGE_CREATE_FAILED"
         }
-        _ if message.starts_with("identity_qr must be a complete QR_V1 wallet_code") => {
+        _ if message.starts_with("identity_qr must be a complete QR_V1 account_id_code") => {
             "ONCHINA_LOGIN_WALLET_CODE_INVALID"
         }
         _ if message.starts_with("complete qr login failed") => "ONCHINA_LOGIN_COMPLETE_FAILED",

@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/citizen/shared/multisig_create_amount_rules.dart';
+import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
@@ -126,30 +127,31 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     );
     if (result == null || !mounted) return;
 
-    // 解析 QR_V1 k=3 user_contact(多签发现走反向索引)
+    // 只接受用户码(k=3):管理员必须是有 CID 的真人,账户码只声明账户、不含身份。
+    //
+    // 曾经这里写 `(env.body as dynamic).address` —— `UserContactBody` 从来没有
+    // `address` 字段(旧版是 `ss58Address`,现在是 `accountId`),`as dynamic`
+    // 绕过了类型检查,于是合法用户码必抛 NoSuchMethodError,被下方 catch 吞成
+    // "请扫描有效的用户二维码",功能 100% 失效且用户看不到真因。
+    // 现改为与全仓其它扫码点同一条路径:强类型 body + 直接取 `accountId`
+    // (它本身就是 0x + 64hex 的账户标识,无需再从 SS58 解码)。
     try {
       final env = QrEnvelope.parse(result.trim());
-      if (env.kind == QrKind.userContact) {
-        final address = (env.body as dynamic).address?.toString() ?? '';
-        if (address.isEmpty) throw const FormatException('缺少 address 字段');
-        final publicKey = Keyring().decodeAddress(address);
-        await _promptAdminNamesAndAdd(_toHex(publicKey));
-        return;
-      }
-    } catch (e) {
-      if (e is FormatException) {
+      if (env.kind != QrKind.userContact) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('二维码格式错误：$e')),
+          const SnackBar(content: Text('请扫描用户码(用户主页的二维码)')),
         );
         return;
       }
+      final body = env.body as UserContactBody;
+      await _promptAdminNamesAndAdd(body.accountId);
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('二维码格式错误：$e')),
+      );
     }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('请扫描有效的用户二维码')),
-    );
   }
 
   Future<void> _promptAdminNamesAndAdd(String accountId) async {

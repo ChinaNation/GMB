@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:citizenwallet/qr/bodies/wallet_code_body.dart';
+import 'package:citizenwallet/qr/bodies/account_id_code_body.dart';
 import 'package:citizenwallet/qr/envelope.dart';
 import 'package:citizenwallet/qr/qr_protocols.dart';
 import 'package:citizenwallet/ui/account_detail_page.dart';
@@ -65,13 +65,13 @@ void main() {
     expect(find.text('点击查看私钥'), findsOneWidget);
   });
 
-  testWidgets('账户详情出固定钱包码，关闭|复制对称，不出现任何时效文案', (tester) async {
+  testWidgets('账户详情出固定账户码，关闭|复制对称，不出现任何时效文案', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: AccountDetailPage(account: account, walletName: '钱包1'),
     ));
     await tester.pump();
 
-    await tester.tap(find.byTooltip('显示钱包码'));
+    await tester.tap(find.byTooltip('显示账户码'));
     await tester.pumpAndSettle();
 
     // 弹窗:二维码 + 关闭/复制双按钮;说明文案已删,无任何时效文案。
@@ -88,11 +88,11 @@ void main() {
     expect(find.byType(QrImageView), findsOneWidget);
   });
 
-  test('钱包码载荷严格为固定 k=5，只含 account_id', () {
+  test('账户码载荷严格为固定 k=5，只含 account_id', () {
     final qrData = buildWalletQr(accountId: account.accountId);
     final envelope = QrEnvelope.parse(qrData);
-    final body = envelope.body as WalletCodeBody;
-    expect(envelope.kind, QrKind.walletCode);
+    final body = envelope.body as AccountIdCodeBody;
+    expect(envelope.kind, QrKind.accountIdCode);
     // 固定码:顶层不得出现 i/e。
     expect(envelope.id, isNull);
     expect(envelope.expiresAt, isNull);

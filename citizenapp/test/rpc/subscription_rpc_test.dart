@@ -138,14 +138,14 @@ void main() {
         'identityBindingUnavailable',
       );
 
-      // status 字节 00→04（CreatorPaused），suspend_reason 仍 00（None）。
-      const creatorPausedHex =
+      // status 字节 00→04（IssuerPaused），suspend_reason 仍 00（None）。
+      const issuerPausedHex =
           '00020068e5cf8b0100000068e5cf8b0100001c8d5b0000000000000000000000000000fc1a478c010000041c8d5b0000000000000000000000000000';
-      final creatorPaused =
-          SubscriptionRpc.decodeSubscriptionState(_bytes(creatorPausedHex));
-      expect(creatorPaused.status, 'creatorPaused');
-      expect(creatorPaused.suspendReason, isNull);
-      expect(creatorPaused.isEffectiveAt(1701000000000), isFalse);
+      final issuerPaused =
+          SubscriptionRpc.decodeSubscriptionState(_bytes(issuerPausedHex));
+      expect(issuerPaused.status, 'issuerPaused');
+      expect(issuerPaused.suspendReason, isNull);
+      expect(issuerPaused.isEffectiveAt(1701000000000), isFalse);
     });
 
     test('严格解码创作者链上档位', () {

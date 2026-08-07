@@ -176,6 +176,30 @@ void main() {
         ...compactVec('001'),
       ];
 
+  /// 身份写入防重放两标量：expected_identity_version(8) + expires_at(8)。
+  /// 链端 extrinsic 里紧跟 payload，授权载荷里位于末尾，两处顺序一致。
+  List<int> identityAuthorizationTailForTest({
+    int identityVersion = 3,
+    int expiresAt = 1800000000,
+  }) =>
+      [...u64Le(identityVersion), ...u64Le(expiresAt)];
+
+  /// 公民实际签名覆盖的完整授权字节：
+  /// genesis_hash(32) ++ payload ++ version(8) ++ expires_at(8)。
+  List<int> citizenIdentityAuthorizationForTest(
+    List<int> payloadBytes, {
+    int identityVersion = 3,
+    int expiresAt = 1800000000,
+  }) =>
+      [
+        ...List<int>.filled(32, 0x11), // genesis_hash
+        ...payloadBytes,
+        ...identityAuthorizationTailForTest(
+          identityVersion: identityVersion,
+          expiresAt: expiresAt,
+        ),
+      ];
+
   List<int> candidateIdentityPayloadForTest(List<int> walletBytes) => [
         ...citizenIdentityPayloadForTest(walletBytes),
         ...compactVec('43'),
@@ -669,7 +693,8 @@ void main() {
 
     test('decodes raw citizen identity payload', () {
       final wallet = List<int>.generate(32, (i) => i + 1);
-      final payload = citizenIdentityPayloadForTest(wallet);
+      final payload = citizenIdentityAuthorizationForTest(
+          citizenIdentityPayloadForTest(wallet));
       final decoded = PayloadDecoder.decode(hexOf(payload));
 
       expect(decoded, isNotNull);
@@ -681,7 +706,8 @@ void main() {
 
     test('decodes raw candidate citizen identity payload', () {
       final wallet = List<int>.generate(32, (i) => i + 1);
-      final payload = candidateIdentityPayloadForTest(wallet);
+      final payload = citizenIdentityAuthorizationForTest(
+          candidateIdentityPayloadForTest(wallet));
       final decoded = PayloadDecoder.decode(hexOf(payload));
 
       expect(decoded, isNotNull);
@@ -706,6 +732,7 @@ void main() {
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
         ...payload,
+        ...identityAuthorizationTailForTest(),
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
       ];
@@ -728,6 +755,7 @@ void main() {
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
         ...payload,
+        ...identityAuthorizationTailForTest(),
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
       ];
@@ -748,6 +776,7 @@ void main() {
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
         ...payload,
+        ...identityAuthorizationTailForTest(),
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
       ];
@@ -774,6 +803,7 @@ void main() {
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
         ...citizenIdentityPayloadForTest(wallet),
+        ...identityAuthorizationTailForTest(),
         ...compactU32(64),
         ...List<int>.filled(64, 0xaa),
       ];
@@ -783,6 +813,7 @@ void main() {
         ...compactVec(registryActorCid),
         ...compactVec('REGISTRAR'),
         ...candidateIdentityPayloadForTest(wallet),
+        ...identityAuthorizationTailForTest(),
         ...compactU32(64),
         ...List<int>.filled(64, 0xbb),
       ];

@@ -73,7 +73,7 @@ class ChainSubscriptionState {
   final String? suspendReason;
 
   /// Active 与已签名取消但仍在已付周期内的 Cancelled 都继续提供权益；
-  /// suspended / creatorPaused 暂停期无权益。
+  /// suspended / issuerPaused 暂停期无权益。
   bool isEffectiveAt(int chainNowMs) =>
       (status == 'active' || status == 'cancelled') && chainNowMs < paidUntil;
 }
@@ -539,7 +539,7 @@ class SubscriptionRpc {
       1 => 'cancelled',
       2 => 'terminated',
       3 => 'suspended',
-      4 => 'creatorPaused',
+      4 => 'issuerPaused',
       _ => throw const FormatException('subscription_status 枚举不合法'),
     };
     final authorizedPriceFen = reader.u128();

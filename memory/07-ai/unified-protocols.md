@@ -952,7 +952,7 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
   - 禁止把内部哈希、nonce、原始公钥 hex 当作普通用户确认字段展示
 - 必跑测试：`citizenwallet/test/signer/payload_decoder_test.dart`、QR sign request 测试
 
-### P-QR-003：QR_V1 / k=5 wallet_code（钱包码）
+### P-QR-003：QR_V1 / k=5 account_id_code（账户码）
 
 - 状态：现行（2026-07-29 三码分类落地；`k=5` 码值由已废止的 `chat_node_pairing` 回收）
 - 类型：扫码协议内固定码（无 `i/e`）
@@ -979,9 +979,9 @@ b.d 里可以有很多不同交易载荷格式，但它们都不是新的扫码�
 - 禁止兼容：不得恢复 `chat_node_pairing` 及其 `node_peer_id`/`node_multiaddr`/`endpoint_kind`
   字段；旧载荷靠 body 字段集精确匹配拒绝，不需要专门的拒绝分支。
 - 禁止事项：
-  - 禁止用钱包码写入通讯录（无 CID 真源，通讯录关系必须锚永久 CID）。
-  - 禁止在钱包码中夹带任何身份或时效字段。
-  - 禁止让 CitizenWallet 生成用户码，或让钱包码承担「人」的语义。
+  - 禁止用账户码写入通讯录（无 CID 真源，通讯录关系必须锚永久 CID）。
+  - 禁止在账户码中夹带任何身份或时效字段。
+  - 禁止让 CitizenWallet 生成用户码，或让账户码承担「人」的语义。
 - 必跑测试：`citizenapp/test/wallet/pages/wallet_qr_page_test.dart`、
   `citizenapp/test/qr/qr_router_test.dart`、`citizenwallet/test/ui/account_detail_page_test.dart`、
   `citizenchain/onchina/src/core/qr/mod.rs` 的 `wallet_code_parser_*` 测试

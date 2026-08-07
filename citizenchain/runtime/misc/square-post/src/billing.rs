@@ -162,10 +162,10 @@ impl<T: Config> Pallet<T> {
         let Some(mut state) = Subscriptions::<T>::get(&key) else {
             return;
         };
-        // 只有留在调度里的 Active / CreatorPaused 才处理；双向一致性由 try_state 守护。
+        // 只有留在调度里的 Active / IssuerPaused 才处理；双向一致性由 try_state 守护。
         if !matches!(
             state.subscription_status,
-            SubscriptionStatus::Active | SubscriptionStatus::CreatorPaused
+            SubscriptionStatus::Active | SubscriptionStatus::IssuerPaused
         ) {
             return;
         }
@@ -199,16 +199,22 @@ impl<T: Config> Pallet<T> {
                 );
                 return;
             }
-            // 创作者掉平台会员 → 暂停扣费但保留粉丝关系，仍留调度、下周期重试，创作者恢复即续。
-            Err(e) if e == Error::<T>::CreatorNotPlatformMember.into() => {
-                state.subscription_status = SubscriptionStatus::CreatorPaused;
+            // 签发方暂时不具备收款条件：创作者掉平台会员，或平台价未播种/收款账户暂不可解析。
+            // 订阅者无过错，暂停扣费但保留订阅关系，仍留调度、下周期重试，签发方恢复即自动续。
+            // 平台侧配置问题绝不能要求全体订阅者重新签名，更不能永久终止。
+            Err(e)
+                if e == Error::<T>::CreatorNotPlatformMember.into()
+                    || e == Error::<T>::PlatformPriceNotSet.into()
+                    || e == Error::<T>::PlatformNotBound.into() =>
+            {
+                state.subscription_status = SubscriptionStatus::IssuerPaused;
                 state.suspend_reason = None;
                 Subscriptions::<T>::insert(&key, state);
                 // 暂停期不推进 paid_until（不给权益）；调度重排到下周期重试。
                 if let Some(retry_at) = add_calendar_period(due_at, plan.billing_period()) {
                     Self::schedule_renewal(&key, retry_at);
                 }
-                Self::deposit_event(Event::SubscriptionCreatorPaused {
+                Self::deposit_event(Event::SubscriptionIssuerPaused {
                     subscriber_cid_number,
                     issuer,
                     paused_at: now,
@@ -227,16 +233,32 @@ impl<T: Config> Pallet<T> {
                 );
                 return;
             }
-            // 公历换算等真实失效 → 终止。
-            Err(_) => {
-                state.subscription_status = SubscriptionStatus::Terminated;
-                state.suspend_reason = None;
-                Subscriptions::<T>::insert(&key, state);
-                Self::deposit_event(Event::SubscriptionRenewalStopped {
+            // 定价或计划归属配置有误，需人工修正后由订阅者再签名恢复。
+            Err(e)
+                if e == Error::<T>::ZeroPrice.into()
+                    || e == Error::<T>::PlanIssuerMismatch.into() =>
+            {
+                Self::suspend_subscription(
+                    &key,
+                    state,
                     subscriber_cid_number,
                     issuer,
-                    stopped_at: now,
-                });
+                    SuspendReason::NeedReconsent,
+                    now,
+                );
+                return;
+            }
+            // 兜底只保守挂起，绝不终止：终止会作废剩余已付时长且需全额重订，
+            // 未知错误一律倒向可恢复的一侧。真正不可恢复的公历溢出在下方独立分支处理。
+            Err(_) => {
+                Self::suspend_subscription(
+                    &key,
+                    state,
+                    subscriber_cid_number,
+                    issuer,
+                    SuspendReason::NeedReconsent,
+                    now,
+                );
                 return;
             }
         };
@@ -386,8 +408,10 @@ impl<T: Config> Pallet<T> {
                     state.subscription_status,
                     SubscriptionStatus::Active | SubscriptionStatus::Cancelled
                 ) {
+                // 折算基准必须是本期实收价：创作者涨价后订阅者到期前再签名时，
+                // authorized_price_fen 已是新价而本期实收仍是旧价，用前者会多折信用。
                 Self::remaining_credit(
-                    state.authorized_price_fen,
+                    state.last_charged_price_fen,
                     state.last_charged_at,
                     state.paid_until,
                     now,
@@ -442,9 +466,12 @@ impl<T: Config> Pallet<T> {
         })
     }
 
-    /// 剩余权益折算：已授权价 × 剩余时长 ÷ 本期总时长（按毫秒，向下取整）。
+    /// 剩余权益折算：本期实收价 × 剩余时长 ÷ 本期总时长（按毫秒，向下取整）。
+    ///
+    /// 只接受 `last_charged_price_fen`。`authorized_price_fen` 是「订阅者已同意的下期价」，
+    /// 仅用于判断是否需要再签名，永不参与任何金额计算。
     fn remaining_credit(
-        authorized_price_fen: u128,
+        last_charged_price_fen: u128,
         last_charged_at: u64,
         paid_until: u64,
         now: u64,
@@ -454,7 +481,7 @@ impl<T: Config> Pallet<T> {
         }
         let remaining = u128::from(paid_until - now);
         let total = u128::from(paid_until - last_charged_at);
-        authorized_price_fen.saturating_mul(remaining) / total
+        last_charged_price_fen.saturating_mul(remaining) / total
     }
 
     /// 创作者覆盖式写入自己的链上付款套餐；展示资料仍只在 Cloudflare/D1。

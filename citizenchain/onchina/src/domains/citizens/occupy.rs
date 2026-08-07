@@ -2620,6 +2620,7 @@ mod tests {
             residence_city_code: b"001".to_vec(),
             account_id,
             binding_revision,
+            identity_version: 0,
             voting: None,
             candidate: None,
         }

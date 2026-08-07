@@ -2,30 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../qr/bodies/wallet_code_body.dart';
+import '../../qr/bodies/account_id_code_body.dart';
 import '../../qr/envelope.dart';
 import '../../qr/qr_protocols.dart';
 import '../app_theme.dart';
 
-/// 钱包码（`QR_V1 k=5 wallet_code`）的构造与展示单源。
+/// 账户码（`QR_V1 k=5 account_id_code`）的构造与展示单源。
 ///
 /// 账户详情页与钱包详情页的账户列表共用本文件：同一个账户在两处入口打开的二维码
 /// 必须逐字节一致，不得各造一份。
 
-/// 为账户生成固定钱包码（`k=5`）。
+/// 为账户生成固定账户码（`k=5`）。
 ///
-/// 钱包码只声明账户，不带时效、不带账户名、不带 CID/昵称。公民钱包完全离线、无 NTP，
+/// 账户码只声明账户，不带时效、不带账户名、不带 CID/昵称。公民钱包完全离线、无 NTP，
 /// 不得签发带绝对时间戳的凭证；也没有 CID↔AccountId 链上真源，不得伪造 `k=3` 用户码。
 String buildWalletQr({required String accountId}) {
-  return QrEnvelope<WalletCodeBody>(
-    kind: QrKind.walletCode,
+  return QrEnvelope<AccountIdCodeBody>(
+    kind: QrKind.accountIdCode,
     id: null,
     expiresAt: null,
-    body: WalletCodeBody(accountId: accountId),
+    body: AccountIdCodeBody(accountId: accountId),
   ).toRawJson();
 }
 
-/// 弹出该账户的钱包码。
+/// 弹出该账户的账户码。
 ///
 /// [accountName] 只在弹窗顶部本机展示，**绝不进载荷**——本机标签用户可随意改写，
 /// 一旦进入二维码就会被扫码端当成对方公开身份显示。

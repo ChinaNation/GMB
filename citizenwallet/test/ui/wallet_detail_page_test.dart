@@ -97,7 +97,7 @@ void main() {
     expect(find.text(kDevPhrase), findsOneWidget);
   });
 
-  testWidgets('账户列表每行有钱包码入口，点它出钱包码且不进账户详情', (tester) async {
+  testWidgets('账户列表每行有账户码入口，点它出账户码且不进账户详情', (tester) async {
     // 真实导入一个钱包，账户0 落库后账户列表才有行可点。
     late Wallet wallet;
     await tester.runAsync(() async {
@@ -114,14 +114,14 @@ void main() {
 
     // 列表标题为「账户列表」;二维码入口在每个账户行上，与右箭头并存。
     expect(find.text('账户列表'), findsOneWidget);
-    final qrEntry = find.byTooltip('显示钱包码');
+    final qrEntry = find.byTooltip('显示账户码');
     expect(qrEntry, findsWidgets);
     expect(find.byIcon(Icons.chevron_right), findsWidgets);
 
     await tester.tap(qrEntry.first);
     await tester.pumpAndSettle();
 
-    // 弹出的是钱包码（与账户详情共用同一份弹窗），且没有跳进账户详情。
+    // 弹出的是账户码（与账户详情共用同一份弹窗），且没有跳进账户详情。
     expect(find.byType(QrImageView), findsOneWidget);
     expect(find.text('复制'), findsOneWidget);
     expect(find.text('账户详情'), findsNothing);

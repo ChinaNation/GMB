@@ -123,7 +123,7 @@ export function TransferForm({ activeWallet, balance, onSubmit, disabled }: Prop
       {showScan && (
         <AddressScanModal
           onResult={(result) => {
-            // 钱包码只声明账户，不带金额；金额一律由本端手工填写。
+            // 账户码只声明账户，不带金额；金额一律由本端手工填写。
             setToAddress(result.ss58_address);
             setShowScan(false);
           }}

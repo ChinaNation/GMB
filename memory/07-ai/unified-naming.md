@@ -736,7 +736,7 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | 协议版本 | `p` | QR envelope | 恒为 `QR_V1` |
-| 流向码 | `k` | QR envelope | `1=sign_request,2=sign_response,3=user_contact(用户码),4=user_transfer(收款码),5=wallet_code(钱包码)`;`5` 由已废止的 `chat_node_pairing` 回收 |
+| 流向码 | `k` | QR envelope | `1=sign_request,2=sign_response,3=user_contact(用户码),4=user_transfer(收款码),5=account_id_code(账户码)`;`5` 由已废止的 `chat_node_pairing` 回收 |
 | 请求 ID | `i` | QR envelope | 临时码 request/session id |
 | 过期时间 | `e` | QR envelope | 临时码过期 unix 秒 |
 | Body | `b` | QR envelope | body 对象 |
@@ -753,7 +753,7 @@ Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream �
 | 币种 | `symbol` | `k=4` body | 当前 `GMB` |
 | 备注 | `memo` | `k=4` body | 收款备注 |
 | 清算标识 | `bank` | `k=4` body | 清算网络/清算行标识 |
-| 账户标识 | `account_id` | `k=5` body | 小写 `0x` 加 64 位十六进制，钱包码唯一字段 |
+| 账户标识 | `account_id` | `k=5` body | 小写 `0x` 加 64 位十六进制，账户码唯一字段 |
 | 节点 PeerId | `node_peer_id` | 旧 `chat_node_pairing` body | 已删除旧字段；旧通信节点 PeerId，不得恢复 |
 | 节点 Multiaddr | `node_multiaddr` | 旧 `chat_node_pairing` body | 已删除旧字段；旧通信节点 multiaddr，不得恢复 |
 | 端点类型 | `endpoint_kind` | 旧 `chat_node_pairing` body | 已删除旧字段；旧通信节点 `ip4` 或 `ip6`，不得恢复 |

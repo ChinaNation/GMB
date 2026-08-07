@@ -50,6 +50,13 @@ class SignResponseBody implements QrBody {
       };
 
   static SignResponseBody fromJson(Map<String, dynamic> data) {
+    // o/r 是换绑场景的可选对,要么都在要么都不在;先按是否带 o 决定期望键集,
+    // 再做精确键闸 —— 未知字段一律拒绝(spec 铁律)。
+    final hasHandover = data.containsKey('o') || data.containsKey('r');
+    _requireExactKeys(
+      data,
+      hasHandover ? const {'u', 's', 'o', 'r'} : const {'u', 's'},
+    );
     final signerPublicKey = data['u'];
     final signature = data['s'];
     final currentAccountId = data['o'];
@@ -107,22 +114,46 @@ class SignResponseBody implements QrBody {
 String _b64NoPad(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
-Uint8List _b64ToBytes(String input, String field) {
-  final normalized =
-      input.padRight(input.length + ((4 - input.length % 4) % 4), '=');
-  try {
-    return Uint8List.fromList(base64Url.decode(normalized));
-  } catch (_) {
-    throw FormatException('签名响应 $field 必须为 base64url');
+/// body 未知字段一律拒绝(spec 铁律)。
+void _requireExactKeys(Map<String, dynamic> data, Set<String> expected) {
+  final actual = data.keys.toSet();
+  if (actual.length != expected.length ||
+      !actual.containsAll(expected) ||
+      !expected.containsAll(actual)) {
+    throw FormatException('签名响应 b 字段必须严格为 ${expected.join('/')}');
   }
 }
 
+/// 严格无填充 base64url:拒填充、拒标准字母表,并做重编码回环校验。
+Uint8List _b64ToBytes(String input, String field) {
+  if (input.isEmpty ||
+      input.contains('=') ||
+      !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(input)) {
+    throw FormatException('签名响应 $field 必须为无填充 base64url');
+  }
+  final normalized =
+      input.padRight(input.length + ((4 - input.length % 4) % 4), '=');
+  try {
+    final bytes = Uint8List.fromList(base64Url.decode(normalized));
+    if (_b64NoPad(bytes) != input) {
+      throw const FormatException();
+    }
+    return bytes;
+  } catch (_) {
+    throw FormatException('签名响应 $field 必须为无填充 base64url');
+  }
+}
+
+/// 严格 hex:强制小写 `0x` 前缀 + 小写偶数字节,与冷端同口径。
 List<int> _hexToBytes(String input) {
-  final text = input.startsWith('0x') || input.startsWith('0X')
-      ? input.substring(2)
-      : input;
-  if (text.isEmpty || text.length.isOdd) {
-    throw const FormatException('hex 必须为偶数字节');
+  if (!input.startsWith('0x')) {
+    throw const FormatException('hex 必须以小写 0x 开头');
+  }
+  final text = input.substring(2);
+  if (text.isEmpty ||
+      text.length.isOdd ||
+      !RegExp(r'^[0-9a-f]+$').hasMatch(text)) {
+    throw const FormatException('hex 必须是小写偶数字节十六进制');
   }
   return List<int>.generate(
     text.length ~/ 2,

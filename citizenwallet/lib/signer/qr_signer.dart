@@ -175,6 +175,13 @@ class QrSigner {
           : _opSignCidAdminRebind;
       return _gmbSigningMessage(opTag, exactPayload);
     }
+    // 广场账户动作只属于 CitizenApp 热钱包(它有会话与在线上下文)。冷钱包扫到
+    // 必须**显式**拒绝:此前没有这一支,直接落到末尾 `return payload` 原始字节直签,
+    // 唯一的保护是「解码器恰好不认识这种字节结构」——一旦将来某个 pallet_index
+    // 撞上广场动作名的 SCALE 首字节,这个巧合就会无声失效。
+    if (body.action == QrActions.squareAccountAction) {
+      return Uint8List(0);
+    }
     if (QrActions.isChainAction(body.action) && payload.length > 256) {
       final digest = Blake2bDigest(digestSize: 32)
         ..update(payload, 0, payload.length);

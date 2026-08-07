@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/wallet_page.dart';
@@ -17,11 +18,18 @@ void main() {
     const publicKey =
         '0x1111111111111111111111111111111111111111111111111111111111111111';
 
-    test('从新用户二维码 user_contact 提取地址', () {
+    test('从用户码 user_contact 提取地址(单字母 c/n,SS58 本机派生)', () {
+      // 码内只有 CID 与 account_id;展示地址由 account_id 在本机派生。
       const raw =
-          '{"p":"QR_V1","k":3,"b":{"cid_number":"CN001-CTZN-000000001-2026","ss58_address":"$address","display_name":"测试用户"}}';
+          '{"p":"QR_V1","k":3,"b":{"c":"CN001-CTZN-000000001-2026","n":"$publicKey"}}';
 
-      expect(extractColdWalletImportAddress(raw), address);
+      expect(extractColdWalletImportAddress(raw), ss58FromAccountIdText(publicKey));
+    });
+
+    test('从账户码 account_id_code 提取地址', () {
+      const raw = '{"p":"QR_V1","k":5,"b":{"n":"$publicKey"}}';
+
+      expect(extractColdWalletImportAddress(raw), ss58FromAccountIdText(publicKey));
     });
 
     test('从 gmb account 二维码提取地址', () {

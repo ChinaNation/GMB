@@ -1,9 +1,14 @@
 // 公民链上身份确认载荷独立解码器。
 //
 // 两色识别模型:签名前必须能从 payload 字节独立解码出全部字段并展示给公民,
-// 解不开一律拒签。SCALE 布局与链端结构体逐字节一致,字段变更三处必须同步:
+// 解不开一律拒签。公民签名覆盖的是完整授权字节
+//   genesis_hash(32) ++ payload ++ expected_identity_version(8) ++ expires_at(8)
+// 三者分别锁链身份、锁身份版本(防回滚重放)、锁授权时间窗。
+// SCALE 布局与链端结构体逐字节一致,字段变更四处必须同步:
 //   citizenchain/runtime/misc/citizen-identity/src/lib.rs
-//     (VotingIdentityPayload / CandidateIdentityPayload)
+//     (CitizenIdentityAuthorization / VotingIdentityPayload / CandidateIdentityPayload)
+//   citizenchain/onchina/src/domains/citizens/chain_identity.rs
+//     (build_citizen_identity_authorization_bytes)
 //   citizenwallet/lib/signer/payload_decoder.dart(_readCandidateIdentityPayload)
 //   本文件
 // 注:链上「已存储」的 CandidateIdentity(含 birth_date)另由
@@ -38,7 +43,49 @@ class VotingIdentityConsentPayload {
     this.givenName,
     this.citizenSexLabel,
     this.birthDate,
+    this.genesisHashHex,
+    this.expectedIdentityVersion,
+    this.authorizationExpiresAt,
   });
+
+  /// 附加防重放授权信息；只有整段授权字节解码成功才会带上。
+  VotingIdentityConsentPayload withAuthorization({
+    required String genesisHashHex,
+    required int expectedIdentityVersion,
+    required int authorizationExpiresAt,
+  }) {
+    return VotingIdentityConsentPayload(
+      identityLevel: identityLevel,
+      cidNumber: cidNumber,
+      accountId: accountId,
+      ss58Address: ss58Address,
+      validFrom: validFrom,
+      validUntil: validUntil,
+      statusNormal: statusNormal,
+      provinceCode: provinceCode,
+      cityCode: cityCode,
+      townCode: townCode,
+      birthProvinceCode: birthProvinceCode,
+      birthCityCode: birthCityCode,
+      birthTownCode: birthTownCode,
+      familyName: familyName,
+      givenName: givenName,
+      citizenSexLabel: citizenSexLabel,
+      birthDate: birthDate,
+      genesisHashHex: genesisHashHex,
+      expectedIdentityVersion: expectedIdentityVersion,
+      authorizationExpiresAt: authorizationExpiresAt,
+    );
+  }
+
+  /// 0x 小写 hex 创世哈希；锁定本次授权只对该链有效。
+  final String? genesisHashHex;
+
+  /// 授权声明的身份版本；链上比对不一致即拒（防回滚重放）。
+  final int? expectedIdentityVersion;
+
+  /// 授权失效时间（Unix 秒）；过期后该签名不可再被提交。
+  final int? authorizationExpiresAt;
 
   final CitizenIdentityConsentLevel identityLevel;
   final String cidNumber;
@@ -72,12 +119,34 @@ class VotingIdentityConsentPayload {
   bool get isCandidate =>
       identityLevel == CitizenIdentityConsentLevel.candidate;
 
-  /// 解码 SCALE 公民身份载荷,必须恰好消费完全部字节。
+  /// 解码公民实际签署的完整授权字节，必须恰好消费完全部字节。
   ///
   /// 任何字段越界、长度非法、日期非法、状态未知都返回 null,
   /// 由调用方按"无法独立验证"拒签。
+  ///
+  /// 布局与链端 `CitizenIdentityAuthorization` 一致：
+  /// `genesis_hash(32) ++ payload ++ expected_identity_version(8) ++ expires_at(8)`。
+  /// 外壳解不开或长度不符一律返回 null（两色识别：解不开就拒签）。
   static VotingIdentityConsentPayload? decode(Uint8List bytes) {
-    return _decodeCandidate(bytes) ?? _decodeVotingRoot(bytes);
+    const genesisHashLen = 32;
+    const trailerLen = 16; // version(8) + expires_at(8)
+    if (bytes.length <= genesisHashLen + trailerLen) return null;
+
+    final inner = Uint8List.sublistView(
+      bytes,
+      genesisHashLen,
+      bytes.length - trailerLen,
+    );
+    final decoded = _decodeCandidate(inner) ?? _decodeVotingRoot(inner);
+    if (decoded == null) return null;
+
+    return decoded.withAuthorization(
+      genesisHashHex: _bytesToLowerHex(
+        Uint8List.sublistView(bytes, 0, genesisHashLen),
+      ),
+      expectedIdentityVersion: _readU64Le(bytes, bytes.length - trailerLen),
+      authorizationExpiresAt: _readU64Le(bytes, bytes.length - 8),
+    );
   }
 
   /// 确认页展示条目,字段中文名与 citizenwallet 确认页一致。
@@ -100,6 +169,8 @@ class VotingIdentityConsentPayload {
           ('公民姓名', '${familyName ?? ''}${givenName ?? ''}'),
           ('公民性别', citizenSexLabel ?? ''),
         ],
+        if (authorizationExpiresAt != null)
+          ('授权有效期至', _formatUnixSeconds(authorizationExpiresAt!)),
       ];
 
   static VotingIdentityConsentPayload? _decodeVotingRoot(Uint8List bytes) {
@@ -213,7 +284,8 @@ class VotingIdentityConsentPayload {
         identityLevel: CitizenIdentityConsentLevel.voting,
         cidNumber: cidNumber,
         accountId: _bytesToLowerHex(walletBytes),
-        ss58Address: Keyring().encodeAddress(walletBytes.toList(), kGmbSs58Prefix),
+        ss58Address:
+            Keyring().encodeAddress(walletBytes.toList(), kGmbSs58Prefix),
         validFrom: validFrom,
         validUntil: validUntil,
         statusNormal: status == 0,
@@ -266,6 +338,26 @@ class VotingIdentityConsentPayload {
       default:
         return (0, 0);
     }
+  }
+
+  static int _readU64Le(Uint8List bytes, int offset) {
+    var value = 0;
+    for (var i = 7; i >= 0; i--) {
+      value = (value << 8) | bytes[offset + i];
+    }
+    return value;
+  }
+
+  /// 授权失效时刻按本地时区展示，公民据此判断该签名的可用窗口。
+  static String _formatUnixSeconds(int seconds) {
+    final local =
+        DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true)
+            .toLocal();
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
   }
 
   static int _readU32Le(Uint8List bytes, int offset) {

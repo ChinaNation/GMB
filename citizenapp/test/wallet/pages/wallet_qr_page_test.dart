@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
-import 'package:citizenapp/qr/bodies/wallet_code_body.dart';
+import 'package:citizenapp/qr/bodies/account_id_code_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/wallet/pages/wallet_qr_page.dart';
 
-/// 钱包码展示页（`k=5 wallet_code`，固定码，唯一入口钱包-账户详情）。
+/// 账户码展示页（`k=5 account_id_code`，固定码，唯一入口钱包-账户详情）。
 ///
 /// 验证点：
 /// - 载荷严格为固定 `k=5`，body 只有 `account_id`，顶层无 `i/e`
 /// - 本机账户标签只在页面顶部显示，绝不进载荷（防止被扫码端当成公开身份）
-/// - 无条件出钱包码：不读链、不判身份，任意账户同一行为
+/// - 无条件出账户码：不读链、不判身份，任意账户同一行为
 /// - account_id 非法时不进页面
 void main() {
   const accountId =
@@ -43,26 +43,26 @@ void main() {
   testWidgets('底部文案覆盖转账与扫码登录，且不出现任何时效文案', (tester) async {
     await openPage(tester);
 
-    expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
+    expect(find.text('账户码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
     expect(find.textContaining('分钟内有效'), findsNothing);
-    // 钱包码不是名片码：不得出现加联系人文案。
+    // 账户码不是名片码：不得出现加联系人文案。
     expect(find.text('扫描此二维码可加为联系人，或向其转账'), findsNothing);
   });
 
-  test('wallet_code 载荷为固定 k=5，body 只含 account_id', () {
-    const envelope = QrEnvelope<WalletCodeBody>(
-      kind: QrKind.walletCode,
+  test('account_id_code 载荷为固定 k=5，body 只含 account_id', () {
+    const envelope = QrEnvelope<AccountIdCodeBody>(
+      kind: QrKind.accountIdCode,
       id: null,
       issuedAt: null,
       expiresAt: null,
-      body: WalletCodeBody(accountId: accountId),
+      body: AccountIdCodeBody(accountId: accountId),
     );
     final raw = envelope.toRawJson();
     final parsed = QrEnvelope.parse(raw);
-    final body = parsed.body as WalletCodeBody;
+    final body = parsed.body as AccountIdCodeBody;
 
-    expect(parsed.kind, QrKind.walletCode);
-    expect(raw.contains('"k":${QrKind.walletCode.code}'), isTrue);
+    expect(parsed.kind, QrKind.accountIdCode);
+    expect(raw.contains('"k":${QrKind.accountIdCode.code}'), isTrue);
     expect(body.accountId, accountId);
     // 固定码：顶层不得出现 i/e。
     expect(parsed.id, isNull);
@@ -76,7 +76,7 @@ void main() {
     expect(raw, isNot(contains('ss58_address')));
   });
 
-  test('wallet_code 拒绝多余字段与非法 account_id', () {
+  test('account_id_code 拒绝多余字段与非法 account_id', () {
     expect(
       () => QrEnvelope.parse(
         '{"p":"QR_V1","k":5,"b":{"account_id":"$accountId","display_name":"张三"}}',
@@ -106,7 +106,7 @@ void main() {
     );
   });
 
-  testWidgets('account_id 非法时不进入钱包码页', (tester) async {
+  testWidgets('account_id 非法时不进入账户码页', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         // SnackBar 需要一个已注册的 Scaffold 才会渲染，不能只有裸 Builder。

@@ -228,8 +228,9 @@ pub type SignedPayload = generic::SignedPayload<RuntimeCall, TxExtension>;
 
 /// Runtime upgrade migrations 集合。
 ///
-/// 元组按执行顺序排列，每项只在其引入的那次升级跑一次。
-pub type Migrations = (citizen_identity::migrations::InitCidCount<Runtime>,);
+/// 元组按执行顺序排列，每项只在其引入的那次升级跑一次；
+/// 开发期每次结构变更都重新创世，创世逻辑自身即为真源，故当前为空。
+pub type Migrations = ();
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<

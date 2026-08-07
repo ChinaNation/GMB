@@ -219,7 +219,7 @@ export function SafetyFundProposalPage({ actorCidNumber, institution_account_id,
           {showAddressScan && (
             <AddressScanModal
               onResult={({ ss58_address }) => {
-                // 钱包码只声明账户，不带金额与备注；两者一律由本端手工填写。
+                // 账户码只声明账户，不带金额与备注；两者一律由本端手工填写。
                 setBeneficiary(ss58_address);
                 setShowAddressScan(false);
               }}

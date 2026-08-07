@@ -1,12 +1,12 @@
 // 解析「扫码识别账户」二维码,用于治理提案的收款地址、手续费地址与安全基金地址。
 //
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
-// 这里要的是「一个账户」,因此只接受 `k=5 wallet_code` 钱包码。
+// 这里要的是「一个账户」,因此只接受 `k=5 account_id_code` 账户码。
 // 用户码(k=3)表达的是「人」、收款码(k=4)表达的是「一笔收款请求」,都不是账户声明,一律拒绝。
 // 裸 SS58 地址和 gmb://account/<addr> 仍然支持(非二维码协议的本地输入兜底)。
 
 import { accountIdToSs58 } from '../ss58';
-import { parseQrEnvelope, QrParseError, type WalletCodeBody } from './citizenQr';
+import { parseQrEnvelope, QrParseError, type AccountIdCodeBody } from './citizenQr';
 
 export type AddressScanResult = {
   ss58_address: string;
@@ -36,13 +36,13 @@ export function parseAddressQr(raw: string): AddressScanResult {
     }
 
     if (env) {
-      if (env.kind !== 'wallet_code') {
-        throw new Error('请扫描钱包码（钱包 → 账户详情右上角二维码）');
+      if (env.kind !== 'account_id_code') {
+        throw new Error('请扫描账户码（钱包 → 账户详情右上角二维码）');
       }
-      const body = env.body as WalletCodeBody;
+      const body = env.body as AccountIdCodeBody;
       const ss58Address = accountIdToSs58(body.account_id);
       if (!SS58_RE.test(ss58Address)) {
-        throw new Error('钱包码中账户格式无效');
+        throw new Error('账户码中账户格式无效');
       }
       return { ss58_address: ss58Address };
     }

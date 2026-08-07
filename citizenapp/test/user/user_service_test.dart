@@ -556,15 +556,14 @@ void main() {
       expect(serialized, isNot(contains('张三')));
     });
 
-    test('用户名片码校验声明 CID，且公开昵称不写入私人备注', () async {
+    test('用户名片码校验声明 CID，备注留空(码内已无昵称字段)', () async {
       final resolver = _FixedPeerCidResolver(_contactCidNumber);
       final service = createService();
 
       final result = await addUserQrContact(
-        body: const UserContactBody(
+        body: UserContactBody(
           cidNumber: _contactCidNumber,
-          ss58Address: _contactA,
-          displayName: '对方公开昵称',
+          accountId: UserContactService.accountIdFromSs58(_contactA),
         ),
         cidResolver: resolver,
         contactService: service,
@@ -578,16 +577,15 @@ void main() {
       expect(result.contact.contactRemark, isEmpty);
     });
 
-    test('用户名片码声明 CID 与 SS58 链上解析不一致时拒绝', () async {
+    test('用户名片码声明 CID 与 account_id 链上解析不一致时拒绝', () async {
       final resolver = _FixedPeerCidResolver('CN001-CTZN-999999999-2026');
       final service = createService();
 
       await expectLater(
         addUserQrContact(
-          body: const UserContactBody(
+          body: UserContactBody(
             cidNumber: _contactCidNumber,
-            ss58Address: _contactA,
-            displayName: '对方公开昵称',
+            accountId: UserContactService.accountIdFromSs58(_contactA),
           ),
           cidResolver: resolver,
           contactService: service,

@@ -10,7 +10,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 展示型二维码的共用外壳:标题 + 顶部大字 + 中央留白二维码 + SS58 地址 + 底部说明。
 ///
-/// 三种展示型码(用户码 / 钱包码 / 收款码)共用同一套外观,只有载荷与文案不同。
+/// 三种展示型码(用户码 / 账户码 / 收款码)共用同一套外观,只有载荷与文案不同。
 /// 本组件不构造任何载荷,由调用方传入已序列化好的 [qrData],避免在展示层混入
 /// 「该出哪种码」的运行时判断。
 class QrDisplayScaffold extends StatefulWidget {
@@ -26,7 +26,7 @@ class QrDisplayScaffold extends StatefulWidget {
   /// AppBar 标题。
   final String title;
 
-  /// 顶部大字。用户码为公开昵称,钱包码为本机账户标签(只在本机显示,不进载荷)。
+  /// 顶部大字。用户码为公开昵称,账户码为本机账户标签(只在本机显示,不进载荷)。
   final String headline;
 
   /// 已序列化的 QR_V1 载荷。

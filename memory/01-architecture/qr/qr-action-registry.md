@@ -54,7 +54,7 @@ CitizenApp / CitizenWallet 已按本规则接入生成产物:`citizenapp/lib/qr/
 
 | a | 名称 | payload | 签名字节 | 生成方 | 扫码/签名方 | 注释 |
 |---:|---|---|---|---|---|---|
-| 1 | `login` | UTF-8 `onchina` | `QR_V1|2|i|onchina|e|target_signer_public_key_without_0x` | OnChina | CitizenWallet | 先扫描 `k=5 wallet_code`（公民钱包账户详情出示），取 `b.account_id` 单向反查链上 Active 管理员记录后，再生成非空 `b.u` 的定向登录请求 |
+| 1 | `login` | UTF-8 `onchina` | `QR_V1|2|i|onchina|e|target_signer_public_key_without_0x` | OnChina | CitizenWallet | 先扫描 `k=5 account_id_code`（公民钱包账户详情出示），取 `b.account_id` 单向反查链上 Active 管理员记录后，再生成非空 `b.u` 的定向登录请求 |
 | 2 | `citizen_identity` | `VotingIdentityPayload` SCALE bytes | `blake2_256(GMB || 0x10 || payload)` | OnChina | CitizenWallet / CitizenApp(电子护照扫码签名页) | 公民本人确认链上投票身份载荷;CitizenApp 侧解码器在 `my/myid/voting_identity_payload.dart` |
 | 3 | `onchina_admin_action` | `onchina_admin_governance` canonical JSON UTF-8 | 原文 | OnChina | CitizenWallet | 链上中国平台管理员治理冷钱包确认 |
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |

@@ -30,7 +30,7 @@ export type SubscriptionStatus =
   | "cancelled"
   | "terminated"
   | "suspended"
-  | "creatorPaused";
+  | "issuerPaused";
 
 export type SuspendReason =
   | "needReconsent"
@@ -129,7 +129,7 @@ const STATUS_BY_BYTE: Record<number, SubscriptionStatus> = {
   1: "cancelled",
   2: "terminated",
   3: "suspended",
-  4: "creatorPaused",
+  4: "issuerPaused",
 };
 
 function encodeIssuerKey(issuer: SubscriptionIssuer): Uint8Array {

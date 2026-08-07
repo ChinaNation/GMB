@@ -15,7 +15,7 @@ import 'package:citizenapp/qr/qr_protocols.dart';
 /// - 下载点击进入保存流程不抛异常（单测环境 SaverGallery 无 native 实现，
 ///   走 `_saveQr` 的 catch 兜底；不用 pumpAndSettle，保存中的进度圈永不 settle）
 /// - k=3 只接受 cid_number + ss58_address + display_name
-/// - 本页只出用户码：不存在任何「该出哪种码」的运行时分流（账户维度走钱包码页）
+/// - 本页只出用户码：不存在任何「该出哪种码」的运行时分流（账户维度走账户码页）
 void main() {
   const accountId =
       '0x0000000000000000000000000000000000000000000000000000000000000000';
@@ -81,18 +81,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('user_contact 载荷为 QR_V1 k=3 且只含身份三字段', () {
-    final raw = QrEnvelope<UserContactBody>(
+  test('user_contact 载荷为 QR_V1 k=3,body 只含单字母 c/n', () {
+    const envelope = QrEnvelope<UserContactBody>(
       kind: QrKind.userContact,
       id: null,
       issuedAt: null,
       expiresAt: null,
-      body: UserContactBody(
-        cidNumber: cidNumber,
-        ss58Address: ss58Address,
-        displayName: displayName,
-      ),
-    ).toRawJson();
+      body: UserContactBody(cidNumber: cidNumber, accountId: accountId),
+    );
+    final raw = envelope.toRawJson();
     final parsed = QrEnvelope.parse(raw);
     final body = parsed.body as UserContactBody;
 
@@ -101,8 +98,12 @@ void main() {
     expect(raw.contains('"k":${QrKind.userContact.code}'), isTrue,
         reason: 'payload should include numeric k=3');
     expect(body.cidNumber, cidNumber);
-    expect(body.ss58Address, ss58Address);
-    expect(body.displayName, displayName);
-    expect(raw, isNot(contains('contact_name')));
+    expect(body.accountId, accountId);
+    // 单字母键;昵称与 SS58 一律不得进码(可篡改 / 只是展示形态)。
+    expect(raw.contains('"c":'), isTrue);
+    expect(raw.contains('"n":'), isTrue);
+    expect(raw, isNot(contains('display_name')));
+    expect(raw, isNot(contains('ss58_address')));
+    expect(raw, isNot(contains('cid_number')));
   });
 }

@@ -17,7 +17,7 @@ import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 /// - 充值 / 提现 / 零钱包（[WalletActionCard]，链下清算行零钱包按账户独立绑定）；
 /// - 清算行（[ClearingBankSettingsPage] 绑定 / 切换）；
 /// - 交易记录（[TransactionHistoryPage]，按账户 `account_id` 查询）；
-/// - 顶部完整 SS58 地址与该账户的钱包码（`k=5`，只声明账户；身份码在用户主页）；
+/// - 顶部完整 SS58 地址与该账户的账户码（`k=5`，只声明账户；身份码在用户主页）；
 /// - AppBar 菜单中的私钥（child mini-secret 独立、单向；展示前生物识别 +
 ///   防截屏 + 纯文本不可复制）。
 ///
@@ -213,7 +213,7 @@ class _AccountDetailPageState extends State<AccountDetailPage>
     await _actionCardKey.currentState?.refresh();
   }
 
-  /// 账户详情统一出固定钱包码（`k=5`）：这里表达的是「账户」，身份由用户主页的用户码表达。
+  /// 账户详情统一出固定账户码（`k=5`）：这里表达的是「账户」，身份由用户主页的用户码表达。
   Future<void> _openWalletQr() async {
     await openWalletQrPage(
       context,

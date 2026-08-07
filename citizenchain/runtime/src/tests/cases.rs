@@ -1294,13 +1294,20 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
             b"4301",
             b"4301001",
         );
-        let signature = sign_citizen_identity_payload(&signer_pair, &payload);
+        let (identity_version, authorization_expires_at, signature) =
+            sign_citizen_identity_authorization(
+                &signer_pair,
+                &payload.cid_number.clone(),
+                &payload,
+            );
 
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
             actor_role_code,
             payload,
+            identity_version,
+            authorization_expires_at,
             signature,
         ));
 
@@ -1333,7 +1340,12 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
             b"4401",
             b"4401001",
         );
-        let signature = sign_citizen_identity_payload(&signer_pair, &payload);
+        let (identity_version, authorization_expires_at, signature) =
+            sign_citizen_identity_authorization(
+                &signer_pair,
+                &payload.cid_number.clone(),
+                &payload,
+            );
 
         assert_noop!(
             CitizenIdentity::register_voting_identity(
@@ -1341,6 +1353,8 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
                 actor_cid_number,
                 actor_role_code,
                 payload,
+                identity_version,
+                authorization_expires_at,
                 signature,
             ),
             citizen_identity::Error::<Runtime>::UnauthorizedRegistrar
@@ -1388,13 +1402,20 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
             citizen_sex: citizen_identity::CitizenSex::Male,
             birth_date: 20000101,
         };
-        let signature = sign_citizen_identity_payload(&signer_pair, &candidate);
+        let (identity_version, authorization_expires_at, signature) =
+            sign_citizen_identity_authorization(
+                &signer_pair,
+                &candidate.voting.cid_number.clone(),
+                &candidate,
+            );
 
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
             actor_role_code,
             candidate,
+            identity_version,
+            authorization_expires_at,
             signature,
         ));
 
@@ -1464,12 +1485,19 @@ fn runtime_registrar_rebind_preserves_candidate_cid_and_enforces_residence_scope
             citizen_sex: citizen_identity::CitizenSex::Female,
             birth_date: 20000101,
         };
-        let candidate_signature = sign_citizen_identity_payload(&current_pair, &candidate);
+        let (candidate_identity_version, candidate_expires_at, candidate_signature) =
+            sign_citizen_identity_authorization(
+                &current_pair,
+                &candidate.voting.cid_number.clone(),
+                &candidate,
+            );
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(registrar.clone()),
             actor_cid_number.clone(),
             hu_role_code.clone(),
             candidate,
+            candidate_identity_version,
+            candidate_expires_at,
             candidate_signature,
         ));
         let voting_identity_before =
@@ -1633,12 +1661,15 @@ fn runtime_square_post_campaign_rejects_voting_only_citizen() {
             b"4301",
             b"4301001",
         );
-        let signature = sign_citizen_identity_payload(&signer_pair, &voting);
+        let (identity_version, authorization_expires_at, signature) =
+            sign_citizen_identity_authorization(&signer_pair, &voting.cid_number.clone(), &voting);
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
             actor_role_code,
             voting,
+            identity_version,
+            authorization_expires_at,
             signature,
         ));
         assert_noop!(
@@ -1696,13 +1727,20 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_account_id() {
             citizen_sex: citizen_identity::CitizenSex::Female,
             birth_date: 20000101,
         };
-        let signature = sign_citizen_identity_payload(&signer_pair, &candidate);
+        let (identity_version, authorization_expires_at, signature) =
+            sign_citizen_identity_authorization(
+                &signer_pair,
+                &candidate.voting.cid_number.clone(),
+                &candidate,
+            );
 
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(registrar),
             actor_cid_number,
             actor_role_code,
             candidate,
+            identity_version,
+            authorization_expires_at,
             signature,
         ));
         assert_ok!(SquarePost::publish_post(

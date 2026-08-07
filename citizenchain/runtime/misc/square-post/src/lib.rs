@@ -291,7 +291,7 @@ pub mod pallet {
             authorized_price_fen: u128,
         },
         /// 创作者掉平台会员，其粉丝订阅暂停扣费但保留、仍留调度，创作者恢复即自动续。
-        SubscriptionCreatorPaused {
+        SubscriptionIssuerPaused {
             subscriber_cid_number: CidNumberOf<T>,
             issuer: IssuerKeyOf<T>,
             paused_at: u64,
@@ -410,9 +410,9 @@ pub mod pallet {
             // 运行期不变量（非迁移专属）：订阅状态与到期调度双向索引必须一致。
             for (key, state) in Subscriptions::<T>::iter() {
                 match state.subscription_status {
-                    // 留在调度里的两态：CreatorPaused 的重试 due 不等于 paid_until，
+                    // 留在调度里的两态：IssuerPaused 的重试 due 不等于 paid_until，
                     // 故只校验「有调度项且双向一致」，不再绑定 paid_until。
-                    SubscriptionStatus::Active | SubscriptionStatus::CreatorPaused => {
+                    SubscriptionStatus::Active | SubscriptionStatus::IssuerPaused => {
                         ensure!(
                             matches!(
                                 RenewalIndex::<T>::get(&key),
@@ -547,7 +547,7 @@ pub mod pallet {
             Self::do_set_creator_plans(who, tiers)
         }
 
-        /// 当前周期内只登记待切换计划；已到期时立即按目标当前价扣款。
+        /// 立即生效并按剩余权益折算：升档补扣差额、降档把信用折成额外时长。
         #[pallet::call_index(4)]
         #[pallet::weight(T::WeightInfo::change_subscription_plan())]
         pub fn change_subscription_plan(

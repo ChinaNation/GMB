@@ -48,6 +48,7 @@ class SignRequestBody implements QrBody {
       };
 
   static SignRequestBody fromJson(Map<String, dynamic> data) {
+    _requireExactKeys(data, const {'a', 'g', 'u', 'd'});
     final action = data['a'];
     final alg = data['g'];
     final signerPublicKey = data['u'];
@@ -105,22 +106,48 @@ class SignRequestBody implements QrBody {
 String _b64NoPad(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
-Uint8List _b64ToBytes(String input, String field) {
-  final normalized =
-      input.padRight(input.length + ((4 - input.length % 4) % 4), '=');
-  try {
-    return Uint8List.fromList(base64Url.decode(normalized));
-  } catch (_) {
-    throw FormatException('签名请求 $field 必须为 base64url');
+/// body 未知字段一律拒绝(spec 铁律):k=1/k=2 是权限最高的两种码型,
+/// 曾是全仓唯一没有这道闸的 body,已废止字段能从这里悄悄混进来。
+void _requireExactKeys(Map<String, dynamic> data, Set<String> expected) {
+  final actual = data.keys.toSet();
+  if (actual.length != expected.length ||
+      !actual.containsAll(expected) ||
+      !expected.containsAll(actual)) {
+    throw FormatException('签名请求 b 字段必须严格为 ${expected.join('/')}');
   }
 }
 
+/// 严格无填充 base64url:拒 `=` 填充、拒标准字母表 `+`/`/`,并做重编码回环校验
+/// 拒绝非规范末位比特。与冷端、Rust 同口径 —— 松一点就会出现「此端过、彼端拒」。
+Uint8List _b64ToBytes(String input, String field) {
+  if (input.isEmpty ||
+      input.contains('=') ||
+      !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(input)) {
+    throw FormatException('签名请求 $field 必须为无填充 base64url');
+  }
+  final normalized =
+      input.padRight(input.length + ((4 - input.length % 4) % 4), '=');
+  try {
+    final bytes = Uint8List.fromList(base64Url.decode(normalized));
+    if (_b64NoPad(bytes) != input) {
+      throw const FormatException();
+    }
+    return bytes;
+  } catch (_) {
+    throw FormatException('签名请求 $field 必须为无填充 base64url');
+  }
+}
+
+/// 严格 hex:强制小写 `0x` 前缀 + 小写偶数字节,与冷端同口径。
 List<int> _hexToBytes(String input) {
-  final text = input.startsWith('0x') || input.startsWith('0X')
-      ? input.substring(2)
-      : input;
-  if (text.isEmpty || text.length.isOdd) {
-    throw const FormatException('hex 必须为偶数字节');
+  if (!input.startsWith('0x')) {
+    throw const FormatException('hex 必须以小写 0x 开头');
+  }
+  final text = input.substring(2);
+  if (text.isEmpty ||
+      text.length.isOdd ||
+      !RegExp(r'^[0-9a-f]+$').hasMatch(text)) {
+    throw const FormatException('hex 必须是小写偶数字节十六进制');
   }
   return List<int>.generate(
     text.length ~/ 2,

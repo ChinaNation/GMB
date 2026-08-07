@@ -367,7 +367,7 @@ void main() {
       expect(find.text('重命名'), findsNothing);
     });
 
-    testWidgets('账户右上角二维码无条件进入固定钱包码页', (tester) async {
+    testWidgets('账户右上角二维码无条件进入固定账户码页', (tester) async {
       final account = _makeAccount(index: 5, name: '日常账户');
       await tester.pumpWidget(
         MaterialApp(
@@ -379,7 +379,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('二维码'), findsOneWidget);
       expect(find.text('日常账户'), findsOneWidget);
-      expect(find.text('钱包码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
+      expect(find.text('账户码：扫描可向本账户转账，或用于扫码登录'), findsOneWidget);
       // 账户详情表达账户，不表达身份：不读链、不出名片码、无任何时效文案。
       expect(find.text('扫描此二维码可加为联系人，或向其转账'), findsNothing);
       expect(find.textContaining('分钟内有效'), findsNothing);

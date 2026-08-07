@@ -52,7 +52,7 @@ class ChatEntryOpeners {
   /// 扫一扫 = 交易·扫一扫统一分派（扫到用户二维码按收款人进入转账）。
   final ChatEntryOpener? openScan;
 
-  /// 收付款 = 展示本账户钱包码（收款码 `k=4` 生成方待实现）。
+  /// 收付款 = 展示本账户账户码（收款码 `k=4` 生成方待实现）。
   final ChatEntryOpener? openReceivePay;
 
   /// 发私信 = 通讯录单选后直开私聊。
@@ -580,10 +580,10 @@ class _ChatTabState extends State<ChatTab> {
     await openScanDispatchFlow(context: context, paymentWallet: wallet);
   }
 
-  /// 收付款 = 展示本账户钱包码（`k=5`），他人扫码后按账户向我转账。
+  /// 收付款 = 展示本账户账户码（`k=5`），他人扫码后按账户向我转账。
   ///
   /// 本入口最终归属是收款码（`k=4`，带金额与备注、临时有效），当前其生成方尚未实现，
-  /// 暂出钱包码；收款码落地时只切这一处，见任务卡
+  /// 暂出账户码；收款码落地时只切这一处，见任务卡
   /// `memory/08-tasks/open/20260729-qr-three-code-classification.md`。
   Future<void> _openReceivePay() async {
     if (!_requireAccount()) return;

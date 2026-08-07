@@ -5,11 +5,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/my/myid/voting_identity_payload.dart';
 
-/// 按 onchina `build_voting_identity_payload` 的字节布局构造夹具:
+/// 公民实际签名覆盖的完整授权字节(与链端 `CitizenIdentityAuthorization` 一致):
+/// genesis_hash(32) || payload || expected_identity_version(u64le) ||
+/// expires_at(u64le)。三者分别锁链身份、锁身份版本、锁授权时间窗。
+Uint8List wrapAuthorization(
+  List<int> payloadBytes, {
+  int identityVersion = 3,
+  int expiresAt = 1800000000,
+}) {
+  void pushU64Le(List<int> out, int value) {
+    for (var i = 0; i < 8; i++) {
+      out.add((value >> (i * 8)) & 0xff);
+    }
+  }
+
+  final out = <int>[
+    ...List.filled(32, 0x11), // genesis_hash
+    ...payloadBytes,
+  ];
+  pushU64Le(out, identityVersion);
+  pushU64Le(out, expiresAt);
+  return Uint8List.fromList(out);
+}
+
+/// 按 onchina `build_voting_identity_payload` 的字节布局构造裸载荷:
 /// compact(len)+cid || publicKey(32) || valid_from(u32le) ||
 /// valid_until(u32le) || status(1) || compact+province || compact+city ||
 /// compact+town。长度均 < 64,compact 恒为单字节 len<<2。
-Uint8List buildPayload({
+Uint8List buildVotingPayloadRaw({
   String cidNumber = 'BJ110198512345678',
   int? publicKeyByte,
   int validFrom = 20260101,
@@ -46,8 +69,30 @@ Uint8List buildPayload({
   return Uint8List.fromList(out);
 }
 
+/// 解码入口收的是完整授权字节，故夹具默认返回已包壳的形态。
+Uint8List buildPayload({
+  String cidNumber = 'BJ110198512345678',
+  int? publicKeyByte,
+  int validFrom = 20260101,
+  int validUntil = 20360101,
+  int status = 0,
+  String province = '11',
+  String city = '01',
+  String town = '001',
+}) =>
+    wrapAuthorization(buildVotingPayloadRaw(
+      cidNumber: cidNumber,
+      publicKeyByte: publicKeyByte,
+      validFrom: validFrom,
+      validUntil: validUntil,
+      status: status,
+      province: province,
+      city: city,
+      town: town,
+    ));
+
 Uint8List buildCandidatePayload() {
-  final out = <int>[...buildPayload()];
+  final out = <int>[...buildVotingPayloadRaw()];
   void pushVec(String text) {
     final bytes = utf8.encode(text);
     out.add(bytes.length << 2);
@@ -68,7 +113,7 @@ Uint8List buildCandidatePayload() {
     (birthDate >> 16) & 0xff,
     (birthDate >> 24) & 0xff,
   ]);
-  return Uint8List.fromList(out);
+  return wrapAuthorization(out);
 }
 
 void main() {

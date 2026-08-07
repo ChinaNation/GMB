@@ -203,10 +203,10 @@ async function reconcilePlatformCandidates(
   batch: number,
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
-    // active（可能转挂起）与 suspended/creatorPaused（可能链上恢复为 active）都要复核。
+    // active（可能转挂起）与 suspended/issuerPaused（可能链上恢复为 active）都要复核。
     // 按身份主键 CID 直接读取链上订阅；账户换绑不会改变 storage key。
     `SELECT cid_number, account_id FROM square_memberships
-      WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
+      WHERE subscription_status IN ('active', 'suspended', 'issuerPaused')
         AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
   ).bind(point.chainTimestamp, batch).all<{
@@ -237,11 +237,11 @@ async function reconcileCreatorCandidates(
   batch: number,
 ): Promise<ReconcileResult> {
   const rows = await env.DB.prepare(
-    // creatorPaused 在链上会随创作者恢复自动续为 active，必须纳入复核刷新镜像。
+    // issuerPaused 在链上会随创作者恢复自动续为 active，必须纳入复核刷新镜像。
     // 订阅者和创作者都以 CID 定位链上状态，不读取审计用账户列。
     `SELECT subscriber_cid_number, creator_cid_number
       FROM square_creator_subscriptions
-      WHERE subscription_status IN ('active', 'suspended', 'creatorPaused')
+      WHERE subscription_status IN ('active', 'suspended', 'issuerPaused')
         AND paid_until <= ?
       ORDER BY paid_until ASC LIMIT ?`,
   ).bind(point.chainTimestamp, batch).all<{

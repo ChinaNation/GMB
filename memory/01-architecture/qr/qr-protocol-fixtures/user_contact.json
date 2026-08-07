@@ -2,8 +2,7 @@
   "p": "QR_V1",
   "k": 3,
   "b": {
-    "cid_number": "CN001-CTZN-000000001-2026",
-    "ss58_address": "w5FhUDLW4BxsE1QXK4sNjPZ8rqSnK2QeVpUfXzqczpWdxChxV",
-    "display_name": "晨光寻路者"
+    "c": "CN001-CTZN-000000001-2026",
+    "n": "0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"
   }
 }

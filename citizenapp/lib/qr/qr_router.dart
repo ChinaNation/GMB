@@ -9,8 +9,8 @@ enum QrRouteType {
   /// 收款码 - 一笔收款请求(user_transfer)
   userTransfer,
 
-  /// 钱包码 - 账户(wallet_code)
-  walletCode,
+  /// 账户码 - 账户(account_id_code);钱包没有码,账户才有码
+  accountIdCode,
 
   /// 交易签名请求(sign_request)
   signRequest,
@@ -67,7 +67,7 @@ class QrRouter {
           QrKind.signResponse => QrRouteType.signResponse,
           QrKind.userContact => QrRouteType.userContact,
           QrKind.userTransfer => QrRouteType.userTransfer,
-          QrKind.walletCode => QrRouteType.walletCode,
+          QrKind.accountIdCode => QrRouteType.accountIdCode,
         };
         return QrRouteResult(type: type, raw: raw, envelope: env);
       } on FormatException {

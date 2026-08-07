@@ -567,13 +567,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   ],
                 ),
               ),
-              // 二维码入口：不进账户详情就能出示该账户的钱包码。
+              // 二维码入口：不进账户详情就能出示该账户的账户码。
               // 独立热区，点它不触发整行的 onTap。
               Semantics(
                 button: true,
-                label: '显示钱包码',
+                label: '显示账户码',
                 child: IconButton(
-                  tooltip: '显示钱包码',
+                  tooltip: '显示账户码',
                   visualDensity: VisualDensity.compact,
                   constraints:
                       const BoxConstraints(minWidth: 36, minHeight: 36),

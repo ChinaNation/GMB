@@ -10,7 +10,7 @@ import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
 import { CitizenSignaturePanel } from '../core/CitizenSignaturePanel';
 import { parseQrEnvelope } from '../core/citizenQr';
-import type { WalletCodeBody } from '../core/citizenQr';
+import type { AccountIdCodeBody } from '../core/citizenQr';
 import type { AdminAuth } from './types';
 import type { AdminIdentifyResult, AdminQrSignRequestResult, NodeBindingRequired } from './api';
 import {
@@ -113,18 +113,18 @@ export function LoginView() {
     notice.success('登录成功');
   }, [setAuth]);
 
-  // 登录第 1 步只收钱包码：管理员私钥保管在离线的 CitizenWallet，钱包码由它自己就能
+  // 登录第 1 步只收账户码：管理员私钥保管在离线的 CitizenWallet，账户码由它自己就能
   // 出示，不需要联网热钱包参与。CID 与管理员姓名一律由链上反查，不信二维码自述。
   const onScanIdentity = useCallback(async (raw: string) => {
     setChallengeLoading(true);
     try {
       const walletCode = parseQrEnvelope(raw);
-      if (walletCode.kind !== 'wallet_code') {
+      if (walletCode.kind !== 'account_id_code') {
         throw new Error(
-          `必须扫描 QR_V1 钱包码（钱包 → 账户详情右上角二维码），当前类型为 ${walletCode.kind}`,
+          `必须扫描 QR_V1 账户码（钱包 → 账户详情右上角二维码），当前类型为 ${walletCode.kind}`,
         );
       }
-      const body = walletCode.body as WalletCodeBody;
+      const body = walletCode.body as AccountIdCodeBody;
       const sessionId = createSessionId();
       const origin = window.location.origin;
       const challenge = await createAdminQrSignRequest({
@@ -132,13 +132,13 @@ export function LoginView() {
         origin,
         session_id: sessionId,
       });
-      // 钱包码不带显示名，这里展示账户短址供操作员核对扫到的是哪个账户；
+      // 账户码不带显示名，这里展示账户短址供操作员核对扫到的是哪个账户；
       // 管理员姓名在会话签发后由链上/数据库记录提供，不信二维码自述。
       setDisplayName(shortAccountId(body.account_id));
       setPendingQrLogin(challenge);
       notice.success('已生成该管理员专用登录二维码');
     } catch (err) {
-      notice.error(err, '钱包码读取失败');
+      notice.error(err, '账户码读取失败');
       setDisplayName('');
       setPendingQrLogin(null);
     } finally {
@@ -153,7 +153,7 @@ export function LoginView() {
 
   const onCompleteSignedLogin = useCallback(async (raw: string) => {
     if (!pendingQrLogin) {
-      notice.error('请先重新扫描管理员钱包码');
+      notice.error('请先重新扫描管理员账户码');
       return;
     }
     setScanSubmitting(true);
@@ -223,7 +223,7 @@ export function LoginView() {
         if (cancelled) return;
         if (status.status === 'PENDING') return;
         if (status.status === 'EXPIRED') {
-          notice.warning('二维码已过期，请重新扫描管理员钱包码');
+          notice.warning('二维码已过期，请重新扫描管理员账户码');
           setPendingQrLogin(null);
           setDisplayName('');
           return;
@@ -284,7 +284,7 @@ export function LoginView() {
           管理员扫码登录
         </Typography.Title>
         <Typography.Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
-          用公民钱包出示账户详情的钱包码，再由同一钱包签名登录
+          用公民钱包出示账户详情的账户码，再由同一钱包签名登录
         </Typography.Text>
       </div>
 
@@ -298,18 +298,18 @@ export function LoginView() {
           qrHint={
             pendingQrLogin
               ? `${displayName} · 有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
-              : '扫描管理员钱包码后生成，仅该账户可以签名'
+              : '扫描管理员账户码后生成，仅该账户可以签名'
           }
-          scannerTitle={pendingQrLogin ? '签名响应' : '管理员钱包码'}
+          scannerTitle={pendingQrLogin ? '签名响应' : '管理员账户码'}
           scannerHint={
             pendingQrLogin
               ? '扫描公民钱包生成的签名响应二维码'
-              : '读取 QR_V1 钱包码中的 account_id；CID 与管理员姓名一律由链上反查'
+              : '读取 QR_V1 账户码中的 account_id；CID 与管理员姓名一律由链上反查'
           }
-          primaryActionText={pendingQrLogin ? '重新扫描钱包码' : undefined}
+          primaryActionText={pendingQrLogin ? '重新扫描账户码' : undefined}
           primaryActionLoading={challengeLoading}
           onPrimaryAction={resetIdentityScan}
-          scannerButtonText={pendingQrLogin ? '扫描签名响应' : '扫描管理员钱包码'}
+          scannerButtonText={pendingQrLogin ? '扫描签名响应' : '扫描管理员账户码'}
           scannerDisabled={challengeLoading || scanSubmitting}
           scannerLoading={challengeLoading || scanSubmitting}
           onDetected={pendingQrLogin ? onCompleteSignedLogin : onScanIdentity}

@@ -933,9 +933,9 @@ fn creator_loses_membership_pauses_fans_and_resumes() {
         Subscriptions::<Test>::remove((creator_cid_number(), IssuerKey::Platform));
         let creator_before = Balances::free_balance(creator_account_id());
         initialize_at(due);
-        // 粉丝暂停：CreatorPaused、未扣、未终止、仍在调度、下周期重试。
+        // 粉丝暂停：IssuerPaused、未扣、未终止、仍在调度、下周期重试。
         let state = Subscriptions::<Test>::get(&ck).expect("state exists");
-        assert_eq!(state.subscription_status, SubscriptionStatus::CreatorPaused);
+        assert_eq!(state.subscription_status, SubscriptionStatus::IssuerPaused);
         assert_eq!(Balances::free_balance(creator_account_id()), creator_before);
         let retry = RenewalIndex::<Test>::get(&ck).expect("still scheduled");
         assert!(retry > due);
@@ -1111,6 +1111,95 @@ fn propose_platform_price_rejects_non_foundation_institution() {
                 599_900,
             ),
             Error::<Test>::NotPlatformInstitution
+        );
+    });
+}
+
+/// 平台侧价格暂时缺失不得永久终止订阅：订阅者无过错，应暂停并自动重试，
+/// 平台恢复后无需订阅者重新签名即自动续费。
+#[test]
+fn missing_platform_price_pauses_instead_of_terminating() {
+    new_test_ext().execute_with(|| {
+        setup_platform();
+        let key = (subscriber_cid_number(), IssuerKey::Platform);
+        assert_ok!(SquarePost::subscribe(
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Platform,
+            platform_plan(),
+            PLATFORM_PRICE,
+        ));
+        let due = RenewalIndex::<Test>::get(&key).expect("scheduled");
+
+        // 平台三档价被清空（模拟播种缺失/治理写入异常）。
+        PlatformPrice::<Test>::remove(MembershipLevel::Spark);
+        initialize_at(due);
+
+        // 必须是可恢复的暂停，且仍留在调度里等待重试。
+        let state = Subscriptions::<Test>::get(&key).expect("state exists");
+        assert_eq!(state.subscription_status, SubscriptionStatus::IssuerPaused);
+        assert_ne!(state.subscription_status, SubscriptionStatus::Terminated);
+        let retry = RenewalIndex::<Test>::get(&key).expect("still scheduled");
+        assert!(retry > due);
+
+        // 平台价恢复 → 下个重试自动续扣回 Active，订阅者全程无需操作。
+        PlatformPrice::<Test>::insert(MembershipLevel::Spark, PLATFORM_PRICE);
+        initialize_at(retry);
+        let resumed = Subscriptions::<Test>::get(&key).expect("state exists");
+        assert_eq!(resumed.subscription_status, SubscriptionStatus::Active);
+    });
+}
+
+/// 换档折算必须按本期实收价，不得按尚未收款的已授权价。
+///
+/// 创作者涨价后订阅者在到期前再签名，此时 authorized_price_fen 已是新价、
+/// 本期实收仍是旧价；若用前者折算会多给信用，升档少收差额。
+#[test]
+fn plan_change_credit_uses_last_charged_price_not_authorized_price() {
+    new_test_ext().execute_with(|| {
+        set_active_platform_member(creator_account_id());
+        let key = (
+            subscriber_cid_number(),
+            IssuerKey::Creator(creator_cid_number()),
+        );
+        CreatorPlans::<Test>::insert(
+            creator_cid_number(),
+            CreatorTiers::try_from(vec![creator_tier(50)]).expect("tiers fit"),
+        );
+        assert_ok!(SquarePost::subscribe(
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_cid_number()),
+            creator_plan(),
+            50,
+        ));
+
+        // 创作者涨价到 100，订阅者到期前再签名：只更新授权价，本期实收仍是 50。
+        CreatorPlans::<Test>::insert(
+            creator_cid_number(),
+            CreatorTiers::try_from(vec![creator_tier(100)]).expect("tiers fit"),
+        );
+        assert_ok!(SquarePost::subscribe(
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_cid_number()),
+            creator_plan(),
+            100,
+        ));
+        let state = Subscriptions::<Test>::get(&key).expect("state exists");
+        assert_eq!(state.authorized_price_fen, 100, "已授权价已是新价");
+        assert_eq!(state.last_charged_price_fen, 50, "本期实收仍是旧价");
+
+        // 立即换档：整周期刚开始，剩余信用应≈实收价 50，而非授权价 100。
+        // 目标档 100 分，补扣差额应接近 50；若误用授权价则信用 100、补扣为 0。
+        let before = Balances::free_balance(subscriber_account_id());
+        assert_ok!(SquarePost::change_subscription_plan(
+            RuntimeOrigin::signed(subscriber_account_id()),
+            IssuerKey::Creator(creator_cid_number()),
+            creator_plan(),
+            100,
+        ));
+        let charged = before - Balances::free_balance(subscriber_account_id());
+        assert!(
+            charged > 0,
+            "必须按实收价折算并补扣差额，不得因误用授权价而零扣款"
         );
     });
 }

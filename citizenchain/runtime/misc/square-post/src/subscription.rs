@@ -176,8 +176,12 @@ pub enum SubscriptionStatus {
     Cancelled = 1,
     Terminated = 2,
     Suspended = 3,
-    /// 创作者掉平台会员，粉丝订阅暂停扣费但仍留在续费调度，创作者恢复即自动续。
-    CreatorPaused = 4,
+    /// 签发方暂时不具备收款条件：创作者掉平台会员，或平台侧价格/收款账户暂不可解析。
+    ///
+    /// 订阅者无过错，故暂停扣费但仍留在续费调度，签发方恢复即自动续，
+    /// 不要求订阅者重新签名。与 `Suspended`（需订阅者介入）和 `Terminated`
+    /// （不可恢复，剩余已付时长作废）是三种互不替代的失败语义。
+    IssuerPaused = 4,
 }
 
 /// 挂起原因。`Suspended` 时为 `Some`，其余状态为 `None`。

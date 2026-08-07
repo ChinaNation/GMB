@@ -2446,29 +2446,52 @@ class PayloadDecoder {
     );
   }
 
-  // CitizenIdentity 原始身份载荷。
-  // SCALE: VotingIdentityPayload {
-  //   cid_number, account_id, valid_from, valid_until,
-  //   citizen_status, residence_province_code, residence_city_code,
-  //   residence_town_code
+  // CitizenIdentity 公民同意授权（公民钱包实际签名覆盖的完整字节）。
+  // SCALE: CitizenIdentityAuthorization {
+  //   genesis_hash: [u8; 32],
+  //   payload: VotingIdentityPayload | CandidateIdentityPayload,
+  //   expected_identity_version: u64,
+  //   expires_at: u64
   // }
+  // 三层分别锁链身份、锁身份版本（防历史载荷回滚重放）、锁授权时间窗。
   static DecodedPayload? _decodeCitizenIdentityPayload(Uint8List bytes) {
-    final candidate = _readCandidateIdentityPayload(bytes, 0);
-    if (candidate != null && candidate.next == bytes.length) {
+    const genesisHashLen = 32;
+    const trailerLen = 16; // expected_identity_version(8) + expires_at(8)
+    if (bytes.length <= genesisHashLen + trailerLen) return null;
+
+    final innerEnd = bytes.length - trailerLen;
+    final genesisHash =
+        _bytesToLowerHex(Uint8List.sublistView(bytes, 0, genesisHashLen));
+    final identityVersion = _readU64Le(bytes, innerEnd);
+    final expiresAt = _readU64Le(bytes, innerEnd + 8);
+    final authorizationFields = <String, String>{
+      'genesis_hash': genesisHash,
+      'expected_identity_version': identityVersion.toString(),
+      'authorization_expires_at': expiresAt.toString(),
+    };
+
+    final candidate = _readCandidateIdentityPayload(bytes, genesisHashLen);
+    if (candidate != null && candidate.next == innerEnd) {
       return DecodedPayload(
         action: 'citizen_candidate_identity',
         summary: '确认公民参选身份上链：${candidate.cidNumber}',
-        fields: candidate.fields,
-        reviewFields: candidate.reviewFields,
+        fields: <String, String>{...candidate.fields, ...authorizationFields},
+        reviewFields: <String, String>{
+          ...candidate.reviewFields,
+          '授权有效期至': _formatUnixSeconds(expiresAt),
+        },
       );
     }
-    final payload = _readVotingIdentityPayload(bytes, 0);
-    if (payload == null || payload.next != bytes.length) return null;
+    final payload = _readVotingIdentityPayload(bytes, genesisHashLen);
+    if (payload == null || payload.next != innerEnd) return null;
     return DecodedPayload(
       action: 'citizen_identity',
       summary: '确认公民身份上链：${payload.cidNumber}',
-      fields: payload.fields,
-      reviewFields: payload.reviewFields,
+      fields: <String, String>{...payload.fields, ...authorizationFields},
+      reviewFields: <String, String>{
+        ...payload.reviewFields,
+        '授权有效期至': _formatUnixSeconds(expiresAt),
+      },
     );
   }
 
@@ -2507,6 +2530,12 @@ class PayloadDecoder {
     if (payload == null) return null;
     offset = payload.next;
 
+    // 防重放两标量紧跟 payload：expected_identity_version(8) + expires_at(8)。
+    if (offset + 16 > bytes.length) return null;
+    final identityVersion = _readU64Le(bytes, offset);
+    final expiresAt = _readU64Le(bytes, offset + 8);
+    offset += 16;
+
     final (signatureLen, signatureLenSize) = _decodeCompactU32(bytes, offset);
     if (signatureLenSize == 0 || signatureLen != 64) return null;
     offset += signatureLenSize;
@@ -2521,12 +2550,15 @@ class PayloadDecoder {
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         ...payload.fields,
+        'expected_identity_version': identityVersion.toString(),
+        'authorization_expires_at': expiresAt.toString(),
         'citizen_signature_len': signatureLen.toString(),
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         ...payload.reviewFields,
+        '授权有效期至': _formatUnixSeconds(expiresAt),
       },
     );
   }
@@ -2566,6 +2598,12 @@ class PayloadDecoder {
     if (payload == null) return null;
     offset = payload.next;
 
+    // 防重放两标量紧跟 payload：expected_identity_version(8) + expires_at(8)。
+    if (offset + 16 > bytes.length) return null;
+    final identityVersion = _readU64Le(bytes, offset);
+    final expiresAt = _readU64Le(bytes, offset + 8);
+    offset += 16;
+
     final (signatureLen, signatureLenSize) = _decodeCompactU32(bytes, offset);
     if (signatureLenSize == 0 || signatureLen != 64) return null;
     offset += signatureLenSize;
@@ -2580,12 +2618,15 @@ class PayloadDecoder {
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         ...payload.fields,
+        'expected_identity_version': identityVersion.toString(),
+        'authorization_expires_at': expiresAt.toString(),
         'citizen_signature_len': signatureLen.toString(),
       },
       reviewFields: <String, String>{
         'actor_cid_number': actorRead.$1,
         'actor_role_code': roleRead.$1,
         ...payload.reviewFields,
+        '授权有效期至': _formatUnixSeconds(expiresAt),
       },
     );
   }
@@ -3288,6 +3329,18 @@ class PayloadDecoder {
   /// 0x 小写 hex。
   static String _bytesToLowerHex(Uint8List bytes) {
     return '0x${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+  }
+
+  /// 授权失效时刻按本机时区展示，签名人据此判断该授权的可用窗口。
+  static String _formatUnixSeconds(int seconds) {
+    final local =
+        DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true)
+            .toLocal();
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
   }
 
   /// 32 字节账户/公钥 bytes → CitizenChain SS58 地址。

@@ -11,7 +11,7 @@ import 'package:citizenapp/wallet/pages/wallet_qr_page.dart';
 /// - 钱包名可点击进入编辑态;提交(回车 / onTapOutside)时通过 [onNameChanged]
 ///   回调让外层落盘。空字符串或与现值相同则回滚不报错,由编辑态自行处理。
 /// - 地址完整展示，空间不足时从第二行左对齐换行；复制按钮独立位于分隔线左侧。
-/// - 右侧 QR 入口进入 [WalletQrPage],内容为 QR_V1 `k=5` 钱包码(只声明账户)。
+/// - 右侧 QR 入口进入 [WalletQrPage],内容为 QR_V1 `k=5` 账户码(只声明账户)。
 ///   身份码(`k=3` 用户码)只在用户主页出示,本卡不做「该出哪种码」的运行时判断。
 class WalletIdentityCard extends StatefulWidget {
   const WalletIdentityCard({

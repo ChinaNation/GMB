@@ -24,6 +24,13 @@ use crate::domains::citizens::admin_entry::{
 };
 use crate::*;
 
+/// 身份写入授权的有效期（秒，按链上时间推算）。
+///
+/// 链端 `MAX_CID_AUTHORIZATION_LIFETIME_SECS` 是 600 秒上限，本端取更短的窗口：
+/// 公民扫码签名是当面办理，180 秒足够，缩短窗口即缩短签名可被取用的时间。
+/// 该值只能小于等于链端上限，调大必须先确认链端上限。
+const CITIZEN_IDENTITY_AUTHORIZATION_LIFETIME_SECS: u64 = 180;
+
 const CITIZEN_IDENTITY_PALLET_INDEX: u8 = 10;
 const REGISTER_VOTING_IDENTITY_CALL_INDEX: u8 = 0;
 const UPGRADE_TO_CANDIDATE_IDENTITY_CALL_INDEX: u8 = 1;
@@ -217,6 +224,28 @@ pub(crate) async fn prepare_citizen_onchain_signature(
             Ok(v) => v,
             Err(resp) => return resp,
         };
+    // 防重放三件套取自同一 finalized 快照：创世哈希锁链、身份版本锁回滚、
+    // 有效期按链上时间推算（不用本机时间，避免与链端时间窗判定产生偏差）。
+    let snapshot = match crate::core::chain_citizen_identity::read_finalized_citizen_identity(
+        record.cid_number.as_str(),
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::error!(cid_number = %record.cid_number, error = %err, "read finalized citizen identity failed");
+            return api_error(StatusCode::BAD_GATEWAY, 2004, "finalized 公民身份读取失败");
+        }
+    };
+    let authorization_expires_at = snapshot
+        .chain_now_seconds
+        .saturating_add(CITIZEN_IDENTITY_AUTHORIZATION_LIFETIME_SECS);
+    let authorization_bytes = build_citizen_identity_authorization_bytes(
+        &snapshot.genesis_hash,
+        &payload.payload_bytes,
+        snapshot.identity_version,
+        authorization_expires_at,
+    );
     let issued_at = Utc::now();
     let expires_at = issued_at + Duration::seconds(180);
     let request_id = format!("citizen-identity-{}", Uuid::new_v4());
@@ -225,7 +254,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         issued_at.timestamp(),
         expires_at.timestamp(),
         citizen_account.account_id.as_str(),
-        &payload.payload_bytes,
+        &authorization_bytes,
         crate::core::qr::action_citizen_identity(),
     ) {
         Ok(v) => v,
@@ -240,6 +269,8 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         citizen_account_id: citizen_account.account_id.clone(),
         identity_level: payload.identity_level.as_str().to_string(),
         payload_hex: hex::encode(&payload.payload_bytes),
+        expected_identity_version: snapshot.identity_version,
+        authorization_expires_at,
         expires_at,
     };
     if let Err(err) = state.db.insert_citizen_onchain_operation(&operation) {
@@ -260,7 +291,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
             identity_level: payload.identity_level,
             account_id: citizen_account.account_id,
             ss58_address: citizen_account.ss58_address,
-            payload_hex: format!("0x{}", hex::encode(payload.payload_bytes)),
+            payload_hex: format!("0x{}", hex::encode(authorization_bytes)),
             sign_request,
             action_label_zh: crate::core::qr::action_label_zh("citizen_identity"),
             expires_at: expires_at.timestamp(),
@@ -366,9 +397,28 @@ pub(crate) async fn complete_citizen_onchain_signature(
         return api_error(StatusCode::FORBIDDEN, 1003, "签名钱包与录入钱包不一致");
     }
     let citizen_signature = sign_response.body.signature;
+    // 验签必须覆盖公民当时实际签署的完整授权字节（含创世哈希、身份版本与有效期），
+    // 这三项取自 prepare 阶段落库的值，不在此重新推算，否则与公民签名内容不一致。
+    let snapshot = match crate::core::chain_citizen_identity::read_finalized_citizen_identity(
+        cid_number.as_str(),
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::error!(cid_number = %cid_number, error = %err, "read finalized citizen identity failed");
+            return api_error(StatusCode::BAD_GATEWAY, 2004, "finalized 公民身份读取失败");
+        }
+    };
+    let authorization_bytes = build_citizen_identity_authorization_bytes(
+        &snapshot.genesis_hash,
+        &payload.payload_bytes,
+        operation.expected_identity_version,
+        operation.authorization_expires_at,
+    );
     if !verify_citizen_identity_signature(
         citizen_account.account_id.as_str(),
-        &payload.payload_bytes,
+        &authorization_bytes,
         citizen_signature.as_str(),
     ) {
         return api_error(
@@ -403,6 +453,8 @@ pub(crate) async fn complete_citizen_onchain_signature(
         &actor_cid_number,
         actor_role_code.as_str(),
         &payload.payload_bytes,
+        operation.expected_identity_version,
+        operation.authorization_expires_at,
         &signature_bytes,
     );
     let action = crate::core::institution_call::chain_action_code(
@@ -489,6 +541,10 @@ struct CitizenOnchainOperation {
     citizen_account_id: String,
     identity_level: String,
     payload_hex: String,
+    /// 公民签名时链上该 CID 的身份版本；链端要求提交值与当时一致。
+    expected_identity_version: u64,
+    /// 链上授权有效期（Unix 秒，按链上时间推算）；与公民签名覆盖的值必须一致。
+    authorization_expires_at: u64,
     expires_at: chrono::DateTime<Utc>,
 }
 
@@ -507,8 +563,9 @@ impl Db {
             conn.execute(
                 "INSERT INTO citizen_onchain_operations
                  (operation_id, registrar_account_id, institution_code, actor_role_code, cid_number,
-                  citizen_account_id, identity_level, payload_hex, expires_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                  citizen_account_id, identity_level, payload_hex,
+                  expected_identity_version, authorization_expires_at, expires_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
                 &[
                     &operation.operation_id,
                     &operation.registrar_account_id,
@@ -518,6 +575,8 @@ impl Db {
                     &operation.citizen_account_id,
                     &operation.identity_level,
                     &operation.payload_hex,
+                    &(operation.expected_identity_version as i64),
+                    &(operation.authorization_expires_at as i64),
                     &operation.expires_at,
                 ],
             )
@@ -535,7 +594,8 @@ impl Db {
             let row = conn
                 .query_opt(
                     "SELECT operation_id, registrar_account_id, institution_code, actor_role_code,
-                        cid_number, citizen_account_id, identity_level, payload_hex, expires_at
+                        cid_number, citizen_account_id, identity_level, payload_hex,
+                        expected_identity_version, authorization_expires_at, expires_at
                  FROM citizen_onchain_operations
                  WHERE operation_id = $1 AND citizen_signed_at IS NULL AND expires_at >= now()",
                     &[&operation_id],
@@ -550,7 +610,9 @@ impl Db {
                 citizen_account_id: row.get(5),
                 identity_level: row.get(6),
                 payload_hex: row.get(7),
-                expires_at: row.get(8),
+                expected_identity_version: row.get::<_, i64>(8) as u64,
+                authorization_expires_at: row.get::<_, i64>(9) as u64,
+                expires_at: row.get(10),
             }))
         })
     }
@@ -601,8 +663,26 @@ impl Db {
 }
 
 struct CitizenIdentityPayloadBytes {
+    /// extrinsic 的 payload 参数本体（不含防重放包装）。
     payload_bytes: Vec<u8>,
     identity_level: CitizenOnchainIdentityLevel,
+}
+
+/// 公民实际签名覆盖的完整字节：`genesis_hash ++ payload ++ version ++ expires_at`。
+///
+/// 与链端 `CitizenIdentityAuthorization` 字段序严格一致，任一端顺序变化都会验签失败。
+fn build_citizen_identity_authorization_bytes(
+    genesis_hash: &[u8; 32],
+    payload_bytes: &[u8],
+    expected_identity_version: u64,
+    authorization_expires_at: u64,
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(32 + payload_bytes.len() + 16);
+    out.extend_from_slice(genesis_hash);
+    out.extend_from_slice(payload_bytes);
+    out.extend(expected_identity_version.to_le_bytes());
+    out.extend(authorization_expires_at.to_le_bytes());
+    out
 }
 
 pub(crate) fn ensure_registry_admin(
@@ -890,6 +970,8 @@ fn encode_citizen_identity_call(
     actor_cid_number: &str,
     actor_role_code: &str,
     payload_bytes: &[u8],
+    expected_identity_version: u64,
+    authorization_expires_at: u64,
     citizen_signature: &[u8; 64],
 ) -> Vec<u8> {
     let mut out = Vec::new();
@@ -900,6 +982,9 @@ fn encode_citizen_identity_call(
     out.extend(Compact(actor_role_code.len() as u32).encode());
     out.extend_from_slice(actor_role_code.as_bytes());
     out.extend_from_slice(payload_bytes);
+    // 防重放两标量紧跟 payload，与链端 extrinsic 参数序一致。
+    out.extend(expected_identity_version.to_le_bytes());
+    out.extend(authorization_expires_at.to_le_bytes());
     out.extend(Compact(citizen_signature.len() as u32).encode());
     out.extend_from_slice(citizen_signature);
     out

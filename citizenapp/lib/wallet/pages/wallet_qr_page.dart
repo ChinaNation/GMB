@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
-import 'package:citizenapp/qr/bodies/wallet_code_body.dart';
+import 'package:citizenapp/qr/bodies/account_id_code_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/qr/widgets/qr_display_scaffold.dart';
 
-/// 钱包码展示页(`QR_V1 k=5 wallet_code`,固定码)。
+/// 账户码展示页(`QR_V1 k=5 account_id_code`,固定码)。
 ///
-/// 钱包码表达「账户」,载荷只有 `account_id` 一个字段。任意账户无条件生成,包括
+/// 账户码表达「账户」,载荷只有 `account_id` 一个字段。任意账户无条件生成,包括
 /// CID 已绑定的身份账户——账户详情表达的是账户,身份由用户主页的用户码表达。
 ///
-/// 固定码,无时效:钱包码必须在离线的 CitizenWallet 也能生成,而离线设备无 NTP,
+/// 固定码,无时效:账户码必须在离线的 CitizenWallet 也能生成,而离线设备无 NTP,
 /// 不得签发带绝对时间戳的凭证。
 ///
 /// 合法扫码场景只有三类:按账户转账、OnChina 管理员登录第 1 步、OnChina 与
@@ -34,12 +34,12 @@ class WalletQrPage extends StatelessWidget {
   String get _ss58Address => ss58FromAccountIdText(accountId);
 
   String _buildQrData() {
-    return QrEnvelope<WalletCodeBody>(
-      kind: QrKind.walletCode,
+    return QrEnvelope<AccountIdCodeBody>(
+      kind: QrKind.accountIdCode,
       id: null,
       issuedAt: null,
       expiresAt: null,
-      body: WalletCodeBody(accountId: accountId),
+      body: AccountIdCodeBody(accountId: accountId),
     ).toRawJson();
   }
 
@@ -49,12 +49,12 @@ class WalletQrPage extends StatelessWidget {
       headline: accountLabel,
       qrData: _buildQrData(),
       ss58Address: _ss58Address,
-      footerText: '钱包码：扫描可向本账户转账，或用于扫码登录',
+      footerText: '账户码：扫描可向本账户转账，或用于扫码登录',
     );
   }
 }
 
-/// 打开钱包码页。account_id 非法时不进页面,直接提示。
+/// 打开账户码页。account_id 非法时不进页面,直接提示。
 Future<void> openWalletQrPage(
   BuildContext context, {
   required String accountId,

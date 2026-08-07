@@ -264,9 +264,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 ),
                 Semantics(
                   button: true,
-                  label: '显示钱包码',
+                  label: '显示账户码',
                   child: IconButton(
-                    tooltip: '显示钱包码',
+                    tooltip: '显示账户码',
                     onPressed: _showWalletQr,
                     icon: Container(
                       width: 36,

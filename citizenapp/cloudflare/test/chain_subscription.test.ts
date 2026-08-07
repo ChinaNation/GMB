@@ -46,7 +46,7 @@ describe("decodeSubscriptionState", () => {
     expect(decodeSubscriptionState(hexToBytes(terminated)).status).toBe("terminated");
   });
 
-  it("解码 Suspended（待再签名）与 CreatorPaused 状态", () => {
+  it("解码 Suspended（待再签名）与 IssuerPaused 状态", () => {
     const suspended = STATE_PREFIX + "03" + STATE_AUTHORIZED + "0100";
     const s = decodeSubscriptionState(hexToBytes(suspended));
     expect(s.status).toBe("suspended");
@@ -57,9 +57,9 @@ describe("decodeSubscriptionState", () => {
       decodeSubscriptionState(hexToBytes(identityUnavailable)).suspendReason,
     ).toBe("identityBindingUnavailable");
 
-    const creatorPaused = STATE_PREFIX + "04" + STATE_AUTHORIZED + "00";
-    const c = decodeSubscriptionState(hexToBytes(creatorPaused));
-    expect(c.status).toBe("creatorPaused");
+    const issuerPaused = STATE_PREFIX + "04" + STATE_AUTHORIZED + "00";
+    const c = decodeSubscriptionState(hexToBytes(issuerPaused));
+    expect(c.status).toBe("issuerPaused");
     expect(c.suspendReason).toBeNull();
   });
 

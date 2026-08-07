@@ -124,12 +124,44 @@
 节点守卫按存储前缀过滤区块 delta，`CidCount` 不落在任何已知前缀内，守卫既不会因它报错，
 也不会校验它；`CidCount` 的正确性由 runtime 执行本身保证（同一 runtime 必得同一结果）。
 
+## 身份写入防重放（CitizenIdentityAuthorization）
+
+四个身份写入口（`register_voting_identity` / `upgrade_to_candidate_identity` /
+`update_voting_identity` / `update_candidate_identity`）的公民同意签名，覆盖的不是裸载荷，
+而是完整授权对象：
+
+```
+CitizenIdentityAuthorization {
+    genesis_hash,                 // 链上注入，调用方无从伪造
+    payload,                      // VotingIdentityPayload | CandidateIdentityPayload
+    expected_identity_version,    // = VotingEligibilityVersionCount[cid]
+    expires_at,                   // Unix 秒，窗口上限 600（MAX_CID_AUTHORIZATION_LIFETIME_SECS）
+}
+```
+
+三层各锁一类重放，缺一即留缺口：
+
+- `genesis_hash` 锁链身份，禁止把测试网签名搬到正式链；
+- `expected_identity_version` 锁该 CID 当前身份版本，每次身份写入单调 +1、永不回退，
+  旧签名携带的版本必然落后，因而**无法用历史载荷把居住地或护照窗口回滚**（防回滚）；
+- `expires_at` 锁授权时间窗，禁止公民签发后长期悬空的载荷被日后取用。
+
+版本复用既有的 `VotingEligibilityVersionCount`，不另建计数存储。校验顺序固定为
+「时间窗 → 版本 → 验签」，先拒掉过期与版本不符的调用，签名验证只在授权仍有效时进行。
+
+字段序即 SCALE 协议序，四端必须逐字节一致，任一端变更四处同步：
+
+- `citizenchain/runtime/misc/citizen-identity/src/lib.rs`（`CitizenIdentityAuthorization`）
+- `citizenchain/onchina/src/domains/citizens/chain_identity.rs`
+  （`build_citizen_identity_authorization_bytes`，版本与创世哈希取自同一 finalized 快照，
+  有效期按链上时间推算，落库到 `citizen_onchain_operations`）
+- `citizenapp/lib/my/myid/voting_identity_payload.dart`
+- `citizenwallet/lib/signer/payload_decoder.dart`
+
 ## 迁移
 
-- `migrations::InitCidCount`：随 `CidCount` 引入的一次性回填，遍历 `CidRegistry` 只数 `Active`
-  写入 `CidCount`，墓碑不计。挂在 `runtime/src/lib.rs` 的 `Migrations` 元组里，由 Executive
-  在升级那个区块执行一次，不进常规出块路径。不回填的话 `ValueQuery` 会让计数从 0 起步，
-  升级前已占号的 CID 全部漏计。
+开发期每次结构变更都重新创世，创世逻辑自身即真源；`runtime/src/lib.rs` 的 `Migrations`
+当前为空元组，不保留任何一次性回填。`CidCount` 由 `GenesisConfig::build` 直接初始化。
 
 ## 验收
 

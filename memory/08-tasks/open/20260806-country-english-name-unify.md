@@ -56,3 +56,41 @@
 - 重新创世完成、44 节点上线、四端 chainspec 同步
 - GitHub org 引用替换完成（待新 org 名）
 - Review 问题已处理
+
+---
+
+# 附:创世前 square-post / citizen-identity 安全审查修复（2026-08-07）
+
+审查发现 4 项阻断问题，全部修复并验证：
+
+1. **身份签名可重放（最高危）**：`register/update_voting_identity`、`upgrade/update_candidate_identity`
+   四个入口的公民同意签名只覆盖裸载荷，无 genesis_hash / 版本 / 有效期，历史签名永久有效。
+   已用 PoC 实证「原辖区注册局可用旧签名把迁居后的居住地与护照窗口静默回滚」。
+   修复：新增 `CitizenIdentityAuthorization { genesis_hash, payload, expected_identity_version, expires_at }`，
+   与既有 `CidRebindAuthorization` / `CidOccupyAuthorization` 同构；版本复用 `VotingEligibilityVersionCount`
+   （每次身份写入 +1，不另建存储），校验顺序「时间窗 → 版本 → 验签」。
+   四端同步：链端 lib.rs、onchina chain_identity.rs（+ 链读 identity_version、operations 表两新列）、
+   citizenapp voting_identity_payload.dart、citizenwallet payload_decoder.dart。
+   新增 6 条测试：重放拒绝（投票/竞选）、超前版本拒绝、过期拒绝、超长有效期拒绝、SCALE 字段序契约。
+
+2. **续费失败错误分流（HIGH）**：`billing.rs` 用 `Err(_)` 通配把 `PlatformPriceNotSet`/`PlatformNotBound`
+   等平台侧暂时不可用错误判为永久 `Terminated`，用户须全额重订且**剩余已付时长作废**。
+   修复：按错误类型穷举分流——平台侧不可用 → `IssuerPaused`（保留调度自动重试，不要求用户重签）；
+   定价配置错误 → `Suspended`；只有 `CalendarOverflow` 才 `Terminated`；未知错误保守挂起。
+   `CreatorPaused` 泛化更名为 `IssuerPaused`（语义覆盖创作者掉会员与平台配置不可用），
+   四端同步：链端、Cloudflare Worker/D1 schema、citizenapp Dart。
+
+3. **换档折算基准价错误（HIGH）**：`remaining_credit` 用 `authorized_price_fen`（已授权的下期价），
+   而创作者涨价后「到期前再签名」窗口内该字段已是新价、本期实收仍是旧价，导致升档少收差额。
+   修复：改用 `last_charged_price_fen`，并固化字段边界（authorized 只判是否需再签名，永不参与金额计算）。
+
+4. **死迁移与命名**：删除 `migrations::InitCidCount`（创世已初始化 `CidCount`），`Migrations` 改空元组；
+   `UnderVotingAge` → `UnderCandidateAge`；订正 `change_subscription_plan` 过时注释。
+
+验证：citizen-identity 83、citizenchain 56、primitives 78+5、square-post 29 全过；
+onchina cargo check --tests 通过；citizenwallet 106、citizenapp 载荷与订阅测试全过；
+Cloudflare chain_subscription 14 全过。全仓旧名（InitCidCount / CreatorPaused / UnderVotingAge）零残留。
+
+**待用户决策（未改）**：CID 吊销后 `CidByAccountId` 反向索引不清理，该钱包账户永久无法再占新 CID。
+若属有意惩罚设计则维持现状；若应允许同账户重新占号，需在 `tombstone_cid_record` 与
+`revoke_bound_identity` 补 `CidByAccountId::remove`。涉及公民权利边界，待定夺。

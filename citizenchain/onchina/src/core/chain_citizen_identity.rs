@@ -62,6 +62,9 @@ pub(crate) struct FinalizedCitizenIdentity {
     pub(crate) residence_city_code: Vec<u8>,
     pub(crate) account_id: Option<[u8; 32]>,
     pub(crate) binding_revision: Option<u64>,
+    /// 该 CID 当前身份版本；身份写入授权必须声明该值，链上比对后才放行。
+    /// 每次身份写入单调 +1，尚无身份时为 0，用旧值提交即被判为重放。
+    pub(crate) identity_version: u64,
     pub(crate) voting: Option<FinalizedVotingIdentity>,
     pub(crate) candidate: Option<FinalizedCandidateIdentity>,
 }
@@ -328,6 +331,22 @@ pub(crate) async fn read_citizen_identity_at(
         )?),
         None => None,
     };
+    // 身份版本：ValueQuery，键不存在即 0（尚未建立任何身份）。
+    let identity_version = match storage
+        .fetch(&dynamic::storage(
+            "CitizenIdentity",
+            "VotingEligibilityVersionCount",
+            cid_key(),
+        ))
+        .await
+        .map_err(|e| format!("fetch VotingEligibilityVersionCount {cid_number} failed: {e}"))?
+    {
+        Some(value) => decode_all::<u64>(
+            value.encoded(),
+            &format!("VotingEligibilityVersionCount {cid_number}"),
+        )?,
+        None => 0,
+    };
     let voting = match storage
         .fetch(&dynamic::storage(
             "CitizenIdentity",
@@ -427,6 +446,7 @@ pub(crate) async fn read_citizen_identity_at(
         cid_status,
         registrar_cid_number,
         commitment,
+        identity_version,
         residence_province_code: province,
         residence_city_code: city,
         account_id,
@@ -502,6 +522,7 @@ mod tests {
     fn active_binding_requires_positive_revision() {
         let snapshot = FinalizedCitizenIdentity {
             genesis_hash: [0; 32],
+            identity_version: 0,
             finalized_block_hash: [1; 32],
             finalized_block_number: 7,
             chain_now_seconds: 100,
@@ -522,6 +543,7 @@ mod tests {
     fn revoked_cid_has_no_active_binding_even_when_audit_mapping_remains() {
         let snapshot = FinalizedCitizenIdentity {
             genesis_hash: [0; 32],
+            identity_version: 0,
             finalized_block_hash: [1; 32],
             finalized_block_number: 7,
             chain_now_seconds: 100,
@@ -542,6 +564,7 @@ mod tests {
     fn voting_or_candidate_requires_registry_rebind() {
         let snapshot = FinalizedCitizenIdentity {
             genesis_hash: [0; 32],
+            identity_version: 0,
             finalized_block_hash: [1; 32],
             finalized_block_number: 7,
             chain_now_seconds: 100,

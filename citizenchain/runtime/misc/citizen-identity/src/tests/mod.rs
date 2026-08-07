@@ -493,6 +493,28 @@ fn rebind_expires_at() -> u64 {
     test_time_secs() + MAX_CID_AUTHORIZATION_LIFETIME_SECS
 }
 
+/// 身份写入授权的有效期上界；与换绑授权同窗口。
+fn identity_expires_at() -> u64 {
+    rebind_expires_at()
+}
+
+/// 读取该 CID 链上当前身份版本；尚无身份时为 0。
+///
+/// 正常调用必须提交当前版本；用旧版本提交即视为重放，链上拒绝。
+fn identity_version(cid_number: &[u8]) -> u64 {
+    VotingEligibilityVersionCount::<Test>::get(cid(cid_number))
+}
+
+/// 从投票身份载荷取当前身份版本。
+fn voting_version(payload: &VotingIdentityPayload<u64>) -> u64 {
+    VotingEligibilityVersionCount::<Test>::get(&payload.cid_number)
+}
+
+/// 从竞选身份载荷取当前身份版本。
+fn candidate_version(payload: &CandidateIdentityPayload<u64>) -> u64 {
+    VotingEligibilityVersionCount::<Test>::get(&payload.voting.cid_number)
+}
+
 fn voting_payload(account_id: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
     VotingIdentityPayload {
         cid_number: cid(cid_number),
@@ -535,6 +557,8 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("0001")),
+            identity_version(&citizen_cid_number("0001")),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -802,6 +826,8 @@ fn self_rebind_cid_account_id_rejects_civic_cid() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("0001")),
+            identity_version(&citizen_cid_number("0001")),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_noop!(
@@ -976,6 +1002,8 @@ fn admin_rebind_cid_account_id_rebinds_civic_cid_with_scoped_registrar() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &cid_bytes),
+            identity_version(&cid_bytes),
+            identity_expires_at(),
             valid_signature(),
         ));
         let voting_identity_before =
@@ -1179,6 +1207,8 @@ fn natp_resident_cannot_become_voting_citizen() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(5, &natp),
+                identity_version(&natp),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::InvalidCitizenCode
@@ -1197,6 +1227,8 @@ fn duplicate_cid_cannot_move_to_another_account_id() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("0001")),
+            identity_version(&citizen_cid_number("0001")),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1206,6 +1238,8 @@ fn duplicate_cid_cannot_move_to_another_account_id() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(2, &citizen_cid_number("0001")),
+                identity_version(&citizen_cid_number("0001")),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::VotingIdentityAlreadyExists
@@ -1225,6 +1259,8 @@ fn updating_identity_cannot_replace_permanent_cid() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("0001")),
+            identity_version(&citizen_cid_number("0001")),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_noop!(
@@ -1233,6 +1269,8 @@ fn updating_identity_cannot_replace_permanent_cid() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(1, &citizen_cid_number("0002")),
+                identity_version(&citizen_cid_number("0002")),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::CidAccountIdBindingMismatch
@@ -1265,6 +1303,8 @@ fn candidate_identity_requires_full_profile_and_enables_candidate_reader() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &citizen_cid_number("CANDIDATE")),
+            identity_version(&citizen_cid_number("CANDIDATE")),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1286,6 +1326,8 @@ fn citizen_subject_requires_active_bidirectional_cid_account_id_binding() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &cid_number),
+            identity_version(&cid_number),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1314,6 +1356,8 @@ fn citizen_subject_rejects_revoked_identity_and_cid() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &cid_number),
+            identity_version(&cid_number),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::revoke_cid(
@@ -1338,7 +1382,9 @@ fn candidate_identity_requires_family_name_and_given_name_separately() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                empty_family,
+                empty_family.clone(),
+                candidate_version(&empty_family),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::EmptyFamilyName
@@ -1352,7 +1398,9 @@ fn candidate_identity_requires_family_name_and_given_name_separately() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                empty_given,
+                empty_given.clone(),
+                candidate_version(&empty_given),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::EmptyGivenName
@@ -1371,6 +1419,8 @@ fn revoke_identity_marks_status_and_removes_effective_population() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &citizen_cid_number("REVOKE")),
+            identity_version(&citizen_cid_number("REVOKE")),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::revoke_identity(
@@ -1429,6 +1479,8 @@ fn revoke_identity_revision_preflight_failures_leave_state_unchanged() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &cid_bytes),
+            identity_version(&cid_bytes),
+            identity_expires_at(),
             valid_signature(),
         ));
         let cid_number = cid(&cid_bytes);
@@ -1487,6 +1539,8 @@ fn population_data_reads_current_scope_count() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("0001")),
+            identity_version(&citizen_cid_number("0001")),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1512,6 +1566,8 @@ fn population_data_revision_freezes_membership_before_identity_update() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("SNAPSHOT-OLD")),
+            identity_version(&citizen_cid_number("SNAPSHOT-OLD")),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1529,7 +1585,9 @@ fn population_data_revision_freezes_membership_before_identity_update() {
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            moved,
+            moved.clone(),
+            voting_version(&moved),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1554,6 +1612,8 @@ fn invalid_citizen_code_is_rejected() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(1, b"OLD-0001"),
+                identity_version(b"OLD-0001"),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::InvalidCitizenCode
@@ -1575,7 +1635,9 @@ fn expired_passport_cannot_vote_and_is_excluded_from_population() {
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            payload,
+            payload.clone(),
+            voting_version(&payload),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1599,7 +1661,9 @@ fn not_yet_valid_passport_cannot_vote() {
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            payload,
+            payload.clone(),
+            voting_version(&payload),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1620,6 +1684,8 @@ fn first_population_date_must_initialize_before_identity_write() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(1, &citizen_cid_number("BOOTSTRAP")),
+                identity_version(&citizen_cid_number("BOOTSTRAP")),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::PopulationDataNotReady
@@ -1632,6 +1698,8 @@ fn first_population_date_must_initialize_before_identity_write() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("BOOTSTRAP")),
+            identity_version(&citizen_cid_number("BOOTSTRAP")),
+            identity_expires_at(),
             valid_signature(),
         ));
     });
@@ -1648,7 +1716,9 @@ fn passport_activates_on_valid_from_and_deactivates_after_valid_until() {
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            payload,
+            payload.clone(),
+            voting_version(&payload),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_eq!(CountryVotingCount::<Test>::get(), 0);
@@ -1684,7 +1754,9 @@ fn population_transition_limit_hides_partial_day_and_blocks_identity_changes() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                payload,
+                payload.clone(),
+                voting_version(&payload),
+                identity_expires_at(),
                 valid_signature(),
             ));
         }
@@ -1704,7 +1776,9 @@ fn population_transition_limit_hides_partial_day_and_blocks_identity_changes() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                update,
+                update.clone(),
+                voting_version(&update),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::PopulationDataNotReady
@@ -1728,7 +1802,9 @@ fn identity_update_invalidates_old_population_transitions_by_revision() {
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            first,
+            first.clone(),
+            voting_version(&first),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1739,7 +1815,9 @@ fn identity_update_invalidates_old_population_transitions_by_revision() {
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            replacement,
+            replacement.clone(),
+            voting_version(&replacement),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1795,6 +1873,8 @@ fn candidate_identity_stores_sex_and_public_profile() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &citizen_cid_number("SEX")),
+            identity_version(&citizen_cid_number("SEX")),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1839,6 +1919,8 @@ fn candidate_birth_date_is_immutable_on_update() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &cid),
+            identity_version(&cid),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1850,7 +1932,9 @@ fn candidate_birth_date_is_immutable_on_update() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                tampered,
+                tampered.clone(),
+                candidate_version(&tampered),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::BirthDateImmutable
@@ -1868,6 +1952,8 @@ fn candidate_birth_scope_and_sex_are_immutable_on_update() {
             registrar_cid_number(),
             registrar_role_code(),
             candidate_payload(1, &cid),
+            identity_version(&cid),
+            identity_expires_at(),
             valid_signature(),
         ));
 
@@ -1879,7 +1965,9 @@ fn candidate_birth_scope_and_sex_are_immutable_on_update() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                tampered_sex,
+                tampered_sex.clone(),
+                candidate_version(&tampered_sex),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::CandidateProfileImmutable
@@ -1893,7 +1981,9 @@ fn candidate_birth_scope_and_sex_are_immutable_on_update() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                tampered_city,
+                tampered_city.clone(),
+                candidate_version(&tampered_city),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::CandidateProfileImmutable
@@ -1912,7 +2002,9 @@ fn candidate_illegal_birth_date_rejected() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                payload,
+                payload.clone(),
+                candidate_version(&payload),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::InvalidBirthDate
@@ -1931,7 +2023,9 @@ fn candidate_future_birth_date_rejected() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                payload,
+                payload.clone(),
+                candidate_version(&payload),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::InvalidBirthDate
@@ -1955,10 +2049,12 @@ fn candidate_under_sixteen_cannot_register_onchain_identity() {
                 RuntimeOrigin::signed(100),
                 registrar_cid_number(),
                 registrar_role_code(),
-                payload,
+                payload.clone(),
+                candidate_version(&payload),
+                identity_expires_at(),
                 valid_signature(),
             ),
-            Error::<Test>::UnderVotingAge
+            Error::<Test>::UnderCandidateAge
         );
     });
 }
@@ -1988,6 +2084,8 @@ fn non_citizen_family_code_is_rejected() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(1, &institution_number),
+                identity_version(&institution_number),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::InvalidCitizenCode
@@ -2200,6 +2298,8 @@ fn register_without_occupation_is_rejected() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(1, &citizen_cid_number("NO-OCC")),
+                identity_version(&citizen_cid_number("NO-OCC")),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::CidNotOccupied
@@ -2216,6 +2316,8 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("RV-1")),
+            identity_version(&citizen_cid_number("RV-1")),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
@@ -2272,6 +2374,8 @@ fn revoke_cid_tombstones_and_revokes_bound_identity() {
                 registrar_cid_number(),
                 registrar_role_code(),
                 voting_payload(2, &citizen_cid_number("RV-1")),
+                identity_version(&citizen_cid_number("RV-1")),
+                identity_expires_at(),
                 valid_signature(),
             ),
             Error::<Test>::CidAlreadyRevoked
@@ -2289,6 +2393,8 @@ fn revoke_cid_revision_preflight_failures_leave_state_unchanged() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &cid_bytes),
+            identity_version(&cid_bytes),
+            identity_expires_at(),
             valid_signature(),
         ));
         let cid_number = cid(&cid_bytes);
@@ -2397,6 +2503,8 @@ fn permanent_cid_update_keeps_registry_record_active() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("CHG-A")),
+            identity_version(&citizen_cid_number("CHG-A")),
+            identity_expires_at(),
             valid_signature(),
         ));
         let mut updated = voting_payload(1, &citizen_cid_number("CHG-A"));
@@ -2405,7 +2513,9 @@ fn permanent_cid_update_keeps_registry_record_active() {
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            updated,
+            updated.clone(),
+            voting_version(&updated),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_eq!(
@@ -2537,6 +2647,8 @@ fn cid_count_decrements_on_revoke_identity() {
             registrar_cid_number(),
             registrar_role_code(),
             voting_payload(1, &citizen_cid_number("count-revoke-id")),
+            identity_version(&citizen_cid_number("count-revoke-id")),
+            identity_expires_at(),
             valid_signature(),
         ));
         assert_eq!(CidCount::<Test>::get(), 1);
@@ -2551,30 +2663,175 @@ fn cid_count_decrements_on_revoke_identity() {
     });
 }
 
-/// 迁移只回填 Active：升级前的墓碑不得计入，否则升级当场把计数抬高。
-#[test]
-fn init_cid_count_migration_counts_only_active_records() {
-    use frame_support::traits::OnRuntimeUpgrade;
+// ───────────────── 身份写入防重放：版本 / 时间窗 ─────────────────
 
+/// 历史载荷重放必须被拒：公民迁居并换发护照后，原辖区注册局不得用旧签名把
+/// 居住地与护照窗口回滚。身份版本每次写入 +1，旧载荷携带的版本必然落后。
+#[test]
+fn replaying_an_old_voting_payload_is_rejected_by_identity_version() {
     new_test_ext().execute_with(|| {
-        occupy_tag_as("count-mig-a", 1);
-        occupy_tag_as("count-mig-b", 2);
-        occupy_tag_as("count-mig-c", 3);
-        assert_ok!(CitizenIdentity::revoke_cid(
+        occupy_tag("REPLAY-OLD");
+        let cid_bytes = citizen_cid_number("REPLAY-OLD");
+        let original = voting_payload(1, &cid_bytes);
+        let original_version = identity_version(&cid_bytes);
+        assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             registrar_cid_number(),
             registrar_role_code(),
-            cid(&citizen_cid_number("count-mig-c")),
+            original.clone(),
+            original_version,
+            identity_expires_at(),
+            valid_signature(),
         ));
-        assert_eq!(CidRegistry::<Test>::iter().count(), 3);
 
-        // 模拟升级前状态：计数器尚未存在，读到 ValueQuery 默认值 0。
-        CidCount::<Test>::kill();
-        assert_eq!(CidCount::<Test>::get(), 0);
+        // 公民迁往另一乡镇并换发护照，有效期延长。
+        let mut moved = voting_payload(1, &cid_bytes);
+        moved.residence_town_code = code(b"4301002");
+        moved.passport_valid_until = 20400630;
+        assert_ok!(CitizenIdentity::update_voting_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            moved,
+            identity_version(&cid_bytes),
+            identity_expires_at(),
+            valid_signature(),
+        ));
 
-        // 测试 runtime 的 DbWeight 是 ()，返回恒为零权重，断言权重没有意义；
-        // 这里只校验回填结果：2 条 Active + 1 条墓碑 → 只数 Active。
-        let _ = crate::migrations::InitCidCount::<Test>::on_runtime_upgrade();
-        assert_eq!(CidCount::<Test>::get(), 2);
+        // 原载荷 + 原版本号原样重提：版本已推进，拒绝。
+        assert_noop!(
+            CitizenIdentity::update_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                original,
+                original_version,
+                identity_expires_at(),
+                valid_signature(),
+            ),
+            Error::<Test>::IdentityVersionMismatch
+        );
+
+        // 链上仍是迁居后的状态，未被回滚。
+        let current = VotingIdentityByCid::<Test>::get(cid(&cid_bytes)).expect("identity");
+        assert_eq!(current.residence_town_code.as_slice(), b"4301002");
+        assert_eq!(current.passport_valid_until, 20400630);
+    });
+}
+
+/// 竞选身份写入同样受版本保护：旧版本号提交即拒。
+#[test]
+fn replaying_an_old_candidate_payload_is_rejected_by_identity_version() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("REPLAY-CAND");
+        let cid_bytes = citizen_cid_number("REPLAY-CAND");
+        let payload = candidate_payload(1, &cid_bytes);
+        let stale_version = identity_version(&cid_bytes);
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(100),
+            registrar_cid_number(),
+            registrar_role_code(),
+            payload.clone(),
+            stale_version,
+            identity_expires_at(),
+            valid_signature(),
+        ));
+
+        assert_noop!(
+            CitizenIdentity::update_candidate_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                payload,
+                stale_version,
+                identity_expires_at(),
+                valid_signature(),
+            ),
+            Error::<Test>::IdentityVersionMismatch
+        );
+    });
+}
+
+/// 超前版本号同样拒绝：版本必须精确等于链上当前值，不接受任意未来值。
+#[test]
+fn future_identity_version_is_rejected() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("VER-AHEAD");
+        let cid_bytes = citizen_cid_number("VER-AHEAD");
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                voting_payload(1, &cid_bytes),
+                identity_version(&cid_bytes) + 1,
+                identity_expires_at(),
+                valid_signature(),
+            ),
+            Error::<Test>::IdentityVersionMismatch
+        );
+    });
+}
+
+/// 公民签发后长期悬空的授权不得日后取用：过期即拒。
+#[test]
+fn expired_identity_authorization_is_rejected() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("IDENT-EXPIRED");
+        let cid_bytes = citizen_cid_number("IDENT-EXPIRED");
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                voting_payload(1, &cid_bytes),
+                identity_version(&cid_bytes),
+                test_time_secs(),
+                valid_signature(),
+            ),
+            Error::<Test>::CidAuthorizationExpired
+        );
+    });
+}
+
+/// 授权有效期不得超过 600 秒上限，避免签一次长期可用。
+#[test]
+fn overlong_identity_authorization_lifetime_is_rejected() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("IDENT-LONG");
+        let cid_bytes = citizen_cid_number("IDENT-LONG");
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                registrar_cid_number(),
+                registrar_role_code(),
+                voting_payload(1, &cid_bytes),
+                identity_version(&cid_bytes),
+                identity_expires_at() + 1,
+                valid_signature(),
+            ),
+            Error::<Test>::CidAuthorizationLifetimeTooLong
+        );
+    });
+}
+
+/// 授权载荷的 SCALE 契约：创世哈希在前、载荷居中、版本与过期时间在后。
+/// 四端按此顺序构造待签字节，任一端字段序变化都会导致验签失败。
+#[test]
+fn citizen_identity_authorization_scale_contract_is_stable() {
+    new_test_ext().execute_with(|| {
+        let payload = voting_payload(1, &citizen_cid_number("SCALE-ORDER"));
+        let authorization = CitizenIdentityAuthorization {
+            genesis_hash: frame_system::Pallet::<Test>::block_hash(0u64),
+            payload: payload.clone(),
+            expected_identity_version: 7,
+            expires_at: 1_700_000_000,
+        };
+
+        let mut expected = frame_system::Pallet::<Test>::block_hash(0u64).encode();
+        expected.extend_from_slice(&payload.encode());
+        expected.extend_from_slice(&7u64.encode());
+        expected.extend_from_slice(&1_700_000_000u64.encode());
+        assert_eq!(authorization.encode(), expected);
     });
 }

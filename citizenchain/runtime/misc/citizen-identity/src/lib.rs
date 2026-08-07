@@ -10,7 +10,6 @@ extern crate alloc;
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
-pub mod migrations;
 pub mod weights;
 
 use alloc::vec::Vec;
@@ -304,6 +303,35 @@ pub struct CandidateIdentityPayload<AccountId> {
     /// 出生日期(YYYYMMDD 整数)。仅竞选身份携带,写入后不可修改;
     /// 链上凭此实时计算竞选公民年龄(见 `candidate_age`)。
     pub birth_date: u32,
+}
+
+/// 公民对本次身份写入的同意授权；四端共用，字段声明顺序即 SCALE 协议顺序。
+///
+/// 与 [`CidRebindAuthorization`]、[`CidOccupyAuthorization`] 同构，三层各锁一类重放：
+/// `genesis_hash` 锁链身份，禁止把测试网签名搬到正式链；
+/// `expected_identity_version` 锁该 CID 当前身份版本（每次身份写入单调 +1），
+/// 旧签名的版本号必然落后，因而无法用历史载荷覆盖新状态（防回滚）；
+/// `expires_at` 锁授权时间窗，禁止公民签发后长期悬空的载荷被日后取用。
+///
+/// 三者缺一都留缺口：只有版本号则跨链可搬运，只有过期时间则窗口内仍可回滚。
+/// `genesis_hash` 由链上注入而非调用方传入，调用方无从伪造。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct CitizenIdentityAuthorization<Hash, Payload> {
+    pub genesis_hash: Hash,
+    pub payload: Payload,
+    pub expected_identity_version: u64,
+    /// Unix 秒；必须晚于当前链上时间，且不得超过当前时间 600 秒。
+    pub expires_at: u64,
 }
 
 #[derive(
@@ -992,9 +1020,12 @@ pub mod pallet {
         InvalidCitizenSignature,
         /// 注册局占号:用户对占号账户的授权签名无效。
         InvalidOccupySignature,
-        UnderVotingAge,
+        /// 竞选身份未达最低参选年龄；投票资格不设年龄门，本错误只用于竞选档。
+        UnderCandidateAge,
         /// 该永久 CID 已经建立投票身份；登记入口不得兼作更新入口。
         VotingIdentityAlreadyExists,
+        /// 调用声明的身份版本不是该 CID 当前身份版本；旧签名重放与状态回滚在此拒死。
+        IdentityVersionMismatch,
         /// CID 与入参账户不符合当前双向绑定。
         CidAccountIdBindingMismatch,
         /// 入参账户已经绑定另一个永久 CID。
@@ -1063,6 +1094,8 @@ pub mod pallet {
             actor_cid_number: CidNumberBound,
             actor_role_code: RoleCodeBound,
             payload: VotingIdentityPayload<T::AccountId>,
+            expected_identity_version: u64,
+            expires_at: u64,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -1071,13 +1104,24 @@ pub mod pallet {
                 &registrar,
                 actor_cid_number.as_slice(),
                 actor_role_code.as_slice(),
-                &payload,
+                payload.residence_province_code.as_slice(),
+                payload.residence_city_code.as_slice(),
                 CitizenIdentityLevel::Voting,
                 0,
             )?;
+            Self::ensure_identity_authorization(
+                &payload.cid_number,
+                expected_identity_version,
+                expires_at,
+            )?;
             Self::ensure_citizen_signature(
                 &payload.account_id,
-                &payload.encode(),
+                &Self::citizen_identity_authorization(
+                    payload.clone(),
+                    expected_identity_version,
+                    expires_at,
+                )
+                .encode(),
                 &citizen_signature,
             )?;
             Self::ensure_cid_occupied_active(&payload.cid_number)?;
@@ -1111,6 +1155,8 @@ pub mod pallet {
             actor_cid_number: CidNumberBound,
             actor_role_code: RoleCodeBound,
             payload: CandidateIdentityPayload<T::AccountId>,
+            expected_identity_version: u64,
+            expires_at: u64,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -1119,13 +1165,24 @@ pub mod pallet {
                 &registrar,
                 actor_cid_number.as_slice(),
                 actor_role_code.as_slice(),
-                &payload.voting,
+                payload.voting.residence_province_code.as_slice(),
+                payload.voting.residence_city_code.as_slice(),
                 CitizenIdentityLevel::Candidate,
                 1,
             )?;
+            Self::ensure_identity_authorization(
+                &payload.voting.cid_number,
+                expected_identity_version,
+                expires_at,
+            )?;
             Self::ensure_citizen_signature(
                 &payload.voting.account_id,
-                &payload.encode(),
+                &Self::citizen_identity_authorization(
+                    payload.clone(),
+                    expected_identity_version,
+                    expires_at,
+                )
+                .encode(),
                 &citizen_signature,
             )?;
             Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
@@ -1176,6 +1233,8 @@ pub mod pallet {
             actor_cid_number: CidNumberBound,
             actor_role_code: RoleCodeBound,
             payload: VotingIdentityPayload<T::AccountId>,
+            expected_identity_version: u64,
+            expires_at: u64,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -1184,13 +1243,24 @@ pub mod pallet {
                 &registrar,
                 actor_cid_number.as_slice(),
                 actor_role_code.as_slice(),
-                &payload,
+                payload.residence_province_code.as_slice(),
+                payload.residence_city_code.as_slice(),
                 CitizenIdentityLevel::Voting,
                 2,
             )?;
+            Self::ensure_identity_authorization(
+                &payload.cid_number,
+                expected_identity_version,
+                expires_at,
+            )?;
             Self::ensure_citizen_signature(
                 &payload.account_id,
-                &payload.encode(),
+                &Self::citizen_identity_authorization(
+                    payload.clone(),
+                    expected_identity_version,
+                    expires_at,
+                )
+                .encode(),
                 &citizen_signature,
             )?;
             Self::ensure_cid_occupied_active(&payload.cid_number)?;
@@ -1214,6 +1284,8 @@ pub mod pallet {
             actor_cid_number: CidNumberBound,
             actor_role_code: RoleCodeBound,
             payload: CandidateIdentityPayload<T::AccountId>,
+            expected_identity_version: u64,
+            expires_at: u64,
             citizen_signature: SignatureOf<T>,
         ) -> DispatchResult {
             let registrar = ensure_signed(origin)?;
@@ -1222,13 +1294,24 @@ pub mod pallet {
                 &registrar,
                 actor_cid_number.as_slice(),
                 actor_role_code.as_slice(),
-                &payload.voting,
+                payload.voting.residence_province_code.as_slice(),
+                payload.voting.residence_city_code.as_slice(),
                 CitizenIdentityLevel::Candidate,
                 3,
             )?;
+            Self::ensure_identity_authorization(
+                &payload.voting.cid_number,
+                expected_identity_version,
+                expires_at,
+            )?;
             Self::ensure_citizen_signature(
                 &payload.voting.account_id,
-                &payload.encode(),
+                &Self::citizen_identity_authorization(
+                    payload.clone(),
+                    expected_identity_version,
+                    expires_at,
+                )
+                .encode(),
                 &citizen_signature,
             )?;
             Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
@@ -1283,16 +1366,8 @@ pub mod pallet {
                 &registrar,
                 actor_cid_number.as_slice(),
                 actor_role_code.as_slice(),
-                &VotingIdentityPayload {
-                    cid_number: cid_number.clone(),
-                    account_id: account.clone(),
-                    passport_valid_from: old.passport_valid_from,
-                    passport_valid_until: old.passport_valid_until,
-                    citizen_status: old.citizen_status,
-                    residence_province_code: old.residence_province_code.clone(),
-                    residence_city_code: old.residence_city_code.clone(),
-                    residence_town_code: old.residence_town_code.clone(),
-                },
+                old.residence_province_code.as_slice(),
+                old.residence_city_code.as_slice(),
                 CitizenIdentityLevel::Voting,
                 4,
             )?;
@@ -1776,16 +1851,21 @@ pub mod pallet {
                 .ok_or(Error::<T>::InvalidBirthDate)?;
             ensure!(
                 age >= MIN_ONCHAIN_CITIZEN_AGE_YEARS as u32,
-                Error::<T>::UnderVotingAge
+                Error::<T>::UnderCandidateAge
             );
             Ok(())
         }
 
+        /// 校验注册局对该居住地、该身份档次的管辖权。
+        ///
+        /// 只取居住省市码而非整个载荷：吊销路径没有入参载荷，传码可避免为过权限校验
+        /// 而拼装一个不参与签名的假载荷。
         fn ensure_authorized(
             registrar: &T::AccountId,
             actor_cid_number: &[u8],
             actor_role_code: &[u8],
-            payload: &VotingIdentityPayload<T::AccountId>,
+            residence_province_code: &[u8],
+            residence_city_code: &[u8],
             level: CitizenIdentityLevel,
             action_code: u32,
         ) -> DispatchResult {
@@ -1794,14 +1874,55 @@ pub mod pallet {
                     registrar,
                     actor_cid_number,
                     actor_role_code,
-                    payload.residence_province_code.as_slice(),
-                    payload.residence_city_code.as_slice(),
+                    residence_province_code,
+                    residence_city_code,
                     level,
                     action_code,
                 ),
                 Error::<T>::UnauthorizedRegistrar
             );
             Ok(())
+        }
+
+        /// 校验调用声明的身份版本等于该 CID 链上当前身份版本。
+        ///
+        /// 版本由 [`VotingEligibilityVersionCount`] 承载，每次身份写入单调 +1、永不回退；
+        /// 尚无身份的 CID 为 0。旧签名携带的版本必然落后于当前值，重放与回滚在此拒死。
+        fn ensure_expected_identity_version(
+            cid_number: &CidNumberBound,
+            expected_identity_version: u64,
+        ) -> DispatchResult {
+            ensure!(
+                VotingEligibilityVersionCount::<T>::get(cid_number) == expected_identity_version,
+                Error::<T>::IdentityVersionMismatch
+            );
+            Ok(())
+        }
+
+        /// 构造四端共用的公民身份写入授权；字段声明顺序即 SCALE 协议顺序。
+        fn citizen_identity_authorization<Payload>(
+            payload: Payload,
+            expected_identity_version: u64,
+            expires_at: u64,
+        ) -> CitizenIdentityAuthorization<T::Hash, Payload> {
+            CitizenIdentityAuthorization {
+                genesis_hash: frame_system::Pallet::<T>::block_hash(BlockNumberFor::<T>::default()),
+                payload,
+                expected_identity_version,
+                expires_at,
+            }
+        }
+
+        /// 身份写入四入口共用的防重放前置：时间窗 + 身份版本，通过后才做验签。
+        ///
+        /// 必须在验签之前调用：先拒掉过期与版本不符的调用，签名验证只在授权仍然有效时进行。
+        fn ensure_identity_authorization(
+            cid_number: &CidNumberBound,
+            expected_identity_version: u64,
+            expires_at: u64,
+        ) -> DispatchResult {
+            Self::ensure_cid_authorization_window(expires_at)?;
+            Self::ensure_expected_identity_version(cid_number, expected_identity_version)
         }
 
         fn ensure_citizen_signature(

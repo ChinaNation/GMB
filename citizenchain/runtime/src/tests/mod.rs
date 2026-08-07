@@ -80,6 +80,30 @@ fn build_voting_identity_payload(
     }
 }
 
+/// 按链端授权结构构造身份写入授权并签名。
+///
+/// 返回 `(身份版本, 授权有效期, 签名)`，三者必须与 extrinsic 入参完全一致；
+/// 版本读链上当前值、有效期按链上时间推算，与生产端取值方式相同。
+fn sign_citizen_identity_authorization<P: codec::Encode + Clone>(
+    signer_pair: &sr25519::Pair,
+    cid_number: &citizen_identity::CidNumberBound,
+    payload: &P,
+) -> (u64, u64, citizen_identity::pallet::SignatureOf<Runtime>) {
+    use frame_support::traits::UnixTime;
+
+    let expected_identity_version =
+        citizen_identity::VotingEligibilityVersionCount::<Runtime>::get(cid_number);
+    let expires_at = <Timestamp as UnixTime>::now().as_secs().saturating_add(300);
+    let authorization = citizen_identity::CitizenIdentityAuthorization {
+        genesis_hash: frame_system::Pallet::<Runtime>::block_hash(0u32),
+        payload: payload.clone(),
+        expected_identity_version,
+        expires_at,
+    };
+    let signature = sign_citizen_identity_payload(signer_pair, &authorization);
+    (expected_identity_version, expires_at, signature)
+}
+
 fn sign_citizen_identity_payload(
     signer_pair: &sr25519::Pair,
     payload: &impl codec::Encode,
