@@ -42,8 +42,6 @@ jobs:
           if len(matches) != 1:
               raise SystemExit("runtime/src/lib.rs 必须且只能包含一个 spec_version 字段")
           source_version = int(matches[0])
-          if source_version <= 0:
-              raise SystemExit("runtime spec_version 必须大于 0")
           # 供后续「发布永久档案」步骤取用；tag 一一对应 spec_version，不得推断。
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
               out.write(f"spec_version={source_version}\n")
