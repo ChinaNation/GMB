@@ -79,9 +79,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// 顶部头图高度（不含状态栏）。
   static const double _bannerHeight = 128;
 
-  /// 头部展开总高（头图 + 白底资料区），不含状态栏。资料区为昵称、SS58、
-  /// CID、签名与计数预留独立行，避免窄屏时与分类标签重叠。
-  static const double _expandedHeight = 372;
+  /// 头部展开总高（头图 + 白底资料区），不含状态栏。资料区只展示昵称、公民号、
+  /// 签名与计数；账户地址收口到用户码后同步压缩空白。
+  static const double _expandedHeight = 344;
 
   late final CitizenProfileApi _api;
   late final CitizenProfileCache _cache;

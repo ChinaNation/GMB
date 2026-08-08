@@ -223,7 +223,11 @@ ADR-017 后已无 best 视图余额接口；所有余额读取 finalized(`fetchF
 - 可选 `onWatchEvent` 会接收后台 `author_submitAndWatchExtrinsic` 状态：
   - `ready / broadcast`：交易进入交易池或已广播
   - `inBlock / finalized`：交易被区块包含或最终化
-  - `future / invalid / dropped / usurped / retracted / finalityTimeout / timeout / error`：交易未能按预期确认，业务页面必须停止“投票中”等待态并给出可操作提示；投票类业务必须回读投票引擎 storage，不能用交易 nonce 推断确认
+  - `invalid / usurped`：当前提交被确定拒绝，可结束等待并报告失败
+  - `future / dropped / retracted / finalityTimeout / timeout / error`：当前节点或订阅未给出
+    业务终局；其中 `dropped` 只表示当前交易池停止跟踪，交易仍可能经其他节点进入
+    finalized。调用方必须继续按 finalized 事件或目标 runtime storage 对账，不能立即包装成
+    “交易失败”；投票类业务必须回读投票引擎 storage，不能用交易 nonce 推断确认
 - 业务层不得把 `txHash` 返回渲染为“投票成功”；链上投票是否生效必须继续读取对应完整票据 storage（如 `InternalVote::InternalVotesByTicket`）确认
 
 `ChainRpc.submitExtrinsicAndWaitForInBlock(Uint8List encoded, {TxPoolWatchCallback? onWatchEvent})`
@@ -232,6 +236,9 @@ ADR-017 后已无 best 视图余额接口；所有余额读取 finalized(`fetchF
 - 返回本地计算的交易哈希和入块状态中的区块哈希
 - 用于提案创建和投票等必须确认链上执行结果的业务；调用方拿到区块哈希后必须继续读取 `System.Events` 或业务 runtime storage
 - 该方法仍不等价于业务成功，业务成功由具体 pallet 事件或投票引擎 storage 决定
+- CID 首次占号在观察链路非确定结束后，使用已签名 extrinsic 的目标
+  `cid_number + account_id + binding_revision=1` 持续核对最新完整验证 finalized storage；
+  目标命中后返回成功，超时只表示“尚未确认”。`invalid / usurped` 仍立即失败。
 
 ### 6.6 Storage Key 计算
 

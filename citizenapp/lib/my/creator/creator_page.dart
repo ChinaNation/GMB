@@ -11,6 +11,7 @@ import 'package:citizenapp/my/membership/membership_page.dart';
 import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/identity_register_guide.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 「我的 → 创作者」：管理自己的创作者会员（档位 / 收入概览）。
 ///
@@ -31,14 +32,28 @@ class _CreatorPageState extends State<CreatorPage> {
   bool _loading = true;
   bool _unregistered = false;
   String? _error;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    WalletManager.walletsRevision.addListener(_onIdentityChanged);
     _load();
   }
 
+  @override
+  void dispose() {
+    WalletManager.walletsRevision.removeListener(_onIdentityChanged);
+    super.dispose();
+  }
+
+  /// 注册可能发生在任意常驻页；finalized 身份广播后，本页必须原地退出注册引导。
+  void _onIdentityChanged() {
+    if (mounted) _load();
+  }
+
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     setState(() {
       _loading = true;
       _error = null;
@@ -48,7 +63,7 @@ class _CreatorPageState extends State<CreatorPage> {
       // 拦截当错误文本呈现。身份链读失败会从 resolve 抛出,落到下方错误分支,
       // 绝不把「没读到链」冒充成「未注册」。
       final identity = await IdentityAccountCache.instance.resolve();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       if (identity == null || !identity.isRegistered) {
         setState(() {
           _unregistered = true;
@@ -59,19 +74,19 @@ class _CreatorPageState extends State<CreatorPage> {
       }
       if (_unregistered) setState(() => _unregistered = false);
       final data = await _service.load();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _data = data;
         _loading = false;
       });
     } on CreatorException catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.message;
         _loading = false;
       });
     } on Exception catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = '加载失败：$e';
         _loading = false;

@@ -149,7 +149,10 @@ citizenapp 不采用“首启强制弹出全部权限”的模式，按平台权
 - 联合投票成功真源是 runtime `JointVote::JointVotesByTicket(proposal_id, institution_ticket)`。
 - 投票服务必须等待交易入块，并按本次提交的完整票据回读对应 runtime storage；只有读到相同票据的 true/false 后才向页面返回成功。
 - 页面不保存或读取账户级 pending 投票。同一链账户的管理员兼任多个岗位时，每个 `CID + 岗位码 + account_id` 的提交、回读和可投状态必须互相独立。
-- 交易池 watch 的 `timeout / finalityTimeout / retracted / future / error` 只能作为本次提交失败信息，不能伪造链上票或阻塞该账户的其他岗位票据。
+- 交易池 watch 的 `timeout / finalityTimeout / retracted / future / dropped / error`
+  只表示当前观察链路未得到终局，不能直接定性链上失败；业务必须按 finalized 事件或目标
+  storage 对账。只有 `invalid / usurped` 属于当前提交的确定拒绝，任何状态都不能伪造链上票
+  或阻塞该账户的其他岗位票据。
 
 ### 2.6 P2P Chat 技术架构
 
@@ -169,7 +172,11 @@ citizenapp 的 P2P Chat 技术路线已确定为“聊天 Tab 统一入口 + 永
   `device_not_registered`，或真实数据解密确认用途钥缺失/失效时，当前绑定账户才鉴权
   一次，签署子钥归属证明并封装用途钥，然后继续原业务。
 - 互联网聊天：Worker 校验 CID、绑定版本、当前账户三元组 session 和登记设备，Durable Object 只在当前请求中转发 OpenMLS `ChatEnvelope`；未送达密文只留发送设备本机队列，无内容推送在系统允许的后台窗口自动连接两端并触发本机重试。
-- 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入 `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；通讯录不复制公开资料。头像下固定按公开昵称、SS58 地址及复制按钮、CID、关注/关注者/帖子三项计数展示；SS58 只从当前绑定规范 `account_id` 即时派生，原始 AccountId 不展示、不复制，CID 单独展示且无复制按钮。
+- 用户主页：广场作者、关注/粉丝、聊天对方与通讯录联系人统一进入
+  `UserProfilePage`。公开资料继续使用 R2 profile JSON + 资料媒体 + D1/链派生信号；
+  通讯录不复制公开资料。头像下固定按公开昵称、“公民号”、签名及关注/关注者/帖子三项
+  计数展示；主页不展示或复制 SS58 / AccountId。`account_id` 仍保留在资料模型用于签名、
+  授权和关系解析；账户地址只在用户码、钱包、转账等明确账户边界使用。
 - 通讯录：联系人关系永久主键是 `cid_number`；公开昵称、头像和签名仍以 CID 从公开
   资料读取，不复制进通讯录。Cloudflare D1 只保存由当前链上绑定钱包账户用途钥生成的
   `contacts-cloud` 用途子钥生成的 AES-256-GCM 单联系人密文和以目标 CID 计算的
@@ -597,6 +604,13 @@ lib/transaction/multisig-transfer/ ← 多签转账业务(创建/详情/投票/�
   此前实时连接。旧实时连接关闭失败时设备登记必须返回 503，禁止报告收敛成功。App 随后
   使 Square Session 只保留新三元组，完整关闭此前 Chat HTTP/WebSocket/MLS 上下文，再建立
   新绑定上下文。清理不是第二套控制权授权，也不接收任何此前账户材料。
+- CID 首次占号的成功条件是“交易进入 finalized 区块且 dispatch 成功，并且 finalized
+  `CID ↔ AccountId` 完整闭环与 `binding_revision=1` 成立”。交易观察出现 `dropped`、
+  `retracted`、`finalityTimeout`、订阅结束或连接错误时，CitizenApp 按后续完整验证
+  finalized 头持续读取目标绑定；命中即按成功收敛，不能提示确定失败。成功后服务层必须先
+  失效共享 `IdentityAccountCache`，再递增 `WalletManager.walletsRevision`；我的、广场、
+  聊天、身份、通讯录、创作者和会员等已挂载页面按 `account_id + cid_number` 重读，
+  同账户 `cid_number: 空 → 有效值` 也必须原地退出“尚未注册”，不得依赖重启 App。
 - App 端发布闭环当前口径：`lib/8964/services/square_api_client.dart` 负责 Worker 登录、会员和上传；普通会员展示读取只查 D1 镜像，发布按钮与上传流程请求 `verify_on_deny=1`，让 Worker 在拒绝前按 CID 复核 finalized 订阅。App 只消费服务端结果，不上传或自证会员资格；402 显示确实无有效会员，401 提示重新登录，503、网络或空响应统一显示“暂时无法验证会员状态”，禁止再吞成 `null` 后误报无会员。manifest、profile 与图片 PUT 都对原始字节生成 P-256 请求签名，视频只向 Stream TUS 地址发送字节。`lib/8964/services/square_upload_service.dart` 生成 manifest、取得 `post_id/storage_receipt_id` 与 `worker/tus` 上传计划；最终额度和真实文件校验只以 Worker 为准。修改内容仍视为新发布，新帖确认成功后再硬删除旧帖 Cloudflare 数据。
 - 广场冷启动第一帧必须直接渲染分类栏、水印、内容区域和发布按钮；Square Session、feed
   与通知轮询在页面显示后后台启动，只允许以非阻塞顶部细进度表示首拉，不得设置全屏身份门

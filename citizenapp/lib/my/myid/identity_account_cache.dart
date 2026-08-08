@@ -36,6 +36,8 @@ class IdentityAccountCache {
   ResolvedIdentity? _cached;
   int _cachedRevision = -1;
   Future<ResolvedIdentity?>? _inflight;
+  int? _inflightRevision;
+  int _generation = 0;
 
   /// 当前身份账户；链读失败上抛，禁止链读且缓存未命中返回 null。
   ///
@@ -53,15 +55,21 @@ class IdentityAccountCache {
     }
     // 合并并发请求:冷启动广场/聊天/我的同时拉身份,只做一次链读。
     final inflight = _inflight;
-    if (inflight != null) {
+    if (inflight != null && _inflightRevision == revision) {
       return inflight;
     }
-    final future = _resolveFresh(revision);
+    final generation = _generation;
+    final future = _resolveFresh(revision, generation);
     _inflight = future;
+    _inflightRevision = revision;
     try {
       return await future;
     } finally {
-      _inflight = null;
+      // 旧版本请求可能晚于失效后的新请求结束，不能反向清掉新版本的 single-flight。
+      if (identical(_inflight, future)) {
+        _inflight = null;
+        _inflightRevision = null;
+      }
     }
   }
 
@@ -88,17 +96,24 @@ class IdentityAccountCache {
     );
   }
 
-  Future<ResolvedIdentity?> _resolveFresh(int revision) async {
+  Future<ResolvedIdentity?> _resolveFresh(int revision, int generation) async {
     final resolved = await _resolver.resolve();
-    _cached = resolved;
-    _cachedRevision = revision;
+    // invalidate 后仍在运行的旧链读只能把结果交给原调用方，禁止回写成当前缓存。
+    if (_generation == generation &&
+        WalletManager.walletsRevision.value == revision) {
+      _cached = resolved;
+      _cachedRevision = revision;
+    }
     return resolved;
   }
 
   /// 强制失效(显式刷新用;`walletsRevision` 变化已自动失效,一般无需手调)。
   void invalidate() {
+    _generation++;
     _cached = null;
     _cachedRevision = -1;
+    _inflight = null;
+    _inflightRevision = null;
   }
 
   static String _lowerHex(List<int> bytes) =>

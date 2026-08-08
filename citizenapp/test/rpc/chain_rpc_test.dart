@@ -70,4 +70,42 @@ void main() {
     final total = await rpc.fetchMinSelfPayBalanceFen();
     expect(total, BigInt.from(121));
   });
+
+  group('交易池观察状态的终局语义', () {
+    test('只有 invalid 与 usurped 是确定失败', () {
+      for (final kind in <TxPoolWatchKind>[
+        TxPoolWatchKind.invalid,
+        TxPoolWatchKind.usurped,
+      ]) {
+        expect(
+          TxPoolWatchEvent(
+            kind: kind,
+            description: kind.name,
+            raw: kind.name,
+          ).isFailure,
+          isTrue,
+        );
+      }
+    });
+
+    test('dropped 等停止观察状态必须交给 finalized 业务对账', () {
+      for (final kind in <TxPoolWatchKind>[
+        TxPoolWatchKind.future,
+        TxPoolWatchKind.dropped,
+        TxPoolWatchKind.retracted,
+        TxPoolWatchKind.finalityTimeout,
+        TxPoolWatchKind.timeout,
+        TxPoolWatchKind.error,
+      ]) {
+        expect(
+          TxPoolWatchEvent(
+            kind: kind,
+            description: kind.name,
+            raw: kind.name,
+          ).isFailure,
+          isFalse,
+        );
+      }
+    });
+  });
 }

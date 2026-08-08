@@ -18,17 +18,21 @@
 **不产出任何留存产物**——`<product>/target/` 沉淀已整体删除（曾各积压 181MB / 98MB）。
 编译产物只在 GitHub：CI 出未签名产物，Release 出正式签名产物。
 
-「编译」的语义是**把能用的软件装进设备**，与 CI / 正式 Release 是三条互不相干的通路，因此
-两脚本一律 `flutter build` + 安装，**不再用 `flutter run`**（那只是把 App 挂在调试器上跑）：
+「编译」的语义是**把最新、能直接使用的软件覆盖升级到设备且保留全部用户数据**，与 CI /
+正式 Release 是三条互不相干的通路，因此两脚本一律 `flutter build` + 原位覆盖，
+**不再用 `flutter run`**（那只是把 App 挂在调试器上跑）：
 
-- **iOS 必须 release**，安装走 `flutter install --release -d <flutter 设备 id>`。iOS 14+ 禁止
+- **iOS 必须 release**，覆盖走 `xcrun devicectl device install app --device <flutter 设备 UDID>
+  <Runner.app>`。iOS 14+ 禁止
   Flutter debug 版脱离 flutter tooling / Xcode 启动，debug 版装进手机后从桌面点图标必然起不来
-  （系统提示 `Cannot create a FlutterEngine instance in debug mode`，随后 signal 11）——表现
-  就是「一点就闪退」。**不能用 `xcrun devicectl` 安装**：flutter 报的 iOS 设备 id 是硬件 UDID
-  （`00008140-…`），devicectl 用的是另一套内部标识（`9B0DA677-…`），两者不通用。
+  （系统提示 `Cannot create a FlutterEngine instance in debug mode`，随后 signal 11）——表现就是
+  「一点就闪退」。`devicectl` 明确接受硬件 UDID；覆盖前校验 Bundle ID 与签名团队。iOS
+  更新时允许迁移数据容器并改变 `dataContainerPath`，因此不得拿绝对路径相等作数据保留判据；
+  已存在钱包数据库时，覆盖后必须复读到同名、同非零大小的 Isar 文件。禁止使用默认先卸载旧
+  App 的 Flutter 安装命令，禁止任何卸载回退。
 - **Android 用 debug**：安卓 debug 版从桌面就能直接使用，且保留 `AppLog` 落盘诊断
   （release 下 `kReleaseMode` 使其为空操作），排障成本低得多；安装走
-  `adb -s <id> install -r`（flutter 的安卓设备 id 即 adb serial）。
+  `adb -s <id> install -r`（flutter 的安卓设备 id 即 adb serial，`-r` 表示保留数据覆盖现有 App）。
 
 两端构建模式不同是 iOS 系统能力的客观差异，按「iOS/Android 两端必须一致」铁律在此显式登记：
 **两端交付物都是可直接使用的 App**，这一条完全一致。要把 Android 也统一成 release，改 android

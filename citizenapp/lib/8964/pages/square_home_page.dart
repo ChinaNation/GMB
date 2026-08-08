@@ -68,8 +68,9 @@ class _SquareHomePageState extends State<SquareHomePage> {
   int _feedLoadGeneration = 0;
   final List<SquarePost> _localPosts = [];
 
-  /// 最近一次身份加载结果的身份账户，供 _onWalletsChanged 廉价比对。
+  /// 最近一次身份加载结果的身份账户与永久 CID，供身份 revision 广播后成对比对。
   String? _identityAddress;
+  String? _identityCidNumber;
 
   final SquareApiClient _squareApi = SquareApiClient();
   final SquarePostSyncService _postSyncService = SquarePostSyncService();
@@ -203,6 +204,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
       readLiveChain: readLiveChain,
     );
     _identityAddress = identity.accountId;
+    _identityCidNumber = identity.cidNumber;
     return identity;
   }
 
@@ -262,21 +264,20 @@ class _SquareHomePageState extends State<SquareHomePage> {
   }
 
   Future<void> _onWalletsChanged() async {
-    // 先廉价比对（纯 Isar 读）：身份账户没变时跳过。
-    // 钱包名是本机标签，改名不得触发广场身份或公开昵称重载。
-    // 避免无关钱包操作触发 CID 链查询。乱序安全由 FutureBuilder
-    // 只跟踪最新 _identityFuture 保证。
-    // 身份账户廉价读（不启动 smoldot），与 _identityAddress 同口径比对。
-    final identityAccountId =
-        await IdentityAccountCache.instance.accountId(allowChainRead: false) ??
-            '';
+    // CID 占号可在 account_id 不变时把 cid_number 从空推进为有效值；收到显式身份
+    // revision 后必须读取完整身份，不能沿用只比较账户的旧优化。
+    final identity = await IdentityAccountCache.instance.resolve();
+    final identityAccountId = identity?.accountId ?? '';
+    final identityCidNumber = identity?.snapshot?.cidNumber ?? '';
     if (!mounted) return;
-    if (identityAccountId == (_identityAddress ?? '')) {
+    if (identityAccountId == (_identityAddress ?? '') &&
+        identityCidNumber == (_identityCidNumber ?? '')) {
       return;
     }
     _operationalIdentityAccount = null;
     setState(() {
-      _identityFuture = _loadIdentity(readLiveChain: false);
+      _identityFuture = _loadIdentity(readLiveChain: true);
+      _feedFuture = _beginFeedLoad();
     });
     _onChainHealthChanged();
   }
@@ -596,8 +597,8 @@ class _SquareHomePageState extends State<SquareHomePage> {
     await next;
   }
 
-  /// 引导内占号成功后的就地回刷:占号不改钱包列表(walletsRevision 不动),必须
-  /// 显式重载身份与 feed;共享注册流程已失效身份缓存,这里重读即得新身份。
+  /// 引导内占号成功后的就地回刷。服务层已经先失效身份缓存再广播全局 revision；
+  /// 当前回调只保证本页在注册流程返回的同一帧重载身份与 feed。
   void _onRegisteredFromGuide() {
     if (!mounted) return;
     setState(() {

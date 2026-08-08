@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
-import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 推特式资料卡：头图下方白底，圆角方形头像跨压头图下缘 + 认证勾 +
-/// 展示名/SS58/CID/签名/计数 + 右上三图标。
+/// 展示名/公民号/签名/计数 + 右上三图标。
 ///
 /// 头像用 [Positioned] 上移半个身位跨到头图上；文字为深色（落在白底）；
 /// 数据来自已加载的 [profile]（可空 → 占位）。
@@ -100,7 +98,6 @@ class ProfileHeaderCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 _IdentityDetails(
-                  accountId: profile?.accountId ?? '',
                   cidNumber: cidNumber,
                 ),
                 if (bio.isNotEmpty) ...[
@@ -169,82 +166,22 @@ class ProfileHeaderCard extends StatelessWidget {
 
 class _IdentityDetails extends StatelessWidget {
   const _IdentityDetails({
-    required this.accountId,
     required this.cidNumber,
   });
 
-  final String accountId;
   final String cidNumber;
-
-  /// SS58 只由规范 AccountId 即时派生，不从资料响应读取第二份地址。
-  ///
-  /// 公开资料尚未加载或服务端返回非法 AccountId 时从严降级，不显示复制入口，
-  /// 更不能把原始 AccountId 冒充为 SS58。
-  String? get _ss58Address {
-    final normalized = accountId.trim();
-    if (normalized.isEmpty) return null;
-    try {
-      return ss58FromAccountIdText(normalized);
-    } on FormatException {
-      return null;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final ss58Address = _ss58Address;
     final cid = cidNumber.trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                ss58Address == null ? 'SS58：暂不可用' : 'SS58：$ss58Address',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            if (ss58Address != null) ...[
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: '复制 SS58 地址',
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(
-                  width: 28,
-                  height: 28,
-                ),
-                padding: EdgeInsets.zero,
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: ss58Address));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('SS58 地址已复制')),
-                  );
-                },
-                icon: const Icon(
-                  Icons.copy,
-                  size: 14,
-                  color: AppTheme.textTertiary,
-                ),
-              ),
-            ],
-          ],
-        ),
-        Text(
-          cid.isEmpty ? 'CID：暂不可用' : 'CID：$cid',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: AppTheme.textTertiary,
-            fontSize: 12,
-          ),
-        ),
-      ],
+    return Text(
+      cid.isEmpty ? '公民号：暂不可用' : '公民号：$cid',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: AppTheme.textTertiary,
+        fontSize: 12,
+      ),
     );
   }
 }

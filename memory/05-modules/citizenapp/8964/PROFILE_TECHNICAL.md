@@ -3,7 +3,8 @@
 ## 定位
 - 「我的 → 点头像」进本人主页；广场帖子点作者进他人主页。
 - 用户主页寻址主键 = 永久 `cid_number`；当前绑定 `account_id` 只承担签名、授权和
-  SS58 派生，主页不直接展示或复制 AccountId。`ss58_address` 只用于展示和边界
+  账户边界解析，主页不展示或复制 AccountId / SS58。`ss58_address` 只用于用户码、钱包、
+  转账等明确账户边界
   输入输出；换绑账户不改变主页或公开昵称。
 - 头像/背景/签名/公开昵称等资料是**链下数据**，用户设置值进 Cloudflare R2；链上只有发帖、交易。`display_name` 是唯一公开昵称真源，`walletName` 只是本机钱包标签，两者不再同步。公开资料缺失或图片读取失败时，App 优先按 CID 稳定选择本地内置默认昵称、头像和背景，该展示兜底不上传、不持久化，也不参与身份判断。
 
@@ -77,9 +78,9 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - 关注/取关复用已有 `POST/DELETE /square/follows`。
 
 ## 前端结构（lib/8964/profile）
-- `user_profile_page.dart`：`NestedScrollView + SliverAppBar(pinned,expandedHeight:372) + FlexibleSpaceBar + bottom:分类TabBar + TabBarView`；cache-first 加载 + session-aware is_following。页面用一个 in-flight Future 建立 Session，并显式下发 `sessionReady`，首次握手完成前帖子 Tab 不得把 null Session 发往 Worker。展开高度为昵称、SS58、CID、签名和三项计数保留独立空间，避免窄屏与分类标签重叠。
+- `user_profile_page.dart`：`NestedScrollView + SliverAppBar(pinned,expandedHeight:344) + FlexibleSpaceBar + bottom:分类TabBar + TabBarView`；cache-first 加载 + session-aware is_following。页面用一个 in-flight Future 建立 Session，并显式下发 `sessionReady`，首次握手完成前帖子 Tab 不得把 null Session 发往 Worker。展开高度为昵称、公民号、签名和三项计数保留空间，避免窄屏与分类标签重叠。
 - `widgets/collapsible_header.dart`：折叠比例驱动 `ImageFiltered` 单图层虚化（非全屏 `BackdropFilter`）+ 资料主体淡出 + 折叠标题浮现；真实 R2 背景优先，缺失/失败时显示稳定本地背景照片。
-- `widgets/profile_header_card.dart`：圆角方形头像（真实 R2 图片优先、缺失/失败回落稳定本地照片）+ 身份徽章 + 公开昵称 + SS58 及唯一复制按钮 + 独立 CID 行 + 签名 + 关注/关注者/帖子三项计数 + 右上三图标槽。SS58 只从规范 `account_id` 即时派生；非法或未加载账户显示“暂不可用”且隐藏复制入口。CID 使用页面路由身份真源，不提供复制按钮。
+- `widgets/profile_header_card.dart`：圆角方形头像（真实 R2 图片优先、缺失/失败回落稳定本地照片）+ 身份徽章 + 公开昵称 + 独立“公民号”行 + 签名 + 关注/关注者/帖子三项计数 + 右上三图标槽。主页不展示 SS58、AccountId 或地址复制入口；公民号使用页面路由身份真源且不提供复制按钮。资料模型仍保留规范 `account_id`，供签名、授权和用户码使用。
 - `widgets/profile_action_icons.dart`：本人 通知/聊天/关注；他人 关注(toggle)/消息（**图标非按钮**）。
 - `widgets/profile_kebab_menu.dart`：`⋮` 二维码（→ `user_qr_page.dart` 名片码）/编辑资料(self-only)/注销用户(self-only)；产品不提供举报功能。
 - `user_qr_page.dart`：主页 `⋮ → 二维码` 传入当前

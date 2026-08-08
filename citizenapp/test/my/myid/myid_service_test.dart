@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/citizen/cid/cid_generator.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
 import 'package:citizenapp/my/myid/citizen_identity_chain_reader.dart';
+import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
@@ -27,7 +28,10 @@ void main() {
   setUp(() {
     // 身份同步标记存 SharedPreferences；每个用例从空白起，互不串扰。
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    IdentityAccountCache.resetDebugInstance();
   });
+
+  tearDown(IdentityAccountCache.resetDebugInstance);
 
   MyIdService buildService({
     WalletProfile? wallet = const _AliceWallet(),
@@ -233,6 +237,9 @@ void main() {
   });
 
   test('注册匿名 CID:用账户0 accountId + UTC 年生成金标 CID 并提交自签占号', () async {
+    final identityCache = _InvalidationCountingIdentityCache();
+    IdentityAccountCache.debugInstance = identityCache;
+    final revisionBefore = WalletManager.walletsRevision.value;
     final fakeRpc = _FakeIdentityRpc();
     final expected = generateCitizenCid(
       accountId: _validAccountId,
@@ -258,6 +265,8 @@ void main() {
     expect(cid, expected);
     expect(fakeRpc.occupiedCid, expected);
     expect(fakeRpc.occupiedAccountId, _validAccountId);
+    expect(identityCache.invalidateCalls, 1);
+    expect(WalletManager.walletsRevision.value, revisionBefore + 1);
   });
 
   test('自主换绑保留当前账户授权；finalized 后仅由新账户接管', () async {
@@ -669,6 +678,16 @@ class _FakeIdentityResolver extends IdentityAccountResolver {
   final ResolvedIdentity? _resolved;
   @override
   Future<ResolvedIdentity?> resolve() async => _resolved;
+}
+
+class _InvalidationCountingIdentityCache extends IdentityAccountCache {
+  int invalidateCalls = 0;
+
+  @override
+  void invalidate() {
+    invalidateCalls++;
+    super.invalidate();
+  }
 }
 
 class _SequenceResolver extends IdentityAccountResolver {

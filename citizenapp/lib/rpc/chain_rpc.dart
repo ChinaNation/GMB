@@ -46,17 +46,22 @@ class TxPoolWatchEvent {
   final String raw;
   final String? blockHashHex;
 
+  /// 当前交易已经得到确定性拒绝，后续不能再以同一交易哈希进入 finalized。
+  ///
+  /// Substrate 的 `dropped` 只表示当前交易池停止跟踪；交易可能已经传播到其他节点并
+  /// 随后进块。`future`、`retracted`、`finalityTimeout` 和订阅错误同样不是业务终局，
+  /// 必须由调用方继续等待 finalized 事件或按业务目标状态对账。
   bool get isFailure {
     switch (kind) {
-      case TxPoolWatchKind.future:
       case TxPoolWatchKind.invalid:
-      case TxPoolWatchKind.dropped:
       case TxPoolWatchKind.usurped:
+        return true;
+      case TxPoolWatchKind.future:
+      case TxPoolWatchKind.dropped:
       case TxPoolWatchKind.retracted:
       case TxPoolWatchKind.finalityTimeout:
       case TxPoolWatchKind.timeout:
       case TxPoolWatchKind.error:
-        return true;
       case TxPoolWatchKind.ready:
       case TxPoolWatchKind.broadcast:
       case TxPoolWatchKind.inBlock:

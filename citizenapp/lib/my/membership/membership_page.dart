@@ -13,6 +13,7 @@ import 'package:citizenapp/my/myid/identity_account_cache.dart';
 import 'package:citizenapp/my/myid/register_identity_flow.dart';
 import 'package:citizenapp/rpc/subscription_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 会员三档固定顺序（与价格升序一致，ADR-036，与身份彻底解耦）：
 /// 自由 freedom < 民主 democracy < 薪火 spark。
@@ -57,6 +58,7 @@ class _MembershipPageState extends State<MembershipPage>
 
   /// 首屏永远使用 App 内置三档静态定义立即渲染；联网只在后台替换动态字段。
   bool _refreshing = false;
+  bool _identityReloadPending = false;
 
   /// 首载失败说明(仅页面尚无可展示数据、且**确属真故障**时置位):三张静态卡按本页
   /// 设计永远保留,失败原因用顶部横幅补充,绝不整页替换成错误页。
@@ -92,13 +94,26 @@ class _MembershipPageState extends State<MembershipPage>
         final anim = _snapAnim;
         if (anim != null && mounted) setState(() => _page = anim.value);
       });
+    WalletManager.walletsRevision.addListener(_onIdentityChanged);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    WalletManager.walletsRevision.removeListener(_onIdentityChanged);
     _snapController.dispose();
     super.dispose();
+  }
+
+  /// 同账户从未注册推进到 finalized CID 时钱包列表不变；身份 revision 仍需让已挂载
+  /// 会员页立即重建会话与订阅快照。若正在刷新，记一次尾随重载避免丢广播。
+  void _onIdentityChanged() {
+    if (!mounted) return;
+    if (_refreshing) {
+      _identityReloadPending = true;
+      return;
+    }
+    unawaited(_load());
   }
 
   /// 进入「未注册」呈现:置标志 + 独立补一次价格。
@@ -263,6 +278,10 @@ class _MembershipPageState extends State<MembershipPage>
       }
     } finally {
       if (mounted) setState(() => _refreshing = false);
+      if (mounted && _identityReloadPending) {
+        _identityReloadPending = false;
+        unawaited(_load());
+      }
     }
     if (forceRefresh && refreshError != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

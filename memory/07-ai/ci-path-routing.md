@@ -164,11 +164,15 @@ GMB 的 GitHub Actions 采用“只由公民控制台按钮显式发起”的策
   失败时选一个回落，而回落的那一端会被当成用户想编的那一端；探测不到目标平台的设备就报错
   退出，绝不改编另一端。安装命令必须带显式设备 id：不带时同时连着两台设备 flutter 无从
   决定，而控制台日志面板没有输入框，它的选择提示回答不了。
-  「编译」的语义 = **把能直接使用的软件装进设备**，因此两脚本一律 `flutter build` + 安装，
+  「编译」的语义 = **把能直接使用的最新软件覆盖升级到设备且保留全部用户数据**，因此两脚本
+  一律 `flutter build` + 原位覆盖，
   **不用 `flutter run`**（那只是挂调试器跑，iOS debug 版装完从桌面点图标必然起不来）：
-  iOS 走 `flutter build ios --release` + `flutter install --release -d <flutter id>`；
+  iOS 走 `flutter build ios --release` + `xcrun devicectl device install app --device <flutter UDID>
+  <Runner.app>`，覆盖前校验 Bundle ID 与签名团队；iOS 允许更新时迁移容器路径，故覆盖后以
+  同名、同非零大小的钱包 Isar 文件验证数据连续性，不比较 `dataContainerPath` 字面值；
   Android 走 `flutter build apk --debug` + `adb -s <id> install -r`（安卓 debug 版可直接
-  使用且保留落盘诊断）。两端交付物都是可直接使用的 App。详见
+  使用且保留落盘诊断）。四端禁止任何卸载命令或卸载失败回退；覆盖失败只允许停止并保留旧 App。
+  两端交付物都是可直接使用的 App。详见
   `memory/05-modules/citizenapp/wallet/WALLET_TECHNICAL.md`「本地编译安装约定」。
   本地编译**不产出留存产物**，`<product>/target/` 沉淀已整体删除，产物只在 GitHub。
   **同一产品的两端互斥，跨产品并发**：两个编译端抢的是同一份 Flutter 工程目录——

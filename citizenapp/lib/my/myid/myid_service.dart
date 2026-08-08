@@ -17,6 +17,7 @@ import 'package:citizenapp/security/local_data_key.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import 'identity_account_resolver.dart';
+import 'identity_account_cache.dart';
 import 'identity_badge_snapshot_store.dart';
 
 /// 身份页身份档。
@@ -426,14 +427,20 @@ class MyIdService {
       accountId: resolvedBindAccountId,
       fromSs58Address: bindSs58,
     );
-    WalletManager.notifyIdentityBindingChanged();
     final finalized = await _requireFinalizedBinding(
       cidNumber: cid,
       accountId: resolvedBindAccountId,
     );
     // CID 注册是正式交易；finalized 后这里只推进公开绑定与数据交接。设备数据钥和
     // P-256 子钥分别由真实数据缺钥、Worker 明确未登记触发，禁止在此额外鉴权。
-    await _finishResolvedBinding(finalized);
+    try {
+      await _finishResolvedBinding(finalized);
+    } on Object catch (error) {
+      // finalized 链身份已经成立，本机公开绑定或数据收敛失败不能反向冒充“注册失败”。
+      // `_finishFinalizedBinding` 的 finally 已广播新身份；具体本机能力在真实访问时
+      // 继续按安全边界自愈或显示自身错误。
+      AppLog.d('CID finalized 后本机绑定收敛待后续自愈: $error');
+    }
     return cid;
   }
 
@@ -561,31 +568,26 @@ class MyIdService {
   /// finalized 只推进公开绑定与数据交接，不生成本地数据钥，也不登记 P-256 设备子钥。
   /// 前者仅在真实数据访问缺钥时生成，后者仅在 Worker 明确报告未登记时登记。
   Future<void> _finishFinalizedBinding(AccountDataBinding current) async {
-    final previous = await _walletManager.readActiveAccountDataBinding();
-    await _walletManager.activateAccountDataBinding(
-      genesisHash: current.genesisHash,
-      cidNumber: current.cidNumber,
-      bindingRevision: current.bindingRevision,
-      accountId: current.accountId,
-    );
-    await _dataHandover.prepareFinalizedBinding(
-      current: current,
-      previous: previous,
-    );
-    await _dataHandover.completeFinalizedBinding(current);
-    if (previous == null || !_sameBinding(previous, current)) {
+    try {
+      final previous = await _walletManager.readActiveAccountDataBinding();
+      await _walletManager.activateAccountDataBinding(
+        genesisHash: current.genesisHash,
+        cidNumber: current.cidNumber,
+        bindingRevision: current.bindingRevision,
+        accountId: current.accountId,
+      );
+      await _dataHandover.prepareFinalizedBinding(
+        current: current,
+        previous: previous,
+      );
+      await _dataHandover.completeFinalizedBinding(current);
+    } finally {
+      // CID 占号与换绑不一定改变 account_id，必须先清“未注册”快照再广播；所有常驻
+      // 页面收到 revision 后按 cid_number + account_id 重读，禁止依赖重启 App。
+      IdentityAccountCache.instance.invalidate();
       WalletManager.notifyIdentityBindingChanged();
     }
   }
-
-  static bool _sameBinding(
-    AccountDataBinding left,
-    AccountDataBinding right,
-  ) =>
-      left.genesisHash == right.genesisHash &&
-      left.cidNumber == right.cidNumber &&
-      left.bindingRevision == right.bindingRevision &&
-      left.accountId == right.accountId;
 
   static String _bytesToHex(List<int> bytes) {
     const alphabet = '0123456789abcdef';

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -44,12 +45,23 @@ class SelfRebindAuthorizationContext {
 /// CID 编码为 `CidNumberBound = BoundedVec<u8, ConstU32<32>>`,签名编码为
 /// `SignatureOf = BoundedVec<u8>`(compact(len) ++ bytes)。
 class CitizenIdentityRpc {
-  CitizenIdentityRpc({ChainRpc? chainRpc, WalletManager? walletManager})
-      : _rpc = chainRpc ?? ChainRpc(),
-        _wallet = walletManager ?? WalletManager();
+  CitizenIdentityRpc({
+    ChainRpc? chainRpc,
+    WalletManager? walletManager,
+    Duration finalizedReconcileTimeout = const Duration(minutes: 20),
+    Duration finalizedReconcileInterval = const Duration(seconds: 1),
+    Future<void> Function(Duration)? wait,
+  })  : _rpc = chainRpc ?? ChainRpc(),
+        _wallet = walletManager ?? WalletManager(),
+        _finalizedReconcileTimeout = finalizedReconcileTimeout,
+        _finalizedReconcileInterval = finalizedReconcileInterval,
+        _wait = wait ?? Future<void>.delayed;
 
   final ChainRpc _rpc;
   final WalletManager _wallet;
+  final Duration _finalizedReconcileTimeout;
+  final Duration _finalizedReconcileInterval;
+  final Future<void> Function(Duration) _wait;
 
   static const int _palletIndex = PalletRegistry.citizenIdentityPallet; // 10
   static const int _selfOccupyCidCallIndex =
@@ -82,16 +94,43 @@ class CitizenIdentityRpc {
     required String fromSs58Address,
   }) async {
     final callData = buildSelfOccupyCidCall(cidNumber);
-    final result = await SignedExtrinsicBuilder(
-      chainRpc: _rpc,
-      logLabel: 'CitizenIdentityRpc',
-    ).signAndSubmitInBlock(
-      callData: callData,
-      fromSs58Address: fromSs58Address,
-      signerPublicKey: _accountId32(accountId),
-      sign: (payload) => _wallet.signForAccountId(accountId, payload),
-      waitForFinalized: true,
-    );
+    SignedExtrinsicTrace? signedTrace;
+    TxPoolWatchEvent? latestWatchEvent;
+    ({String txHash, int usedNonce, String blockHashHex}) result;
+    try {
+      result = await SignedExtrinsicBuilder(
+        chainRpc: _rpc,
+        logLabel: 'CitizenIdentityRpc',
+      ).signAndSubmitInBlock(
+        callData: callData,
+        fromSs58Address: fromSs58Address,
+        signerPublicKey: _accountId32(accountId),
+        sign: (payload) => _wallet.signForAccountId(accountId, payload),
+        onTrace: (trace) => signedTrace = trace,
+        onWatchEvent: (event) => latestWatchEvent = event,
+        waitForFinalized: true,
+      );
+    } on Object catch (error) {
+      final trace = signedTrace;
+      if (trace == null ||
+          _isDefinitiveSubmissionFailure(latestWatchEvent, error)) {
+        rethrow;
+      }
+      // 已完成签名并开始提交后，订阅结束、dropped、retracted 或连接错误都只说明
+      // 当前观察链路没有给出终局。CID 与账户目标已知，可直接在后续 finalized 头上
+      // 核验业务闭环；命中即成功，禁止把“停止跟踪”误报成“注册失败”。
+      final finalizedBlockHashHex = await reconcileFinalizedBinding(
+        cidNumber: cidNumber,
+        expectedAccountId: accountId,
+        expectedBindingRevision: BigInt.one,
+      );
+      final txHash = Hasher.blake2b256.hash(trace.encoded);
+      result = (
+        txHash: '0x${SignedExtrinsicBuilder.hexEncode(txHash)}',
+        usedNonce: trace.nonce,
+        blockHashHex: finalizedBlockHashHex,
+      );
+    }
     // finalized inclusion 不等于 Dispatch Success；只有目标绑定和首次 revision 均已落链，
     // 上层才可广播身份变化或继续本地凭证初始化。
     await verifyFinalizedBindingState(
@@ -101,6 +140,58 @@ class CitizenIdentityRpc {
       finalizedBlockHashHex: result.blockHashHex,
     );
     return result;
+  }
+
+  bool _isDefinitiveSubmissionFailure(
+    TxPoolWatchEvent? event,
+    Object error,
+  ) {
+    if (event?.kind == TxPoolWatchKind.invalid ||
+        event?.kind == TxPoolWatchKind.usurped) {
+      return true;
+    }
+    final message = error.toString().toLowerCase();
+    return message.contains('invalid transaction') ||
+        message.contains('bad proof') ||
+        message.contains('usurped') ||
+        message.contains('交易无效');
+  }
+
+  /// 交易观察链路给出非确定结果后，按最新 finalized 身份 storage 收敛真实业务结果。
+  ///
+  /// 这里只读取 `AccountIdByCid + BindingRevisionByCid` 两个精确整键，不扫描历史块、
+  /// 不依赖 best head，也不把区块高度推进本身当成注册成功。
+  @visibleForTesting
+  Future<String> reconcileFinalizedBinding({
+    required String cidNumber,
+    required String expectedAccountId,
+    required BigInt expectedBindingRevision,
+  }) async {
+    final deadline = DateTime.now().add(_finalizedReconcileTimeout);
+    Object? latestError;
+    do {
+      try {
+        final finalized = await _rpc.fetchFinalizedBlock();
+        final blockHashHex =
+            '0x${SignedExtrinsicBuilder.hexEncode(finalized.blockHash)}';
+        await verifyFinalizedBindingState(
+          cidNumber: cidNumber,
+          expectedAccountId: expectedAccountId,
+          expectedBindingRevision: expectedBindingRevision,
+          finalizedBlockHashHex: blockHashHex,
+        );
+        return blockHashHex;
+      } on Object catch (error) {
+        latestError = error;
+      }
+      if (DateTime.now().isBefore(deadline)) {
+        await _wait(_finalizedReconcileInterval);
+      }
+    } while (DateTime.now().isBefore(deadline));
+    throw TimeoutException(
+      'CID 注册交易结果尚未在 finalized 身份绑定中确认：$latestError',
+      _finalizedReconcileTimeout,
+    );
   }
 
   /// 提交 `self_rebind_cid_account_id`:匿名 CID 换绑到新账户。

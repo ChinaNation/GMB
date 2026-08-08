@@ -1,5 +1,7 @@
 # 移动端双平台：编译按钮拆分 iOS/Android + CI 与 Release 双端产物
 
+当前状态：已完成（2026-08-07，四端统一为保留数据的覆盖升级）。
+
 任务需求：把公民与公民钱包的「编译软件」各拆成「编译iOS端」「编译Android端」两个按钮，
 点哪个编哪个；并让「运行 CI」与「正式 Release」同时产出 iOS 与 Android 两端产物。
 
@@ -240,8 +242,8 @@ iOS 三步顺序断言直接在 workflow 原文里找下标，命中的是注释
 
 ## 删除热载（2026-08-05）
 
-另一线程把编译改成 `build + install`（iOS release + `flutter install`，Android debug + `adb install`）
-之后，热载已不可能触发：检测靠日志里的 `Flutter run key commands` / `A Dart VM Service on`，
+编译改成 `build + 原位覆盖`（iOS release + `devicectl device install app`，Android debug +
+`adb install -r`）之后，热载已不可能触发：检测靠日志里的 `Flutter run key commands` / `A Dart VM Service on`，
 只有 `flutter run` 才输出。更硬的一层是 **iOS 上物理不可能**——iOS 必须 release 才能从桌面点开，
 而 release 关闭了 Dart VM Service，`flutter attach` 也连不上。按两端一致铁律，四端一并删除。
 
@@ -270,3 +272,57 @@ iOS 三步顺序断言直接在 workflow 原文里找下标，命中的是注释
 四个编译动作**没有任何超时**（`timeoutMs: 0`，全仓只有 Cloudflare 生产部署声明了 30 分钟）。
 `flutter build ios --release` 卡在签名环节时进程不生不死，标签会永远停在「编译中」——
 这正是「一直显示编译中」最可能的真实成因，删热载并不能解决它。
+
+## 四端覆盖升级保留钱包数据（2026-08-07）
+
+### 根因
+
+公民与公民钱包的 iOS 编译脚本曾调用 Flutter 安装命令。本机 Flutter 3.41.0 的该命令默认
+`uninstall = true`，每次发现同 Bundle ID 的旧 App 都先执行 `device.uninstallApp()`；iOS 随之
+删除 Application Support 中的 Isar 数据库，所以每次编译安装后钱包与账户列表消失。Android
+一直使用 `adb install -r`，属于保留数据的覆盖升级，没有同类问题。
+
+### 统一目标态
+
+- 公民与公民钱包、iOS 与 Android 四端统一为“编译最新软件并覆盖升级”，禁止卸载旧软件。
+- iOS 直接调用 Xcode `devicectl device install app`；其 `--device` 接受 Flutter 返回的硬件
+  UDID，无需转换为 CoreDevice 内部 Identifier。
+- iOS 覆盖前校验固定 Bundle ID 和有效 Team ID。系统更新 App 时允许迁移数据容器并改变
+  `dataContainerPath`，所以不得用绝对路径相等判断是否保留数据；已有钱包 Isar 文件时，覆盖后
+  必须复读到同名、同非零大小的数据库。无法读取或安装失败一律失败关闭，绝不回退到卸载重装。
+- Android 保持 `adb install -r`；`-r` 是替换现有应用并保留数据。任何安装失败只允许停止。
+- 两款产品共用字节级相同的 iOS 安全安装函数，仅 Bundle ID 和构建步骤不同；控制台回归测试
+  强制两份函数一致，并反向禁止四端出现任何卸载命令。
+
+### 修改范围
+
+- `citizenapp/scripts/`：公民 iOS 原位覆盖、身份校验和钱包数据库守卫；Android 保持 `-r`。
+- `citizenwallet/scripts/`：公民钱包采用同一实现；不改钱包业务和密钥模型。
+- `citizenconsole/test/`：删除对旧 iOS 安装方式的错误要求，增加四端禁止卸载、数据容器守卫、
+  两款产品函数一致性和固定 Bundle ID 断言。
+- `memory/05-modules/citizenapp/wallet/`、`memory/07-ai/`：统一当前技术口径并清理错误注释。
+
+### 验收口径
+
+- Bash 语法、ShellCheck、CitizenConsole 全量测试通过。
+- 全仓可执行脚本不存在 Flutter 卸载式安装、`devicectl ... uninstall` 或 `adb uninstall`。
+- 已连接 iPhone 上两款 App 覆盖前后钱包 Isar 文件保持同名、同非零大小，App 仍可直接启动。
+- 覆盖安装不得修改 runtime、订阅、Cloudflare 或链上逻辑。
+
+### 真实运行态验收
+
+- 公民 iOS：完整 release 构建成功；直接调用与控制台脚本相同的安全安装函数再次覆盖成功，
+  `org.citizenapp`、Team ID `7QJXLLBA6J` 校验通过，`citizenapp.isar` 覆盖前后均为
+  41,943,040 字节。首次验收同时确认 iOS 可能迁移容器 UUID，任务据此删除了错误的绝对路径
+  相等判断；新容器中的原钱包数据库实际存在，不是空容器。
+- 公民钱包 iOS：完整脚本一次通过，`org.citizenwallet`、同一 Team ID 校验通过，
+  `citizenwallet.isar` 覆盖前后均为 1,048,576 字节。
+- 公民 Android：完整脚本 `adb install -r` 成功，`citizenapp.isar` 覆盖前后均为
+  36,700,160 字节，证明既有钱包数据库保留。
+- 公民钱包 Android：目标 Pixel 原先未安装该产品，本次首次安装成功并可启动；启动后生成
+  1,048,576 字节 `citizenwallet.isar`。后续编译固定走同一 `adb install -r` 覆盖路径。
+- Bash 语法、ShellCheck、本任务回归测试及 CitizenConsole 编译检查全部通过。CitizenConsole
+  全量测试当前 98/99；唯一失败是既存节点部署测试仍断言旧冻结 CI run id `30724462739`，而
+  当前节点部署脚本已是 `31164684013`，与本任务无关且未越界修改。
+- iPhone 两款 App 完成安装与数据库复读后进入 CoreDevice 不可调试状态，后续自动 launch 被
+  iOS 拒绝；该状态发生在覆盖和数据连续性验收完成之后，不改变安装结果。

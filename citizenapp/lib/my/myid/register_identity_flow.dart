@@ -15,7 +15,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 ///   选主体类型与绑定账户 → 余额闸(不足则带去充值,回来不自动续跑)
 ///   → [MyIdService.registerAnonymousCid] 自签自付占号
-///   → 成功后 [IdentityAccountCache.invalidate](各页身份判定立即失效重读)。
+///   → finalized 身份闭环成立后由服务层统一失效缓存并广播各页重读。
 ///
 /// 身份页右上角「注册」与各页未注册引导([IdentityRegisterGuide])、动作级
 /// 拦截([ensureCidRegisteredOrPrompt])一律调用本入口,禁止另写注册链路。
@@ -53,9 +53,6 @@ Future<bool> startCidRegistrationFlow(
       institution: choice.institution,
       bindAccountId: choice.bindAccountId,
     );
-    // 身份缓存按钱包版本失效,而占号不改钱包列表,必须显式失效;否则广场/聊天
-    // 等页面会继续拿到"未注册"的旧解析结果。
-    IdentityAccountCache.instance.invalidate();
     if (context.mounted) _showSnack(context, '身份 CID 已注册:$cid');
     return true;
   } on Object catch (error) {

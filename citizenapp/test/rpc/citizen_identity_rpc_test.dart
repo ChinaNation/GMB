@@ -282,6 +282,29 @@ void main() {
         completes,
       );
     });
+
+    test('观察链路中断后持续读取 finalized，第二个块命中即收敛成功', () async {
+      final rpc = _ReconcileFinalizedBindingChainRpc();
+      final resolvedBlockHash = await CitizenIdentityRpc(
+        chainRpc: rpc,
+        finalizedReconcileTimeout: const Duration(seconds: 1),
+        finalizedReconcileInterval: Duration.zero,
+        wait: (_) async {},
+      ).reconcileFinalizedBinding(
+        cidNumber: cid,
+        expectedAccountId: newAccount,
+        expectedBindingRevision: BigInt.one,
+      );
+
+      expect(resolvedBlockHash, '0x${'bb' * 32}');
+      expect(rpc.finalizedBlockReads, 2);
+      expect(rpc.readBlockHashes, <String>[
+        '0x${'aa' * 32}',
+        '0x${'aa' * 32}',
+        '0x${'bb' * 32}',
+        '0x${'bb' * 32}',
+      ]);
+    });
   });
 }
 
@@ -353,5 +376,39 @@ class _FinalizedBindingChainRpc extends ChainRpc {
       1 => _RebindContextChainRpc._u64(BigInt.from(revision)),
       _ => throw StateError('unexpected storage read: $storageKeyHex'),
     };
+  }
+}
+
+/// 第一个 finalized 块仍是旧绑定，第二个 finalized 块才形成首次占号目标状态。
+class _ReconcileFinalizedBindingChainRpc extends ChainRpc {
+  int finalizedBlockReads = 0;
+  int _storageReadIndex = 0;
+  final List<String> readBlockHashes = <String>[];
+
+  @override
+  Future<({Uint8List blockHash, int blockNumber})> fetchFinalizedBlock() async {
+    finalizedBlockReads++;
+    final byte = finalizedBlockReads == 1 ? 0xaa : 0xbb;
+    return (
+      blockHash: Uint8List.fromList(List<int>.filled(32, byte)),
+      blockNumber: finalizedBlockReads,
+    );
+  }
+
+  @override
+  Future<Uint8List?> fetchStorageAtBlock(
+    String storageKeyHex,
+    String blockHashHex,
+  ) async {
+    readBlockHashes.add(blockHashHex);
+    final readInBlock = _storageReadIndex++ % 2;
+    final isTargetBlock = blockHashHex == '0x${'bb' * 32}';
+    if (readInBlock == 0) {
+      final accountByte = isTargetBlock ? 0x11 : 0x33;
+      return Uint8List.fromList(List<int>.filled(32, accountByte));
+    }
+    return _RebindContextChainRpc._u64(
+      isTargetBlock ? BigInt.one : BigInt.zero,
+    );
   }
 }

@@ -17,6 +17,7 @@ import 'package:citizenapp/my/myid/identity_account_resolver.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/contact_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 const _accountId =
     '0x2222222222222222222222222222222222222222222222222222222222222222';
@@ -193,6 +194,26 @@ class _UnregisteredIdentityCache extends IdentityAccountCache {
       );
 }
 
+class _MutableIdentityCache extends IdentityAccountCache {
+  bool registered = false;
+
+  @override
+  Future<ResolvedIdentity?> resolve({bool allowChainRead = true}) async =>
+      ResolvedIdentity(
+        accountId: _accountId,
+        ss58Address: 'ss58-owner',
+        accountIndex: 0,
+        snapshot: registered
+            ? CitizenIdentityChainSnapshot(
+                cidNumber: 'CN220-CTZN2-100000009-2026',
+                accountId: Uint8List(32),
+                bindingRevision: 1,
+                votingIdentity: null,
+              )
+            : null,
+      );
+}
+
 void main() {
   setUp(() {
     IdentityAccountCache.debugInstance = _RegisteredIdentityCache();
@@ -222,7 +243,7 @@ void main() {
     );
   });
 
-  testWidgets('联系人卡以公开昵称为主并分别展示备注、CID、SS58', (tester) async {
+  testWidgets('联系人卡以公开昵称为主并只展示备注与公民号', (tester) async {
     await tester.pumpWidget(_page());
     await tester.pumpAndSettle();
 
@@ -235,14 +256,14 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('备注：张三'), findsOneWidget);
-    expect(find.text('CID：$_contactCidNumber'), findsOneWidget);
-    expect(find.text('SS58：$_contactAddress'), findsOneWidget);
+    expect(find.text('公民号：$_contactCidNumber'), findsOneWidget);
+    expect(find.textContaining('SS58：'), findsNothing);
     expect(find.text('建设一个可信、自由的社会'), findsOneWidget);
     expect(find.byKey(const ValueKey('contact-card-$_contactCidNumber')),
         findsOneWidget);
   });
 
-  testWidgets('搜索匹配公开昵称并可清空', (tester) async {
+  testWidgets('搜索只匹配公开昵称、备注或公民号，不匹配账户地址', (tester) async {
     await tester.pumpWidget(_page());
     await tester.pumpAndSettle();
 
@@ -261,6 +282,20 @@ void main() {
 
     await tester.enterText(
       find.byKey(const ValueKey('contact-search')),
+      _contactAddress,
+    );
+    await tester.pump();
+    expect(find.text('没有匹配的联系人'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('contact-search')),
+      _contactAccountId,
+    );
+    await tester.pump();
+    expect(find.text('没有匹配的联系人'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('contact-search')),
       '不存在',
     );
     await tester.pump();
@@ -275,7 +310,7 @@ void main() {
     final fallback =
         ProfilePresentation.forIdentityKey(_contactCidNumber).fallbackName;
     expect(find.text(fallback), findsOneWidget);
-    expect(find.text('SS58：$_contactAddress'), findsOneWidget);
+    expect(find.textContaining('SS58：'), findsNothing);
   });
 
   testWidgets('普通点击进入唯一 UserProfilePage', (tester) async {
@@ -419,6 +454,24 @@ void main() {
   testWidgets('已注册身份正常展示通讯录(引导不误伤)', (tester) async {
     final service = _FakeContacts();
     await tester.pumpWidget(_page(service: service));
+    await tester.pumpAndSettle();
+
+    expect(find.text('尚未注册'), findsNothing);
+    expect(find.byKey(const ValueKey('contact-search')), findsOneWidget);
+    expect(service.getContactsCalls, greaterThan(0));
+  });
+
+  testWidgets('同一账户 finalized 注册广播后原地退出尚未注册页', (tester) async {
+    final identityCache = _MutableIdentityCache();
+    IdentityAccountCache.debugInstance = identityCache;
+    final service = _FakeContacts();
+    await tester.pumpWidget(_page(service: service));
+    await tester.pumpAndSettle();
+    expect(find.text('尚未注册'), findsOneWidget);
+    expect(service.getContactsCalls, 0);
+
+    identityCache.registered = true;
+    WalletManager.notifyIdentityBindingChanged();
     await tester.pumpAndSettle();
 
     expect(find.text('尚未注册'), findsNothing);

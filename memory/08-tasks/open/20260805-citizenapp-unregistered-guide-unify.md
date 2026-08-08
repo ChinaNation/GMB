@@ -71,7 +71,8 @@
       (广场 feed 与红点轮询 `_notifySession` 双短路 —— 红点是第二条会话路径,
       漏掉它未注册用户仍会周期性打 403)
 - [x] 注册成功后:`IdentityAccountCache.instance.invalidate()` + 各页 onRegistered
-      回刷(占号不改钱包列表,walletsRevision 不动,必须显式失效+回调)
+      回刷（占号不改钱包列表，但 finalized 身份闭环成立后服务层统一失效缓存并递增
+      walletsRevision；页面回调只作当前页即时兜底）
 - [x] 测试:流程 4 例(放行/拦截/占号成功失效缓存/链读失败 fail-closed)+
       聊天短路铁证(readPreviewCount==0)+ 广场 3 例(缓存命中零请求/
       cid_not_bound 映射/通用错误保持原文案);受影响套件 25+34+296+204 全绿。

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -72,6 +73,35 @@ void main() {
     expect(calls, 1, reason: '并发应合并成一次链读');
   });
 
+  test('失效后的新版本不复用旧未注册请求，旧结果也不能覆盖新缓存', () async {
+    final resolver = _ControlledResolver();
+    final c = IdentityAccountCache(resolver: resolver);
+
+    final stale = c.resolve();
+    expect(resolver.calls, 1);
+
+    c.invalidate();
+    WalletManager.walletsRevision.value++;
+    final fresh = c.resolve();
+    expect(resolver.calls, 2, reason: '新身份版本必须启动独立链读');
+
+    final registered = _identity(_account5);
+    resolver.completers[1].complete(registered);
+    expect(await fresh, same(registered));
+
+    resolver.completers[0].complete(
+      const ResolvedIdentity(
+        accountId: _account5,
+        ss58Address: 'stale-ss58',
+        accountIndex: 5,
+        snapshot: null,
+      ),
+    );
+    expect((await stale)?.isRegistered, isFalse);
+    expect(await c.resolve(), same(registered));
+    expect(resolver.calls, 2, reason: '旧请求结束后不得覆盖新版本缓存');
+  });
+
   test('accountId() 便捷入口', () async {
     final c = cache(result: _identity(_account5));
     expect(await c.accountId(), _account5);
@@ -125,5 +155,19 @@ class _FakeResolver extends IdentityAccountResolver {
     onResolve?.call(_calls);
     if (throwIt) throw StateError('chain down');
     return _result;
+  }
+}
+
+class _ControlledResolver extends IdentityAccountResolver {
+  final List<Completer<ResolvedIdentity?>> completers =
+      <Completer<ResolvedIdentity?>>[];
+
+  int get calls => completers.length;
+
+  @override
+  Future<ResolvedIdentity?> resolve() {
+    final completer = Completer<ResolvedIdentity?>();
+    completers.add(completer);
+    return completer.future;
   }
 }

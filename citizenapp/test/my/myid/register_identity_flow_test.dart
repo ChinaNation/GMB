@@ -135,7 +135,7 @@ void main() {
     expect(results, [false]);
   });
 
-  testWidgets('未注册 → 面板内确认占号:提交一次并失效身份缓存', (tester) async {
+  testWidgets('未注册 → 面板内确认占号:只提交一次，缓存收敛归服务层', (tester) async {
     final cache = _UnregisteredCache();
     IdentityAccountCache.debugInstance = cache;
     final service = _FlowService();
@@ -148,9 +148,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.registerCalls, 1);
-    // 占号不改钱包列表(walletsRevision 不动),共享流程必须显式失效身份缓存,
-    // 广场/聊天下一次判定才能读到"已注册"。
-    expect(cache.invalidateCalls, 1);
+    // Widget 流程不抢在 finalized 闭环前失效缓存或广播；MyIdService 在完整闭环成立后
+    // 统一执行，相关“一次失效 + 一次 revision”由 myid_service_test 单独钉死。
+    expect(cache.invalidateCalls, 0);
     expect(find.textContaining('身份 CID 已注册'), findsOneWidget);
   });
 

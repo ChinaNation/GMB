@@ -19,6 +19,7 @@ import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/identity_register_guide.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 通讯录页使用模式。
 enum ContactPickMode {
@@ -91,18 +92,21 @@ class _ContactBookPageState extends State<ContactBookPage> {
   /// 且**不读通讯录**——通讯录属主就是 CID,没有 CID 连读都不该读。
   bool _unregistered = false;
   String _query = '';
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _profiles.addAll(widget.initialProfiles);
     _service.syncState.addListener(_onSyncStateChanged);
+    WalletManager.walletsRevision.addListener(_onIdentityChanged);
     unawaited(_load());
   }
 
   @override
   void dispose() {
     _service.syncState.removeListener(_onSyncStateChanged);
+    WalletManager.walletsRevision.removeListener(_onIdentityChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -111,7 +115,14 @@ class _ContactBookPageState extends State<ContactBookPage> {
     if (mounted) setState(() => _syncState = _service.syncState.value);
   }
 
+  /// CID finalized 后即使绑定账户没变也要退出“尚未注册”态；全局身份缓存已在广播前
+  /// 失效，此处重读即可得到新的 cid_number，不依赖当前注册引导的局部回调。
+  void _onIdentityChanged() {
+    if (mounted) unawaited(_load());
+  }
+
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     try {
       // 未注册 CID 必须在此短路:通讯录属主 = CID,`getContacts()` 第一步
       // `_requireIdentityOwner()` 对未注册身份必抛 WalletAuthException,catch 后
@@ -120,7 +131,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
       // 链读异常不在此吞:resolve 抛错走下方 catch 的故障路径,绝不把"没读到链"
       // 冒充成"没注册"。
       final identity = await IdentityAccountCache.instance.resolve();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       if (identity == null || !identity.isRegistered) {
         setState(() {
           _unregistered = true;
@@ -132,22 +143,25 @@ class _ContactBookPageState extends State<ContactBookPage> {
       if (_unregistered) setState(() => _unregistered = false);
       final contacts = await _service.getContacts();
       final syncState = await _service.readSyncState();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _contacts = contacts;
         _syncState = syncState;
         _loading = false;
       });
       await _loadProfiles(contacts);
+      if (!mounted || generation != _loadGeneration) return;
       try {
         final refreshed = await _service.refreshContactBindings();
-        if (mounted) setState(() => _contacts = refreshed);
+        if (mounted && generation == _loadGeneration) {
+          setState(() => _contacts = refreshed);
+        }
       } on Exception {
         // 页面仍可离线展示 CID 关系；转账前会再次严格链读并禁止使用旧地址。
       }
-      await _sync();
+      if (generation == _loadGeneration) await _sync();
     } on Exception catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _loading = false;
         _syncState = ContactSyncState(
@@ -361,8 +375,6 @@ class _ContactBookPageState extends State<ContactBookPage> {
           .toLowerCase();
       return contact.contactRemark.toLowerCase().contains(query) ||
           contact.cidNumber.toLowerCase().contains(query) ||
-          contact.accountId.toLowerCase().contains(query) ||
-          contact.ss58Address.toLowerCase().contains(query) ||
           publicName.contains(query);
     }).toList(growable: false)
       ..sort(
@@ -407,78 +419,78 @@ class _ContactBookPageState extends State<ContactBookPage> {
 
   Widget _buildContactList(List<UserContact> visible) {
     return RefreshIndicator(
-        onRefresh: _sync,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
-          children: [
-            if (_loading) ...[
-              const LinearProgressIndicator(
-                key: ValueKey('contacts-local-load-progress'),
-                minHeight: 2,
+      onRefresh: _sync,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
+        children: [
+          if (_loading) ...[
+            const LinearProgressIndicator(
+              key: ValueKey('contacts-local-load-progress'),
+              minHeight: 2,
+            ),
+            const SizedBox(height: 10),
+          ],
+          _SyncBanner(state: _syncState, onRetry: _sync),
+          const SizedBox(height: 10),
+          TextField(
+            key: const ValueKey('contact-search'),
+            controller: _searchController,
+            onChanged: (value) => setState(() => _query = value),
+            decoration: InputDecoration(
+              hintText: '搜索昵称、备注或公民号',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+              filled: true,
+              fillColor: AppTheme.surfaceCard,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_loading && _contacts.isEmpty)
+            const _ContactsLoadingNotice()
+          else if (_contacts.isEmpty)
+            const _EmptyContacts()
+          else if (visible.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 56),
+              child: Center(child: Text('没有匹配的联系人')),
+            )
+          else
+            for (final contact in visible) ...[
+              _ContactCard(
+                contact: contact,
+                profile: _profileOf(contact),
+                avatarUrl: _avatarUrl(_profileOf(contact)),
+                avatarHeaders: _session == null
+                    ? null
+                    : <String, String>{
+                        'authorization': 'Bearer ${_session!.sessionToken}',
+                      },
+                // 纯选私信模式只允许点选,不显示逐项操作菜单。
+                showActions: widget.mode != ContactPickMode.pickForMessage,
+                onTap: () => _open(contact),
+                onTransfer: () => _transfer(contact),
+                onMessage: () => _message(contact),
+                onRename: () => _rename(contact),
+                onDelete: () => _delete(contact),
               ),
               const SizedBox(height: 10),
             ],
-            _SyncBanner(state: _syncState, onRetry: _sync),
-            const SizedBox(height: 10),
-            TextField(
-              key: const ValueKey('contact-search'),
-              controller: _searchController,
-              onChanged: (value) => setState(() => _query = value),
-              decoration: InputDecoration(
-                hintText: '搜索昵称、备注、CID 或钱包账户',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _query = '');
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                filled: true,
-                fillColor: AppTheme.surfaceCard,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_loading && _contacts.isEmpty)
-              const _ContactsLoadingNotice()
-            else if (_contacts.isEmpty)
-              const _EmptyContacts()
-            else if (visible.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 56),
-                child: Center(child: Text('没有匹配的联系人')),
-              )
-            else
-              for (final contact in visible) ...[
-                _ContactCard(
-                  contact: contact,
-                  profile: _profileOf(contact),
-                  avatarUrl: _avatarUrl(_profileOf(contact)),
-                  avatarHeaders: _session == null
-                      ? null
-                      : <String, String>{
-                          'authorization': 'Bearer ${_session!.sessionToken}',
-                        },
-                  // 纯选私信模式只允许点选,不显示逐项操作菜单。
-                  showActions: widget.mode != ContactPickMode.pickForMessage,
-                  onTap: () => _open(contact),
-                  onTransfer: () => _transfer(contact),
-                  onMessage: () => _message(contact),
-                  onRename: () => _rename(contact),
-                  onDelete: () => _delete(contact),
-                ),
-                const SizedBox(height: 10),
-              ],
-          ],
-        ),
-      );
+        ],
+      ),
+    );
   }
 
   String? _avatarUrl(CitizenProfile? profile) {
@@ -579,17 +591,7 @@ class _ContactCard extends StatelessWidget {
                       ],
                       const SizedBox(height: 3),
                       Text(
-                        'CID：${contact.cidNumber}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppTheme.textTertiary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'SS58：${contact.ss58Address}',
+                        '公民号：${contact.cidNumber}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

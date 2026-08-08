@@ -172,11 +172,16 @@ class _ProfilePageState extends State<MyTab> {
   }
 
   Future<void> _onWalletsChanged() async {
-    // 先廉价比对（纯 Isar 读）：默认钱包账户没变的操作不触发链查询。
-    // walletName 是本机标签，改名不得刷新公开昵称或身份。
+    // revision 同时覆盖钱包列表与 finalized CID 绑定。注册前后默认账户可能完全相同，
+    // 不能只比钱包 account_id；必须重读并比较 cid_number + 身份账户。
     final wallet = await _walletManager.getDefaultWallet();
+    final identity = await IdentityAccountCache.instance.resolve();
     if (!mounted) return;
-    if (wallet?.accountId == _defaultWallet?.accountId) {
+    final identityAccountId = identity?.accountId ?? wallet?.accountId ?? '';
+    final identityCidNumber = identity?.snapshot?.cidNumber ?? '';
+    if (wallet?.accountId == _defaultWallet?.accountId &&
+        identityAccountId == _identityAccountId &&
+        identityCidNumber == _identityCidNumber) {
       return;
     }
     _operationalIdentityAccount = null;
