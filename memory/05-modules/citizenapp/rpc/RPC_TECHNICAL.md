@@ -119,6 +119,12 @@ lib/rpc/
 - 根因修复必须保持职责边界：`BlockNotPinned` 是 finalized 推进使旧验证锚过期的瞬态竞态，交易服务应结束旧 validation future，并让仍待处理的交易基于当前 best block 重新验证；不得 panic、不得把单块过期升级为整条 subscription 失效、不得错误丢弃交易。修复后需重新执行既有 smoldot-light、Rust FFI、CitizenApp RPC/交易页、smoldotdart、analyzer、ARM64 APK 与旧 ABI 残留检查，并以有待处理交易时的下一次真实 finalized 推进作最终验收。
 - operational 后由单实例一分钟定时器低频检查 `currentVerifiedFinalized`。只有快照仍可用且该完整验证 finalized 严格高于最近持久化高度时才进入既有串行稳定导出；同高度不导出，dispose 取消定时器并等待刷新/写队列。下一次业务入口若发现原生重新进入 warp，会立即撤销本地 ready，完成后保存的新 F 成为下一次启动 H。
 - 连接诊断必须以有效 peer、best/finalized 状态是否可读或推进为准；未部署 bootNodes 的连接失败日志不是故障根因，不得把它解释成 citizenapp 网络不可用。
+- **链事件订阅断开必须能自愈（2026-08-07 回归修复）**：自动确认**只有一条**通路 —— finalized 订阅推 `newFinalizedBlock` → `ChainTxMonitor._syncThrough` → `_confirmOpenSubmits`。`SmoldotClientManager.subscribe()` 是 `async*` 生成器，内层 `_chain!.subscribe(...)` 随原生 chain 释放而结束、外层随之完成，因此**订阅在运行期会正常断开，这是常态而非异常**。
+  - `ChainEventSubscription` 必须通过 `dropped` 流对外发出断开信号；只把 `_newHeadsSub`/`_finalizedHeadsSub` 置 null 并打日志等于把断开吞掉。
+  - `ChainTxMonitor` 必须订阅该信号并把 `_subscriptionConnected` 落回 false 后重连。该标志此前**只在 `stop()` 里置 false**，于是断开后 `_ensureSubscription()` 每次从第一行 `if (_subscriptionConnected) return;` 早退，**没有任何重连路径**，交易永久停在待确认，只有手动刷新（走 `_syncToLatest()`，不经订阅）才翻已确认。iOS/Android 两端同时复现，因为这是纯 Dart 状态机漏洞、与平台无关。
+  - 重连**必须走退避定时器，不得立即重连**：轻节点持续不可用时 `connect()` 会立刻再失败、流也会立刻再结束，立即重连退化成烧 CPU 的热循环。首次连接失败与运行中断开共用同一条退避路径。
+  - 断连期间漏掉的 finalized 块不需要单独补扫：重连成功后 `_connectSubscriptionOnce` 既有的 `_syncToLatest()` 会按游标补齐。
+  - 回归由 `test/rpc/chain_tx_monitor_resubscribe_test.dart` 钉死，断言落在**真的重新 connect 了**而不是标志位翻转（只断言标志会漏掉「标志翻了但没人去连」）。该守卫已实证：抽掉断开监听后 4 个用例红 3 个。
 - 本地开发期 `30334` bootnode 只是可选调试兜底，不是 citizenapp 真机连接区块链网络的必要条件；没有本地 `30334` 也不应判定为连接异常。
 - Flutter widget test 环境不具备真实 smoldot 轻节点链路，`ChainProgressBanner` 在测试中只渲染静态提示条，禁止读取链状态和创建轮询定时器，避免 `pumpAndSettle` 被后台链路轮询卡住。
 - 当前代码已继续下沉原生能力，且已完成 **异步 FFI 迁移**：

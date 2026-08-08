@@ -4,6 +4,7 @@ import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
+import 'package:citizenapp/transaction/personal-manage/personal_account_entry.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/transaction/transaction_tab_page.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
@@ -70,7 +71,7 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('交易页顶栏显示链状态且保留扫一扫和多签账户入口', (tester) async {
+  testWidgets('交易页顶栏显示链状态，入口只剩多签账户卡片，扫码收进收款地址框', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
@@ -108,27 +109,31 @@ void main() {
     );
     final screenWidth = tester.getSize(find.byType(Scaffold).first).width;
     expect(centerGap.center.dx, closeTo(screenWidth / 2, 0.01));
-    // 交易顶栏状态不再使用原卡片中的竖线；扫一扫/多签卡片的竖线仍保留。
+    // 交易顶栏状态不再使用原卡片中的竖线。
     expect(
       find.byKey(
         const ValueKey<String>('transaction-chain-status-divider'),
       ),
       findsNothing,
     );
-    expect(
-      find.byKey(const ValueKey<String>('transaction-entry-divider')),
-      findsOneWidget,
-    );
-    final entryDivider = tester.getSize(
-      find.byKey(const ValueKey<String>('transaction-entry-divider')),
-    );
-    expect(entryDivider.height, closeTo(52 * 2 / 3, 0.01));
-    expect(find.text('扫一扫'), findsOneWidget);
+    // 顶部入口只剩多签账户一张独立卡片：不再是双入口，故也不再有中间竖线。
+    expect(find.byType(PersonalAccountEntryCard), findsOneWidget);
     expect(find.text('多签账户'), findsOneWidget);
     expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(PersonalAccountEntryCard),
+        matching: find.byIcon(Icons.chevron_right),
+      ),
+      findsOneWidget,
+    );
     expect(find.byIcon(Icons.account_tree_outlined), findsNothing);
     expect(find.text('个人多签'), findsNothing);
     expect(find.text('机构多签'), findsNothing);
+
+    // 扫一扫入口已撤销，扫码收进收款地址框内；签名请求改由「聊天 → 扫一扫」承接。
+    expect(find.text('扫一扫'), findsNothing);
+    expect(find.byTooltip('扫码填入收款地址'), findsOneWidget);
 
     await tester.tap(find.byTooltip('我的通讯录'));
     await _pumpUntilFound(tester, find.byType(ContactBookPage));

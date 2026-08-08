@@ -19,11 +19,14 @@ import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/seed_sign_error.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 交易 tab「扫一扫」统一入口：扫码 → 按协议分派。
+/// 聊天 tab「扫一扫」统一入口：扫码 → 按协议分派。
 ///
-/// - 收款 / 链下支付码 → 现有链下支付流程（用交易页选的 [paymentWallet]）。
+/// - 收款 / 链下支付码 → 现有链下支付流程（用 [paymentWallet]）。
 /// - signRequest → 用 QR `u` 对应的本机 Account 签名，与付款钱包无关。
 /// - 未来其它类型只需在此加分支。
+///
+/// 交易页不再走本分发器：那里的扫码收进收款地址输入框（[AddressScanButton]），
+/// 只填地址；签名请求（广场账户动作 / 公民身份 / 注册局占号换绑）统一由本入口承接。
 Future<void> openScanDispatchFlow({
   required BuildContext context,
   required WalletProfile? paymentWallet,

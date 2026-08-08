@@ -1,16 +1,14 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/multisig_create_amount_rules.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/qr/pages/qr_scan_page.dart'
-    show QrScanMode, QrScanPage, QrScanTransferResult;
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/qr/widgets/address_scan_button.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -354,50 +352,22 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
               // 受益人地址
               _buildSectionTitle('受益人地址'),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _beneficiaryController,
-                      decoration: InputDecoration(
-                        hintText: '输入或扫码',
-                        errorText: _addressError,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                      ),
+              TextField(
+                controller: _beneficiaryController,
+                decoration: InputDecoration(
+                  hintText: '输入或扫码',
+                  errorText: _addressError,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  suffixIcon: AddressScanButton(
+                    onAddressScanned: (ss58Address) => setState(
+                      () => _beneficiaryController.text = ss58Address,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: '扫码填入受益人地址',
-                    icon: SvgPicture.asset(
-                      'assets/icons/scan-line.svg',
-                      width: 22,
-                      height: 22,
-                    ),
-                    onPressed: () async {
-                      // QrScanPage 在 transfer 模式下 pop 的是 QrScanTransferResult 对象
-                      // 而非 String,故 push 泛型须用 QrScanTransferResult。
-                      // 复用转账扫码结果解析写法，仅取收款地址。
-                      final result = await Navigator.push<QrScanTransferResult>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const QrScanPage(
-                            mode: QrScanMode.transfer,
-                            customTitle: '扫描收款码',
-                          ),
-                        ),
-                      );
-                      if (result == null || !mounted) return;
-                      setState(() {
-                        _beneficiaryController.text = result.toSs58Address;
-                      });
-                    },
-                  ),
-                ],
+                ),
               ),
               if (widget.adminWallets.length > 1) ...[
                 const SizedBox(height: 20),

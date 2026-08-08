@@ -173,6 +173,10 @@ class _QrScanPageState extends State<QrScanPage> {
             _handleAccountIdCode(result);
           } else if (result.type == QrRouteType.legacyAddress) {
             _handleLegacyAddress(result.extractedAddress!);
+          } else if (result.type == QrRouteType.signRequest) {
+            // 签名请求统一在「聊天 → 扫一扫」处理;这里给明确去向,不用
+            // 「无法识别」含糊过去。
+            await _showSignRequestNotHere();
           } else {
             await _showUnrecognized();
           }
@@ -353,6 +357,24 @@ class _QrScanPageState extends State<QrScanPage> {
           '通讯录关系必须锚定对方的永久 CID，只有「用户主页」出示的用户码携带 CID。'
           '账户码和收款码只声明账户，不能加为联系人。',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 扫码填地址时扫到签名请求：只指路，不解释。
+  Future<void> _showSignRequestNotHere() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('这是签名请求'),
+        content: const Text('此处只扫收款地址。请到「聊天 → 扫一扫」。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

@@ -15,6 +15,10 @@
 //
 //   ./scripts/build-smoldot-native.sh macos   # 产 rust/target/release/libsmoldot.dylib
 //   flutter test test/chat/mls_native_test.dart test/chat/mls_native_session_test.dart
+//
+// **宿主库会被跑 App 反复清掉,不是灵异现象**:`scripts/citizenapp-run.sh` 编译前先
+// `cargo clean`(整个 rust/target 连宿主 dylib 一起没),随后只编 `$PLATFORM` 单平台。
+// 所以每跑一次 App(安卓/iOS),这些测试就自动回到 skip —— 重跑上面那条 macos 命令即可。
 
 import 'package:citizenapp/chat/crypto/mls_native.dart';
 

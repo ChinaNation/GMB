@@ -300,6 +300,14 @@ Chat 与广场权限分离：
   不写入私人备注；`transfer`/`dispatch` 模式把 userContact 作为收款人进入转账。
   缺少 CID 的 userTransfer 收款码不得再兼作联系人码。**不新造带金额收款码**。
 - 聊天搜索页（2026-07-23，2026-08-02 设备数据钥订正）：一个输入框分会话、联系人、聊天记录三段结果。会话按标题/最近消息搜索；联系人只在本地匹配私人备注、CID 和 finalized 当前账户快照，打开私信时始终传联系人 CID。聊天记录由 `ChatStore.searchMessages({ownerCidNumber, currentAccountId, keyword, limit})` 查询：`ownerCidNumber` 是唯一数据分区与索引归属，`currentAccountId` 只用于校验精确绑定并从设备数据钥金库静默解封 Chat 与索引用途钥，禁止在搜索或页面进入时读取账户 child；候选消息解密后再以 `ChatPayloadCodec.decode(...).summary` 复验真实子串，避免截断 HMAC token 假阳性。点结果统一复用 `openGroupChat` / `openDirectChat`，聊天记录命中只打开所在会话，不另造账户身份路径。
+- 签名请求扫码统一收归聊天扫一扫（2026-08-07）：交易页「扫一扫」入口撤销后，广场账户
+  动作（a=9）、公民身份（a=2）、注册局占号换绑（a=10/11）三条签名分支的**唯一通用入口**
+  是聊天页加号 → 扫一扫（另有「我的 → 钱包 → 账户卡片 → 扫码签名」锁定单账户的专用
+  入口）。**零代码迁移**：交易页与聊天页此前调用的就是同一个
+  `openScanDispatchFlow(paymentWallet:)`（都不传 `signingAccount`），删交易页入口不损失
+  任何能力。聊天页扫一扫本身零改动，继续按现状分派（收款码走链下支付、签名请求走签名）。
+  已知保留项：聊天页扫一扫扫到用户码 / 账户码 / 裸地址仍会落进链下支付并被「未绑定
+  清算行」挡回，待链下支付上线一并处理。
 - OpenMLS FFI 设备公钥断链修复（2026-08-04）：Rust 侧发 `device_public_key_hex`，
   Dart 侧 `mls_native.dart` 却读 `device_public_key`（全仓唯一漏 `_hex` 后缀处），
   `?? ''` 把它静默压成空串。后果不止测试：`chat_runtime._buildAccountContext` 首次

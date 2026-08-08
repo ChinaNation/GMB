@@ -130,6 +130,9 @@ PersonalAdmins storage：
 - “阈值规则”右侧浅色文案显示“注册须全员同意”。
 - 注销个人多签页面“阈值规则”右侧浅色文案显示“注销须全员同意”。
 - 扫码添加管理员使用 `assets/icons/scan-line.svg`，不使用二维码图标。
+- 注销个人多签页“受益人地址”的扫码按钮在**输入框内**（`suffixIcon`），复用全仓唯一的
+  `lib/qr/widgets/address_scan_button.dart`；原先框外独立 `IconButton` 的写法已删除。
+  该页不得再就地写 `QrScanPage(mode: QrScanMode.transfer)`。
 - 账户列表右上角加号直接进入 `personal_account_create_page.dart`，不再弹出个人/机构选择。
 
 ## 4. 与 citizen/institution 目录关系

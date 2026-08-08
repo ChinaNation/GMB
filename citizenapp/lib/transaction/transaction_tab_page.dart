@@ -1,149 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:citizenapp/qr/scan_dispatch_flow.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
-import 'package:citizenapp/transaction/personal-manage/personal_account_list_page.dart';
-import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/transaction/personal-manage/personal_account_entry.dart';
 
 /// 交易 Tab 页面。
 ///
-/// 本页只负责交易页入口编排；链上支付主体仍由 onchain 模块渲染，
-/// 「扫一扫」统一入口按协议分派（链下支付 / 广场账户动作签名 / 未来类型）。
+/// 本页只负责交易页入口编排；链上支付主体仍由 onchain 模块渲染。
+/// 扫码收在收款地址输入框内（只填地址）；签名请求统一走「聊天 → 扫一扫」。
 class TransactionTabPage extends StatelessWidget {
   const TransactionTabPage({super.key});
-
-  Future<void> _openScan(
-    BuildContext context,
-    WalletProfile? wallet,
-  ) async {
-    // wallet = 交易页选的默认付款钱包；仅支付分支用它，签名分支按 QR u 另解析。
-    await openScanDispatchFlow(context: context, paymentWallet: wallet);
-  }
-
-  Future<void> _openPersonalAccounts(BuildContext context) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PersonalAccountListPage()),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return OnchainPaymentPanel(
       // 交易 Tab 的页面标题由真实公民链状态取代；独立链上支付页仍保留自己的标题。
       chainStatusInHeader: true,
-      extraEntriesBuilder: (context, wallet) => [
-        _TransactionEntryGroup(
-          children: [
-            _TransactionEntryTile(
-              icon: SvgPicture.asset(
-                'assets/icons/scan-line.svg',
-                width: 22,
-                height: 22,
-                colorFilter: const ColorFilter.mode(
-                  AppTheme.primary,
-                  BlendMode.srcIn,
-                ),
-              ),
-              title: '扫一扫',
-              onTap: () => _openScan(context, wallet),
-            ),
-            _TransactionEntryTile(
-              icon: const RotatedBox(
-                // Material 的分享关系图旋转后为“一上两下”圆形节点，
-                // 与确认稿的多签关系结构和线性描边最接近。
-                quarterTurns: 1,
-                child: Icon(
-                  Icons.share_outlined,
-                  size: 24,
-                  color: AppTheme.primary,
-                ),
-              ),
-              title: '多签账户',
-              onTap: () => _openPersonalAccounts(context),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
+      extraEntriesBuilder: (context) => const [
+        PersonalAccountEntryCard(),
+        SizedBox(height: 12),
       ],
-    );
-  }
-}
-
-class _TransactionEntryGroup extends StatelessWidget {
-  const _TransactionEntryGroup({required this.children});
-
-  // 原 52dp 竖线缩短三分之一，只改变视觉长度，不改变双入口卡片高度与点击区域。
-  static const double _dividerHeight = 52 * 2 / 3;
-
-  final List<_TransactionEntryTile> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: AppTheme.cardDecoration(),
-      child: Row(
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            Expanded(child: children[i]),
-            if (i != children.length - 1)
-              const SizedBox(
-                key: ValueKey<String>('transaction-entry-divider'),
-                height: _dividerHeight,
-                child: VerticalDivider(
-                  width: 1,
-                  thickness: 0.5,
-                  color: AppTheme.border,
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TransactionEntryTile extends StatelessWidget {
-  const _TransactionEntryTile({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
-
-  final Widget icon;
-  final String title;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              icon,
-              const SizedBox(width: 12),
-              Flexible(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

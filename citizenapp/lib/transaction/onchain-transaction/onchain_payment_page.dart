@@ -20,6 +20,7 @@ import 'package:citizenapp/transaction/shared/tx_auto_refresh_mixin.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
+import 'package:citizenapp/qr/widgets/address_scan_button.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/contact_service.dart' show UserContact;
@@ -30,8 +31,42 @@ import 'package:citizenapp/wallet/pages/transaction_history_page.dart';
 
 typedef OnchainPaymentExtraEntriesBuilder = List<Widget> Function(
   BuildContext context,
-  WalletProfile? currentWallet,
 );
+
+/// 交易表单四个输入框(收款地址 / 金额 / 币种 / 备注)共用的装饰。
+///
+/// [suffixIcon] 必须逐字段传入,不能写死进本函数 —— 只有收款地址需要扫码按钮,
+/// 写死会让金额、币种、备注也长出图标。
+///
+/// 提到类外是因为它不依赖任何实例状态,且「带 suffixIcon 的收款地址框必须与不带的
+/// 金额框等高」这条布局约束要由测试钉住:`isDense` 把内容高压到与 suffix 图标同高,
+/// 二者相等时输入框才不会被图标撑高。
+@visibleForTesting
+InputDecoration transactionFieldDecoration({
+  required String hintText,
+  Widget? suffixIcon,
+}) {
+  return InputDecoration(
+    hintText: hintText,
+    suffixIcon: suffixIcon,
+    filled: true,
+    fillColor: AppTheme.surfaceCard,
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      borderSide: const BorderSide(color: AppTheme.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      borderSide: const BorderSide(color: AppTheme.danger),
+    ),
+  );
+}
 
 typedef OnchainWalletPicker = Future<bool?> Function();
 typedef OnchainCurrentWalletLoader = Future<WalletProfile?> Function();
@@ -687,30 +722,6 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
     }
   }
 
-  InputDecoration _transactionFieldDecoration({
-    required String hintText,
-  }) {
-    return InputDecoration(
-      hintText: hintText,
-      filled: true,
-      fillColor: AppTheme.surfaceCard,
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        borderSide: const BorderSide(color: AppTheme.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        borderSide: const BorderSide(color: AppTheme.danger),
-      ),
-    );
-  }
-
   Widget _buildFieldLabel(String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -786,8 +797,13 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
                 color: AppTheme.textPrimary,
                 fontSize: 14,
               ),
-              decoration: _transactionFieldDecoration(
+              decoration: transactionFieldDecoration(
                 hintText: '请输入账户',
+                suffixIcon: AddressScanButton(
+                  onAddressScanned: (ss58Address) => setState(
+                    () => _toController.text = ss58Address,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -809,7 +825,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
                           color: AppTheme.textPrimary,
                           fontSize: 14,
                         ),
-                        decoration: _transactionFieldDecoration(
+                        decoration: transactionFieldDecoration(
                           hintText: '请输入金额',
                         ),
                       ),
@@ -824,7 +840,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
                     children: [
                       _buildFieldLabel('币种'),
                       InputDecorator(
-                        decoration: _transactionFieldDecoration(
+                        decoration: transactionFieldDecoration(
                           hintText: '',
                         ),
                         child: Row(
@@ -871,7 +887,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
                     color: AppTheme.textPrimary,
                     fontSize: 14,
                   ),
-                  decoration: _transactionFieldDecoration(
+                  decoration: transactionFieldDecoration(
                     hintText: '请输入转账备注（选填）',
                   ).copyWith(
                     contentPadding: const EdgeInsets.fromLTRB(14, 14, 14, 32),
@@ -1055,7 +1071,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel>
                   padding: const EdgeInsets.all(16),
                   children: [
                     if (widget.extraEntriesBuilder != null)
-                      ...widget.extraEntriesBuilder!(context, _currentWallet),
+                      ...widget.extraEntriesBuilder!(context),
                     if (_currentWallet == null && !_loadingWallet)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),

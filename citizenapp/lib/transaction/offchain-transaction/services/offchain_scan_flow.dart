@@ -6,7 +6,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 链下支付尾段：已拿到收款码解析结果后，校验清算行 → 查节点 → 跳付款确认页。
 ///
-/// 扫码入口统一收口在交易 tab「扫一扫」分发器（[openScanDispatchFlow]）：识别为收款/
+/// 扫码入口统一收口在聊天 tab「扫一扫」分发器（[openScanDispatchFlow]）：识别为收款/
 /// 支付码后调本函数。真正的校验清算行、查收款方节点、跳付款确认页都留在 offchain 域。
 /// 扫码结果必须携带 `UserTransferBody.bank`（收款方清算行 `cid_number`）。
 Future<void> proceedOffchainPayment({

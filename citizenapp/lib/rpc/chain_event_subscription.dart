@@ -16,6 +16,8 @@ class ChainEventSubscription {
   final SmoldotClientManager _smoldotClientManager;
   final StreamController<ChainEvent> _eventController =
       StreamController<ChainEvent>.broadcast();
+  final StreamController<void> _droppedController =
+      StreamController<void>.broadcast();
 
   StreamSubscription<dynamic>? _newHeadsSub;
   StreamSubscription<dynamic>? _finalizedHeadsSub;
@@ -23,6 +25,17 @@ class ChainEventSubscription {
 
   /// 新区块等事件流。
   Stream<ChainEvent> get events => _eventController.stream;
+
+  /// 底层订阅**意外断开**的信号（断一次发一次；`disconnect()` 主动断开不发）。
+  ///
+  /// 必须有这条通路。`SmoldotClientManager.subscribe()` 是 `async*` 生成器，内层
+  /// `_chain!.subscribe(...)` 随原生 chain 释放而结束，外层随之完成 —— 此前
+  /// `onDone` 只把本地字段置 null 并打一行日志，**不通知任何人**；而
+  /// `ChainTxMonitor._subscriptionConnected` 只在 `stop()` 里才置回 false。
+  /// 结果是订阅断开后监控器仍以为自己连着，`_ensureSubscription()` 每次都从
+  /// 第一行早退，没有任何重连路径，交易再也不会自动翻已确认 —— 这正是
+  /// 2026-08-07 iOS/Android 两端同时复现「必须手动刷新」的真因。
+  Stream<void> get dropped => _droppedController.stream;
 
   /// 开始订阅新区块头和 finalized 区块头。
   ///
@@ -50,11 +63,13 @@ class ChainEventSubscription {
       method: 'chain_subscribeNewHeads',
       type: ChainEventType.newBlock,
       logLabel: 'newHeads',
+      generation: generation,
     );
     final finalizedOk = _connectSmoldot(
       method: 'chain_subscribeFinalizedHeads',
       type: ChainEventType.newFinalizedBlock,
       logLabel: 'finalizedHeads',
+      generation: generation,
     );
     return newHeadsOk && finalizedOk;
   }
@@ -63,6 +78,7 @@ class ChainEventSubscription {
     required String method,
     required ChainEventType type,
     required String logLabel,
+    required int generation,
   }) {
     if (type == ChainEventType.newBlock && _newHeadsSub != null) return true;
     if (type == ChainEventType.newFinalizedBlock &&
@@ -101,6 +117,11 @@ class ChainEventSubscription {
           } else {
             _finalizedHeadsSub = null;
           }
+          // `disconnect()` 走的是 `cancel()`，按 Dart 语义**不会**触发 onDone；
+          // 代际再兜一层，确保停止过程中的迟到 onDone 不把监控器重新唤醒。
+          if (generation != _lifecycleGeneration) return;
+          if (_droppedController.isClosed) return;
+          _droppedController.add(null);
         },
       );
       if (type == ChainEventType.newBlock) {

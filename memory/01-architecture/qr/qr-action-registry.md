@@ -60,7 +60,7 @@ CitizenApp / CitizenWallet 已按本规则接入生成产物:`citizenapp/lib/qr/
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |
-| 9 | `square_account_action` | 广场账户动作 SCALE bytes（`action‖account_id‖challenge_id[‖level]‖u64(expires)`） | `signing_message(OP_SIGN_SQUARE_ACTION, payload)` | 官网 citizenweb / CitizenApp | CitizenApp（交易 tab「扫一扫」，account_id 对应主钥+生物识别） | 会员订阅/取消等账户动作链下签名；account_id 由 QR `u` 在本机定位钱包，两色解码 `signer/square_action_payload.dart`；Worker `account/action_challenge.ts` 构造/验签 |
+| 9 | `square_account_action` | 广场账户动作 SCALE bytes（`action‖account_id‖challenge_id[‖level]‖u64(expires)`） | `signing_message(OP_SIGN_SQUARE_ACTION, payload)` | 官网 citizenweb / CitizenApp | CitizenApp（聊天 tab「扫一扫」，account_id 对应主钥+生物识别） | 会员订阅/取消等账户动作链下签名；account_id 由 QR `u` 在本机定位钱包，两色解码 `signer/square_action_payload.dart`；Worker `account/action_challenge.ts` 构造/验签 |
 
 动作码 `8` 已取消登记。Chat 设备绑定只能使用 CitizenApp 已登记的硬件 P-256 设备子钥静默签名，不得生成 QR 请求，不得交给 CitizenWallet 或钱包主私钥签名。
 

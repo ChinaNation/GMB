@@ -37,18 +37,53 @@ class _DecodedTransferEvent {
 /// 同步 System.Events 写入流水——交易状态两态(已提交→已确认)，不再扫
 /// best 链、不再产生"已出块"中间态；本地页面只读 Isar 缓存。
 class ChainTxMonitor {
-  ChainTxMonitor._();
+  ChainTxMonitor._()
+      : _subscription = ChainEventSubscription(),
+        _chainRpc = ChainRpc(),
+        _subscriptionRetryDelay = const Duration(seconds: 5),
+        _confirmPollInterval = const Duration(seconds: 3);
+
+  /// 单测专用：注入可控订阅、离线 RPC 和短退避。
+  ///
+  /// - 真 [ChainRpc] 在单测里会真的去拉起 smoldot（flutter_test 环境没有原生库，
+  ///   抛错时机还不确定），必须注入离线 fake，否则用例随机 flaky。
+  /// - 退避可注入是因为 `start()` 里有 Isar 真 I/O，用 `fakeAsync` 拨表会卡在
+  ///   真实事件循环上；只能走真实定时器，把 5 秒缩到毫秒级。
+  @visibleForTesting
+  ChainTxMonitor.forTesting({
+    required ChainEventSubscription subscription,
+    required ChainRpc chainRpc,
+    Duration subscriptionRetryDelay = const Duration(milliseconds: 20),
+    Duration confirmPollInterval = const Duration(milliseconds: 20),
+  })  : _subscription = subscription,
+        _chainRpc = chainRpc,
+        _subscriptionRetryDelay = subscriptionRetryDelay,
+        _confirmPollInterval = confirmPollInterval;
+
   static final ChainTxMonitor instance = ChainTxMonitor._();
 
-  final ChainEventSubscription _subscription = ChainEventSubscription();
-  final ChainRpc _chainRpc = ChainRpc();
+  final ChainEventSubscription _subscription;
+  final ChainRpc _chainRpc;
   StreamSubscription<ChainEvent>? _listener;
+  StreamSubscription<void>? _dropListener;
   Future<void>? _syncInflight;
   Timer? _subscriptionRetryTimer;
   Timer? _syncRetryTimer;
   Future<void>? _subscriptionConnectFuture;
   bool _running = false;
   bool _subscriptionConnected = false;
+
+  /// 订阅重连退避；首次连接失败与运行中断开共用同一条退避路径。
+  final Duration _subscriptionRetryDelay;
+
+  /// 待确认记录的确认轮询间隔。
+  final Duration _confirmPollInterval;
+  Timer? _confirmTimer;
+  bool _confirmPollInflight = false;
+
+  /// 单测断言用：当前是否认为链事件订阅在线。
+  @visibleForTesting
+  bool get subscriptionConnectedForTesting => _subscriptionConnected;
 
   /// 当前监控的钱包：AccountId（小写 0x + 64 位 hex） → SS58 地址。
   final Map<String, String> _ss58AddressByAccountId = {};
@@ -115,6 +150,11 @@ class ChainTxMonitor {
     }
 
     _listener = _subscription.events.listen(_onEvent);
+    // 断开信号必须订阅：自动确认**只有**「finalized 事件 → _syncThrough →
+    // _confirmOpenSubmits」这一条通路，订阅断了不重连就等于自动确认永久失效。
+    _dropListener =
+        _subscription.dropped.listen((_) => _onSubscriptionDropped());
+    _startConfirmPolling();
     _ensureSubscription();
     AppLog.d('[TxMonitor] 交易监控已启动，监控 ${_ss58AddressByAccountId.length} 个钱包');
 
@@ -142,8 +182,12 @@ class ChainTxMonitor {
     _subscriptionRetryTimer = null;
     _syncRetryTimer?.cancel();
     _syncRetryTimer = null;
+    _confirmTimer?.cancel();
+    _confirmTimer = null;
     _listener?.cancel();
     _listener = null;
+    _dropListener?.cancel();
+    _dropListener = null;
     _subscription.disconnect();
     AppLog.d('[TxMonitor] 交易监控已停止');
   }
@@ -195,7 +239,28 @@ class ChainTxMonitor {
       return;
     }
 
-    _subscriptionRetryTimer ??= Timer(const Duration(seconds: 5), () {
+    _scheduleSubscriptionRetry();
+  }
+
+  /// 底层链事件订阅断开：把连接标记落回 false 并排队重连。
+  ///
+  /// **必须走定时器而不是立即重连**：轻节点持续不可用时，`connect()` 会立刻再失败、
+  /// 流也会立刻再结束，立即重连就退化成烧 CPU 的热循环。退避与首次连接失败同一条路径。
+  ///
+  /// 断连期间漏掉的 finalized 块不需要在这里补扫：重连成功后
+  /// [_connectSubscriptionOnce] 既有的 `_syncToLatest()` 会按游标补齐。
+  void _onSubscriptionDropped() {
+    if (!_running) return;
+    // 两条子订阅先后结束会各发一次；第二次已经是断开态，直接忽略。
+    if (!_subscriptionConnected) return;
+    _subscriptionConnected = false;
+    AppLog.d('[TxMonitor] 链事件订阅已断开，排队重连');
+    _scheduleSubscriptionRetry();
+  }
+
+  void _scheduleSubscriptionRetry() {
+    if (!_running) return;
+    _subscriptionRetryTimer ??= Timer(_subscriptionRetryDelay, () {
       _subscriptionRetryTimer = null;
       _ensureSubscription();
     });
@@ -216,6 +281,46 @@ class ChainTxMonitor {
         ChainReadCache.instance.invalidate();
         await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
         break;
+    }
+  }
+
+  /// 只要还有未终态的本机提交记录，就按固定间隔重试确认，直到全部翻成终态。
+  ///
+  /// **为什么必须独立于出块**：确认此前只在「新 finalized 块事件」里跑，而本链
+  /// **空块不出块** —— 一笔交易只有它自己那个块这一次确认机会。这一次里任何一步
+  /// 慢了或失败了（轻节点还没把该块应用完，`fetchFinalizedBlock` 拿到的还是 N-1、
+  /// 账户 nonce 快照还是旧值、或者事件被 `_syncInflight` 合并丢掉），日志打一行
+  /// 「下轮再确认」就完了 —— **可根本没有下一轮**，记录永久停在待确认，只能手动刷新。
+  ///
+  /// 连发多笔时后一笔的块给前一笔当了重试机会，所以联测看起来是好的；单发一笔必卡。
+  /// 本轮询把「重试」和「出块」解绑：这是最简单的做法，也是唯一不依赖链活跃度的做法。
+  void _startConfirmPolling() {
+    _confirmTimer ??=
+        Timer.periodic(_confirmPollInterval, (_) => unawaited(_pollConfirm()));
+  }
+
+  Future<void> _pollConfirm() async {
+    if (!_running || _confirmPollInflight) return;
+    if (_ss58AddressByAccountId.isEmpty) return;
+
+    // 无待确认记录时零链上开销：先本地查一次再决定要不要读链，避免空闲期每 3 秒
+    // 白发一次 finalized 读（`_confirmOpenSubmits` 第一行就会读链）。
+    var hasOpen = false;
+    for (final accountId in _ss58AddressByAccountId.keys) {
+      if ((await LocalTxStore.queryOpenLocalSubmit(accountId)).isNotEmpty) {
+        hasOpen = true;
+        break;
+      }
+    }
+    if (!hasOpen) return;
+
+    _confirmPollInflight = true;
+    try {
+      await _confirmOpenSubmits();
+    } catch (e) {
+      AppLog.d('[TxMonitor] 轮询确认失败，下次再试: $e');
+    } finally {
+      _confirmPollInflight = false;
     }
   }
 

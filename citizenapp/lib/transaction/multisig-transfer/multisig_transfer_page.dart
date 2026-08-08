@@ -6,7 +6,6 @@ import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:isar_community/isar.dart';
@@ -17,7 +16,7 @@ import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_balance_guard.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_service.dart';
 import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
-import 'package:citizenapp/qr/pages/qr_scan_page.dart';
+import 'package:citizenapp/qr/widgets/address_scan_button.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/rpc/transfer_rpc.dart' show TransferRpc;
 import 'package:citizenapp/qr/qr_protocols.dart';
@@ -145,18 +144,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       } else {
         _estimatedFee = 0.0;
       }
-    });
-  }
-
-  Future<void> _scanToAddress() async {
-    final result = await Navigator.of(context).push<QrScanTransferResult>(
-      MaterialPageRoute(
-        builder: (_) => const QrScanPage(mode: QrScanMode.transfer),
-      ),
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      _beneficiaryController.text = result.toSs58Address;
     });
   }
 
@@ -514,13 +501,9 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
                     borderSide: const BorderSide(color: AppTheme.danger),
                   ),
                   errorText: _addressError,
-                  suffixIcon: IconButton(
-                    tooltip: '扫码填入收款地址',
-                    onPressed: _scanToAddress,
-                    icon: SvgPicture.asset(
-                      'assets/icons/scan-line.svg',
-                      width: 18,
-                      height: 18,
+                  suffixIcon: AddressScanButton(
+                    onAddressScanned: (ss58Address) => setState(
+                      () => _beneficiaryController.text = ss58Address,
                     ),
                   ),
                 ),

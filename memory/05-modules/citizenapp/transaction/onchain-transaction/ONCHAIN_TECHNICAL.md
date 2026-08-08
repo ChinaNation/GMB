@@ -117,11 +117,27 @@ fee = max(amount_fen * 0.001, 10 fen)
 
 ## 8. 边界规则
 
-- `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/transaction/transaction_tab_page.dart` 在顶栏链状态下方、链上支付表单上方插入扫码支付入口；`chainStatusInHeader=true` 只允许交易 Tab 把真实链状态放入原页面标题位置。通讯录进入的独立“链上支付”页只显示标题，`ChainProgressBanner` 继续在零尺寸状态下读取链状态并驱动提交门禁，不显示内容区状态卡片；onchain 模块自身不 import `offchain` 或 `multisig`
+- `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/transaction/transaction_tab_page.dart` 在顶栏链状态下方、链上支付表单上方插入入口卡片；它只收 `BuildContext`，**不再传当前钱包**——唯一插入方是多签账户卡片，不需要钱包。`chainStatusInHeader=true` 只允许交易 Tab 把真实链状态放入原页面标题位置。通讯录进入的独立“链上支付”页只显示标题，`ChainProgressBanner` 继续在零尺寸状态下读取链状态并驱动提交门禁，不显示内容区状态卡片；onchain 模块自身不 import `offchain` 或 `multisig`
 - `OnchainPaymentPage.initialToAddress` 只用于从通讯录等入口预填收款地址，不得触发付款钱包切换、金额填写、签名或自动提交。
-- 交易页“扫一扫 / 多签账户”双入口卡片只把中间竖线从 52dp 缩短三分之一至
-  `52 × 2 / 3`，卡片、点击区域、图标和入口逻辑不变；链上支付收款地址输入框的占位
-  文案统一为“请输入账户”，实际输入和校验仍使用 SS58 地址。
+- 交易页顶部入口只有“多签账户”**一张独立卡片**（左图标 + 标题 + 右向
+  `Icons.chevron_right, size: 22`，整张卡是点击区，箭头不单独包 `InkWell`）。原
+  “扫一扫 / 多签账户”双入口卡片及其中间竖线已删除。
+- 交易页扫码收进**收款地址输入框内的 `suffixIcon`**（`AddressScanButton`），只填地址、
+  不进支付也不进签名；签名请求统一走“聊天 → 扫一扫”。收款地址输入框占位文案统一为
+  “请输入账户”，实际输入和校验仍使用 SS58 地址。
+- `lib/qr/widgets/address_scan_button.dart` 是**全仓“扫码填地址”唯一实现**，四处输入框
+  一律以 `suffixIcon` 接入：链上支付（收款地址）、多签转账、安全基金转账、个人多签账户
+  关闭（后三者为受益人地址）。新增“扫码填地址”场景必须复用它，禁止再就地写
+  `QrScanPage(mode: QrScanMode.transfer)` —— 组件外出现裸 `QrScanMode.transfer` 即残留。
+  它固定只认地址类码、只回传 SS58（收款码的金额/备注/清算行一律丢弃），
+  **回调而非代写调用方 controller**（代写会吞掉调用方的 `setState`）。
+  组件只统一扫码行为与图标，**不接管各页 `InputDecoration`** —— 四处边框、圆角、
+  `contentPadding` 本就不同，强行拉平会改动已上线页面的视觉。
+- `transactionFieldDecoration` 为交易表单四个输入框（收款地址 / 金额 / 币种 / 备注）
+  共用装饰，`suffixIcon` **必须逐字段传入**，不得写死进装饰。收款地址框内嵌扫码按钮后
+  必须与金额框等高：`isDense: true` + `contentPadding vertical 14` 把内容压到与
+  suffix 图标同高（均为 48），由 `test/transaction/transaction_field_decoration_test.dart`
+  钉住；调 `contentPadding` 会打破它。
 - `lib/transaction/onchain-transaction/` 不放治理提案、投票、多签、链下支付、清算行、钱包密钥管理、二维码协议底座，也不提供“交易/金融”聚合入口
 - 新增普通链上支付 UI / model / service 时才进入 `lib/transaction/onchain-transaction/`
 - 若新增能力需要 pallet index / call index，必须先确认是否仍属于“普通链上支付”；否则放回对应业务模块
